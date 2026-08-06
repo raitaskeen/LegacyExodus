@@ -1,387 +1,418 @@
 # LegacyExodus Project Context
-**Version:** v1.0  
-**Document Role:** Foundation Document
-
-## 1. Introduction
-
-LegacyExodus is an AI-powered legacy software modernization platform designed to transform outdated software systems into modern, maintainable, secure, and scalable applications.
-
-The platform focuses on migrating complex legacy ecosystems—especially JavaScript, PHP, and other dynamically typed environments—into modern Rust-based architectures.
-
-LegacyExodus is **not** a code transpiler or syntax converter.
-
-It is a **software intelligence and modernization platform** that first understands systems deeply, then transforms them safely.
+**Version:** v2.0 (Enterprise Architecture Edition)  
+**Document Role:** Foundational Architecture Context
 
 ---
 
-## 2. The Problem
+## 1. Project Identity
 
-Modern enterprises are constrained by millions of lines of legacy code powering mission-critical operations. These systems often:
+**Project Name:** LegacyExodus
 
-- Are difficult to maintain
-- Depend on outdated dependencies
-- Lack reliable documentation
-- Hide business logic inside implementation details
-- Carry high rewrite risk and cost
-- Introduce security and reliability concerns
-- Depend on shrinking pools of legacy experts
+LegacyExodus is an enterprise, knowledge-first software modernization platform designed to transform fragile, under-documented legacy systems into modern, maintainable, secure, and scalable architectures.
 
-Traditional migration methods fail because they mostly perform **surface-level translation**.
+It exists because most modernization efforts fail when they treat migration as a code conversion problem instead of a system understanding problem. In legacy environments, critical behavior is often hidden in implicit assumptions, middleware chains, side effects, configuration drift, and undocumented business rules. Translating syntax without reconstructing this meaning creates operational risk.
 
-They convert syntax, but not system meaning.
+LegacyExodus addresses this by establishing deterministic system intelligence before any transformation is executed.
 
-Example:
+### Why LegacyExodus Exists
+Organizations are constrained by business-critical legacy systems that are expensive to maintain, difficult to scale, and risky to rewrite. Traditional paths are often inadequate:
 
-```javascript
-app.get('/users', async (req, res) => {
-  const users = await database.getUsers()
-  res.json(users)
-})
-```
+- Full rewrites are costly, slow, and high-risk.
+- Syntax translators are fast but shallow.
+- Generic AI generation can be useful but inconsistent without architecture grounding.
 
-This is not just a route handler. In real systems it often represents:
+LegacyExodus provides a governed modernization path that emphasizes understanding, traceability, and controlled delivery confidence.
 
-- Route contract
-- Authentication
-- Authorization
-- Database access assumptions
-- Business rules
-- Response schema guarantees
-- Logging, monitoring, and auditing requirements
+### What LegacyExodus Is Not
+LegacyExodus is **not**:
 
-A syntax-only conversion cannot preserve these layers safely.
+- A transpiler
+- A line-by-line converter
+- A prompt-only AI code generator
 
-LegacyExodus solves this by building a system intelligence layer first through:
+### What LegacyExodus Is
+LegacyExodus is:
 
-- Knowledge Graph construction
-- Project State modeling
-- Event-driven execution
-- AI agent orchestration
-- Validation and approval gates
+- A **knowledge-first modernization intelligence system**
+- A staged architecture that separates discovery, modeling, generation, and validation
+- A human-governed AI platform with deterministic control surfaces
+
+**Core principle:**  
+**Understand first. Transform second. Trust always.**
 
 ---
 
-## 3. Vision
+## 2. Vision Statement
 
-**Vision Statement:**  
-> “Create the world’s most intelligent autonomous legacy modernization engine.”
+LegacyExodus aims to become the reference platform for safe, explainable, and continuously improving software modernization.
 
-LegacyExodus aims to enable organizations to migrate years—or decades—of software evolution into modern technology stacks with confidence, traceability, and control.
+Its long-term vision is to provide organizations with the capability to:
+
+- Understand legacy ecosystems as living systems, not static files
+- Reconstruct architecture and behavioral intent at scale
+- Modernize incrementally with governance and confidence scoring
+- Maintain continuous system intelligence after migration
+- Evolve toward autonomous modernization assistance while preserving human control over high-risk decisions
+
+LegacyExodus is designed not only to migrate software, but to establish a durable modernization intelligence layer that supports future evolution.
 
 ---
 
-## 4. Mission
+## 3. Mission Statement
 
 LegacyExodus exists to:
 
-1. Understand legacy systems deeply  
-2. Extract hidden operational and business knowledge  
-3. Build structured, queryable system intelligence  
-4. Generate modern architectures and implementations  
-5. Validate migration correctness and safety  
-6. Keep humans in control of critical decisions  
+1. **Understand legacy systems deeply** through deterministic analysis  
+2. **Extract hidden knowledge** from code, structure, and behavior  
+3. **Build machine-readable system intelligence** for planning and decision support  
+4. **Generate modern architectures and implementations** with AI-assisted orchestration  
+5. **Validate migration quality and safety** through technical and governance gates  
+6. **Maintain human control** at critical decision points for enterprise trust
 
 ---
 
-## 5. Core Philosophy
+## 4. Core Philosophy
 
-### 5.1 Knowledge First
-The system must understand before modifying.  
-Migration starts with knowledge extraction—not code generation.
+## 4.1 Knowledge First Architecture
 
-### 5.2 Human-Governed AI
-AI assists engineers; it does not replace accountability.  
-Important migration decisions remain reviewable and governable.
+Transformation without understanding introduces silent defects. LegacyExodus prioritizes system intelligence as the primary output of early stages.
 
-### 5.3 Event-Driven Architecture
-All significant actions emit events such as:
+Before generation, the platform performs:
+
+- System discovery
+- Architecture recovery
+- Business logic extraction
+- Dependency and boundary understanding
+- Behavioral pattern analysis
+
+This prevents shallow conversions and enables modernization decisions grounded in system reality.
+
+---
+
+## 4.2 Event-Driven Architecture
+
+Every significant operation emits a domain event. Events are the audit spine of the platform.
+
+Examples include:
 
 - `FileDiscovered`
 - `DependencyMapped`
 - `ASTGenerated`
-- `AgentCompleted`
-- `MigrationApproved`
+- `KnowledgeExtracted`
+- `MigrationGenerated`
+- `ValidationCompleted`
 
-This supports scalability, auditability, replay, and debugging.
+### Why Events Matter
 
-### 5.4 Modular Architecture
-Capabilities are isolated into independent modules/services such as:
+- **Auditability:** Every decision path is inspectable
+- **Replayability:** Workflows can be replayed for diagnosis or recovery
+- **Scalability:** Services communicate asynchronously through defined facts
+- **Debuggability:** Failures can be traced to exact transition points
+- **Observability:** Progress, bottlenecks, and confidence can be monitored systematically
+
+---
+
+## 4.3 Human-Governed AI
+
+AI is an accelerator, not an authority.
+
+LegacyExodus treats AI as a probabilistic subsystem that proposes candidate outputs and reasoning artifacts. Final trust is established through validation and human governance.
+
+Governance model includes:
+
+- Approval gates for high-impact changes
+- Confidence scoring for generated artifacts
+- Human review workflows for ambiguous transformations
+- Traceable rationale for acceptance or rejection
+
+This preserves accountability while still leveraging automation at scale.
+
+---
+
+## 4.4 Modular Architecture
+
+Capabilities are isolated into independent services to reduce coupling and support parallel evolution.
+
+Key modules include:
 
 - Parser Service
 - Graph Service
+- Knowledge Service
 - AI Gateway
 - Compiler Service
 - Storage Service
+- Orchestrator
 
-This allows parallel evolution and controlled complexity.
-
-### 5.5 Safe Migration Over Fast Migration
-The objective is not “generate code quickly.”  
-The objective is “generate trustworthy systems.”
+Isolation improves maintainability, testability, and controlled extensibility across stages.
 
 ---
 
-## 6. High-Level Architecture
+## 4.5 Safe Migration Over Fast Migration
 
-```text
-                 Legacy System
-                      |
-                      v
-                 VyrixScout
-       Discovery & Understanding
-                      |
-                      v
-                 NolaraStruct
-      Structure + Knowledge Modeling
-                      |
-                      v
-                 ZelvoxForge
-          AI-Assisted Generation
-                      |
-                      v
-                  VymosGate
-       Validation & Human Approval
-                      |
-                      v
-               Modern Rust System
+Speed is valuable only if correctness is preserved.  
+LegacyExodus prioritizes trustworthy modernization outcomes over throughput.
+
+Primary optimization target: **confidence-adjusted correctness**, not raw generation speed.
+
+---
+
+## 5. System Overview
+
+LegacyExodus operates as a four-stage modernization pipeline:
+
+```mermaid
+flowchart TD
+    A[Legacy Application] --> B[VyrixScout]
+    B --> C[NolaraStruct]
+    C --> D[ZelvoxForge]
+    D --> E[VymosGate]
+    E --> F[Modern Rust System]
 ```
 
-This four-stage pipeline is the central mental model of LegacyExodus and should be referenced across future documentation.
+### Stage Summary
+
+| Stage | Purpose | Input | Output | Importance |
+|---|---|---|---|---|
+| VyrixScout | Deterministic discovery and inventory | Legacy codebase + configs | Legacy System Inventory | Establishes factual system baseline |
+| NolaraStruct | Semantic reconstruction and modeling | Inventory + source structure | Machine-readable system understanding (knowledge model) | Converts syntax into architectural intelligence |
+| ZelvoxForge | Transformation planning and code generation | Knowledge model + modernization strategies | Candidate modern implementation | Produces modernization artifacts with rationale |
+| VymosGate | Validation and governance | Candidate implementation + validation policies | Production-ready migration decision | Ensures safety, quality, and release confidence |
 
 ---
 
-## 6.5 Core Platform Architecture (Core Engine)
+## 6. Four Core Migration Stages
 
-The migration pipeline does not operate alone.  
-It runs on top of the **LegacyExodus Core Engine** (runtime foundation).
+## 6.1 VyrixScout (Discovery & Intelligence Collection)
 
-### LegacyExodus Core Runtime provides:
-
-- Project State Management
-- Event-Driven Communication (Event Bus)
-- Plugin Execution
-- AI Agent Coordination
-- Storage Abstraction
-- Workflow Orchestration
-
-### Conceptual Architecture
-
-```text
-                LegacyExodus Core Engine
-                        |
-   ------------------------------------------------
-   |              |             |                |
-ProjectState    EventBus     Plugin System     Storage
-                        |
-                        v
-                Migration Pipeline
-        (VyrixScout → NolaraStruct → ZelvoxForge → VymosGate)
-```
-
-The Core Engine is the heart of the platform; the pipeline is its modernization workflow.
-
----
-
-## 7. Four Core Migration Stages
-
-### Stage 1: VyrixScout
-**Purpose:** Discover and analyze the existing system.
+**Purpose:** Identify what exists and how the legacy system is composed.
 
 **Responsibilities:**
 
-- File scanning
-- Language and framework detection
-- Dependency extraction
+- Filesystem analysis
+- Language detection
+- Framework detection
+- Dependency discovery
 - Configuration analysis
-- Initial metadata generation
+- Metadata extraction
+
+**Input:** Repository/workspace files, manifests, configuration surfaces  
+**Output:** **Legacy System Inventory**
+
+VyrixScout forms the deterministic ground truth that all downstream reasoning depends on.
 
 ---
 
-### Stage 2: NolaraStruct
-**Purpose:** Convert discovered artifacts into structured knowledge.
+## 6.2 NolaraStruct (Knowledge Modeling)
+
+**Purpose:** Convert discovered artifacts into structured understanding.
 
 **Responsibilities:**
 
 - AST generation
-- Dependency graph creation
-- Symbol analysis
+- Symbol extraction
+- Dependency graph construction
 - Knowledge graph construction
+- Architecture reconstruction
+
+**Input:** Legacy System Inventory + source artifacts  
+**Output:** **Machine-readable system understanding**
+
+NolaraStruct elevates the system from file-level data to architecture-level intelligence.
 
 ---
 
-### Stage 3: ZelvoxForge
-**Purpose:** Generate the modern implementation.
+## 6.3 ZelvoxForge (Transformation & Generation)
+
+**Purpose:** Generate modernization candidates using orchestrated AI and deterministic constraints.
 
 **Responsibilities:**
 
-- AI agents and orchestration
-- Architecture transformation
-- Code generation
-- Rust implementation output
+- AI agent orchestration
+- Architecture planning
+- Rust-oriented generation
+- Modernization strategy selection
+- Transformation reasoning capture
+
+**Input:** Knowledge model + migration policies + target architecture patterns  
+**Output:** **Candidate modern implementation**
+
+ZelvoxForge produces implementation artifacts that are traceable to modeled intent, not just source syntax.
 
 ---
 
-### Stage 4: VymosGate
-**Purpose:** Ensure migration quality and confidence.
+## 6.4 VymosGate (Validation & Governance)
+
+**Purpose:** Determine whether a migration candidate is safe, correct, and ready for promotion.
 
 **Responsibilities:**
 
 - Testing and verification
+- Security checks
 - Behavioral validation
 - Human approval workflows
-- Security verification
+- Release confidence assessment
+
+**Input:** Candidate implementation + test/validation criteria  
+**Output:** **Production-ready migration decision**
+
+VymosGate ensures modernization quality before deployment decisions are made.
 
 ---
 
-## 8. Technology Philosophy
+## 7. Technology Stack Philosophy
 
-### 8.1 Core Engine (Current)
-**Primary:** TypeScript + Bun Runtime
+## 7.1 Core Engine: TypeScript + Bun
 
-**Reasoning (MVP and near-term):**
+The core runtime uses TypeScript with Bun to optimize execution speed of platform development and orchestration learning cycles.
 
-- High development velocity
-- Mature AI integration ecosystem
-- Strong tooling and developer productivity
-- Fast orchestration iteration cycles
+**Why this choice:**
 
-### 8.2 Migration Target
-**Primary Target:** Rust
+- High development velocity for platform iteration
+- Strong ecosystem for AI and developer tooling
+- Productive type-guided engineering workflows
+- Efficient runtime for orchestration-heavy operations
 
-Rust is selected as the primary modernization target because modernization is not only about replacing legacy syntax.
-
-It is about building systems that are safer, more maintainable, and resilient for the next decade.
-
-Rust provides:
-
-- Memory safety
-- Predictable execution
-- Reliability under load
-- Security advantages
-- Long-term maintainability
-
-### 8.3 Frontend Visualization
-**Technology:** React + TypeScript + Vite + Tailwind CSS
-
-**Purpose:** Visualize migration progress, knowledge graphs, AI decisions, and validation confidence.
+This supports rapid capability evolution during MVP and near-term platform hardening.
 
 ---
 
-## 9. Runtime Evolution Strategy
+## 7.2 Modernization Target: Rust
 
-LegacyExodus follows a progressive runtime evolution model:
+Rust is the primary target for generated systems because modernization goals include safety, reliability, and long-term maintainability—not only code translation.
 
-### Phase 1: Platform Acceleration
-- TypeScript + Bun core runtime
+**Why Rust:**
 
-### Phase 2: Hybrid Runtime
-- Introduce Rust for performance-critical components while preserving orchestration flexibility
+- Memory safety guarantees
+- Predictable performance characteristics
+- Reliability under concurrency and load
+- Strong suitability for long-lived enterprise services
 
-### Phase 3: Rust-Centric Core (Long-Term)
-- Gradual migration of selected core engine layers to Rust where justified
-
-This path enables gradual replacement without architectural disruption.
+Rust aligns with LegacyExodus objectives for resilient modernization outcomes.
 
 ---
 
-## 10. Target Users
+## 7.3 Frontend Visualization: React + TypeScript + Vite + Tailwind CSS
 
-### Enterprise Organizations
-Companies with legacy platforms facing modernization pressure, rising maintenance cost, and reliability/security risk.
+The frontend is an operational control center, not a static dashboard.
 
-### Software Teams
-Teams needing:
+It provides visibility into:
 
-- migration assistance
-- architecture understanding
-- documentation regeneration
-- controlled transformation workflows
+- Migration progress and stage status
+- Dependency and knowledge graph insights
+- AI reasoning artifacts and confidence indicators
+- Validation state and approval workflows
 
-### Developers
-Developers maintaining:
-
-- legacy JavaScript/PHP systems
-- large monoliths
-- under-documented business-critical applications
+This interface supports transparency, governance, and human decision quality.
 
 ---
 
-## 11. Success Definition
+## 8. Architecture Principles
 
-LegacyExodus succeeds when:
+## 8.1 Traceability
+Every generated artifact should map back to source evidence, transformation intent, and validation outcomes.
 
-**Input:**  
-A legacy application (e.g., 50,000+ lines)
+## 8.2 Reproducibility
+Given the same inputs, configuration, and policies, migration workflows should be repeatable and explainably variant when differences occur.
 
-**Output:**  
-A modern Rust application  
-+ complete documentation  
-+ architecture and system knowledge  
-+ migration history and decision traceability
+## 8.3 Extensibility
+Languages, parsers, agents, and generation strategies should be pluggable through clear contracts and modular boundaries.
 
-With:
+## 8.4 Security First
+The platform must protect:
 
-- high automation leverage
-- strong human confidence
-- production readiness
+- Source code and intellectual property
+- Generated artifacts
+- AI interaction surfaces
+- Secrets and credentials across execution paths
 
----
+## 8.5 Explainability
+For every major transformation, the platform should answer:
 
-## 12. Competitive Positioning
-
-### Category Comparison
-
-#### Traditional Rewrite
-- Deep human understanding
-- High cost
-- Slow delivery
-- High program risk
-
-#### Transpilers / Syntax Translators
-- Fast transformation
-- Low system understanding
-- Limited correctness confidence
-- Unsafe for complex business systems
-
-#### Generic AI Code Generators
-- Strong code generation capability
-- Limited full-system context
-- Inconsistent migration governance
-
-#### LegacyExodus
-- Understands system behavior first
-- Models knowledge explicitly
-- Transforms architecture and implementation
-- Validates with technical and human gates
-
-LegacyExodus is positioned as a **governed intelligence platform for modernization**, not a raw code generator.
+- What changed?
+- Why did it change?
+- How confident is this change?
 
 ---
 
-## 13. Long-Term Vision
+## 9. Target Users
 
-Future capabilities include:
+## 9.1 Enterprise Organizations
+Need controlled modernization of mission-critical systems with governance, audit trails, and risk-managed delivery.
 
-- Multi-language migration expansion
-- Cloud-native architecture generation
-- Continuous automatic documentation
-- Security posture improvement during migration
-- Performance optimization guidance
-- Autonomous, collaborative engineering agents
+**How LegacyExodus helps:**  
+Provides staged modernization with traceability, approval gates, and confidence-based release decisions.
+
+## 9.2 Software Engineering Teams
+Need practical migration acceleration without losing architectural correctness.
+
+**How LegacyExodus helps:**  
+Automates discovery and generation while preserving human control over critical architecture and business logic decisions.
+
+## 9.3 Legacy System Maintainers
+Need to preserve undocumented behavior while reducing technical debt.
+
+**How LegacyExodus helps:**  
+Reconstructs hidden system knowledge and converts it into structured intelligence before transformation.
 
 ---
 
-## 14. Final Perspective
+## 10. Current MVP Scope
 
-Legacy modernization is fundamentally a **knowledge problem** before it is a coding problem.
+**Current modernization focus:**
 
-LegacyExodus addresses this by combining:
+- **Input:** Node.js / Express.js legacy backends  
+- **Output:** Rust / Axum / SQLx modern backends
 
-- deep system understanding
-- explicit knowledge modeling
-- AI-assisted transformation
-- validation-centric delivery
-- human-governed control
+**Target success profile:**  
+A legacy Express backend with 50+ files can be analyzed and migrated with high automation support, while routing complex or high-risk logic through explicit human approval workflows.
 
-**Principle:**  
-**Understand first. Model second. Transform third. Validate always.**
+---
+
+## 11. Future Evolution
+
+Planned platform evolution includes:
+
+- Multi-language modernization expansion
+- Cloud-native architecture modernization support
+- Autonomous documentation and knowledge refresh
+- Security posture modernization during migration
+- Performance optimization recommendation layers
+- Collaborative autonomous engineering agents under governance constraints
+
+These capabilities extend the platform while preserving the same foundational principles: knowledge-first reasoning, explainable transformation, and human-governed trust.
+
+---
+
+## 12. Operating Model Summary
+
+```mermaid
+flowchart LR
+    subgraph Discovery[Stage 1: VyrixScout]
+      D1[Inventory]
+    end
+
+    subgraph Modeling[Stage 2: NolaraStruct]
+      M1[AST + Symbols]
+      M2[Knowledge Graph]
+    end
+
+    subgraph Generation[Stage 3: ZelvoxForge]
+      G1[Plan]
+      G2[Generate Rust]
+    end
+
+    subgraph Governance[Stage 4: VymosGate]
+      V1[Test + Security]
+      V2[Human Approval]
+    end
+
+    D1 --> M1 --> M2 --> G1 --> G2 --> V1 --> V2
+```
+
+**Final perspective:**  
+Legacy modernization is fundamentally a knowledge and governance challenge before it is a code generation task.
+
+LegacyExodus operationalizes this through staged intelligence, controlled transformation, and validation-centric delivery.
+
+**Guiding principle:**  
+**Understand first. Transform second. Trust always.**
