@@ -1,329 +1,211 @@
-# Communication Patterns
+# LegacyExodus Communication Patterns
 
-## Purpose
+## 1. Purpose
 
-This document defines how LegacyExodus components communicate across the modernization runtime.  
-The system uses explicit message types and strict contracts so that behavior is deterministic, auditable, and safe.
+This document defines how components inside LegacyExodus communicate to coordinate modernization work safely and predictably.
 
-Communication is organized into five patterns:
+It answers:
 
-1. **Commands** (intent to change state)
-2. **Events** (facts that state changed)
-3. **Queries** (read-only state retrieval)
-4. **APIs** (external and inter-service interfaces)
-5. **Internal contracts** (schemas, versioning, compatibility rules)
+- How requests are issued
+- How state changes are announced
+- How read access is separated from write operations
+- How contracts keep cross-layer interactions stable
 
 ---
 
-## 1) Core model at a glance
+## 2. Communication Model Overview
 
-```text
-Client (CLI/API)
-   |
-   | Command
-   v
-Orchestrator  -----> Command Handlers
-   |                      |
-   | emits                | appends facts
-   v                      v
-Event Bus ------------> Event Handlers / Projections
-                              |
-                              | updates
-                              v
-                         Read Models / State Views
-                              ^
-                              | Query
-                        CLI / API / Services
-```
+LegacyExodus uses a **message-oriented, event-driven architecture** with **CQRS**:
+
+- **Commands** trigger intent to change state.
+- **Events** record facts that state changed.
+- **Queries** read current or historical state without causing mutation.
+
+This model provides:
+
+- deterministic orchestration for safety-critical flows
+- replayable evidence for governance and audit
+- loose coupling between discovery, intelligence, transformation, and governance layers
 
 ---
 
-## 2) Commands
+## 3. Core Message Types
 
-Commands are requests to perform an action that may change system state.  
-They are **imperative**, **validated**, and **handled exactly once logically** (with idempotency protection).
+## 3.1 Commands (Intent to Change State)
 
-## 2.1 Command characteristics
-- Represent user/system intent
-- Target one bounded context/aggregate
-- Include correlation + causation metadata
-- Must pass schema and policy validation before execution
-- Produce zero or more events
+Commands are imperative requests handled by one responsible component.
 
-## 2.2 Command envelope (logical shape)
-```json
-{
-  "command_id": "cmd_01J...",
-  "type": "StartMigration",
-  "run_id": "run_01J...",
-  "timestamp": "2026-08-06T00:00:00Z",
-  "actor": {
-    "type": "user",
-    "id": "raitaskeen"
-  },
-  "payload": {},
-  "metadata": {
-    "correlation_id": "corr_01J...",
-    "causation_id": "cause_01J...",
-    "idempotency_key": "idem_..."
-  }
-}
-```
+Examples:
 
-## 2.3 Example commands
-- `StartMigration`
-- `PauseMigration`
-- `ResumeMigration`
-- `CancelMigration`
-- `RunDiscovery`
-- `BuildKnowledgeGraph`
-- `ProposeTransformationBatch`
-- `ApplyTransformationBatch`
-- `RequestApproval`
-- `RecordApprovalDecision`
-- `RunValidationGate`
-- `FinalizeMigration`
+- `AnalyzeProjectCommand`
+- `StartMigrationCommand`
+- `ApproveMigrationCommand`
 
-## 2.4 Command handling rules
-1. Validate schema
-2. Validate authorization/policy
-3. Acquire run/stage lock
-4. Execute domain logic
-5. Append resulting events
-6. Return acknowledgment/result handle
+Command characteristics:
 
-If command fails validation, no domain event is emitted.
+- directed to a single handler (single owner)
+- validated before execution
+- idempotency key required for retry safety
+- produce zero or more events as outcomes
+
+Example intent:
+
+- `AnalyzeProjectCommand` → start discovery pipeline for a target system
+- `StartMigrationCommand` → initiate approved transformation plan execution
+- `ApproveMigrationCommand` → authorize release transition after governance checks
 
 ---
 
-## 3) Events
+## 3.2 Events (Facts About Completed Change)
 
-Events are immutable facts describing something that already happened.  
-They are **past tense**, append-only, and form the primary audit trail.
+Events represent immutable facts that something happened.
 
-## 3.1 Event characteristics
-- Immutable and timestamped
-- Ordered per run/aggregate
-- Consumable by multiple handlers
-- Safe for replay (idempotent consumers required)
+Examples:
 
-## 3.2 Event envelope (logical shape)
-```json
-{
-  "event_id": "evt_01J...",
-  "type": "MigrationStarted",
-  "run_id": "run_01J...",
-  "sequence": 42,
-  "timestamp": "2026-08-06T00:00:01Z",
-  "payload": {},
-  "metadata": {
-    "correlation_id": "corr_01J...",
-    "causation_id": "cmd_01J...",
-    "schema_version": 1
-  }
-}
-```
-
-## 3.3 Example events
-- `MigrationStarted`
-- `DiscoveryStarted`
-- `DiscoveryCompleted`
-- `KnowledgeGraphBuildStarted`
-- `KnowledgeGraphBuilt`
-- `TransformationProposed`
-- `TransformationApplied`
-- `ApprovalRequired`
-- `ApprovalGranted`
-- `ApprovalRejected`
-- `ValidationStarted`
+- `ProjectDiscovered`
+- `DependencyMapped`
+- `KnowledgeCreated`
+- `TransformationCompleted`
 - `ValidationPassed`
-- `ValidationFailed`
-- `MigrationCompleted`
-- `MigrationFailed`
-- `MigrationCancelled`
 
-## 3.4 Event consumption
-Consumers include:
-- Stage dispatchers
-- Projection builders (read models)
-- Notification services
-- Audit/compliance recorders
-- Metrics/telemetry processors
+Event characteristics:
 
-Delivery is at-least-once; consumers must deduplicate by `event_id`.
+- append-only and immutable
+- timestamped with provenance metadata
+- may be consumed by multiple downstream subscribers
+- form the auditable evidence chain for modernization decisions
+
+Example outcomes:
+
+- `ProjectDiscovered` emitted after inventory baseline is persisted
+- `DependencyMapped` emitted when dependency topology is captured
+- `KnowledgeCreated` emitted when normalized graph artifacts are committed
+- `TransformationCompleted` emitted when staged artifacts are produced
+- `ValidationPassed` emitted when policy/test gates succeed
 
 ---
 
-## 4) Queries
+## 3.3 Queries (Read-Only Access)
 
-Queries retrieve state without modifying it.  
-They run against read models/projections, not command handlers.
+Queries retrieve information without changing system state.
 
-## 4.1 Query characteristics
-- Side-effect free
-- Optimized for read use-cases
-- Can aggregate multiple event-derived projections
-- May include authorization filtering
+Examples:
 
-## 4.2 Query examples
 - `GetProjectState`
-- `GetRunStatus`
-- `GetStageProgress`
-- `GetApprovalQueue`
-- `GetArtifactLineage`
-- `GetValidationResults`
-- `GetRiskSummary`
-- `GetTransformationTraceMap`
+- `GetKnowledgeGraph`
+- `GetMigrationStatus`
 
-## 4.3 Example query flow
+Query characteristics:
+
+- side-effect free
+- optimized for read models / projections
+- can expose current snapshot and historical trend views
+- access-controlled by trust boundary and role policy
+
+---
+
+## 4. Event-Driven Architecture in LegacyExodus
+
+LegacyExodus coordinates across layers through domain events:
+
+1. Discovery emits early facts (`ProjectDiscovered`, `DependencyMapped`).
+2. Intelligence consumes discovery events and emits knowledge events (`KnowledgeCreated`).
+3. Transformation consumes approved planning events and emits execution events (`TransformationCompleted`).
+4. Governance consumes transformation + validation streams and emits gate outcomes (`ValidationPassed`, approval/hold events).
+
+Benefits:
+
+- asynchronous decoupling between producers and consumers
+- resilient recovery through replay/reprocessing
+- explicit operational timeline of modernization lifecycle
+
+---
+
+## 5. CQRS Application
+
+LegacyExodus applies CQRS to separate concerns:
+
+- **Command Side (Write Path):**
+  - handles intent, policy checks, orchestration, and state mutation
+  - source of truth captured as events + authoritative state stores
+
+- **Query Side (Read Path):**
+  - builds denormalized projections for dashboards, status, and audit views
+  - optimized for governance reporting and operator decision support
+
+Why CQRS here:
+
+- modernization workflows have strict control requirements (writes)
+- stakeholders need rich, fast visibility (reads)
+- auditability requires immutable change history and independently verifiable projections
+
+---
+
+## 6. Communication Contracts
+
+Contracts define the schema and behavioral guarantees for commands, events, and queries.
+
+Each contract must specify:
+
+- message name and version
+- required/optional fields
+- correlation identifiers
+- causation/source metadata
+- idempotency expectations
+- error semantics
+- backward compatibility policy
+
+Minimum metadata (all message types):
+
+- `messageId`
+- `messageType`
+- `messageVersion`
+- `timestamp`
+- `correlationId`
+- `causationId`
+- `tenantOrOrgId` (if multi-tenant)
+- `actor` (user/service identity)
+
+Compatibility rules:
+
+1. New consumers must tolerate unknown fields.
+2. Breaking schema changes require new version.
+3. Deprecated fields must have migration windows.
+4. Governance-critical message contracts require approval before rollout.
+
+---
+
+## 7. Message Flow (Canonical)
+
 ```text
-CLI: GetProjectState(run_id)
-   -> Query API
-   -> Read Model Store
-   -> ProjectState DTO returned
-```
-
-## 4.4 Query response model
-Responses should include:
-- requested state snapshot
-- projection timestamp (staleness visibility)
-- pagination cursors where applicable
-- optional consistency token/etag
-
----
-
-## 5) APIs
-
-LegacyExodus exposes APIs at two boundaries:
-
-1. **External APIs** (CLI and/or HTTP/gRPC) for users/platforms
-2. **Internal APIs** for service-to-service coordination
-
-## 5.1 External API principles
-- Contract-first schema definitions
-- Strong validation and typed errors
-- Idempotency for mutation endpoints
-- Long-running operations return operation/run handles
-
-### External API examples
-- `POST /migrations` -> issues `StartMigration`
-- `POST /migrations/{runId}/pause` -> issues `PauseMigration`
-- `GET /migrations/{runId}` -> `GetRunStatus`
-- `GET /migrations/{runId}/state` -> `GetProjectState`
-- `GET /migrations/{runId}/artifacts` -> artifact index
-
-## 5.2 Internal API principles
-- Prefer async messaging for stage transitions
-- Use sync RPC only for bounded low-latency dependencies
-- Enforce mTLS/service identity where applicable
-- Propagate trace/correlation ids end-to-end
-
-### Internal API examples
-- Orchestrator -> Worker Dispatcher: submit stage task
-- Worker -> Artifact Service: publish artifact metadata
-- Gate Service -> Policy Service: evaluate rule set
-- Projection Service -> Event Store: subscribe/read events
-
----
-
-## 6) Internal contracts
-
-Internal contracts keep components decoupled while preserving compatibility.
-
-## 6.1 Contract categories
-1. **Message contracts**: command/event/query schemas
-2. **Artifact contracts**: artifact metadata + content schema
-3. **Service contracts**: API request/response definitions
-4. **Policy contracts**: rule input/output schema
-5. **Identity contracts**: actor, approval, and ownership records
-
-## 6.2 Contract rules
-- Every contract has explicit version (`v1`, `v2`, …)
-- Backward-compatible changes are additive
-- Breaking changes require:
-  - new version
-  - migration plan
-  - dual-read/dual-write window (if needed)
-- Unknown fields must be safely ignored where defined
-- Required fields must never be silently removed
-
-## 6.3 Schema governance
-- Schemas stored in a central contract registry directory
-- CI validates compatibility on pull requests
-- Runtime rejects unknown-breaking payloads
-- Contract tests verify producer/consumer alignment
-
----
-
-## 7) Canonical examples
-
-## 7.1 Command example
-**Command:** `StartMigration`
-
-Intent: begin a modernization run for a target repository/workspace.
-
-Possible outcomes:
-- Accepted -> emits `MigrationStarted`
-- Rejected -> validation/authorization error (no event)
-
-## 7.2 Event example
-**Event:** `MigrationStarted`
-
-Fact: run lifecycle has entered active state and planning/dispatch may begin.
-
-Downstream consumers:
-- stage scheduler
-- progress projection
-- audit logger
-
-## 7.3 Query example
-**Query:** `GetProjectState`
-
-Read model returns:
-- current stage
-- stage completion percentages
-- pending approvals
-- latest artifacts
-- gate status summary
-
----
-
-## 8) Error and reliability patterns
-
-## 8.1 Commands
-- Validation errors -> synchronous reject
-- Conflict errors (lock/version mismatch) -> retry guidance
-- Timeout/transient infra errors -> retry with same idempotency key
-
-## 8.2 Events
-- Failed consumers -> retry with backoff
-- Poison events -> dead-letter queue + operator alert
-- Replay supported for projection rebuilds
-
-## 8.3 Queries
-- If projection lag exists, response includes `as_of` timestamp
-- Optional strong-consistency mode can block until minimum event offset is reached
-
----
-
-## 9) Security and trust boundaries
-
-- All command issuers are authenticated and authorized
-- Approval commands require elevated policy scope
-- Sensitive payload fields are redacted in logs where required
-- Event and API access is scoped by actor/project permissions
-- Full traceability maintained via correlation/causation ids
-
----
-
-## 10) Summary
-
-LegacyExodus communication is built on explicit, typed interactions:
-
-- **Commands** express intent (`StartMigration`)
-- **Events** record facts (`MigrationStarted`)
-- **Queries** read state (`GetProjectState`)
-- **APIs** expose controlled external/internal interfaces
-- **Internal contracts** guarantee compatibility and safe evolution
-
-This model ensures modernization workflows remain predictable, scalable, and auditable across all four pipeline stages.
+[Legacy System Input]
+        |
+        v
+AnalyzeProjectCommand
+        |
+        v
+(ProjectDiscovered, DependencyMapped) ----------------------+
+        |                                                   |
+        v                                                   v
+NolaraStruct consumes events                      GetProjectState / GetKnowledgeGraph
+        |
+        v
+KnowledgeCreated
+        |
+        v
+StartMigrationCommand
+        |
+        v
+TransformationCompleted
+        |
+        v
+Validation + Policy Checks
+        |
+        v
+ValidationPassed
+        |
+        v
+ApproveMigrationCommand
+        |
+        v
+[Modern System Released]
