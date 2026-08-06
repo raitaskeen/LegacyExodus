@@ -1,8 +1,15 @@
-# LegacyExodus
+<!-- Replace the top text header with this -->
+<p align="center">
+  <picture>
+    <img src="docs/assets/branding/banner.png" alt="LegacyExodus: Autonomous Software Modernization Platform" width="100%">
+  </picture>
+</p>
 
-**Enterprise-Grade Autonomous Software Modernization Platform**
+<h3 align="center">Enterprise-Grade Autonomous Software Modernization Platform</h3>
 
-A knowledge-first engineering platform that systematically maps, documents, and safely transforms complex legacy software systems into memory-safe architectures.
+<p align="center">
+  A knowledge-first engineering platform that systematically maps, documents, and safely transforms complex legacy software systems into memory-safe architectures.
+</p>
 
 ---
 
@@ -26,8 +33,8 @@ Millions of mission-critical enterprise applications currently run on aging, fra
 
 ### The Symptoms of Legacy Decay
 Enterprise systems typically suffer from:
-* **Undocumented Business Logic:** Core rules ("VIPs get 15% discounts on Tuesdays") exist only in undocumented, nested `if` statements.
-* **Tightly Coupled Architecture:** Database queries, network requests, and presentation logic are inextricably linked, making microservice extraction impossible.
+* **Undocumented Business Logic:** Core rules exist only in undocumented, nested conditionals.
+* **Tightly Coupled Architecture:** Database queries, network requests, and presentation logic are inextricably linked.
 * **Security Degradation:** Outdated dependencies and legacy frameworks harbor unpatched vulnerabilities.
 * **Knowledge Silos:** The original engineers have left, leaving a "black box" that current maintainers are afraid to touch.
 * **Testing Deficits:** A lack of unit and integration tests makes refactoring mathematically dangerous.
@@ -35,8 +42,8 @@ Enterprise systems typically suffer from:
 ### The Failure of Traditional Modernization
 When attempting to modernize these systems, organizations typically choose from three flawed paths:
 1. **Manual Rewrites:** Exhaustively slow, mathematically prone to human error, and prohibitively expensive.
-2. **Consulting Armies:** Outsourcing to large firms results in a loss of internal domain knowledge and massive capital expenditure.
-3. **Naive AI Generation:** Feeding raw legacy files into an LLM (Large Language Model) asking for a Rust/Go translation. This results in hallucinated syntax, missed dependencies, and complete architectural failure because the AI lacks the *global context* of the application.
+2. **Consulting Armies:** Outsourcing results in a loss of internal domain knowledge and massive capital expenditure.
+3. **Naive AI Generation:** Feeding raw legacy files into an LLM asking for a Rust/Go translation results in hallucinated syntax, missed dependencies, and complete architectural failure.
 
 ---
 
@@ -69,181 +76,105 @@ To survive in an enterprise environment, LegacyExodus adheres to strict engineer
 Understanding software is exponentially more valuable than generating software. The platform's primary output is the Knowledge Graph. Code generation is simply a byproduct of that knowledge.
 
 ### II. The Deterministic Core
-Critical infrastructure operations are 100% deterministic and written in strict TypeScript. These include:
-* Project discovery and file hashing
-* Abstract Syntax Tree (AST) parsing
-* Dependency resolution
-* File storage and database transactions
-* System governance and policy enforcement
-* Native compiler integration
-
-**These services never rely on probabilistic AI.**
+Critical infrastructure operations are 100% deterministic and written in strict TypeScript. These include project discovery, AST parsing, dependency resolution, file storage, governance, and compiler integration. **These services never rely on probabilistic AI.**
 
 ### III. AI as Specialized Workers
-AI is utilized strictly as a tool for heuristic reasoning, never as a system controller. Specialized agents are given narrow scopes:
-* **Architecture Agent:** Identifies design patterns.
-* **Business Logic Agent:** Translates AST nodes into human-readable business rules.
-* **Migration Planner:** formulates step-by-step conversion plans.
-* **Rust Generator Agent:** Writes idiomatic Rust code based on strict interfaces.
-
-**AI models never have direct write access to the filesystem, security policies, or secret management.**
+AI is utilized strictly as a tool for heuristic reasoning, never as a system controller. Specialized agents are given narrow scopes (Architecture mapping, Business Logic extraction, Migration Planning, Rust Generation). **AI models never have direct write access to the filesystem, security policies, or secret management.**
 
 ### IV. Zero Trust & Enterprise Safety
-LegacyExodus operates under a Zero Trust architecture:
-* Every generated artifact is treated as hostile until validated.
-* Output is piped through native compiler checks (e.g., `cargo check`).
-* High-risk domains (Authentication, Cryptography, Payments) trigger automatic system halts, requiring explicit cryptographic sign-off from a human engineer before proceeding.
+LegacyExodus operates under a Zero Trust architecture. Every generated artifact is treated as hostile until validated. Output is piped through native compiler checks, and high-risk domains trigger automatic system halts requiring human cryptographic approval.
 
 ---
 
 ## 5. High-Level System Architecture
 
-The pipeline operates as a unidirectional data flow, beginning with raw source code and ending with validated, modern binaries.
+LegacyExodus is not a single AI script; it is a **four-stage autonomous modernization pipeline**. The system flows through strict, isolated phases:
 
-    ================================================================================
-                               PHASE 0: INGESTION
-    ================================================================================
-                              [Legacy Source Code]
-                                       │
-                                       ▼
-                             (Discovery Service)
-                                       │
-    ================================================================================
-                               PHASE 1: THE ENGINE
-    ================================================================================
-                                       ▼
-                               (Parser Service)
-                                       │
-                                       ▼
-                            [Knowledge Extraction]
-                                       │
-                                       ▼
-                          [(SQLite Knowledge Graph)]
-                                       │
-    ================================================================================
-                             PHASE 2: ORCHESTRATION
-    ================================================================================
-                                       ▼
-                          [Event-Driven Workflow Bus]
-                                       │
-                 ┌─────────────────────┼─────────────────────┐
-                 ▼                     ▼                     ▼
-         [Architecture]         [Business Logic]        [Migration]
-            (Agent)                 (Agent)               (Agent)
-                 │                     │                     │
-                 └─────────────────────┼─────────────────────┘
-                                       ▼
-    ================================================================================
-                               PHASE 3: GENERATION
-    ================================================================================
-                                       ▼
-                            (Rust Generator Agent)
-                                       │
-                                       ▼
-                           (Compiler Validation Gate)
-                                       │
-                            (Repair Agent Loop) ↺
-                                       │
-    ================================================================================
-                                PHASE 4: DELIVERY
-    ================================================================================
-                                       ▼
-                           [Human Approval (HITL)]
-                                       │
-                                       ▼
-                               [Final ChangeSet]
-    ================================================================================
+                     [Legacy Source Code]
+                              │
+                              ▼
+     ┌──────────────────────────────────────────────────┐
+     │ Stage 1: VyrixScout                              │
+     │ (Discovery & System Understanding)               │
+     └──────────────────────────────────────────────────┘
+                              │
+                              ▼
+     ┌──────────────────────────────────────────────────┐
+     │ Stage 2: NolaraStruct                            │
+     │ (Knowledge Graph Reconstruction)                 │
+     └──────────────────────────────────────────────────┘
+                              │
+                              ▼
+     ┌──────────────────────────────────────────────────┐
+     │ Stage 3: ZelvoxForge                             │
+     │ (Modern Architecture Generation)                 │
+     └──────────────────────────────────────────────────┘
+                              │
+                              ▼
+     ┌──────────────────────────────────────────────────┐
+     │ Stage 4: VymosGate                               │
+     │ (Validation & Governance)                        │
+     └──────────────────────────────────────────────────┘
+                              │
+                              ▼
+                    [Modernized Software]
 
 ---
 
-## 6. Software Engineering Paradigms
+## 6. The Four-Stage Pipeline (Major Components)
+
+### Stage 1: VyrixScout (Legacy Intelligence Discovery Engine)
+**The Goal:** *"What exists inside this software system?"*
+VyrixScout is the deterministic reconnaissance layer. It scans the repository to map the physical boundaries of the legacy application before any parsing begins.
+* **Responsibilities:** Language/framework detection, dependency mapping, entry point detection, and API endpoint discovery.
+* **Output:** A complete System Inventory (Workspaces, Projects, Files, and raw Endpoints).
+
+### Stage 2: NolaraStruct (Knowledge Reconstruction Engine)
+**The Goal:** *"How does this system actually work?"*
+NolaraStruct represents our *Knowledge-First* philosophy. It converts raw syntax into a deep, semantic understanding of the business domain.
+* **Responsibilities:** AST parsing, symbol extraction, business rule discovery, domain modeling, and architecture reconstruction.
+* **Output:** A relational Knowledge Graph (Entities, Relationships, Business Rules, and Architecture Models).
+
+### Stage 3: ZelvoxForge (Modernization Generation Engine)
+**The Goal:** *"How do we rebuild this system safely?"*
+ZelvoxForge is where specialized AI agents operate. Guided by the Knowledge Graph, it systematically generates modern, memory-safe code. 
+* **Responsibilities:** Rust code generation, framework mapping, database migration mapping, test generation, and compiler repair loops.
+* **Output:** Modernized Source Code (Rust/Axum Services, SQLx Models, and generated tests).
+
+### Stage 4: VymosGate (Verification & Governance Gateway)
+**The Goal:** *"Can this transformation be trusted?"*
+VymosGate is the final barrier before deployment. It enforces Zero-Trust security and ensures the generated code compiles, passes tests, and meets architectural standards.
+* **Responsibilities:** Security validation, native compilation checks (`cargo check`), automated testing, and Human-in-the-Loop (HITL) approval checkpoints.
+* **Output:** Validated Software, Migration Reports, and Cryptographic Approval Records.
+
+---
+
+## 7. Software Engineering Paradigms
 
 LegacyExodus is designed around battle-tested software engineering patterns to ensure massive scalability and absolute data integrity.
-
-### Domain-Driven Design (DDD)
-The system's internal language strictly separates business concepts from infrastructure.
-* **The Engine:** Owns the static concepts (`Workspace`, `Project`, `File`, `Symbol`, `CodeSpan`, `Dependency`).
-* **The Workflow:** Owns the dynamic processes (`Command`, `Event`, `MigrationTask`, `Approval`, `ChangeSet`).
-
-### Command Query Responsibility Segregation (CQRS)
-To prevent agents from corrupting the system state through race conditions, reads and writes are physically separated.
-* **Commands (Writes):** Agents emit intents (e.g., `ExtractRuleCommand`). The Orchestrator validates the command against security policies before accepting it.
-* **Queries (Reads):** Agents request context from highly optimized, read-only SQLite projections (e.g., `GetDependenciesQuery`).
-
-### Event-Driven Architecture & Event Sourcing
-Direct database mutation is prohibited. Every action in LegacyExodus is recorded as an immutable event in an append-only `.jsonl` log.
-* If a process crashes at file 99,000 out of 100,000, the system does not restart. It reads the Event Log, rebuilds the exact state projection in milliseconds, and resumes at file 99,001.
-* This provides a flawless, cryptographic audit trail for enterprise compliance teams.
-
-### AI Gateway Routing
-LegacyExodus does not depend on a single vendor (e.g., OpenAI, Anthropic, or Google). It utilizes an Intelligent AI Router pattern.
-* **Lightweight tasks** (AST cleanup, semantic search) are routed to local, offline models (e.g., Ollama running Qwen/Llama) to ensure zero data leakage and zero API costs.
-* **Heavy reasoning tasks** (Architecture mapping) are routed to premium cloud models via strict `AIProvider` interfaces.
-
----
-
-## 7. Major Component Specifications
-
-The repository is modularly divided into deterministic services, orchestrators, and AI layers.
-
-### A. The Engine (Deterministic Services)
-The Engine is the absolute source of truth. It executes predictably, rapidly, and without hallucination.
-
-| Service Name | Primary Responsibility | Data Output |
-| :--- | :--- | :--- |
-| **Discovery Service** | Traverses directories, hashes files, and maps the `Workspace` and `Project` boundaries. Respects `.exodusignore`. | `Project` Entity |
-| **Parser Service** | Converts raw text into Language-Agnostic Abstract Syntax Trees (AST). Applies the "Token Diet" to strip noise. | AST JSON |
-| **Knowledge Service** | Resolves `Symbols` (functions, classes) and their exact `CodeSpan` locations across multiple files. | `Symbol` Entity |
-| **Graph Service** | Builds directed acyclic graphs representing module imports and database calls. | `Dependency` Entity |
-| **Storage Service** | Manages SQLite connections, Event Log appending, and file-system read/writes. | Checkpoints |
-| **Governance Engine** | Deterministically enforces hard security rules (e.g., blocking `.env` reads). | `Risk` Flags |
-| **Compiler Service** | Wraps native toolchains (e.g., Node, Cargo, Rustc) to execute `cargo check` and `cargo test`. | `Diagnostic` Entity |
-
-### B. The Orchestrator (Workflow)
-The Orchestrator is the central nervous system. It routes Commands, validates them against the Governance Engine, appends Events, and schedules Tasks.
-* **Task Queue:** Manages the backlog of migration workloads, prioritizing based on dependencies (e.g., migrating Auth before Payments).
-* **State Projections:** Continuously updates the SQLite database as new events are appended to the log.
-
-### C. The Intelligence Layer (AI Agents)
-Agents are stateless, isolated workers. They are spun up, provided a specific slice of the `ProjectState`, and expected to return a Zod-validated JSON response.
-
-| Agent Name | Primary Responsibility | Target Output Schema |
-| :--- | :--- | :--- |
-| **Architecture Agent** | Maps API routes to database schemas and identifies missing middleware. | `Route` / `Endpoint` |
-| **Business Logic Agent** | Translates complex nested loops and conditionals into plain-English rules. | `BusinessRule` |
-| **Migration Planner** | Analyzes the Knowledge Graph to formulate safe, step-by-step migration phases. | `MigrationTask` |
-| **Rust Generator** | Ingests a `MigrationTask` and outputs idiomatic Rust (`Axum`/`SQLx`) code. | `ChangeSet` |
-| **Repair Agent** | Ingests a `Diagnostic` (Compiler error) and the faulty Rust code to generate a fix. | `ChangeSet` (Patch) |
-| **Risk Agent** | Analyzes business logic for implied security vulnerabilities (e.g., missing auth checks). | `Risk` |
-
-### D. The Enterprise Dashboard
-A frontend UI providing real-time telemetry into the migration process.
-* **Visualizes the Knowledge Graph:** Allows engineers to see how their legacy monolith is connected.
-* **Approval Gates:** The UI pauses and flashes when a High-Risk task requires human cryptographic approval.
-* **Confidence Scoring:** Displays the AI's self-reported confidence metric for every generated `ChangeSet`.
+* **Domain Driven Design (DDD):** Business concepts remain independent of infrastructure.
+* **CQRS:** Commands mutate state. Queries retrieve knowledge.
+* **Event Driven Architecture:** Every important system action becomes an immutable event.
+* **Hybrid Event Sourcing:** Historical events are preserved while optimized projections support fast querying.
+* **Human-in-the-Loop (HITL):** High-risk migrations require explicit manual approval at VymosGate.
+* **Zero Trust AI:** AI agents operate strictly inside the deterministic boundaries of ZelvoxForge and NolaraStruct.
+* **AI Gateway Routing:** Vendor-agnostic routing to prevent lock-in, utilizing local models for lightweight tasks and cloud models for heavy reasoning.
 
 ---
 
 ## 8. Technology Stack Justification
 
-Every tool in the LegacyExodus stack was chosen for speed, type safety, and local execution capabilities.
+* **Runtime:** `Bun` (Ultra-fast File I/O, native TypeScript execution, built-in SQLite driver).
+* **Language:** `TypeScript` in Strict Mode with `Zod` (Enforces rigorous data contracts).
+* **Database:** `Better-SQLite3` (Embedded, local, ACID-compliant to prevent OOM crashes).
+* **Event Store:** Flat `.jsonl` files (Human-readable, append-only, version-controlled).
+* **Target Architecture:** `Rust` / `Axum` / `SQLx` (Memory-safe, highly performant, strictly typed).
 
-* **Runtime:** `Bun`
-  * *Why:* Bun offers ultra-fast File I/O, native TypeScript execution without compilation overhead, and a built-in SQLite driver. This is critical for scanning 100,000+ file repositories.
-* **Language:** `TypeScript` (Strict Mode)
-  * *Why:* Enforces rigorous data contracts. By utilizing `Zod`, we guarantee that malformed AI outputs crash at the boundary layer rather than corrupting the database.
-* **Database:** `Better-SQLite3`
-  * *Why:* Embedded, local, and ACID-compliant. It prevents Out-Of-Memory (OOM) crashes by offloading the Knowledge Graph to disk while maintaining sub-millisecond query speeds.
-* **Event Store:** Flat `.jsonl` files
-  * *Why:* Human-readable, append-only, and easily version-controlled.
-* **Target Architecture:** `Rust` / `Axum`
-  * *Why:* Memory-safe, highly performant, and strictly typed. Rust's compiler acts as our ultimate deterministic validation gate.
-
-  ---
+---
 
 ## 9. Repository Directory Structure
 
-LegacyExodus is designed with a massive, comprehensive documentation hub that precedes the core logic implementation. The core engine and dashboard are explicitly isolated for future phases.
+LegacyExodus is designed with a massive, comprehensive documentation hub that precedes the core logic implementation.
 
     LegacyExodus/
     ├── .github/                           # GitHub Governance & CI/CD
@@ -265,6 +196,7 @@ LegacyExodus is designed with a massive, comprehensive documentation hub that pr
     │   ├── reviews/                       # Architecture, security, and AI reviews
     │   ├── security/                      # Threat models, compliance, sandboxing
     │   ├── templates/                     # Standardized markdown templates
+    │   ├── assets/branding/               # Logos, banners, and visual assets
     │   ├── AI_CONTEXT.md                  # Specific instructions for AI agents
     │   ├── DOCUMENTATION_RULES.md         # Rules for writing docs
     │   ├── GLOSSARY.md                    # Project-specific terminology
@@ -285,36 +217,33 @@ LegacyExodus is designed with a massive, comprehensive documentation hub that pr
 LegacyExodus is being built incrementally to ensure mathematical stability at every phase.
 
 ### Phase 0: Foundation (Current Status)
-- [x] Establish Enterprise Repository Metadata.
+- [x] Establish Enterprise Repository Metadata & Branding.
 - [x] Define Domain-Driven Design (DDD) Ubiquitous Language.
 - [x] Draft Architecture Decision Records (ADRs 001-007).
 - [x] Configure strict TypeScript and testing environments.
 - [x] Establish the massive `docs/` knowledge hub.
 
-### Phase 1: The Deterministic Engine (Upcoming)
+### Phase 1: VyrixScout (The Deterministic Engine)
 - [ ] Implement `StorageService` (SQLite scaffolding and Event Log writing).
 - [ ] Implement `DiscoveryService` (Directory traversal, file hashing, `.exodusignore`).
-- [ ] Validate Engine by parsing a dummy Express.js project into a structured JSON representation without AI.
+- [ ] Validate Engine by parsing a dummy Express.js project into a structured JSON representation.
 
-### Phase 2: Knowledge Extraction (Upcoming)
+### Phase 2: NolaraStruct (Knowledge Extraction)
 - [ ] Implement `ParserService` (AST generation via `@babel/parser`).
 - [ ] Implement `GraphService` (Resolving dependencies and mapping endpoints).
 - [ ] Persist the completed Knowledge Graph to SQLite.
 
-### Phase 3: The Intelligence Layer (Upcoming)
+### Phase 3: ZelvoxForge (The Intelligence Layer)
 - [ ] Build the `AI Gateway` (Vendor-agnostic routing interface).
 - [ ] Implement local embedding support for semantic search.
 - [ ] Deploy the `ArchitectureAgent` and `BusinessLogicAgent`.
-
-### Phase 4: Transformation & Validation (Upcoming)
 - [ ] Implement the `RustGeneratorAgent`.
+
+### Phase 4: VymosGate (Transformation & Validation)
 - [ ] Build the `CompilerService` (`cargo check` integration).
 - [ ] Develop the Self-Healing `RepairAgent` loop.
-
-### Phase 5: Enterprise Controls (Upcoming)
-- [ ] Develop the React `legacy-exodus-dashboard`.
 - [ ] Implement Human-in-the-loop (HITL) approval gates.
-- [ ] Finalize telemetry and metric exporting.
+- [ ] Finalize telemetry and metric exporting via the Dashboard.
 
 ---
 
@@ -344,13 +273,13 @@ LegacyExodus is being built incrementally to ensure mathematical stability at ev
     # Initialize a workspace in an existing legacy project
     legacy-exodus init ./my-legacy-express-app
 
-    # Run the deterministic Discovery and Knowledge services
+    # Run VyrixScout and NolaraStruct
     legacy-exodus scan
 
-    # Formulate a migration plan using the Intelligence Layer
+    # Formulate a migration plan via ZelvoxForge
     legacy-exodus plan --target=rust-axum
 
-    # Execute the migration with Human-in-the-loop enabled
+    # Execute the migration with VymosGate HITL enabled
     legacy-exodus migrate --interactive
 
 ---
@@ -379,16 +308,15 @@ Security is non-negotiable. LegacyExodus processes highly sensitive, proprietary
 * **Secret Scanning:** The Governance Engine deterministically strips `.env` files, `.pem` certificates, and hardcoded API keys before ASTs are transmitted to any cloud AI provider.
 
 ### Vulnerability Reporting
-If you discover a vulnerability—especially sandbox escapes, prompt injection risks, or event-log corruption vectors—**do not open a public issue.** 
-
-Please refer to our [SECURITY.md](SECURITY.md) file for responsible disclosure protocols. 
+If you discover a vulnerability—especially sandbox escapes, prompt injection risks, or event-log corruption vectors—**do not open a public issue.** Please refer to our [SECURITY.md](SECURITY.md) file for responsible disclosure protocols. 
 
 ---
 
 ## 14. License
 
-This project is licensed under the **MIT License**. 
+This project is licensed under the **MIT License**. By contributing to LegacyExodus, you agree that your contributions will be licensed under its MIT License. See the [LICENSE](LICENSE) file for complete details.
 
-By contributing to LegacyExodus, you agree that your contributions will be licensed under its MIT License. See the [LICENSE](LICENSE) file for complete details.
-
-**Built for the future of software engineering.**
+<div align="center">
+  <br>
+  <i>Built for the future of software engineering.</i>
+</div>
