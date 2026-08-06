@@ -1,1723 +1,1811 @@
 # LegacyExodus Glossary
 
-## Introduction
+This glossary is the canonical vocabulary reference for LegacyExodus.  
+It defines how terms are used across architecture, implementation, governance, and AI-assisted workflows.
 
-This glossary is the canonical terminology reference for LegacyExodus. It exists to ensure that developers, architects, reviewers, enterprise stakeholders, and AI assistants use a shared, precise vocabulary when designing, implementing, and validating modernization workflows.
+Use this document as the single source of truth for terminology used by:
 
-### Why this glossary exists
+- software engineers
+- architects
+- AI agents
+- reviewers
+- enterprise stakeholders
 
-Legacy modernization projects fail when teams use the same words to mean different things. In LegacyExodus, terminology is not cosmetic; it is operational. Terms in this document are tied to architecture decisions, pipeline behavior, governance requirements, and delivery outcomes.
+---
 
-### How terminology should be interpreted
+## How to Use This Glossary
 
-- **Normative meaning**: Definitions in this glossary are authoritative for the LegacyExodus codebase and documentation.
-- **Contextual meaning**: Many terms have broad software-industry definitions. This glossary narrows them to LegacyExodus usage.
-- **Decision meaning**: If two concepts appear similar (for example, *translation* vs *migration*), the distinction here determines implementation and governance choices.
+Each term is defined with the following structure:
 
-### General software terms vs LegacyExodus-specific meanings
-
-- A **general term** explains an industry concept (for example, AST, static analysis, reliability).
-- A **LegacyExodus term** explains how that concept is instantiated in this platform (for example, how ASTs feed NolaraStruct’s system intelligence model).
-
-When a conflict exists between colloquial usage and this glossary, use this glossary.
+- **Definition**: precise meaning.
+- **LegacyExodus Meaning**: how the term is used in this platform.
+- **Architectural Purpose**: why the concept exists.
+- **Related Terms / Stages**: connected concepts and pipeline location.
 
 ---
 
 ## Section 1: Core Project Concepts
 
-## LegacyExodus
+### LegacyExodus
+**Definition**  
+A knowledge-driven software modernization engine for analyzing, modeling, transforming, and validating legacy systems.
 
-### Definition
+**LegacyExodus Meaning**  
+LegacyExodus is not a code converter. It is a governed modernization platform that executes a four-stage pipeline: VyrixScout, NolaraStruct, ZelvoxForge, and VymosGate.
 
-A knowledge-driven modernization platform that analyzes legacy systems, models their behavior and architecture, transforms them into modern implementations, and validates outcomes through governed controls.
+**Architectural Purpose**  
+To produce safe, explainable modernization outcomes by treating system understanding as a prerequisite for transformation.
 
-### LegacyExodus Context
+**Related Terms / Stages**  
+Knowledge-First Architecture, Migration Pipeline, Human-Governed AI, Migration Confidence.
 
-LegacyExodus is implemented as a staged pipeline: **VyrixScout → NolaraStruct → ZelvoxForge → VymosGate**. It is not a line-by-line converter.
+---
 
-### Example
+### Legacy Modernization
+**Definition**  
+A structured process of evolving legacy software into maintainable, secure, and operationally reliable modern systems.
 
-A PHP monolith is ingested, analyzed into structured intelligence, transformed into Rust services, and released only after validation evidence meets governance policy.
+**LegacyExodus Meaning**  
+Modernization is defined as: understanding + modeling + transformation + validation. It is broader than syntax conversion.
 
-## Legacy Modernization
+**Architectural Purpose**  
+To preserve business intent while reducing technical risk and long-term maintenance burden.
 
-### Definition
+**Related Terms / Stages**  
+System Understanding, Migration Strategy, Behavioral Equivalence, VymosGate.
 
-The disciplined process of evolving software systems from high-risk legacy states to maintainable, secure, and scalable modern states while preserving business-critical behavior.
+---
 
-### LegacyExodus Context
+### Modernization Intelligence Platform
+**Definition**  
+A platform that combines software analysis, system modeling, AI-assisted generation, and governance controls to support modernization decisions and execution.
 
-Modernization is treated as an engineering lifecycle with traceable artifacts, not a one-time rewrite event.
+**LegacyExodus Meaning**  
+LegacyExodus functions as a modernization intelligence platform by maintaining a project state and system intelligence model through the full pipeline.
 
-### Example
+**Architectural Purpose**  
+To make modernization deterministic, traceable, and repeatable at enterprise scale.
 
-Replacing a legacy data access layer with SQLx-based repositories while retaining transactional behavior and compliance reporting outputs.
+**Related Terms / Stages**  
+Project State, Knowledge Graph, AI Governance, Pipeline Orchestration.
 
-## Modernization Intelligence Platform
+---
 
-### Definition
+### Knowledge-First Architecture
+**Definition**  
+An architecture pattern where knowledge acquisition and representation precede and constrain automated change.
 
-A platform that makes modernization decisions based on computed system understanding (structure, behavior, dependencies, and risks) rather than heuristics alone.
+**LegacyExodus Meaning**  
+No transformation is authoritative unless grounded in discovered system facts and formalized system intelligence.
 
-### LegacyExodus Context
+**Architectural Purpose**  
+To prevent unsafe or semantically incorrect migrations caused by shallow code-level conversion.
 
-NolaraStruct materializes this intelligence so downstream transformation and validation are informed by explicit models.
+**Related Terms / Stages**  
+VyrixScout, NolaraStruct, System Intelligence Model, Migration Confidence.
 
-### Example
+---
 
-Before generating Rust modules, the platform identifies bounded contexts, coupling hotspots, and transaction boundaries.
+### Autonomous Migration System
+**Definition**  
+A system that can execute modernization tasks with high automation while remaining bounded by policy and approvals.
 
-## Knowledge-First Architecture
+**LegacyExodus Meaning**  
+Autonomy is operational, not absolute. Agents can propose and perform actions, but final trust decisions pass through governance controls.
 
-### Definition
+**Architectural Purpose**  
+To increase modernization throughput without removing accountability.
 
-An architecture principle where system understanding is built before system transformation.
+**Related Terms / Stages**  
+Multi-Agent System, Agent Orchestration, Human Approval Loop, VymosGate.
 
-### LegacyExodus Context
+---
 
-Every major change proposed by ZelvoxForge is grounded in knowledge artifacts produced by VyrixScout and NolaraStruct.
+### Human-Governed AI
+**Definition**  
+An operational model where AI-generated outputs are subject to explicit human-controlled gates and policy checks.
 
-### Example
+**LegacyExodus Meaning**  
+AI contributes analysis and transformation, but high-impact decisions require review and approval.
 
-Instead of `legacy file -> converted file`, LegacyExodus performs `source analysis -> intelligence model -> planned transformation -> validated output`.
+**Architectural Purpose**  
+To maintain auditability, compliance, and stakeholder trust in modernization outcomes.
 
-## Autonomous Migration System
+**Related Terms / Stages**  
+AI Governance, Human Approval Loop, Governance Engine, Audit Trail.
 
-### Definition
+---
 
-A system that can execute large portions of the migration lifecycle automatically, with deterministic checkpoints and controllable intervention points.
+### Migration Intelligence
+**Definition**  
+The accumulated analytical and contextual knowledge required to modernize a system safely.
 
-### LegacyExodus Context
+**LegacyExodus Meaning**  
+A composite of parsed structures, dependencies, domain semantics, inferred architecture, and validation evidence.
 
-Autonomy is scoped by governance. The system automates analysis, planning, and generation, but final adoption remains controllable.
+**Architectural Purpose**  
+To drive transformation quality and reduce regression risk.
 
-### Example
+**Related Terms / Stages**  
+Source Analysis, Semantic Analysis, Knowledge Graph, System Intelligence Model.
 
-Transformation batches are generated automatically, but promotion to production requires policy gates and human approval.
+---
 
-## Human-Governed AI
+### System Understanding
+**Definition**  
+A verified interpretation of how a software system behaves, is structured, and encodes business logic.
 
-### Definition
+**LegacyExodus Meaning**  
+System understanding is built progressively from discovery artifacts and formalized in NolaraStruct.
 
-An AI operating model where machine-driven decisions are bounded by explicit human-defined policies, controls, and approval workflows.
+**Architectural Purpose**  
+To establish behavioral and architectural baselines before code generation.
 
-### LegacyExodus Context
+**Related Terms / Stages**  
+VyrixScout, NolaraStruct, Domain Model, Invariant.
 
-VymosGate enforces this model through approval checkpoints, audit evidence, and risk-based release criteria.
+---
 
-### Example
+### Transformation Pipeline
+**Definition**  
+An ordered sequence of stages that convert discovered system knowledge into validated modern implementations.
 
-A high-risk authentication migration cannot proceed without designated reviewer sign-off, even if automated tests pass.
+**LegacyExodus Meaning**  
+The pipeline is fixed in intent: discover, model, transform, validate.
 
-## Migration Intelligence
+**Architectural Purpose**  
+To enforce separation of concerns and stage-specific quality controls.
 
-### Definition
+**Related Terms / Stages**  
+Migration Pipeline, Pipeline Orchestration, VyrixScout, NolaraStruct, ZelvoxForge, VymosGate.
 
-The aggregated knowledge used to make migration decisions: architecture semantics, behavior signatures, dependency structure, and risk indicators.
+---
 
-### LegacyExodus Context
+### Migration Confidence
+**Definition**  
+A measurable level of trust that modernization outputs preserve required behavior and meet governance criteria.
 
-This intelligence is persisted and versioned so that pipeline stages can reason consistently over time.
+**LegacyExodus Meaning**  
+Confidence is evidence-based and derived from traceability, validation results, policy checks, and human approvals.
 
-### Example
+**Architectural Purpose**  
+To support release decisions with auditable rationale.
 
-A dependency graph plus data-flow analysis indicates that a billing module requires phased extraction rather than direct decomposition.
-
-## System Understanding
-
-### Definition
-
-A verified internal representation of what a legacy system does, how it is structured, and where critical behavior resides.
-
-### LegacyExodus Context
-
-System understanding is an explicit deliverable, not an implied side effect of parsing code.
-
-### Example
-
-The platform identifies that order finalization behavior spans controller code, stored procedures, and asynchronous queue handlers.
-
-## Transformation Pipeline
-
-### Definition
-
-The ordered sequence of stages that convert legacy system intelligence into modern implementation artifacts.
-
-### LegacyExodus Context
-
-Pipeline stages are isolated by responsibility and connected via explicit contracts.
-
-### Example
-
-Discovery outputs from VyrixScout become structured inputs for NolaraStruct model synthesis.
-
-## Migration Confidence
-
-### Definition
-
-A measurable indicator of how safely a modernization output can be adopted, based on evidence quality, behavior preservation, and governance checks.
-
-### LegacyExodus Context
-
-Confidence is not subjective; it is derived from validation artifacts and policy outcomes.
-
-### Example
-
-Confidence increases when regression parity, security scans, and domain invariant checks all pass.
+**Related Terms / Stages**  
+Behavioral Equivalence, Regression Testing, AI Reasoning Trace, Governance Engine.
 
 ---
 
 ## Section 2: Migration Pipeline Terms
 
-## Migration Pipeline
+### Migration Pipeline
+**Definition**  
+A structured lifecycle for modernizing legacy systems through distinct, interdependent stages.
 
-### Definition
+**LegacyExodus Meaning**  
+The canonical flow is: Legacy System -> VyrixScout -> NolaraStruct -> ZelvoxForge -> VymosGate -> Modern Production System.
 
-A multi-stage modernization workflow with explicit handoffs, contracts, and evidence.
+**Architectural Purpose**  
+To transform unstructured modernization effort into governed execution.
 
-### LegacyExodus Context
+**Related Terms / Stages**  
+Migration Stage, Pipeline Orchestration, Project State.
 
-The pipeline is the backbone of LegacyExodus delivery architecture.
+---
 
-### Example
+### Migration Stage
+**Definition**  
+A bounded phase in the pipeline with specific responsibilities, inputs, outputs, and acceptance criteria.
 
-`Legacy System -> VyrixScout -> NolaraStruct -> ZelvoxForge -> VymosGate -> Modern Rust System`.
+**LegacyExodus Meaning**  
+Each named stage encapsulates a separate responsibility domain and contract.
 
-## Migration Stage
+**Architectural Purpose**  
+To isolate complexity and improve reliability of stage transitions.
 
-### Definition
+**Related Terms / Stages**  
+Event Contract, Service Contract, Pipeline Orchestration.
 
-A bounded processing phase with a single primary responsibility and well-defined I/O contracts.
+---
 
-### LegacyExodus Context
+### Pipeline Orchestration
+**Definition**  
+Coordination logic that sequences stages, propagates context, handles failures, and enforces gating rules.
 
-Each stage can evolve independently as long as stage contracts remain stable.
+**LegacyExodus Meaning**  
+The orchestrator controls progression and ensures each stage consumes validated outputs from prior stages.
 
-### Example
+**Architectural Purpose**  
+To maintain deterministic flow and state integrity.
 
-ZelvoxForge may update code generation tactics without changing VyrixScout discovery semantics.
+**Related Terms / Stages**  
+Orchestrator, Event-Driven Architecture, Project State.
 
-## Pipeline Orchestration
+---
 
-### Definition
+### VyrixScout
+**Purpose**  
+Discovery and system observation.
 
-The runtime control mechanism that schedules stages, propagates artifacts, handles retries, and enforces ordering constraints.
+**Responsibilities**  
+- ingest legacy code and related artifacts  
+- perform foundational structural and dependency discovery  
+- capture observable system characteristics
 
-### LegacyExodus Context
+**Inputs**  
+Legacy source code, configuration artifacts, and project metadata.
 
-The Orchestrator coordinates stage execution and failure handling.
+**Outputs**  
+Discovery artifacts: parse-ready structures, dependency observations, and initial system signals.
 
-### Example
+**Role in Lifecycle**  
+Establishes the factual baseline for subsequent intelligence modeling.
 
-If NolaraStruct fails model consistency checks, the Orchestrator blocks ZelvoxForge execution and raises a governance event.
+**Related Terms / Stages**  
+Source Analysis, Parser, Dependency Graph, Migration Intelligence.
 
-## VyrixScout
+---
 
-### Definition
+### NolaraStruct
+**Purpose**  
+System intelligence and knowledge modeling.
 
-The discovery stage responsible for extracting raw structural and behavioral signals from legacy systems.
+**Responsibilities**  
+- convert discovery artifacts into structured knowledge  
+- construct domain and architecture representations  
+- formalize entities, relationships, invariants, and boundaries
 
-### Purpose
+**Inputs**  
+VyrixScout discovery outputs.
 
-Create high-fidelity source intelligence inputs.
+**Outputs**  
+System Intelligence Model, Knowledge Graph, refined Project State.
 
-### Responsibilities
+**Role in Lifecycle**  
+Transforms raw discovery into actionable understanding that guides safe transformation.
 
-- Source ingestion and normalization
-- Structural parsing and metadata capture
-- Initial dependency and symbol discovery
+**Related Terms / Stages**  
+Knowledge Graph, Domain Model, Bounded Context, Invariant.
 
-### Inputs
+---
 
-Legacy repositories, configuration, schema definitions, build metadata.
+### ZelvoxForge
+**Purpose**  
+AI-assisted transformation and generation.
 
-### Outputs
+**Responsibilities**  
+- generate modern implementation candidates from validated system intelligence  
+- apply transformation strategies under policy constraints  
+- preserve intent and behavior defined by upstream knowledge models
 
-Discovery artifacts: parsed units, symbol maps, dependency seeds, metadata records.
+**Inputs**  
+NolaraStruct system intelligence outputs and transformation directives.
 
-### Role in lifecycle
+**Outputs**  
+Generated modernization artifacts and transformation trace data.
 
-Establishes the factual baseline used by all downstream reasoning.
+**Role in Lifecycle**  
+Performs modernization execution while remaining constrained by prior understanding.
 
-## NolaraStruct
+**Related Terms / Stages**  
+Prompt Engineering, Context Engineering, Behavioral Equivalence, AI Reasoning Trace.
 
-### Definition
+---
 
-The understanding stage that turns discovery artifacts into coherent architectural and domain intelligence.
+### VymosGate
+**Purpose**  
+Validation, governance, and human approval.
 
-### Purpose
+**Responsibilities**  
+- evaluate transformation outputs for correctness, safety, and policy compliance  
+- enforce approval workflows  
+- capture evidence for release confidence and auditability
 
-Build the system intelligence model.
+**Inputs**  
+ZelvoxForge generated artifacts, validation signals, and governance policies.
 
-### Responsibilities
+**Outputs**  
+Approval decisions, compliance records, and final migration confidence status.
 
-- Model synthesis
-- Relationship mapping
-- Context and boundary detection
-- Risk surface identification
+**Role in Lifecycle**  
+Acts as the trust boundary before promotion to modern production systems.
 
-### Inputs
-
-VyrixScout discovery artifacts.
-
-### Outputs
-
-Knowledge graph, domain model candidates, interaction maps, modernization constraints.
-
-### Role in lifecycle
-
-Converts extracted data into decision-grade system understanding.
-
-## ZelvoxForge
-
-### Definition
-
-The transformation stage that generates modern architecture and implementation artifacts guided by system intelligence.
-
-### Purpose
-
-Produce migration outputs that preserve behavior while improving architecture and safety.
-
-### Responsibilities
-
-- Target architecture generation
-- Code transformation and synthesis
-- Contract reshaping
-- Compatibility strategy generation
-
-### Inputs
-
-NolaraStruct intelligence model and modernization constraints.
-
-### Outputs
-
-Rust-oriented services/modules, interface contracts, migration diffs, transformation evidence.
-
-### Role in lifecycle
-
-Creates executable modernization outputs from modeled understanding.
-
-## VymosGate
-
-### Definition
-
-The validation and governance stage that verifies quality, risk, and policy conformance before adoption.
-
-### Purpose
-
-Prevent unsafe modernization outcomes from progressing.
-
-### Responsibilities
-
-- Behavioral equivalence checks
-- Compliance and security validation
-- Policy evaluation and approval routing
-- Audit packaging
-
-### Inputs
-
-ZelvoxForge outputs plus all upstream evidence.
-
-### Outputs
-
-Validation reports, confidence scores, governance decisions, release recommendations.
-
-### Role in lifecycle
-
-Acts as the final control boundary between generated modernization outputs and production adoption.
+**Related Terms / Stages**  
+Human Approval Loop, AI Governance, Audit Trail, Regression Testing.
 
 ---
 
 ## Section 3: AI Architecture Terms
 
-## AI Agent
+### AI Agent
+**Definition**  
+A bounded computational actor that performs specific reasoning or execution tasks.
 
-### Definition
+**LegacyExodus Meaning**  
+Agents operate within defined scopes per stage and are constrained by governance and context boundaries.
 
-A specialized autonomous unit that executes bounded cognitive tasks (analysis, planning, synthesis, validation) under explicit instructions and constraints.
+**Architectural Purpose**  
+To modularize AI responsibilities and reduce uncontrolled behavior.
 
-### LegacyExodus Context
+**Related Terms / Stages**  
+Agent Isolation, Multi-Agent System, Agent Orchestration.
 
-Agents are role-scoped to reduce ambiguity and improve traceability.
+---
 
-### Example
+### Multi-Agent System
+**Definition**  
+A coordinated set of specialized agents collaborating toward a shared objective.
 
-A discovery agent extracts symbol relationships while a governance agent evaluates policy compliance.
+**LegacyExodus Meaning**  
+Different agents support discovery, modeling, transformation, and validation tasks across the pipeline.
 
-## Multi-Agent System
+**Architectural Purpose**  
+To achieve specialization, scalability, and composability in modernization workflows.
 
-### Definition
+**Related Terms / Stages**  
+AI Agent, Agent Orchestration, Migration Stage.
 
-An architecture where multiple specialized agents collaborate through orchestrated workflows and shared context.
+---
 
-### LegacyExodus Context
+### Agent Orchestration
+**Definition**  
+The coordination of agent invocation, sequencing, context transfer, and policy enforcement.
 
-Pipeline stages may host distinct agent roles to separate concerns and improve reliability.
+**LegacyExodus Meaning**  
+Orchestration aligns agent tasks with stage goals and lifecycle controls.
 
-### Example
+**Architectural Purpose**  
+To ensure consistency, traceability, and bounded execution in autonomous operations.
 
-NolaraStruct uses one agent for domain inference and another for dependency risk scoring.
+**Related Terms / Stages**  
+Pipeline Orchestration, AI Governance, Project State.
 
-## Agent Orchestration
+---
 
-### Definition
+### Agent Memory
+**Definition**  
+Persisted and transient context used by agents to maintain task continuity.
 
-The control logic that sequences, supervises, and coordinates agent interactions.
+**LegacyExodus Meaning**  
+Memory is scoped to avoid contamination across projects or stages and to preserve explainability.
 
-### LegacyExodus Context
+**Architectural Purpose**  
+To improve reasoning continuity while enforcing context hygiene.
 
-Orchestration ensures deterministic execution boundaries and governed escalation paths.
+**Related Terms / Stages**  
+Project State, Context Engineering, Agent Isolation.
 
-### Example
+---
 
-An orchestration policy reruns semantic inference only when source deltas exceed a threshold.
+### AI Gateway
+**Definition**  
+A control layer that brokers access between platform services and external or internal model providers.
 
-## Agent Memory
+**LegacyExodus Meaning**  
+The gateway standardizes model invocation, policy checks, and telemetry for AI operations.
 
-### Definition
+**Architectural Purpose**  
+To centralize AI integration, control cost/risk, and enforce governance uniformly.
 
-Structured retention of context and intermediate reasoning artifacts used by agents across tasks.
+**Related Terms / Stages**  
+Model Provider, AI Governance, Service Contract.
 
-### LegacyExodus Context
+---
 
-Memory is bounded and auditable to prevent uncontrolled context drift.
+### Model Provider
+**Definition**  
+A runtime source of AI model capabilities used for analysis or generation.
 
-### Example
+**LegacyExodus Meaning**  
+Providers are treated as interchangeable dependencies behind gateway-managed contracts.
 
-An agent reuses previously identified business invariants when generating subsequent migration units.
+**Architectural Purpose**  
+To decouple business logic from specific model vendors or runtimes.
 
-## AI Gateway
+**Related Terms / Stages**  
+AI Gateway, Service-Oriented Architecture, Plugin Architecture.
 
-### Definition
+---
 
-An abstraction layer that mediates model calls, provider selection, policy enforcement, and observability.
+### Prompt Engineering
+**Definition**  
+The design of instruction payloads to produce controlled AI behavior.
 
-### LegacyExodus Context
+**LegacyExodus Meaning**  
+Prompts are architecture-aware and grounded in system intelligence artifacts, not generic conversion requests.
 
-The AI Gateway decouples pipeline logic from specific model vendors.
+**Architectural Purpose**  
+To reduce ambiguity and improve determinism of transformation outputs.
 
-### Example
+**Related Terms / Stages**  
+Context Engineering, ZelvoxForge, AI Reasoning Trace.
 
-Requests requiring strict data controls route to approved providers with redaction policies.
+---
 
-## Model Provider
+### Context Engineering
+**Definition**  
+The selection, shaping, and boundary control of input context for AI tasks.
 
-### Definition
+**LegacyExodus Meaning**  
+Context is intentionally scoped to stage-relevant knowledge and governance constraints.
 
-An external or internal service that hosts inference models consumed through the AI Gateway.
+**Architectural Purpose**  
+To improve output relevance, reduce hallucination risk, and preserve security boundaries.
 
-### LegacyExodus Context
+**Related Terms / Stages**  
+Agent Memory, Knowledge Graph, Project State.
 
-Providers are selected by capability, latency, cost, and governance constraints.
+---
 
-### Example
+### AI Reasoning Trace
+**Definition**  
+Recorded rationale and decision evidence associated with AI-produced outputs.
 
-A high-context architectural reasoning task is routed to a model optimized for long-context synthesis.
+**LegacyExodus Meaning**  
+Trace data links generated artifacts back to inputs, constraints, and validation criteria.
 
-## Prompt Engineering
+**Architectural Purpose**  
+To support explainability, reviewability, and audit requirements.
 
-### Definition
+**Related Terms / Stages**  
+Audit Trail, Migration Confidence, VymosGate.
 
-The design of task instructions to produce reliable, constrained model outputs.
+---
 
-### LegacyExodus Context
+### Human Approval Loop
+**Definition**  
+A required review-and-approval mechanism where humans authorize high-impact actions.
 
-Prompts encode modernization objectives, policy boundaries, and required output schemas.
+**LegacyExodus Meaning**  
+Approval loops are integral to final gate decisions and cannot be bypassed by autonomous execution.
 
-### Example
+**Architectural Purpose**  
+To preserve accountability and operational control.
 
-A transformation prompt requires explicit mapping from legacy endpoint behavior to generated Rust service contracts.
+**Related Terms / Stages**  
+Human-Governed AI, Governance Engine, VymosGate.
 
-## Context Engineering
+---
 
-### Definition
+### AI Governance
+**Definition**  
+Policy, process, and technical controls that regulate AI behavior and outputs.
 
-The discipline of selecting, structuring, and delivering the right contextual artifacts to AI processes.
+**LegacyExodus Meaning**  
+Governance defines what AI may do, what must be reviewed, and what evidence must be retained.
 
-### LegacyExodus Context
+**Architectural Purpose**  
+To align AI operations with enterprise risk, compliance, and quality standards.
 
-Context packages include graphs, contracts, invariants, and risk annotations.
+**Related Terms / Stages**  
+Governance, Compliance, AI Gateway, VymosGate.
 
-### Example
+---
 
-Providing an agent only relevant bounded context artifacts reduces hallucinated cross-domain dependencies.
+### Agent Isolation
+**Definition**  
+Separation of agent execution contexts, permissions, and data visibility.
 
-## AI Reasoning Trace
+**LegacyExodus Meaning**  
+Isolation prevents cross-stage and cross-project leakage of state or assumptions.
 
-### Definition
+**Architectural Purpose**  
+To improve security, reliability, and result integrity.
 
-A recorded explanation of AI decision flow, inputs considered, and outputs produced.
-
-### LegacyExodus Context
-
-Reasoning traces support auditability and post-decision review.
-
-### Example
-
-A trace shows why a module was migrated as a separate service based on coupling metrics and domain boundaries.
-
-## Human Approval Loop
-
-### Definition
-
-A formal review mechanism requiring human acceptance at critical decision points.
-
-### LegacyExodus Context
-
-VymosGate controls these loops for high-impact transformations.
-
-### Example
-
-Database schema migration plans require explicit architect approval prior to merge.
-
-## AI Governance
-
-### Definition
-
-Policies, controls, and monitoring mechanisms that constrain AI behavior to enterprise requirements.
-
-### LegacyExodus Context
-
-Governance spans data handling, model usage, approval paths, and release eligibility.
-
-### Example
-
-A governance policy blocks output promotion when traceability evidence is incomplete.
-
-## Agent Isolation
-
-### Definition
-
-A design pattern that limits agent scope, permissions, and context to reduce cross-task contamination and risk.
-
-### LegacyExodus Context
-
-Isolation is used to separate analysis, transformation, and validation responsibilities.
-
-### Example
-
-A validation agent can read test evidence but cannot modify transformation artifacts.
+**Related Terms / Stages**  
+Security Model, Agent Memory, Component Boundary.
 
 ---
 
 ## Section 4: Code Analysis Terms
 
-## Source Analysis
+### Source Analysis
+**Definition**  
+Systematic examination of source artifacts to extract structural and behavioral information.
 
-### Definition
+**LegacyExodus Meaning**  
+Source analysis is the entry point for migration intelligence generation in VyrixScout.
 
-Systematic examination of source artifacts to extract structure, behavior, and dependencies.
+**Architectural Purpose**  
+To replace assumptions with evidence from legacy code realities.
 
-### LegacyExodus Context
+**Related Terms / Stages**  
+Parser, AST, Semantic Analysis, Migration Intelligence.
 
-Performed primarily in VyrixScout to establish discovery baselines.
+---
 
-### Example
+### Parser
+**Definition**  
+A component that converts source text into structured representations.
 
-Analyzing routing, persistence, and asynchronous workflow code to identify modernization units.
+**LegacyExodus Meaning**  
+Parsers feed downstream intelligence workflows and must preserve syntactic fidelity.
 
-## Parser
+**Architectural Purpose**  
+To enable deterministic machine reasoning over legacy code.
 
-### Definition
+**Related Terms / Stages**  
+CST, AST, Parser Service.
 
-A component that converts source text into machine-usable syntactic structures.
+---
 
-### LegacyExodus Context
+### AST (Abstract Syntax Tree)
+**Definition**  
+A structural tree representation of source code semantics, abstracting low-level syntax tokens.
 
-Parser outputs feed symbol extraction, graph construction, and semantic modeling.
+**LegacyExodus Meaning**  
+ASTs are used for semantic inference, transformation planning, and behavior-preserving generation.
 
-### Example
+**Architectural Purpose**  
+To provide an analyzable intermediate form for modernization logic.
 
-Parsing PHP files into syntax trees for downstream dependency analysis.
+**Related Terms / Stages**  
+Parser, Semantic Analysis, ZelvoxForge.
 
-## Abstract Syntax Tree (AST)
+---
 
-### Definition
+### CST (Concrete Syntax Tree)
+**Definition**  
+A parse tree that preserves concrete source syntax, including token-level structure.
 
-A tree representation of source code focused on semantic structure rather than literal formatting.
+**LegacyExodus Meaning**  
+CSTs support faithful reconstruction and diagnostics when syntax-level detail matters.
 
-### LegacyExodus Context
+**Architectural Purpose**  
+To retain source-level precision for traceability and parser correctness.
 
-ASTs support language-aware analysis and transformation planning.
+**Related Terms / Stages**  
+Parser, Source Analysis, AI Reasoning Trace.
 
-### Example
+---
 
-Method declarations and invocation relationships are read from AST nodes.
+### Symbol Extraction
+**Definition**  
+Identification and indexing of named program elements such as functions, types, modules, and constants.
 
-## Concrete Syntax Tree (CST)
+**LegacyExodus Meaning**  
+Symbols become first-class knowledge objects for relationship mapping and migration planning.
 
-### Definition
+**Architectural Purpose**  
+To establish explicit references across large legacy codebases.
 
-A syntax tree preserving full syntactic detail, including tokens and formatting structures.
+**Related Terms / Stages**  
+Dependency Graph, Knowledge Graph, NolaraStruct.
 
-### LegacyExodus Context
+---
 
-CSTs help when exact source reconstruction or fine-grained mapping is required.
+### Dependency Graph
+**Definition**  
+A graph representation of compile-time or runtime dependencies among code elements or services.
 
-### Example
+**LegacyExodus Meaning**  
+Dependency graphs expose coupling hotspots and modernization risk surfaces.
 
-Tracking exact legacy source positions for audit traceability.
+**Architectural Purpose**  
+To prioritize transformation sequencing and isolate high-impact dependencies.
 
-## Symbol Extraction
+**Related Terms / Stages**  
+Call Graph, Component Boundary, Migration Strategy.
 
-### Definition
+---
 
-Identification and indexing of named program elements (types, functions, variables, modules).
+### Call Graph
+**Definition**  
+A directed graph of callable relationships among procedures, methods, or services.
 
-### LegacyExodus Context
+**LegacyExodus Meaning**  
+Call graphs help identify execution pathways that must preserve behavior after modernization.
 
-Symbols are foundational entities in dependency and call graph construction.
+**Architectural Purpose**  
+To support equivalence validation and regression-focused test design.
 
-### Example
+**Related Terms / Stages**  
+Control Flow Graph, Regression Testing, VymosGate.
 
-Extracting service classes and shared utility symbols to detect reuse concentration.
+---
 
-## Dependency Graph
+### Control Flow Graph
+**Definition**  
+A representation of possible execution paths through program logic.
 
-### Definition
+**LegacyExodus Meaning**  
+Control flow analysis is used to reason about branching behavior and critical logic paths.
 
-A graph of relationships showing which components depend on others.
+**Architectural Purpose**  
+To protect behavior consistency during transformation.
 
-### LegacyExodus Context
+**Related Terms / Stages**  
+Data Flow Analysis, Behavioral Equivalence, Source Analysis.
 
-Used to identify coupling hotspots and safe migration sequencing.
+---
 
-### Example
+### Data Flow Analysis
+**Definition**  
+Analysis of how data values propagate and transform through program execution.
 
-A payment module with high inbound dependency is migrated with staged compatibility boundaries.
+**LegacyExodus Meaning**  
+Data flow insights reveal state dependencies, implicit contracts, and mutation risks.
 
-## Call Graph
+**Architectural Purpose**  
+To prevent semantic drift in transformed implementations.
 
-### Definition
+**Related Terms / Stages**  
+Control Flow Graph, Invariant, System Understanding.
 
-A graph describing which functions or methods invoke others.
+---
 
-### LegacyExodus Context
+### Static Analysis
+**Definition**  
+Program analysis without executing the target system.
 
-Supports behavioral path analysis and critical-flow preservation.
+**LegacyExodus Meaning**  
+Static analysis provides scalable early signals for architecture reconstruction and risk detection.
 
-### Example
+**Architectural Purpose**  
+To reduce migration uncertainty before runtime validation.
 
-Tracing order placement from API handler through inventory and billing calls.
+**Related Terms / Stages**  
+Semantic Analysis, Source Analysis, VyrixScout.
 
-## Control Flow Graph
+---
 
-### Definition
+### Semantic Analysis
+**Definition**  
+Interpretation of program meaning beyond syntax, including type intent, domain behavior, and logical effects.
 
-A graph modeling execution paths and branching behavior.
+**LegacyExodus Meaning**  
+Semantic analysis converts parsed structures into modernization-relevant intelligence.
 
-### LegacyExodus Context
+**Architectural Purpose**  
+To ensure generated code preserves intent, not only form.
 
-Enables equivalence checks for complex conditional logic.
+**Related Terms / Stages**  
+System Intelligence Model, NolaraStruct, Behavioral Equivalence.
 
-### Example
+---
 
-Validating error-path parity between legacy code and generated Rust handlers.
+### Code Intelligence
+**Definition**  
+An actionable representation of code structure, behavior, and relationships for engineering decisions.
 
-## Data Flow Analysis
+**LegacyExodus Meaning**  
+Code intelligence is a foundation input to migration strategy and automated transformation.
 
-### Definition
+**Architectural Purpose**  
+To enable evidence-driven modernization at scale.
 
-Analysis of how data values are created, transformed, and propagated through program paths.
-
-### LegacyExodus Context
-
-Used for invariant detection and sensitive data handling validation.
-
-### Example
-
-Ensuring customer identifiers are consistently validated before persistence writes.
-
-## Static Analysis
-
-### Definition
-
-Code analysis performed without executing the program.
-
-### LegacyExodus Context
-
-Provides early risk signals and structural insights during discovery and validation.
-
-### Example
-
-Detecting unreachable branches and unsafe legacy patterns before transformation.
-
-## Semantic Analysis
-
-### Definition
-
-Interpretation of code meaning, intent, and domain behavior beyond syntax.
-
-### LegacyExodus Context
-
-NolaraStruct uses semantic analysis to infer domain boundaries and business rules.
-
-### Example
-
-Recognizing that differently named methods implement the same business invariant.
-
-## Code Intelligence
-
-### Definition
-
-Actionable knowledge synthesized from source analysis, semantics, and architecture context.
-
-### LegacyExodus Context
-
-Code intelligence is consumed by ZelvoxForge for transformation planning.
-
-### Example
-
-Flagging a legacy caching subsystem as replaceable with a standardized modern abstraction.
+**Related Terms / Stages**  
+Migration Intelligence, Knowledge Graph, ZelvoxForge.
 
 ---
 
 ## Section 5: Knowledge System Terms
 
-## Project State
+### Project State
+**Definition**  
+The authoritative, evolving representation of a modernization project’s current facts, decisions, and artifacts.
 
-### Definition
+**LegacyExodus Meaning**  
+Project state is the cross-stage continuity model used by orchestration, agents, and governance controls.
 
-The current, versioned representation of migration progress, artifacts, and decisions.
+**Architectural Purpose**  
+To ensure lifecycle coherence and deterministic handoffs.
 
-### LegacyExodus Context
+**Related Terms / Stages**  
+Pipeline Orchestration, Agent Memory, Knowledge Service.
 
-Project State enables resumable and auditable modernization execution.
+---
 
-### Example
+### Knowledge Graph
+**Definition**  
+A structured graph of entities and relationships representing system and domain intelligence.
 
-A project state snapshot records completed discovery, pending transformation units, and unresolved policy checks.
+**LegacyExodus Meaning**  
+The graph encodes code, architecture, and domain linkages discovered and modeled through the pipeline.
 
-## Knowledge Graph
+**Architectural Purpose**  
+To support reasoning, traceability, and dependency-aware transformation planning.
 
-### Definition
+**Related Terms / Stages**  
+Entity, Relationship Mapping, NolaraStruct, Graph Service.
 
-A graph-structured representation of entities and relationships in the legacy and target systems.
+---
 
-### LegacyExodus Context
+### System Intelligence Model
+**Definition**  
+A formalized model describing how the legacy system is structured, behaves, and encodes business intent.
 
-Acts as the shared intelligence substrate across pipeline stages.
+**LegacyExodus Meaning**  
+This model is the primary transformation contract passed into ZelvoxForge.
 
-### Example
+**Architectural Purpose**  
+To anchor generation in validated understanding rather than heuristics.
 
-Nodes for services, tables, events, and invariants linked by dependency and ownership edges.
+**Related Terms / Stages**  
+System Understanding, Knowledge Graph, Migration Intelligence.
 
-## System Intelligence Model
+---
 
-### Definition
+### Domain Model
+**Definition**  
+A conceptual representation of business concepts, rules, and interactions in a system domain.
 
-A composite model combining structural, behavioral, domain, and risk intelligence.
+**LegacyExodus Meaning**  
+Domain models make implicit legacy business logic explicit for safe modernization.
 
-### LegacyExodus Context
+**Architectural Purpose**  
+To preserve business continuity across technological change.
 
-NolaraStruct produces this model to guide all transformation decisions.
+**Related Terms / Stages**  
+Entity, Aggregate, Bounded Context, Invariant.
 
-### Example
+---
 
-The model marks payment authorization as high criticality with strict equivalence requirements.
-
-## Domain Model
-
-### Definition
-
-A representation of core business concepts, behaviors, and constraints.
-
-### LegacyExodus Context
-
-Domain models prevent purely technical migrations from breaking business intent.
-
-### Example
-
-Order, Invoice, and Settlement are modeled with lifecycle transitions and invariants.
-
-## Entity
-
-### Definition
-
+### Entity
+**Definition**  
 A domain object with identity continuity over time.
 
-### LegacyExodus Context
+**LegacyExodus Meaning**  
+Entities represent durable business concepts extracted from legacy behavior and data flows.
 
-Entities guide aggregate and persistence design in generated architectures.
+**Architectural Purpose**  
+To stabilize business semantics during architectural change.
 
-### Example
+**Related Terms / Stages**  
+Domain Model, Aggregate, Value Object.
 
-`Order` remains the same identity while status changes from `Pending` to `Completed`.
+---
 
-## Aggregate
+### Aggregate
+**Definition**  
+A consistency boundary that groups related entities and value objects under controlled invariants.
 
-### Definition
+**LegacyExodus Meaning**  
+Aggregates define transactional and behavioral boundaries inferred from legacy systems.
 
-A consistency boundary containing one root entity and related objects governed by shared invariants.
+**Architectural Purpose**  
+To preserve integrity rules in transformed implementations.
 
-### LegacyExodus Context
+**Related Terms / Stages**  
+Invariant, Bounded Context, Domain Event.
 
-Aggregation informs service boundaries and transactional rules during migration.
+---
 
-### Example
+### Value Object
+**Definition**  
+An immutable domain concept identified by value rather than identity.
 
-An `Order` aggregate controls line items and payment state transitions.
+**LegacyExodus Meaning**  
+Value objects help express precise business semantics in modernized models.
 
-## Value Object
+**Architectural Purpose**  
+To reduce ambiguity and mutation-related defects.
 
-### Definition
+**Related Terms / Stages**  
+Entity, Domain Model, Type Safety.
 
-An immutable object defined by attributes rather than identity.
+---
 
-### LegacyExodus Context
+### Bounded Context
+**Definition**  
+A semantic boundary within which a domain model and terminology are internally consistent.
 
-Value objects support type-safe, explicit domain representation in Rust.
+**LegacyExodus Meaning**  
+Bounded contexts partition large legacy domains into modernization-manageable units.
 
-### Example
+**Architectural Purpose**  
+To prevent model collisions and support modular transformation.
 
-`Money { amount, currency }` with validation rules encoded at construction.
+**Related Terms / Stages**  
+Domain Model, Component Boundary, Modular Architecture.
 
-## Bounded Context
+---
 
-### Definition
+### Domain Event
+**Definition**  
+A business-significant occurrence represented as a formal event.
 
-A domain boundary within which terms and models have specific meaning.
+**LegacyExodus Meaning**  
+Domain events provide traceable business behavior transitions across modernization stages.
 
-### LegacyExodus Context
+**Architectural Purpose**  
+To align domain semantics with event-driven orchestration.
 
-Bounded contexts drive modular decomposition and service contracts.
+**Related Terms / Stages**  
+Event Contract, Event-Driven Architecture, Project State.
 
-### Example
+---
 
-`Billing` and `Fulfillment` contexts may both reference “status” with different semantics.
+### Invariant
+**Definition**  
+A rule that must always hold true for system correctness.
 
-## Domain Event
+**LegacyExodus Meaning**  
+Invariants are extracted from legacy behavior and enforced in transformed systems.
 
-### Definition
+**Architectural Purpose**  
+To preserve business-critical correctness under modernization.
 
-A meaningful business occurrence captured as an immutable fact.
+**Related Terms / Stages**  
+Behavioral Equivalence, Aggregate, VymosGate.
 
-### LegacyExodus Context
+---
 
-Events become first-class artifacts in event-driven modernization designs.
+### Relationship Mapping
+**Definition**  
+The explicit modeling of dependencies and semantic links among system elements.
 
-### Example
+**LegacyExodus Meaning**  
+Mapping connects code artifacts, domain objects, and runtime interactions in a unified intelligence view.
 
-`InvoiceIssued` triggers downstream reconciliation workflows.
+**Architectural Purpose**  
+To enable impact analysis and transformation planning.
 
-## Invariant
+**Related Terms / Stages**  
+Knowledge Graph, Dependency Graph, System Intelligence Model.
 
-### Definition
+---
 
-A business rule that must always hold true.
+### Metadata
+**Definition**  
+Structured descriptive attributes attached to artifacts, models, events, and decisions.
 
-### LegacyExodus Context
+**LegacyExodus Meaning**  
+Metadata records provenance, confidence, lineage, and policy context for modernization artifacts.
 
-Invariant preservation is a key criterion in migration confidence scoring.
+**Architectural Purpose**  
+To support traceability, governance, and reproducibility.
 
-### Example
-
-An order cannot be marked paid unless authorization is successful.
-
-## Relationship Mapping
-
-### Definition
-
-The process of defining explicit connections among entities, components, and behaviors.
-
-### LegacyExodus Context
-
-Relationship maps reduce accidental architecture drift during transformation.
-
-### Example
-
-Mapping controller actions to domain services and storage dependencies.
-
-## Metadata
-
-### Definition
-
-Descriptive attributes about artifacts, processes, and decisions.
-
-### LegacyExodus Context
-
-Metadata powers traceability, filtering, and governance evaluation.
-
-### Example
-
-Each transformation artifact includes source origin, model version, and validation status.
+**Related Terms / Stages**  
+Audit Trail, AI Reasoning Trace, Project State.
 
 ---
 
 ## Section 6: Architecture Terms
 
-## Event-Driven Architecture
+### Event-Driven Architecture
+**Definition**  
+An architecture where components communicate through events rather than direct synchronous coupling.
 
-### Definition
+**LegacyExodus Meaning**  
+Stage transitions and state updates are coordinated through event contracts and orchestration rules.
 
-An architecture where system components communicate via emitted and consumed events.
+**Architectural Purpose**  
+To improve decoupling, resilience, and observability in pipeline execution.
 
-### LegacyExodus Context
+**Related Terms / Stages**  
+Domain Event, Event Contract, Pipeline Orchestration.
 
-Used for decoupling modernization outputs and improving extensibility.
+---
 
-### Example
+### Service-Oriented Architecture
+**Definition**  
+An architecture organized around independently deployable services with defined contracts.
 
-`OrderCreated` event triggers asynchronous fulfillment and notification flows.
+**LegacyExodus Meaning**  
+Core platform capabilities are expressed as services with bounded responsibilities.
 
-## Service-Oriented Architecture
+**Architectural Purpose**  
+To support composability, operational scale, and independent evolution.
 
-### Definition
+**Related Terms / Stages**  
+Service Contract, Component Boundary, Runtime Architecture.
 
-An architectural style organizing capabilities into interoperable services with explicit contracts.
+---
 
-### LegacyExodus Context
+### Modular Architecture
+**Definition**  
+An architecture partitioned into cohesive modules with explicit interfaces.
 
-Guides decomposition of monolithic legacy systems into domain-aligned services.
+**LegacyExodus Meaning**  
+Modules map to functional concerns such as discovery, modeling, transformation, and governance.
 
-### Example
+**Architectural Purpose**  
+To reduce coupling and increase maintainability.
 
-Authentication and billing are separated into independently deployable services.
+**Related Terms / Stages**  
+Component Boundary, Plugin Architecture, Migration Stage.
 
-## Modular Architecture
+---
 
-### Definition
+### Plugin Architecture
+**Definition**  
+An extensibility model where capabilities are added through contract-compliant plugin components.
 
-A design where internal system capabilities are split into cohesive, loosely coupled modules.
+**LegacyExodus Meaning**  
+LegacyExodus can extend analysis or transformation behavior without altering core engine semantics.
 
-### LegacyExodus Context
+**Architectural Purpose**  
+To enable controlled adaptability across languages, frameworks, and enterprise constraints.
 
-Often used when full service decomposition is unnecessary.
+**Related Terms / Stages**  
+Service Contract, Model Provider, Multi-Language Migration.
 
-### Example
+---
 
-A Rust application split into domain modules with strict interface boundaries.
+### Component Boundary
+**Definition**  
+A defined interface and responsibility limit between architectural units.
 
-## Plugin Architecture
+**LegacyExodus Meaning**  
+Boundaries separate stage concerns and prevent leakage of hidden assumptions across components.
 
-### Definition
+**Architectural Purpose**  
+To preserve correctness, security, and evolvability.
 
-A framework that supports extension via independently developed, contract-bound modules.
+**Related Terms / Stages**  
+Service Contract, Agent Isolation, Bounded Context.
 
-### LegacyExodus Context
+---
 
-Useful for parser adapters, transformation strategies, and policy evaluators.
+### Service Contract
+**Definition**  
+A formal definition of service inputs, outputs, behaviors, and error semantics.
 
-### Example
+**LegacyExodus Meaning**  
+Contracts govern inter-service calls and stage handoffs.
 
-Adding a COBOL parser plugin without altering core orchestration logic.
+**Architectural Purpose**  
+To maintain integration stability and deterministic behavior.
 
-## Component Boundary
+**Related Terms / Stages**  
+API Contract, Event Contract, Orchestrator.
 
-### Definition
+---
 
-The explicit demarcation of responsibilities, interfaces, and dependency rules for a component.
+### API Contract
+**Definition**  
+A formal interface definition for request/response interactions.
 
-### LegacyExodus Context
+**LegacyExodus Meaning**  
+APIs expose controlled capabilities to internal components and governed clients.
 
-Boundary definition reduces coupling and improves migration safety.
+**Architectural Purpose**  
+To ensure compatibility, versioning discipline, and safe integration.
 
-### Example
+**Related Terms / Stages**  
+Service Contract, Runtime Architecture, Governance.
 
-The Graph Service exposes query APIs but not direct storage internals.
+---
 
-## Service Contract
+### Event Contract
+**Definition**  
+A formal schema and behavioral agreement for produced and consumed events.
 
-### Definition
+**LegacyExodus Meaning**  
+Event contracts define stage transition data expectations and validation requirements.
 
-A formal specification of service capabilities, request/response semantics, and error behavior.
+**Architectural Purpose**  
+To ensure reliable asynchronous coordination and traceable state transitions.
 
-### LegacyExodus Context
+**Related Terms / Stages**  
+Event-Driven Architecture, Domain Event, Pipeline Orchestration.
 
-Contracts are generated or refined during transformation and validated in VymosGate.
+---
 
-### Example
+### Runtime Architecture
+**Definition**  
+The operational structure of services, processes, and interactions while the system is executing.
 
-A billing service contract defines idempotency and failure response codes.
+**LegacyExodus Meaning**  
+Runtime architecture governs how pipeline services and agents execute and communicate in production workflows.
 
-## API Contract
+**Architectural Purpose**  
+To deliver reliable and observable modernization operations.
 
-### Definition
+**Related Terms / Stages**  
+Deployment Architecture, Service-Oriented Architecture, Observability.
 
-The interface definition for externally visible endpoints, including schema and behavior guarantees.
+---
 
-### LegacyExodus Context
+### Deployment Architecture
+**Definition**  
+The topology and configuration by which system components are provisioned and run in target environments.
 
-API contract parity is a critical migration success metric.
+**LegacyExodus Meaning**  
+Deployment architecture defines how LegacyExodus services are released and operated under enterprise controls.
 
-### Example
+**Architectural Purpose**  
+To satisfy reliability, security, and scalability requirements.
 
-A migrated endpoint preserves required fields, status codes, and pagination semantics.
-
-## Event Contract
-
-### Definition
-
-The schema and semantic guarantees of an emitted event.
-
-### LegacyExodus Context
-
-Event contracts ensure downstream compatibility during phased migration.
-
-### Example
-
-`PaymentSettled` includes stable identifiers and timestamp semantics required by analytics consumers.
-
-## Runtime Architecture
-
-### Definition
-
-How components execute and interact during operation.
-
-### LegacyExodus Context
-
-Runtime concerns include concurrency, failure handling, and latency boundaries.
-
-### Example
-
-Tokio tasks process asynchronous events with bounded retries and backpressure controls.
-
-## Deployment Architecture
-
-### Definition
-
-How software components are packaged, deployed, scaled, and connected in target environments.
-
-### LegacyExodus Context
-
-Deployment architecture decisions are captured as modernization artifacts.
-
-### Example
-
-Core services deployed as containerized workloads behind API gateways with managed databases.
+**Related Terms / Stages**  
+Runtime Architecture, Reliability, Scalability, Compliance.
 
 ---
 
 ## Section 7: Software Migration Terms
 
-## Rewrite
+### Rewrite
+**Definition**  
+Re-implementation of system functionality from scratch in a new codebase.
 
-### Definition
+**LegacyExodus Meaning**  
+Rewrite is one possible strategy component, but is governed by discovered knowledge and validation constraints.
 
-Rebuilding a system or subsystem from scratch, often with minimal reuse of implementation.
+**Architectural Purpose**  
+To replace brittle legacy constructs where incremental evolution is not viable.
 
-### LegacyExodus Context
+**Related Terms / Stages**  
+Migration Strategy, Behavioral Equivalence, ZelvoxForge.
 
-LegacyExodus may generate rewrite-style outputs, but only after intelligence-grounded analysis.
+---
 
-### Example
+### Refactoring
+**Definition**  
+Code structure improvement without changing externally observable behavior.
 
-Replacing a legacy queue processor with a Rust-native async service based on validated behavior models.
+**LegacyExodus Meaning**  
+Refactoring may occur within modernization outputs to improve maintainability and safety.
 
-## Refactoring
+**Architectural Purpose**  
+To reduce complexity while preserving behavior.
 
-### Definition
+**Related Terms / Stages**  
+Behavioral Equivalence, Regression Testing, Modernization.
 
-Changing internal code structure without altering observable behavior.
+---
 
-### LegacyExodus Context
+### Replatforming
+**Definition**  
+Migration of software to a new platform with limited functional change.
 
-Refactoring can occur inside modernization stages as a low-risk preparation tactic.
+**LegacyExodus Meaning**  
+Replatforming is treated as a strategy option when business behavior is stable but infrastructure targets change.
 
-### Example
+**Architectural Purpose**  
+To improve operability or cost profile with controlled functional risk.
 
-Isolating data access concerns before extracting service boundaries.
+**Related Terms / Stages**  
+Migration Strategy, Compatibility Layer, Deployment Architecture.
 
-## Replatforming
+---
 
-### Definition
+### Rehosting
+**Definition**  
+Relocating software to a new runtime environment with minimal code changes.
 
-Migrating to a new runtime or platform with limited functional redesign.
+**LegacyExodus Meaning**  
+Rehosting may be used as a transitional step, not the end-state modernization objective.
 
-### LegacyExodus Context
+**Architectural Purpose**  
+To reduce immediate infrastructure constraints while preparing deeper modernization.
 
-Applicable when business behavior is stable but infrastructure modernization is required.
+**Related Terms / Stages**  
+Replatforming, Continuous Modernization, Legacy System.
 
-### Example
+---
 
-Moving from self-hosted legacy runtime to container orchestration with minimal domain change.
+### Translation
+**Definition**  
+Conversion of code representation from one language or format to another.
 
-## Rehosting
+**LegacyExodus Meaning**  
+Translation is a narrow technical action and does not satisfy LegacyExodus modernization requirements by itself.
 
-### Definition
+**Architectural Purpose**  
+To support transformation mechanics where appropriate, under model constraints.
 
-Lifting and shifting applications to new infrastructure with minimal code changes.
+**Related Terms / Stages**  
+Transpilation, Code Conversion, Migration Strategy.
 
-### LegacyExodus Context
+---
 
-Typically a temporary strategy, not the primary LegacyExodus objective.
+### Transpilation
+**Definition**  
+Automated source-to-source translation, typically preserving high-level semantics across languages.
 
-### Example
+**LegacyExodus Meaning**  
+Transpilation can be a tactical mechanism inside transformation, but not the architectural definition of migration.
 
-Running legacy application images in cloud VMs while planning deeper transformation.
+**Architectural Purpose**  
+To accelerate implementation generation where behavior and structure are already understood.
 
-## Translation
+**Related Terms / Stages**  
+Translation, ZelvoxForge, Behavioral Equivalence.
 
-### Definition
+---
 
-Converting code representations between languages or forms, often preserving structure directly.
+### Migration Strategy
+**Definition**  
+A planned approach selecting modernization methods, sequencing, and risk controls.
 
-### LegacyExodus Context
+**LegacyExodus Meaning**  
+Strategy is evidence-driven and derived from migration intelligence and governance constraints.
 
-LegacyExodus treats translation as insufficient unless domain behavior and architecture are also modernized.
+**Architectural Purpose**  
+To optimize safety, cost, and delivery outcomes.
 
-### Example
+**Related Terms / Stages**  
+Migration Intelligence, Pipeline Orchestration, VymosGate.
 
-Directly mapping PHP syntax to Rust syntax without redesign is translation, not full modernization.
+---
 
-## Transpilation
+### Behavioral Equivalence
+**Definition**  
+The condition where modernized outputs preserve required observable behavior of legacy systems.
 
-### Definition
+**LegacyExodus Meaning**  
+Behavioral equivalence is a core acceptance criterion for modernization trust.
 
-Automated source-to-source conversion between programming languages at similar abstraction levels.
+**Architectural Purpose**  
+To ensure business continuity through change.
 
-### LegacyExodus Context
+**Related Terms / Stages**  
+Regression Testing, Invariant, Migration Confidence.
 
-May be used as a helper technique but never as the sole migration strategy.
+---
 
-### Example
+### Regression Testing
+**Definition**  
+Validation activities ensuring changes do not introduce unintended behavior deviations.
 
-Generating preliminary Rust stubs from JavaScript signatures before semantic hardening.
+**LegacyExodus Meaning**  
+Regression testing evidence is consumed by VymosGate to support approval decisions.
 
-## Migration Strategy
+**Architectural Purpose**  
+To detect semantic drift before production release.
 
-### Definition
+**Related Terms / Stages**  
+Behavioral Equivalence, VymosGate, Migration Confidence.
 
-A planned approach for sequencing modernization work based on risk, dependencies, and business priorities.
+---
 
-### LegacyExodus Context
+### Compatibility Layer
+**Definition**  
+An intermediary interface preserving interaction compatibility during transitional modernization states.
 
-Strategies are evidence-driven by discovery and model intelligence.
+**LegacyExodus Meaning**  
+Compatibility layers may be used to decouple rollout sequencing from full domain transformation.
 
-### Example
+**Architectural Purpose**  
+To reduce migration disruption and enable phased adoption.
 
-Strangler pattern for high-risk monolith decomposition with compatibility adapters.
+**Related Terms / Stages**  
+Replatforming, Rehosting, Deployment Architecture.
 
-## Behavioral Equivalence
+---
 
-### Definition
+### Clarification: Translation vs Migration
+**Translation != Migration**  
+Translation changes code form. Migration changes system architecture, maintainability, safety posture, and governance state while preserving business intent.
 
-The condition where modernized outputs preserve required externally observable behavior of legacy systems.
-
-### LegacyExodus Context
-
-A central validation criterion in VymosGate.
-
-### Example
-
-Given equivalent inputs and state, both systems produce consistent domain outcomes and contract-compliant responses.
-
-## Regression Testing
-
-### Definition
-
-Testing that verifies previously working behavior remains intact after changes.
-
-### LegacyExodus Context
-
-Regression evidence contributes directly to migration confidence scoring.
-
-### Example
-
-Running legacy-derived scenario suites against transformed Rust services.
-
-## Compatibility Layer
-
-### Definition
-
-An adapter that preserves interoperability between legacy and modern components during phased migration.
-
-### LegacyExodus Context
-
-Used to reduce cutover risk and enable incremental modernization.
-
-### Example
-
-A facade exposing legacy API shapes while internally routing to new Rust services.
+### Clarification: Code Conversion vs Modernization
+**Code Conversion != Modernization**  
+Conversion is an implementation step. Modernization is a lifecycle outcome requiring discovery, modeling, transformation, and validation.
 
 ---
 
 ## Section 8: Rust Migration Terms
 
-## Ownership
+### Ownership
+**Definition**  
+A compile-time model that assigns each value a single owner responsible for lifecycle management.
 
-### Definition
+**LegacyExodus Meaning**  
+Ownership is a target-state design principle used to eliminate classes of legacy memory defects.
 
-Rust’s memory management model assigning each value a single owner with deterministic lifetime semantics.
+**Architectural Purpose**  
+To provide predictable resource safety and enforce disciplined data lifecycles.
 
-### LegacyExodus Context
+**Related Terms / Stages**  
+Borrow Checker, Memory Safety, Type Safety.
 
-Ownership is foundational to eliminating classes of runtime memory errors common in unmanaged systems.
+---
 
-### Example
+### Borrow Checker
+**Definition**  
+A compile-time mechanism enforcing aliasing and lifetime rules for references.
 
-A migrated service passes references safely rather than relying on shared mutable state patterns.
+**LegacyExodus Meaning**  
+Borrow checking is central to validating memory-safe modernization outputs.
 
-## Borrow Checker
+**Architectural Purpose**  
+To prevent use-after-free, data races, and invalid aliasing patterns.
 
-### Definition
+**Related Terms / Stages**  
+Ownership, Memory Safety, Error Handling.
 
-Rust compiler enforcement that validates safe aliasing and lifetimes at compile time.
+---
 
-### LegacyExodus Context
+### Memory Safety
+**Definition**  
+Protection against invalid memory operations through language and runtime guarantees.
 
-Borrow checking constrains migration designs toward explicit, safe data flow.
+**LegacyExodus Meaning**  
+Memory safety is a core modernization objective and reason for Rust-first targets.
 
-### Example
+**Architectural Purpose**  
+To reduce security risk and runtime instability endemic to unsafe legacy patterns.
 
-Concurrent handlers are redesigned to avoid mutable aliasing races.
+**Related Terms / Stages**  
+Ownership, Borrow Checker, Security Model.
 
-## Memory Safety
+---
 
-### Definition
+### Zero-Cost Abstraction
+**Definition**  
+High-level language abstractions that compile to efficient low-level code without runtime penalty beyond manual equivalents.
 
-Guarantee that memory is accessed correctly without use-after-free, dangling pointers, or buffer corruption.
+**LegacyExodus Meaning**  
+Enables modern, maintainable implementations without sacrificing performance constraints common in legacy environments.
 
-### LegacyExodus Context
+**Architectural Purpose**  
+To balance maintainability and performance in production modernization.
 
-A primary modernization goal when moving from high-risk legacy implementations.
+**Related Terms / Stages**  
+Type Safety, Rust target strategy, Scalability.
 
-### Example
+---
 
-Replacing unsafe legacy buffer routines with type-checked Rust abstractions.
+### Async Runtime
+**Definition**  
+Execution environment for non-blocking asynchronous tasks and I/O.
 
-## Zero-Cost Abstraction
+**LegacyExodus Meaning**  
+Async runtime choices influence throughput and service responsiveness in modernized systems.
 
-### Definition
+**Architectural Purpose**  
+To support scalable concurrent workloads.
 
-Language abstractions compiled to machine code with little or no runtime overhead compared to manual low-level implementations.
+**Related Terms / Stages**  
+Tokio, Runtime Architecture, Reliability.
 
-### LegacyExodus Context
+---
 
-Enables maintainable architecture without sacrificing performance targets.
+### Tokio
+**Definition**  
+A Rust asynchronous runtime and ecosystem for building concurrent applications.
 
-### Example
+**LegacyExodus Meaning**  
+Tokio is a preferred runtime foundation for modernized Rust services where async concurrency is required.
 
-Iterator-based data processing that compiles efficiently while remaining expressive.
+**Architectural Purpose**  
+To provide robust async execution primitives and ecosystem maturity.
 
-## Async Runtime
+**Related Terms / Stages**  
+Async Runtime, Axum, SQLx.
 
-### Definition
+---
 
-The execution framework for scheduling and running asynchronous tasks.
+### Axum
+**Definition**  
+A Rust web framework built on the Tokio ecosystem.
 
-### LegacyExodus Context
+**LegacyExodus Meaning**  
+Axum is a preferred service interface layer for modern Rust implementations generated or guided by modernization workflows.
 
-Critical for migrating IO-heavy legacy workloads to scalable Rust services.
+**Architectural Purpose**  
+To expose APIs with strong typing and async integration.
 
-### Example
+**Related Terms / Stages**  
+Tokio, API Contract, Service-Oriented Architecture.
 
-Handling thousands of concurrent network requests through async tasks.
+---
 
-## Tokio
+### SQLx
+**Definition**  
+A Rust SQL toolkit emphasizing compile-time checked query interactions.
 
-### Definition
+**LegacyExodus Meaning**  
+SQLx supports safer persistence modernization by aligning data access with Rust type guarantees.
 
-A Rust asynchronous runtime and ecosystem for building non-blocking networked applications.
+**Architectural Purpose**  
+To reduce runtime query/type mismatches and improve reliability.
 
-### LegacyExodus Context
+**Related Terms / Stages**  
+Type Safety, Error Handling, Reliability.
 
-Common default runtime for transformed service workloads.
+---
 
-### Example
+### Type Safety
+**Definition**  
+A property where type constraints prevent classes of invalid operations at compile time.
 
-Tokio powers async database calls, timers, and network servers in modernized components.
+**LegacyExodus Meaning**  
+Type safety is a key modernization objective for reducing latent defects in transformed code.
 
-## Axum
+**Architectural Purpose**  
+To shift error detection earlier in delivery lifecycle.
 
-### Definition
+**Related Terms / Stages**  
+Ownership, SQLx, Behavioral Equivalence.
 
-A Rust web framework built on Tokio and Tower, emphasizing type-safe HTTP services.
+---
 
-### LegacyExodus Context
+### Error Handling
+**Definition**  
+Structured management of failure conditions, propagation, and recovery.
 
-Frequently used for migrated API layers requiring strong contracts and composability.
+**LegacyExodus Meaning**  
+Modernization outputs prioritize explicit, typed error handling over ambiguous control patterns.
 
-### Example
+**Architectural Purpose**  
+To increase observability, reliability, and governance confidence.
 
-Legacy REST endpoints are reimplemented as Axum routers with typed extractors.
+**Related Terms / Stages**  
+Reliability, Migration Confidence, VymosGate.
 
-## SQLx
+---
 
-### Definition
+### Why Rust is the Preferred Migration Target
+Rust is preferred because it combines:
 
-An async Rust SQL toolkit with compile-time query checking (when configured) and runtime-safe database access patterns.
+- strong memory safety guarantees
+- compile-time correctness checks
+- high performance characteristics
+- explicit concurrency semantics
+- strong ecosystem support for modern service architecture
 
-### LegacyExodus Context
-
-Supports safer data-layer modernization from dynamic query patterns.
-
-### Example
-
-Transforming raw concatenated SQL into parameterized, validated SQLx queries.
-
-## Type Safety
-
-### Definition
-
-The degree to which a system prevents invalid operations through compile-time type constraints.
-
-### LegacyExodus Context
-
-Type safety is used to encode domain rules and reduce runtime defect classes.
-
-### Example
-
-Representing order state transitions with enums and validated constructors.
-
-## Error Handling
-
-### Definition
-
-Structured modeling and propagation of failures with explicit semantics.
-
-### LegacyExodus Context
-
-Modernized systems prefer typed errors and contextual propagation over silent failure patterns.
-
-### Example
-
-Returning domain-specific error enums mapped to stable API responses.
-
-### Why these matter for JavaScript/PHP migrations
-
-JavaScript and PHP ecosystems often tolerate dynamic typing, implicit coercions, and deferred failure detection. LegacyExodus uses Rust concepts to shift defect detection left (compile-time), improve operational safety, and increase long-term maintainability while preserving business behavior.
+In LegacyExodus, these properties align with the objective of producing secure, reliable, and governable modernization outcomes.
 
 ---
 
 ## Section 9: Enterprise Engineering Terms
 
-## Technical Debt
+### Technical Debt
+**Definition**  
+Accumulated engineering liabilities that increase change cost and risk.
 
-### Definition
+**LegacyExodus Meaning**  
+Debt signals are discovered, modeled, and prioritized as modernization inputs.
 
-Accumulated design and implementation shortcuts that increase future change cost and risk.
+**Architectural Purpose**  
+To guide sequencing and reduce long-term operational burden.
 
-### LegacyExodus Context
+**Related Terms / Stages**  
+Migration Strategy, Legacy System, Reliability.
 
-Discovery and intelligence stages identify debt clusters to prioritize migration sequencing.
+---
 
-### Example
+### Legacy System
+**Definition**  
+An existing system with entrenched behavior, constraints, and often aging architecture or tooling.
 
-A shared utility with pervasive side effects becomes a first-class modernization risk target.
+**LegacyExodus Meaning**  
+The modernization source system whose business semantics must be preserved while technical posture is improved.
 
-## Legacy System
+**Architectural Purpose**  
+To establish the baseline subject of discovery and transformation.
 
-### Definition
+**Related Terms / Stages**  
+VyrixScout, System Understanding, Behavioral Equivalence.
 
-An existing production system with critical business value but elevated maintenance, security, or scalability risk.
+---
 
-### LegacyExodus Context
+### Business Logic
+**Definition**  
+Rules and workflows that implement business intent and domain policy.
 
-Legacy systems are analyzed as assets to preserve and evolve, not discarded blindly.
+**LegacyExodus Meaning**  
+Business logic is treated as protected knowledge that must survive modernization intact.
 
-### Example
+**Architectural Purpose**  
+To preserve enterprise value during technical change.
 
-A decade-old PHP platform supporting revenue-critical workflows.
+**Related Terms / Stages**  
+Domain Model, Invariant, System Intelligence Model.
 
-## Business Logic
+---
 
-### Definition
+### Compliance
+**Definition**  
+Conformance to internal and external regulatory or policy requirements.
 
-Domain-specific rules and workflows that implement organizational behavior.
+**LegacyExodus Meaning**  
+Compliance checks are integrated into validation and approval paths.
 
-### LegacyExodus Context
+**Architectural Purpose**  
+To ensure modernization outputs are operationally and legally acceptable.
 
-Business logic preservation is prioritized above syntactic preservation.
+**Related Terms / Stages**  
+Governance, Audit Trail, VymosGate.
 
-### Example
+---
 
-Tax calculation and approval rules must remain consistent post-migration.
+### Audit Trail
+**Definition**  
+A traceable record of actions, decisions, and evidence throughout system operations.
 
-## Compliance
+**LegacyExodus Meaning**  
+Audit trails capture pipeline events, AI traces, approvals, and policy outcomes.
 
-### Definition
+**Architectural Purpose**  
+To support accountability, forensics, and regulatory evidence.
 
-Adherence to legal, regulatory, contractual, and internal policy requirements.
+**Related Terms / Stages**  
+AI Reasoning Trace, Governance Engine, Migration Confidence.
 
-### LegacyExodus Context
+---
 
-Compliance checks are integrated into validation and release gates.
+### Governance
+**Definition**  
+Organizational and technical control mechanisms that enforce acceptable behavior and decision rights.
 
-### Example
+**LegacyExodus Meaning**  
+Governance defines authorization, approval requirements, and risk thresholds across modernization lifecycle stages.
 
-Ensuring data retention behavior remains conformant after architecture changes.
+**Architectural Purpose**  
+To keep automated modernization aligned with enterprise controls.
 
-## Audit Trail
+**Related Terms / Stages**  
+Human-Governed AI, Compliance, VymosGate.
 
-### Definition
+---
 
-A traceable historical record of actions, decisions, and evidence.
+### Security Model
+**Definition**  
+A formal representation of security assumptions, controls, and enforcement boundaries.
 
-### LegacyExodus Context
+**LegacyExodus Meaning**  
+Security models constrain agent behavior, data flow, and service interaction.
 
-Pipeline outputs include provenance metadata and governance decisions for auditability.
+**Architectural Purpose**  
+To protect modernization workflows and outcomes from misuse or exposure.
 
-### Example
+**Related Terms / Stages**  
+Threat Model, Agent Isolation, Component Boundary.
 
-Every approved transformation links source artifacts, generated outputs, and reviewer sign-off.
+---
 
-## Governance
+### Threat Model
+**Definition**  
+A structured analysis of potential adversaries, attack paths, and mitigations.
 
-### Definition
+**LegacyExodus Meaning**  
+Threat modeling informs governance and validation criteria for modernized systems.
 
-The control framework for decision rights, policies, risk thresholds, and accountability.
+**Architectural Purpose**  
+To reduce security regression risk during transformation.
 
-### LegacyExodus Context
+**Related Terms / Stages**  
+Security Model, Compliance, VymosGate.
 
-Governance is enforced through VymosGate and policy-aware orchestration.
+---
 
-### Example
+### Observability
+**Definition**  
+The ability to understand system internal state through telemetry signals.
 
-High-impact schema migrations require elevated approval workflow tiers.
+**LegacyExodus Meaning**  
+Observability applies to pipeline execution, agent behavior, and validation workflows.
 
-## Security Model
+**Architectural Purpose**  
+To support diagnosis, trust, and operational control.
 
-### Definition
+**Related Terms / Stages**  
+Runtime Architecture, Reliability, Audit Trail.
 
-The formal description of how a system protects confidentiality, integrity, and availability.
+---
 
-### LegacyExodus Context
+### Reliability
+**Definition**  
+The probability that a system performs required functions correctly over time.
 
-Security models are re-evaluated and strengthened during transformation.
+**LegacyExodus Meaning**  
+Reliability is a validation objective for both platform operations and modernization outputs.
 
-### Example
+**Architectural Purpose**  
+To ensure production readiness and stakeholder trust.
 
-Moving from coarse session checks to explicit service-to-service authorization controls.
+**Related Terms / Stages**  
+Regression Testing, Error Handling, VymosGate.
 
-## Threat Model
+---
 
-### Definition
+### Scalability
+**Definition**  
+The capacity of a system to handle increasing load with acceptable performance.
 
-A structured analysis of potential adversaries, attack vectors, and mitigations.
+**LegacyExodus Meaning**  
+Scalability applies to analysis throughput, transformation execution, and governance processing volume.
 
-### LegacyExodus Context
+**Architectural Purpose**  
+To support enterprise modernization programs across large portfolios.
 
-Threat modeling informs migration priorities and validation criteria.
-
-### Example
-
-Identifying injection risks in legacy query paths and validating mitigations in migrated services.
-
-## Observability
-
-### Definition
-
-The ability to understand system state from emitted telemetry (logs, metrics, traces, events).
-
-### LegacyExodus Context
-
-Observability is designed into transformed services to support confidence and operations.
-
-### Example
-
-Distributed traces verify end-to-end behavior equivalence across phased cutovers.
-
-## Reliability
-
-### Definition
-
-The probability that a system performs required functions under stated conditions over time.
-
-### LegacyExodus Context
-
-Reliability improvements are expected modernization outcomes, validated before release.
-
-### Example
-
-Introducing retry policies and circuit controls to reduce transient failure impact.
-
-## Scalability
-
-### Definition
-
-A system’s ability to handle increased load by efficient resource growth.
-
-### LegacyExodus Context
-
-Scalability decisions are captured in target architecture and deployment design.
-
-### Example
-
-Splitting high-throughput workflows into independently scalable async services.
+**Related Terms / Stages**  
+Deployment Architecture, Async Runtime, Service-Oriented Architecture.
 
 ---
 
 ## Section 10: LegacyExodus Internal Components
 
-## Core Engine
+### Core Engine
+**Purpose**  
+Central execution foundation for modernization lifecycle management.
 
-### Purpose
+**Responsibilities**  
+- coordinate platform-wide state transitions  
+- enforce lifecycle invariants  
+- provide shared execution primitives
 
-Provide the foundational runtime and domain abstractions for pipeline execution.
+**Communication Boundaries**  
+Interacts with orchestrator and core services through defined contracts; does not collapse service boundaries.
 
-### Responsibilities
+**Related Terms / Stages**  
+Project State, Pipeline Orchestration, Service Contract.
 
-- Shared execution primitives
-- Artifact lifecycle management
-- Cross-component consistency rules
+---
 
-### Communication
+### Orchestrator
+**Purpose**  
+Controls sequencing and gating across migration stages and agent tasks.
 
-Interacts with Orchestrator and all stage services through internal contracts.
+**Responsibilities**  
+- stage transition control  
+- event routing and failure handling  
+- enforcement of progression criteria
 
-## Orchestrator
+**Communication Boundaries**  
+Consumes and emits contract-bound events and service calls; avoids direct logic ownership of stage internals.
 
-### Purpose
+**Related Terms / Stages**  
+Migration Pipeline, Event Contract, VymosGate.
 
-Coordinate end-to-end pipeline execution and control flow.
+---
 
-### Responsibilities
+### Parser Service
+**Purpose**  
+Provides syntax and structure extraction from legacy source artifacts.
 
-- Stage scheduling
-- Retry and failure handling
-- Policy-aware routing
+**Responsibilities**  
+- parse source into CST/AST forms  
+- emit parse diagnostics and structural metadata  
+- support language-specific analysis entry points
 
-### Communication
+**Communication Boundaries**  
+Produces structured outputs for discovery/modeling services via explicit contracts.
 
-Dispatches tasks to Discovery, Knowledge, Transformation, and Governance components; emits execution events.
+**Related Terms / Stages**  
+Parser, AST, CST, VyrixScout.
 
-## Parser Service
+---
 
-### Purpose
+### Discovery Service
+**Purpose**  
+Executes early-stage discovery workflows over legacy systems.
 
-Convert source artifacts into structured syntax and symbol representations.
+**Responsibilities**  
+- gather dependency and structural signals  
+- classify and normalize discovered artifacts  
+- publish discovery outputs for intelligence modeling
 
-### Responsibilities
+**Communication Boundaries**  
+Consumes parser outputs; publishes discovery artifacts without owning transformation logic.
 
-- Language parsing
-- Syntax tree generation
-- Source location mapping
+**Related Terms / Stages**  
+VyrixScout, Source Analysis, Dependency Graph.
 
-### Communication
+---
 
-Supplies parsed outputs to Discovery Service and Graph Service.
+### Graph Service
+**Purpose**  
+Stores and serves graph-modeled relationships for system intelligence.
 
-## Discovery Service
+**Responsibilities**  
+- maintain knowledge graph structures  
+- support relationship queries and traversals  
+- preserve lineage and mapping integrity
 
-### Purpose
+**Communication Boundaries**  
+Exposes graph operations through service APIs; isolates graph persistence concerns.
 
-Extract baseline structural and dependency intelligence from legacy systems.
+**Related Terms / Stages**  
+Knowledge Graph, Relationship Mapping, NolaraStruct.
 
-### Responsibilities
+---
 
-- Source inventory
-- Symbol extraction
-- Initial graph seeding
+### Knowledge Service
+**Purpose**  
+Manages formalized system intelligence and project knowledge lifecycle.
 
-### Communication
+**Responsibilities**  
+- persist and version system intelligence artifacts  
+- enforce metadata and provenance consistency  
+- serve context packages to downstream stages
 
-Consumes Parser outputs and publishes discovery artifacts to Knowledge Service.
+**Communication Boundaries**  
+Interfaces with graph/storage services under explicit contracts; does not execute generation logic.
 
-## Graph Service
+**Related Terms / Stages**  
+System Intelligence Model, Metadata, Project State.
 
-### Purpose
+---
 
-Build and query relationship graphs used for architecture and dependency reasoning.
+### AI Gateway
+**Purpose**  
+Governed integration layer for model invocation.
 
-### Responsibilities
+**Responsibilities**  
+- route requests to model providers  
+- apply policy checks and context controls  
+- collect usage and trace telemetry
 
-- Dependency graph construction
-- Call/data/control flow graph management
-- Graph query interfaces
+**Communication Boundaries**  
+Decouples internal components from provider-specific APIs.
 
-### Communication
+**Related Terms / Stages**  
+Model Provider, AI Governance, Agent Orchestration.
 
-Integrates with Discovery and Knowledge services; provides analysis support to ZelvoxForge.
+---
 
-## Knowledge Service
+### Compiler Service
+**Purpose**  
+Validates and verifies build-level properties of generated modernization artifacts.
 
-### Purpose
+**Responsibilities**  
+- execute compilation/build checks  
+- surface diagnostics for validation workflows  
+- provide build evidence for confidence assessment
 
-Materialize and maintain system intelligence models and domain context artifacts.
+**Communication Boundaries**  
+Consumes generated artifacts; returns validation signals to governance paths.
 
-### Responsibilities
+**Related Terms / Stages**  
+ZelvoxForge, VymosGate, Migration Confidence.
 
-- Model synthesis
-- Invariant capture
-- Context boundary representation
+---
 
-### Communication
+### Storage Service
+**Purpose**  
+Persistent storage layer for artifacts, state, traces, and governance records.
 
-Consumes discovery/graph artifacts and publishes decision-grade intelligence for transformation.
+**Responsibilities**  
+- durable artifact and metadata persistence  
+- versioned state support  
+- retrieval for audit and replay workflows
 
-## AI Gateway
+**Communication Boundaries**  
+Provides persistence contracts to platform services; no ownership of business transformation semantics.
 
-### Purpose
+**Related Terms / Stages**  
+Project State, Audit Trail, Metadata.
 
-Broker and govern model interactions across agents and stages.
+---
 
-### Responsibilities
+### Governance Engine
+**Purpose**  
+Executes policy and approval logic for modernization decisions.
 
-- Provider abstraction
-- Policy enforcement
-- Request/response observability
+**Responsibilities**  
+- evaluate validation evidence  
+- enforce approval requirements  
+- record governance outcomes and rationale
 
-### Communication
+**Communication Boundaries**  
+Consumes evidence from validation and orchestration paths; publishes decision artifacts to project state.
 
-Serves Orchestrator, Knowledge Service, and Compiler Service with governed AI capabilities.
-
-## Compiler Service
-
-### Purpose
-
-Generate and validate modern code artifacts from transformation plans.
-
-### Responsibilities
-
-- Code synthesis
-- Build/compile verification
-- Artifact packaging
-
-### Communication
-
-Consumes Knowledge artifacts and AI Gateway outputs; publishes outputs to Governance Engine.
-
-## Storage Service
-
-### Purpose
-
-Persist artifacts, metadata, evidence, and project state.
-
-### Responsibilities
-
-- Durable storage
-- Versioning
-- Retrieval APIs for pipeline components
-
-### Communication
-
-Used by all components as system-of-record infrastructure.
-
-## Governance Engine
-
-### Purpose
-
-Evaluate modernization outputs against policy, quality, and risk controls.
-
-### Responsibilities
-
-- Approval workflow enforcement
-- Evidence validation
-- Confidence scoring and release decisioning
-
-### Communication
-
-Consumes artifacts from Compiler/Knowledge services and emits gate decisions to Orchestrator and release processes.
+**Related Terms / Stages**  
+Human Approval Loop, AI Governance, VymosGate.
 
 ---
 
 ## Section 11: Naming Conventions
 
-LegacyExodus uses functional names for major stages to encode responsibilities, not for arbitrary branding.
+### Stage Naming Philosophy
+LegacyExodus stage names are purpose-signaling identifiers.  
+Each name communicates operational responsibility in the modernization lifecycle.
 
-## VyrixScout
+---
 
-### Meaning in naming philosophy
+### VyrixScout
+**Name Intent**  
+"Scout" indicates reconnaissance and discovery.
 
-**Scout** indicates discovery-first behavior: survey, detect, and report structural reality.
+**Responsibility Signal**  
+This stage observes and maps the legacy landscape before interpretation or change.
 
-## NolaraStruct
+---
 
-### Meaning in naming philosophy
+### NolaraStruct
+**Name Intent**  
+"Struct" indicates structuring and formal modeling.
 
-**Struct** indicates structure-building behavior: organize, model, and contextualize discovered intelligence.
+**Responsibility Signal**  
+This stage turns discovered facts into organized system intelligence and domain structure.
 
-## ZelvoxForge
+---
 
-### Meaning in naming philosophy
+### ZelvoxForge
+**Name Intent**  
+"Forge" indicates controlled creation.
 
-**Forge** indicates construction behavior: shape and produce modern artifacts from verified understanding.
+**Responsibility Signal**  
+This stage constructs modern implementation artifacts from validated intelligence inputs.
 
-## VymosGate
+---
 
-### Meaning in naming philosophy
+### VymosGate
+**Name Intent**  
+"Gate" indicates controlled admission and decisioning.
 
-**Gate** indicates controlled progression behavior: verify, govern, and authorize forward movement.
+**Responsibility Signal**  
+This stage validates, governs, and authorizes progression to production-ready outcomes.
 
-### Convention principle
+---
 
-Stage names must communicate operational intent. If a new stage is introduced, its name should indicate role, boundary, and lifecycle function at a glance.
+### Convention Rule
+Stage names must remain tightly coupled to responsibilities.  
+A stage name is valid only if it communicates what the stage does in the architecture.
 
 ---
 
 ## Section 12: Future Expansion Terms
 
-## Continuous Modernization
+### Continuous Modernization
+**Definition**  
+An operating model where modernization is iterative and ongoing rather than a one-time project.
 
-### Definition
+**LegacyExodus Meaning**  
+Future workflows may continuously re-assess and evolve systems as architecture and risk profiles change.
 
-A delivery model where modernization is ongoing, incremental, and integrated into normal engineering flow.
+**Architectural Purpose**  
+To keep systems modernization-aligned over long operational horizons.
 
-### LegacyExodus Context
+---
 
-Future versions may treat modernization as a persistent capability rather than a project with a fixed endpoint.
+### Autonomous Engineering
+**Definition**  
+High-automation engineering execution under explicit governance boundaries.
 
-### Example
+**LegacyExodus Meaning**  
+Extends agent capabilities while preserving human approval and policy enforcement as control points.
 
-New legacy risks are continuously discovered and queued as modernization units.
+**Architectural Purpose**  
+To increase throughput without sacrificing trust.
 
-## Autonomous Engineering
+---
 
-### Definition
+### Self-Healing Systems
+**Definition**  
+Systems that can detect, diagnose, and remediate certain failure classes automatically.
 
-Engineering workflows where AI systems perform substantial implementation and validation tasks under policy control.
+**LegacyExodus Meaning**  
+A future-state objective for modernization outputs and potentially platform operations.
 
-### LegacyExodus Context
+**Architectural Purpose**  
+To improve resilience and reduce operational intervention burden.
 
-Extends current autonomous migration behaviors with tighter feedback loops and broader scope.
+---
 
-### Example
+### AI Software Architect
+**Definition**  
+An AI capability that reasons about architecture, trade-offs, and modernization plans at system level.
 
-Automated architecture adjustments triggered by drift detection and approved governance policies.
+**LegacyExodus Meaning**  
+A future specialized role for architecture guidance constrained by knowledge-first and governance policies.
 
-## Self-Healing Systems
+**Architectural Purpose**  
+To augment human architecture decision-making with scalable analytical support.
 
-### Definition
+---
 
-Systems that can detect, diagnose, and remediate certain failures automatically.
+### Multi-Language Migration
+**Definition**  
+Support for modernization across multiple source and target language ecosystems.
 
-### LegacyExodus Context
+**LegacyExodus Meaning**  
+Extensible pipeline capabilities through plugin and parser/service expansion models.
 
-Potential post-migration capability in modernized runtime architectures.
+**Architectural Purpose**  
+To broaden platform applicability across enterprise legacy portfolios.
 
-### Example
+---
 
-Runtime detects repeated transient dependency failures and applies safe fallback routing automatically.
+### Cloud-Native Transformation
+**Definition**  
+Modernization toward architectures optimized for cloud deployment, scaling, resilience, and managed operations.
 
-## AI Software Architect
+**LegacyExodus Meaning**  
+A target transformation profile that may be selected by migration strategy and governance requirements.
 
-### Definition
+**Architectural Purpose**  
+To align modernized systems with contemporary operational platforms.
 
-An AI capability focused on architecture reasoning, trade-off analysis, and design proposal generation.
+---
 
-### LegacyExodus Context
+## Final Terminology Principle
 
-Could become a specialized role interacting with knowledge graphs and governance constraints.
-
-### Example
-
-Proposing service boundary refinements based on observed coupling and latency hotspots.
-
-## Multi-Language Migration
-
-### Definition
-
-Modernization support spanning multiple legacy and target language ecosystems.
-
-### LegacyExodus Context
-
-Future pipeline extensions may support broader source landscapes beyond current focus areas.
-
-### Example
-
-Coordinated migration of mixed PHP, JavaScript, and Java legacy subsystems.
-
-## Cloud-Native Transformation
-
-### Definition
-
-Redesigning systems to use cloud-aligned patterns such as elasticity, managed services, and distributed resilience.
-
-### LegacyExodus Context
-
-Represents a likely evolution from code-level modernization to full operating model modernization.
-
-### Example
-
-Transforming batch-bound legacy workflows into event-driven, autoscaled service topologies.
+In LegacyExodus, terminology is an architectural control surface.  
+If a term is ambiguous, it is incomplete.  
+If a term is incomplete, modernization risk increases.  
+This glossary exists to eliminate that risk by enforcing shared, explicit language.
