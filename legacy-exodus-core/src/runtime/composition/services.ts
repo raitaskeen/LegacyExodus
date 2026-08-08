@@ -8,7 +8,12 @@ import { PluginLoader, PluginRegistry } from "@plugins/index";
 import { ApplicationRuntime } from "@runtime/application";
 import { loadRuntimeConfig, type EnvironmentVariables } from "@runtime/config";
 import { createLogger } from "@shared/logger";
-import { MemoryStorageProvider, StorageManager } from "@storage/index";
+import {
+  DiscoveryProjectionService,
+  FileDiscoveryProjectionAdapter,
+  MemoryStorageProvider,
+  StorageManager,
+} from "@storage/index";
 
 export function createEngineContext(
   environment: EnvironmentVariables = process.env,
@@ -16,6 +21,10 @@ export function createEngineContext(
   const config = loadRuntimeConfig(environment);
   const logger = createLogger(config, "runtime");
   const storage = new StorageManager(new MemoryStorageProvider());
+  const discoveryProjection = new DiscoveryProjectionService(
+    storage,
+    new FileDiscoveryProjectionAdapter(),
+  );
   const eventBus = new EventBus();
   const eventStore = new InMemoryEventStore();
   const plugins = new PluginRegistry();
@@ -23,7 +32,15 @@ export function createEngineContext(
   const runtime = new ApplicationRuntime(config, logger, storage, plugins, pluginLoader);
   const orchestrator = new Orchestrator(eventStore, eventBus, storage, new DiscoveryEngine());
 
-  return { runtime, eventStore, eventBus, storage, plugins, orchestrator };
+  return {
+    runtime,
+    eventStore,
+    eventBus,
+    storage,
+    discoveryProjection,
+    plugins,
+    orchestrator,
+  };
 }
 
 export function createLegacyExodusEngine(

@@ -4,12 +4,14 @@ import type { Orchestrator } from "@core/orchestration/orchestrator";
 import type { PluginRegistry } from "@plugins/index";
 import type { ApplicationRuntime } from "@runtime/application";
 import type { StorageManager } from "@storage/index";
+import type { DiscoveryProjectionService } from "@storage/index";
 
 export interface EngineContext {
   readonly runtime: ApplicationRuntime;
   readonly eventStore: InMemoryEventStore;
   readonly eventBus: EventBus;
   readonly storage: StorageManager;
+  readonly discoveryProjection: DiscoveryProjectionService;
   readonly plugins: PluginRegistry;
   readonly orchestrator: Orchestrator;
 }

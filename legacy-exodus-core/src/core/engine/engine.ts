@@ -69,6 +69,17 @@ export class LegacyExodusEngine {
           });
         }
 
+        const discoveryRecord = execution.records[0];
+
+        if (discoveryRecord === undefined) {
+          throw new LegacyExodusError({
+            code: "DISCOVERY_RECORD_MISSING",
+            message: "AnalyzeProject completed without a discovery record.",
+          });
+        }
+
+        await this.context.discoveryProjection.project(discoveryRecord.id);
+
         return { type: "AnalyzeProject", discovery: execution.discovery };
       }
     }

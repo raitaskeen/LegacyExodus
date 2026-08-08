@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -44,6 +44,14 @@ describe("analyze project integration", () => {
           "react",
         ]);
       }
+
+      expect(JSON.parse(await readFile(join(projectPath, ".discovery", "summary.json"), "utf8"))).toEqual({
+        projectName: "library-management-system",
+        fileCount: 2,
+        dependencyCount: 3,
+        frameworkCount: 3,
+        languages: ["javascript"],
+      });
 
       await engine.shutdown();
     } finally {
