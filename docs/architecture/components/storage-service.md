@@ -1,0 +1,92 @@
+# Storage Service
+
+## Overview
+
+Storage Service provides durable, versioned persistence for artifacts, metadata, and project execution state across the LegacyExodus pipeline.
+
+## Scope
+
+- artifacts
+- project state
+- metadata
+- versioning
+- persistence
+
+## Purpose
+
+- Persist all stage outputs and operational state reliably.
+- Preserve provenance and auditability.
+- Enable checkpoint/resume, replay, and compliance retrieval.
+
+## Data Domains
+
+### 1) Artifacts
+- Discovery artifacts
+- Parsed artifacts
+- Graph snapshots
+- Knowledge snapshots
+- Transformation bundles
+- Validation reports
+
+### 2) Project State
+- run lifecycle state
+- stage progress state
+- checkpoint pointers
+- retry/terminal outcomes
+
+### 3) Metadata
+- provenance hashes
+- policy/contract versions
+- tenant and environment tags
+- timestamps and lineage references
+
+## Versioning Model
+
+- Immutable artifact versions
+- Append-only lineage links
+- Explicit schema versions
+- No silent overwrite of accepted records
+
+## Persistence Architecture
+
+```text
+Pipeline Services
+      |
+      v
+Storage API
+      |
+      +--> Artifact Store (binary/object)
+      |
+      +--> Metadata Store (relational/indexed)
+      |
+      +--> State Store (run/checkpoint lifecycle)
+```
+
+## Contracts
+
+### Input
+- Typed artifact/state write requests with provenance and policy context.
+
+### Output
+- Persisted record identifiers
+- version/hash references
+- retrieval pointers
+
+## Consistency and Integrity
+
+- Writes require integrity checksums.
+- State transitions are transactionally guarded.
+- Cross-reference integrity (artifact ↔ metadata ↔ state) must validate.
+
+## Failure Handling
+
+- Write failure => retry if transient; fail if integrity violation.
+- Version conflict => reject and require explicit new version.
+- Corrupt artifact => quarantine and block downstream consumption.
+
+## Observability
+
+- write/read latency
+- storage growth by artifact class
+- integrity failure rate
+- checkpoint restore success rate

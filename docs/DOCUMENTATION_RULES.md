@@ -1,504 +1,442 @@
-# LegacyExodus Documentation Rules  
-## Documentation Governance System
+# LegacyExodus AI Context
+## AI Assistant Operating Manual
 
-## 1) Purpose of Documentation Governance
+## 1) Purpose
 
-Documentation governance exists to ensure that LegacyExodus knowledge remains durable, accurate, and operationally useful across time, teams, and tooling.
+This document defines the canonical operating context for AI assistants contributing to LegacyExodus.
 
-In LegacyExodus, documentation is not optional project decoration. It is a core engineering artifact that:
+LegacyExodus is an architecture-governed modernization platform. Contributions cannot be treated as isolated file edits. Every technical decision can impact:
 
-- prevents architectural and domain knowledge loss
-- maintains cross-module and cross-stage consistency
-- enables reliable collaboration between contributors
-- allows AI systems to reason from stable context
-- supports enterprise adoption, audits, and long-term maintenance
+- migration safety
+- intelligence fidelity
+- enterprise trust
+- governance boundaries
+- long-term maintainability
 
-LegacyExodus is a knowledge-first modernization platform. Therefore, any undocumented critical design effectively behaves as hidden system state. Hidden state creates risk. Documentation governance reduces that risk by making architectural intent explicit, reviewable, and evolvable.
-
-**Principle:** Documentation is part of the product surface and must be engineered with the same rigor as code.
+AI assistants must treat this document as foundational, not optional reference material.
 
 ---
 
-## 2) Documentation Philosophy
+## 2) What LegacyExodus Is
 
-### 2.1 Documentation Before Complexity
+LegacyExodus is a knowledge-first modernization intelligence platform for transforming complex legacy systems into modern, secure, maintainable architectures while preserving business behavior.
 
-Important architecture and workflow decisions must be documented before implementation becomes deeply coupled or difficult to reverse.
+LegacyExodus is **not** a direct code translation tool.
 
-Required sequence for non-trivial work:
+It does **not** follow:
 
-**Design → Document → Implement → Review**
-
-This sequence ensures:
-
-- intent is explicit before code hardens assumptions
-- reviewers evaluate decisions, not only code style
-- future maintainers can distinguish deliberate design from accidental behavior
-
-### 2.2 Documentation as Knowledge Preservation
-
-LegacyExodus documentation must preserve:
-
-- decisions that shaped the system
-- reasoning behind those decisions
-- expected system behavior
-- architectural intent and boundaries
-- explicit tradeoffs and rejected paths
-
-If an expert leaves the project, documentation must retain enough context for a new engineer to reconstruct why the current architecture exists.
-
-### 2.3 Documentation Must Explain WHY
-
-Documentation that only describes **what exists** is incomplete.
-
-Every major document must explain:
-
-- why this component exists
-- why this approach was selected
-- what alternatives were considered
-- why alternatives were rejected
-
-“Why” is mandatory for architecture-level clarity, governance quality, and safe modernization.
-
----
-
-## 3) Documentation Categories
-
-### 3.1 Project Documentation  
-**Location:** `docs/`  
-**Purpose:** High-level orientation for project mission, scope, principles, and contributor onboarding.
-
-Typical files include:
-
-- `README.md`
-- `PROJECT_CONTEXT.md`
-- `GLOSSARY.md`
-
-Project documentation must answer:
-
-- what LegacyExodus is
-- what it is not
-- how the platform is organized
-- where to find authoritative details
-
----
-
-### 3.2 Architecture Documentation  
-**Location:** `docs/architecture/`  
-**Purpose:** Describe system design, boundaries, and runtime relationships.
-
-Typical files include:
-
-- `system-overview.md`
-- `component-map.md`
-- `runtime-architecture.md`
-- `security-architecture.md`
-
-Each architecture document should cover:
-
-- component responsibility
-- explicit boundaries and ownership
-- interaction patterns and contracts
-- data flow and control flow
-- key design decisions
-- tradeoffs and constraints
-
----
-
-### 3.3 Architecture Decision Records (ADR)  
-**Location:** `docs/adr/`  
-**Purpose:** Capture irreversible or high-impact decisions with full context.
-
-Every major decision must include:
-
-1. Problem  
-2. Context  
-3. Options considered  
-4. Decision  
-5. Consequences
-
-Examples requiring ADR coverage:
-
-- storage model decisions
-- event architecture and CQRS boundaries
-- AI gateway and trust-boundary design
-- plugin/runtime extension model
-
-If a change modifies an existing major decision, update the prior ADR or add a superseding ADR.
-
----
-
-### 3.4 Domain Documentation  
-**Location:** `docs/domain/`  
-**Purpose:** Define business and system concepts independent of implementation details.
-
-Must include, where applicable:
-
-- entities
-- aggregates
-- workflows
-- domain events
-- invariants
-- canonical terminology
-
-Domain documentation must remain consistent with DDD separation between Engine and Workflow contexts.
-
----
-
-### 3.5 Implementation Documentation  
-**Location:** `docs/implementation/`  
-**Purpose:** Explain how system behavior is realized in code and modules.
-
-Should include:
-
-- service responsibilities
-- module boundaries
-- internal architecture patterns
-- integration contracts
-- deterministic vs probabilistic separation points
-
-Implementation docs must never contradict architecture docs or ADRs.
-
----
-
-### 3.6 Pipeline Documentation  
-**Location:** `docs/pipeline/`  
-**Purpose:** Document stage isolation and end-to-end modernization flow.
-
-Must explicitly cover:
-
-- **VyrixScout** (discovery and inventory)
-- **NolaraStruct** (knowledge reconstruction)
-- **ZelvoxForge** (transformation and generation)
-- **VymosGate** (validation and assurance)
-
-Pipeline docs must preserve stage responsibilities and non-overlap constraints.
-
----
-
-### 3.7 Security Documentation  
-**Location:** `docs/security/`  
-**Purpose:** Define security expectations for platform operation and enterprise usage.
-
-Must cover:
-
-- AI trust boundaries and sanitization rules
-- handling of untrusted source code and generated code
-- secrets management and credential boundaries
-- compliance and governance considerations
-- secure usage patterns for enterprise environments
-
-Security documentation is mandatory for any feature that introduces new data paths, execution paths, or model interaction surfaces.
-
----
-
-## 4) Required Document Structure
-
-Major technical documents should use the following template:
-
-```md
-# Title
-
-## Overview
-Explain what this document covers.
-
-## Purpose
-Why this component or concept exists.
-
-## Responsibilities
-What it owns.
-
-## Architecture
-How it works.
-
-## Data Flow
-How information moves.
-
-## Dependencies
-What it relies on.
-
-## Design Decisions
-Important choices.
-
-## Failure Handling
-What happens when things fail.
-
-## Security Considerations
-Security implications.
-
-## Future Evolution
-Possible improvements.
+```text
+Legacy Code
+   -> AI Translation
+   -> Modern Code
 ```
 
-Not every document requires every section; however, major architecture, pipeline, domain, and security documents should follow this structure unless there is a clear reason not to.
+It follows:
 
-If a section is intentionally omitted, the omission should be obvious and justified by document scope.
+```text
+Legacy System
+   -> System Discovery
+   -> Knowledge Reconstruction
+   -> Architectural Understanding
+   -> Controlled Transformation
+   -> Validation & Governance
+   -> Modern System
+```
 
----
+Foundational belief:
 
-## 5) Writing Standards
-
-### 5.1 Clarity
-
-Documentation must be understandable by:
-
-- new contributors
-- cross-functional reviewers
-- maintainers operating months later
-- AI assistants using docs as context
-
-Avoid:
-
-- unnecessary complexity
-- vague statements
-- unexplained terms
-- ambiguous ownership language
-
-Prefer explicit, observable descriptions.
+> A system must be understood before it can be safely transformed.
 
 ---
 
-### 5.2 Precision
+## 3) Core Philosophy
 
-Avoid generic phrasing such as:
+All AI-assisted contributions must align with these principles.
 
-> “The system handles things automatically.”
+### 3.1 Knowledge Before Generation
 
-Prefer precise statements such as:
+LegacyExodus prioritizes understanding before transformation.
 
-> “The orchestrator receives `MigrationRequested` events and schedules transformation agents.”
+AI assistants must not recommend “analyze one file then generate replacement” workflows without producing understanding artifacts first.
 
-Precision is required for testability, reviewability, and safe evolution.
+Required reasoning sequence:
 
----
+```text
+Source Code
+   -> Discovery
+   -> Structural Analysis
+   -> Dependency Mapping
+   -> Domain Understanding
+   -> Transformation Planning
+   -> Generation
+   -> Validation
+```
 
-### 5.3 Consistency
+Generation must be evidence-backed, not assumption-driven.
 
-Use canonical naming and never casually rename core concepts.
+### 3.2 Human-Governed AI
 
-Required canonical terms include:
+AI accelerates engineering work; it is not final authority.
 
-- **VyrixScout**
-- **NolaraStruct**
-- **ZelvoxForge**
-- **VymosGate**
+LegacyExodus must preserve:
 
-Also preserve consistency for:
+- human review
+- approval checkpoints
+- audit trails
+- decision visibility
+- rollback paths
 
-- CQRS terminology (`Command`, `Event`, immutable log)
-- DDD context terms (Engine vs Workflow)
-- trust-boundary terms (deterministic core vs probabilistic periphery)
+Critical transformations must never execute silently.
 
----
+Correct governance flow:
 
-## 6) Technical Documentation Rules
+```text
+AI identifies opportunity
+   -> proposal
+   -> supporting evidence
+   -> human approval
+   -> controlled execution
+```
 
-### 6.1 Code Examples
+### 3.3 Deterministic Core, Probabilistic Periphery
 
-Code examples must:
+LegacyExodus separates deterministic correctness from probabilistic assistance.
 
-- be realistic and representative of actual system patterns
-- explain only relevant complexity
-- include annotations where intent may be misread
-- align with current architecture and naming
+**Deterministic Core owns:**
 
-Do not include contrived examples that conflict with real system behavior.
+- filesystem and repository processing
+- parsing and structural extraction
+- graph/state construction
+- storage and event handling
+- contract validation
+- security and policy checks
 
----
+**Probabilistic Periphery supports:**
 
-### 6.2 Diagrams
+- semantic reasoning
+- architecture suggestions
+- generation assistance
+- modernization alternatives
 
-Use diagrams when textual explanation is insufficient for architecture comprehension.
-
-Preferred format:
-
-- **Mermaid**
-
-Recommended diagram types:
-
-- sequence diagrams
-- component diagrams
-- data flow diagrams
-- boundary/trust-zone diagrams
-
-Diagrams must match written descriptions and be updated with architecture changes.
-
----
-
-### 6.3 References and Linking
-
-Documents should link related artifacts, including:
-
-- relevant ADRs
-- architecture documents
-- implementation documents
-- security decisions
-- pipeline stage docs
-
-Cross-linking is mandatory when a document depends on assumptions defined elsewhere.
+AI output is always untrusted until validated by deterministic systems.
 
 ---
 
-## 7) AI-Generated Documentation Rules
+## 4) Pipeline Model (Four-Stage Isolation)
 
-LegacyExodus uses AI heavily, but AI output is draft material until validated.
+LegacyExodus is a strict four-stage pipeline:
 
-AI-generated documentation must:
+```text
+VyrixScout -> NolaraStruct -> ZelvoxForge -> VymosGate
+```
 
-- be reviewed by human owners before approval
-- avoid invented components, stages, or flows
-- verify technical claims against repository truth
-- reference existing ADRs and architecture sources
-- preserve canonical terminology and naming
-- declare uncertainty rather than fabricate detail
+Each stage has explicit boundaries and must not collapse responsibilities.
 
-AI may assist writing velocity. AI may not become an unreviewed source of truth.
+### 4.1 VyrixScout — Discovery
 
----
+**Question answered:** What exists?
 
-## 8) Documentation Review Process
+Responsibilities:
 
-### 8.1 Draft Stage  
-**Location:** `docs/drafts/ai-generated/`  
-Use for generated, exploratory, or unverified documentation.
+- repository scanning
+- language and framework detection
+- dependency extraction
+- configuration discovery
+- source metadata collection
 
-### 8.2 Human Review Stage  
-**Location:** `docs/drafts/human-review/`  
-Architecture owners and domain reviewers validate correctness, consistency, and alignment.
+Input: legacy codebases  
+Output: discovery artifacts (files, symbols, dependencies, metadata, initial relationships)
 
-### 8.3 Approved Stage  
-Approved documents are moved into official documentation locations (for example `docs/architecture/`, `docs/domain/`, `docs/security/`, etc.).
+VyrixScout observes and inventories. It does not redesign.
 
-### 8.4 Rejected Stage  
-Rejected drafts are retained for historical reference when useful for auditability and decision traceability.
+### 4.2 NolaraStruct — Knowledge Reconstruction
 
-No AI-generated draft may bypass human review for architecture-impacting documentation.
+**Question answered:** What does the system mean?
 
----
+Responsibilities:
 
-## 9) Versioning and Change Management
+- AST analysis
+- symbol relationship modeling
+- dependency graph construction
+- domain inference
+- architecture interpretation
+- knowledge graph generation
 
-Documentation must evolve with the code and architecture it describes.
+Input: VyrixScout artifacts  
+Output: System Intelligence Model (knowledge foundation for transformation)
 
-When major architecture changes occur, required actions include:
+### 4.3 ZelvoxForge — Controlled Transformation
 
-1. update or add ADR(s)  
-2. update all affected documentation  
-3. complete review before merge
+**Question answered:** How should this become modern?
 
-Documentation commits must use meaningful messages.
+Responsibilities:
 
-Good examples:
+- target architecture planning
+- AI-assisted modernization generation
+- Rust-oriented implementation generation
+- interface redesign
+- migration strategy execution
 
-- `Document event-driven orchestration model`
-- `Add ADR for AI gateway trust-boundary design`
-- `Update NolaraStruct DAG documentation for new dependency classifier`
+Input: NolaraStruct intelligence  
+Output: modernization artifacts (services, modules, APIs, migration plans)
 
-Bad example:
+ZelvoxForge must not generate in the absence of validated understanding context.
 
-- `Update docs`
+### 4.4 VymosGate — Validation & Governance
 
-If behavior changed and docs did not, the change is incomplete.
+**Question answered:** Is this safe?
 
----
+Responsibilities:
 
-## 10) Documentation Ownership
+- behavioral validation
+- security verification
+- compliance checks
+- testing and assurance
+- governance decision workflows
 
-Documentation ownership is role-based and explicit.
+Input: generated artifacts  
+Output: confidence decision
 
-- **Architects** own architecture and ADR quality.
-- **Developers** maintain implementation-level documentation.
-- **Security reviewers** maintain security guidance and compliance-aligned artifacts.
-- **Contributors** follow governance rules and keep touched docs current.
-- **AI assistants** generate draft content that conforms to this policy.
+Outcomes:
 
-Ownership does not prevent collaboration; it defines accountability for correctness.
-
----
-
-## 11) Documentation Quality Checklist
-
-Before merging documentation, confirm all applicable items:
-
-- [ ] Is the purpose clear?
-- [ ] Is terminology canonical and consistent?
-- [ ] Does the document explain **why**, not only **what**?
-- [ ] Are architecture boundaries and responsibilities explicit?
-- [ ] Are diagrams included where complexity warrants visual explanation?
-- [ ] Are related ADRs and documents linked?
-- [ ] Does the content match the current implementation and architecture?
-- [ ] Have appropriate human reviewers approved it?
-
-Merge readiness requires affirmative answers for relevant checklist items.
+- approved
+- rejected
+- requires review
+- requires additional evidence
 
 ---
 
-## 12) Documentation Anti-Patterns
+## 5) Architectural Mental Model
 
-### 12.1 Writing Without Context
+LegacyExodus is a coordinated system of intelligence, transformation, and governance:
 
-Bad:
+```text
+LegacyExodus
+   -> Intelligence
+   -> Transformation
+   -> Governance
 
-> “This service handles migration.”
+Discovery -> Knowledge -> Generation -> Validation
+```
 
-Good:
-
-> “This service orchestrates migration workflows by coordinating agents through event-based communication.”
-
-Context transforms statements from superficial description into usable engineering knowledge.
-
----
-
-### 12.2 Documentation Drift
-
-If implementation evolves but documentation does not, documentation becomes misleading.
-
-To prevent drift:
-
-- update docs in the same PR as behavior changes whenever possible
-- block merges for architecture-impacting changes without doc updates
-- periodically audit core documents against current system behavior
+It is not an AI wrapper. It is an engineering system with AI as a constrained capability.
 
 ---
 
-### 12.3 Over-Documentation
+## 6) Architecture Principles
 
-Avoid documenting trivial or self-evident implementation details that provide little long-term value.
+### 6.1 Event-Driven Design
 
-Prioritize documenting:
+Key actions emit events to create traceability and replayable system history.
 
-- decisions
-- architecture
-- behavior
-- invariants
-- tradeoffs
-- reasoning
+Example event types:
 
-Signal-to-noise ratio matters. High-value documentation is curated, not verbose by default.
+- `FileDiscovered`
+- `DependencyMapped`
+- `ASTGenerated`
+- `KnowledgeUpdated`
+- `MigrationGenerated`
+- `ValidationCompleted`
+
+Event discipline provides:
+
+- observability
+- auditability
+- debuggability
+- replayability
+- loose coupling
+
+### 6.2 Modular Boundaries
+
+Major components should remain explicitly bounded:
+
+- Core Engine
+- Orchestrator
+- Discovery Service
+- Parser Service
+- Graph Service
+- Knowledge Service
+- AI Gateway
+- Compiler Service
+- Storage Service
+- Governance Engine
+
+Each component must have clear ownership and contracts.
+
+### 6.3 Plugin-Based Extensibility
+
+LegacyExodus must scale without core rewrites.
+
+Extension surfaces include:
+
+- parser plugins
+- migration strategy plugins
+- validation rule plugins
+- AI provider adapters
+- storage adapters
 
 ---
 
-## 13) AI Assistant Instructions
+## 7) AI Assistant Reasoning Rules
 
-When generating documentation for LegacyExodus, AI assistants must:
+### 7.1 Before Writing Code
 
-1. Read `PROJECT_CONTEXT.md`.
-2. Read relevant architecture documents under `docs/architecture/`.
-3. Review relevant ADRs under `docs/adr/`.
-4. Align with existing domain terminology.
-5. Preserve deterministic-core and zero-trust principles.
-6. Avoid introducing undocumented architecture assumptions.
-7. Ask clarifying questions if architectural intent is ambiguous.
+AI assistants must determine:
 
-AI assistants should optimize for architectural fidelity, not stylistic novelty.
+1. Why does this component exist?
+2. Which architectural boundary owns it?
+3. What problem does it solve?
+4. Which contracts or invariants can it impact?
+5. Which documentation artifacts must be updated?
+
+### 7.2 Before Suggesting Improvements
+
+Assess:
+
+- architecture impact
+- security impact
+- migration safety impact
+- maintainability impact
+- compatibility impact
+
+Do not optimize exclusively for:
+
+- fewer lines of code
+- fastest implementation path
+- trend-based technology adoption
 
 ---
 
-## 14) Final Documentation Principle
+## 8) Prohibited AI Behaviors
 
-LegacyExodus documentation exists to preserve intelligence.
+AI assistants must never:
 
-The code explains **what** the system does.  
-The documentation explains **why** the system exists.
+- invent undocumented platform components
+- rename canonical stages or concepts
+- bypass governance or approval requirements
+- remove human review checkpoints
+- reduce modernization to direct translation
+- assume generated code correctness without validation
+- ignore ADR decisions
+- introduce architecture changes without rationale and traceability
 
-Sustainable modernization requires both.
+---
+
+## 9) Canonical Vocabulary
+
+The following names are mandatory and must be used exactly:
+
+```text
+VyrixScout
+NolaraStruct
+ZelvoxForge
+VymosGate
+```
+
+Do not introduce alternate spellings or “friendly” variants.
+
+---
+
+## 10) Target Technology Direction
+
+### 10.1 Core Platform
+
+Preferred:
+
+- TypeScript
+- Bun runtime
+
+Rationale:
+
+- development velocity
+- tooling maturity
+- ecosystem leverage
+- AI integration practicality
+
+### 10.2 Frontend
+
+Preferred:
+
+- React
+- TypeScript
+- Vite
+- Tailwind CSS
+
+Purpose: visualization, review, and operational control interfaces.
+
+### 10.3 Migration Target Stack
+
+Primary target language: Rust
+
+Preferred ecosystem:
+
+- Axum
+- Tokio
+- SQLx
+
+Rationale:
+
+- memory safety
+- performance
+- reliability
+- strong correctness characteristics
+
+---
+
+## 11) Documentation Authority Model
+
+AI assistants must follow this hierarchy when documents conflict:
+
+1. ADR decisions
+2. Architecture documentation
+3. Project context documentation
+4. Implementation documentation
+
+Expected context chain:
+
+```text
+AI_CONTEXT.md
+   -> PROJECT_CONTEXT.md
+   -> docs/architecture/*
+   -> docs/adr/*
+   -> docs/implementation/*
+```
+
+---
+
+## 12) Contribution Standard for AI
+
+AI contributions should reflect the quality bar of:
+
+- principal software architecture
+- distributed systems engineering
+- modernization safety engineering
+- secure systems design
+
+Before finalizing any output, ask:
+
+> Does this change move LegacyExodus toward becoming a trustworthy autonomous modernization platform?
+
+---
+
+## 13) Final Principle
+
+Legacy systems are not only code; they are accumulated business intelligence.
+
+LegacyExodus exists to preserve and modernize that intelligence safely.
+
+The mission is not:
+
+> “Convert old code to new code.”
+
+The mission is:
+
+> “Understand legacy systems deeply, preserve their intelligence, and evolve them into secure future architectures.”
+
+Operating axiom:
+
+```text
+Understand First.
+Transform Second.
+Validate Always.
+```
