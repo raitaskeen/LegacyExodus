@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "legacy-exodus": "src/cli/index.ts"
+  },
   "packageManager": "bun@1.3.9",
   "engines": {
     "bun": ">=1.3.0"
@@ -10,6 +13,7 @@
   "scripts": {
     "start": "bun run src/cli/index.ts",
     "dev": "bun --watch run src/cli/index.ts",
+    "legacy-exodus": "bun run src/cli/index.ts",
     "test": "bun test --coverage",
     "test:watch": "bun test --watch",
     "typecheck": "tsc --noEmit",

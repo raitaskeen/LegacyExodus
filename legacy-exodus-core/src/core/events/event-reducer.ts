@@ -1,5 +1,8 @@
 import type {
+  DependencyDetected,
+  DiscoveryCompleted,
   FileDiscovered,
+  FrameworkDetected,
   KnowledgeUpdated,
   ProjectInitialized,
 } from "@contracts/events";
@@ -22,6 +25,12 @@ function reduceEvent(state: ProjectState, event: DomainEvent): ProjectState {
       return reduceFileDiscovered(state, event as FileDiscovered);
     case "KnowledgeUpdated":
       return reduceKnowledgeUpdated(state, event as KnowledgeUpdated);
+    case "DependencyDetected":
+      return reduceDependencyDetected(state, event as DependencyDetected);
+    case "FrameworkDetected":
+      return reduceFrameworkDetected(state, event as FrameworkDetected);
+    case "DiscoveryCompleted":
+      return reduceDiscoveryCompleted(state, event as DiscoveryCompleted);
     default:
       return state;
   }
@@ -69,6 +78,55 @@ function reduceKnowledgeUpdated(state: ProjectState, event: KnowledgeUpdated): P
         type: "knowledge",
         createdAt: event.timestamp,
       },
+    },
+    updatedAt: event.timestamp,
+  });
+}
+
+function reduceDependencyDetected(state: ProjectState, event: DependencyDetected): ProjectState {
+  const dependencyCount = Number.parseInt(state.metadata.dependencyCount ?? "0", 10) + 1;
+
+  return freezeProjectState({
+    ...state,
+    version: state.version + 1,
+    metadata: {
+      ...state.metadata,
+      dependencyCount: String(dependencyCount),
+      lastDependencyName: event.payload.name,
+      lastDependencyVersion: event.payload.version,
+    },
+    updatedAt: event.timestamp,
+  });
+}
+
+function reduceFrameworkDetected(state: ProjectState, event: FrameworkDetected): ProjectState {
+  const frameworkCount = Number.parseInt(state.metadata.frameworkCount ?? "0", 10) + 1;
+
+  return freezeProjectState({
+    ...state,
+    version: state.version + 1,
+    metadata: {
+      ...state.metadata,
+      frameworkCount: String(frameworkCount),
+      lastFrameworkName: event.payload.name,
+      lastFrameworkEvidence: event.payload.evidence,
+    },
+    updatedAt: event.timestamp,
+  });
+}
+
+function reduceDiscoveryCompleted(state: ProjectState, event: DiscoveryCompleted): ProjectState {
+  return freezeProjectState({
+    ...state,
+    id: event.payload.projectId,
+    version: state.version + 1,
+    status: ProjectStatus.ANALYZING,
+    metadata: {
+      ...state.metadata,
+      discoveryStatus: "completed",
+      discoveredFileCount: String(event.payload.fileCount),
+      dependencyCount: String(event.payload.dependencyCount),
+      frameworkCount: String(event.payload.frameworkCount),
     },
     updatedAt: event.timestamp,
   });

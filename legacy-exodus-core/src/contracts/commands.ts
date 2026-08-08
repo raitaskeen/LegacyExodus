@@ -26,14 +26,21 @@ export interface UpdateKnowledgePayload {
   readonly artifactId: string;
 }
 
+export interface AnalyzeProjectPayload {
+  readonly projectId: string;
+  readonly path: string;
+}
+
 export type InitializeProjectCommand = Command<InitializeProjectPayload, "InitializeProject">;
 export type DiscoverProjectCommand = Command<DiscoverProjectPayload, "DiscoverProject">;
 export type UpdateKnowledgeCommand = Command<UpdateKnowledgePayload, "UpdateKnowledge">;
+export type AnalyzeProjectCommand = Command<AnalyzeProjectPayload, "AnalyzeProject">;
 
 export type LegacyExodusCommand =
   | InitializeProjectCommand
   | DiscoverProjectCommand
-  | UpdateKnowledgeCommand;
+  | UpdateKnowledgeCommand
+  | AnalyzeProjectCommand;
 
 const commandBaseSchema = {
   id: z.string().uuid(),
@@ -65,6 +72,14 @@ export const commandSchema = z.discriminatedUnion("type", [
     payload: z.object({
       projectId: z.string().uuid(),
       artifactId: z.string().uuid(),
+    }),
+  }),
+  z.object({
+    ...commandBaseSchema,
+    type: z.literal("AnalyzeProject"),
+    payload: z.object({
+      projectId: z.string().uuid(),
+      path: z.string().trim().min(1),
     }),
   }),
 ]);

@@ -1,0 +1,33 @@
+import { LegacyExodusEngine } from "@core/engine/engine";
+import type { EngineContext } from "@core/engine/engine-context";
+import { EventBus } from "@core/events/event-bus";
+import { InMemoryEventStore } from "@core/events/event-store";
+import { Orchestrator } from "@core/orchestration/orchestrator";
+import { DiscoveryEngine } from "@discovery/index";
+import { PluginLoader, PluginRegistry } from "@plugins/index";
+import { ApplicationRuntime } from "@runtime/application";
+import { loadRuntimeConfig, type EnvironmentVariables } from "@runtime/config";
+import { createLogger } from "@shared/logger";
+import { MemoryStorageProvider, StorageManager } from "@storage/index";
+
+export function createEngineContext(
+  environment: EnvironmentVariables = process.env,
+): EngineContext {
+  const config = loadRuntimeConfig(environment);
+  const logger = createLogger(config, "runtime");
+  const storage = new StorageManager(new MemoryStorageProvider());
+  const eventBus = new EventBus();
+  const eventStore = new InMemoryEventStore();
+  const plugins = new PluginRegistry();
+  const pluginLoader = new PluginLoader(plugins, { logger, eventBus, storage });
+  const runtime = new ApplicationRuntime(config, logger, storage, plugins, pluginLoader);
+  const orchestrator = new Orchestrator(eventStore, eventBus, storage, new DiscoveryEngine());
+
+  return { runtime, eventStore, eventBus, storage, plugins, orchestrator };
+}
+
+export function createLegacyExodusEngine(
+  environment: EnvironmentVariables = process.env,
+): LegacyExodusEngine {
+  return new LegacyExodusEngine(createEngineContext(environment));
+}

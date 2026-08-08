@@ -1,16 +1,10 @@
 import type { Logger } from "pino";
 
 import { LegacyExodusError } from "@shared/errors";
-import { createLogger } from "@shared/logger";
-import { MemoryStorageProvider, StorageManager } from "@storage/index";
-import { EventBus } from "@core/events/event-bus";
-import { PluginLoader, PluginRegistry } from "@plugins/index";
+import type { PluginLoader, PluginRegistry } from "@plugins/index";
+import type { StorageManager } from "@storage/index";
 
-import {
-  loadRuntimeConfig,
-  type EnvironmentVariables,
-  type RuntimeConfig,
-} from "./config";
+import type { RuntimeConfig } from "./config";
 
 export type RuntimeStatus =
   | "created"
@@ -54,7 +48,7 @@ export class ApplicationRuntime {
   }
 
   public async start(): Promise<void> {
-    if (this.status === "ready") {
+    if (this.status === "running") {
       return;
     }
 
@@ -141,21 +135,4 @@ export class ApplicationRuntime {
       });
     }
   }
-}
-
-export function createApplicationRuntime(
-  environment: EnvironmentVariables = process.env,
-): ApplicationRuntime {
-  const config = loadRuntimeConfig(environment);
-  const logger = createLogger(config, "runtime");
-  const storageManager = new StorageManager(new MemoryStorageProvider());
-  const eventBus = new EventBus();
-  const pluginRegistry = new PluginRegistry();
-  const pluginLoader = new PluginLoader(pluginRegistry, {
-    logger,
-    eventBus,
-    storage: storageManager,
-  });
-
-  return new ApplicationRuntime(config, logger, storageManager, pluginRegistry, pluginLoader);
 }

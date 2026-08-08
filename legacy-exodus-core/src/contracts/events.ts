@@ -15,8 +15,31 @@ export interface KnowledgeUpdatedPayload {
   readonly artifactId: string;
 }
 
+export interface DependencyDetectedPayload {
+  readonly name: string;
+  readonly version: string;
+}
+
+export interface FrameworkDetectedPayload {
+  readonly name: string;
+  readonly evidence: string;
+}
+
+export interface DiscoveryCompletedPayload {
+  readonly projectId: string;
+  readonly fileCount: number;
+  readonly dependencyCount: number;
+  readonly frameworkCount: number;
+}
+
 export type ProjectInitialized = DomainEvent<ProjectInitializedPayload, "ProjectInitialized">;
 
 export type FileDiscovered = DomainEvent<FileDiscoveredPayload, "FileDiscovered">;
 
 export type KnowledgeUpdated = DomainEvent<KnowledgeUpdatedPayload, "KnowledgeUpdated">;
+
+export type DependencyDetected = DomainEvent<DependencyDetectedPayload, "DependencyDetected">;
+
+export type FrameworkDetected = DomainEvent<FrameworkDetectedPayload, "FrameworkDetected">;
+
+export type DiscoveryCompleted = DomainEvent<DiscoveryCompletedPayload, "DiscoveryCompleted">;

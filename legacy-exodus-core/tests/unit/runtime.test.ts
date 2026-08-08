@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { createApplicationRuntime } from "@runtime/application";
+import { createEngineContext } from "@runtime/composition/services";
 import { loadRuntimeConfig } from "@runtime/config";
 import { ConfigurationError, LegacyExodusError } from "@shared/errors";
 
@@ -10,10 +10,10 @@ describe("runtime foundation", () => {
   });
 
   test("initializes and shuts down deterministically", async (): Promise<void> => {
-    const runtime = createApplicationRuntime({
+    const runtime = createEngineContext({
       LOG_LEVEL: "silent",
       NODE_ENV: "test",
-    });
+    }).runtime;
 
     expect(runtime.getStatus()).toBe("created");
     await runtime.start();

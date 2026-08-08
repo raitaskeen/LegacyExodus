@@ -4,13 +4,19 @@ import { z } from "zod";
 
 import { StorageValidationError } from "./storage-errors";
 
+export interface SerializedObject {
+  readonly [key: string]: SerializedPayload;
+}
+
+export interface SerializedArray extends ReadonlyArray<SerializedPayload> {}
+
 export type SerializedPayload =
   | string
   | number
   | boolean
   | null
-  | readonly SerializedPayload[]
-  | Readonly<Record<string, SerializedPayload>>;
+  | SerializedArray
+  | SerializedObject;
 
 export interface StorageRecord<Payload extends SerializedPayload = SerializedPayload> {
   readonly id: string;
