@@ -6,6 +6,7 @@ import { Orchestrator } from "@core/orchestration/orchestrator";
 import { DiscoveryEngine } from "@discovery/index";
 import { PluginLoader, PluginRegistry } from "@plugins/index";
 import { JavaScriptParser, ParserManager, ParserRegistry } from "@parser/index";
+import { JavaScriptSymbolExtractor } from "@symbols/index";
 import { ApplicationRuntime } from "@runtime/application";
 import { loadRuntimeConfig, type EnvironmentVariables } from "@runtime/config";
 import { createLogger } from "@shared/logger";
@@ -34,7 +35,15 @@ export function createEngineContext(
   const parserManager = new ParserManager(parserRegistry);
   const pluginLoader = new PluginLoader(plugins, { logger, eventBus, storage });
   const runtime = new ApplicationRuntime(config, logger, storage, plugins, pluginLoader);
-  const orchestrator = new Orchestrator(eventStore, eventBus, storage, new DiscoveryEngine());
+  const orchestrator = new Orchestrator(
+    eventStore,
+    eventBus,
+    storage,
+    new DiscoveryEngine(),
+    undefined,
+    parserManager,
+    new JavaScriptSymbolExtractor(),
+  );
 
   return {
     runtime,

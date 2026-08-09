@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import type { ASTNode, ASTResult } from "@parser/index";
+import { validateASTResult, type ASTNode, type ASTResult } from "@parser/index";
 
 import type { SymbolExtractor } from "./symbol-extractor";
 import {
@@ -25,16 +25,18 @@ const initialContext: ExtractionContext = Object.freeze({
 
 export class JavaScriptSymbolExtractor implements SymbolExtractor {
   public extract(ast: ASTResult): SymbolTable {
-    if (ast.metadata.language !== "javascript") {
-      throw new UnsupportedSymbolLanguageError(ast.metadata.language);
+    const validatedAst = validateASTResult(ast);
+
+    if (validatedAst.metadata.language !== "javascript") {
+      throw new UnsupportedSymbolLanguageError(validatedAst.metadata.language);
     }
 
     const symbols: CodeSymbol[] = [];
-    this.visit(ast.root, ast, initialContext, symbols);
+    this.visit(validatedAst.root, validatedAst, initialContext, symbols);
 
     return validateSymbolTable({
-      filePath: ast.metadata.sourcePath,
-      language: ast.metadata.language,
+      filePath: validatedAst.metadata.sourcePath,
+      language: validatedAst.metadata.language,
       symbols,
       summary: createSummary(symbols),
     });

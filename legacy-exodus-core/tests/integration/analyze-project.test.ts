@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 
 import { describe, expect, test } from "bun:test";
 
-import { createLegacyExodusEngine } from "@core/engine";
+import { createEngineContext, createLegacyExodusEngine } from "@runtime/composition/services";
 
 describe("analyze project integration", () => {
   test("runs deterministic discovery through the engine facade", async (): Promise<void> => {
@@ -54,6 +54,37 @@ describe("analyze project integration", () => {
       });
 
       await engine.shutdown();
+    } finally {
+      await rm(projectPath, { force: true, recursive: true });
+    }
+  });
+
+  test("chains discovery, JavaScript parsing, and symbol extraction", async (): Promise<void> => {
+    const projectPath = await mkdtemp(join(tmpdir(), "legacy-exodus-pipeline-"));
+
+    try {
+      await mkdir(join(projectPath, "src"), { recursive: true });
+      await writeFile(
+        join(projectPath, "src", "billing.js"),
+        "export class BillingService { processPayment(amount) { return amount; } }",
+        "utf8",
+      );
+      const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+
+      await context.orchestrator.execute({
+        id: "00000000-0000-4000-8000-000000000040",
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: {
+          projectId: "00000000-0000-4000-8000-000000000041",
+          path: projectPath,
+        },
+      });
+
+      expect(context.eventStore.getByType("FileParsed")).toHaveLength(1);
+      expect(context.eventStore.getByType("SymbolsExtracted")).toHaveLength(1);
+      expect(await context.storage.findAll("ast-result")).toHaveLength(1);
+      expect(await context.storage.findAll("symbol-table")).toHaveLength(1);
     } finally {
       await rm(projectPath, { force: true, recursive: true });
     }
