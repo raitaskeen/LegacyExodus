@@ -5,6 +5,7 @@ import { InMemoryEventStore } from "@core/events/event-store";
 import { Orchestrator } from "@core/orchestration/orchestrator";
 import { DiscoveryEngine } from "@discovery/index";
 import { PluginLoader, PluginRegistry } from "@plugins/index";
+import { JavaScriptParser, ParserManager, ParserRegistry } from "@parser/index";
 import { ApplicationRuntime } from "@runtime/application";
 import { loadRuntimeConfig, type EnvironmentVariables } from "@runtime/config";
 import { createLogger } from "@shared/logger";
@@ -28,6 +29,9 @@ export function createEngineContext(
   const eventBus = new EventBus();
   const eventStore = new InMemoryEventStore();
   const plugins = new PluginRegistry();
+  const parserRegistry = new ParserRegistry();
+  parserRegistry.register(new JavaScriptParser());
+  const parserManager = new ParserManager(parserRegistry);
   const pluginLoader = new PluginLoader(plugins, { logger, eventBus, storage });
   const runtime = new ApplicationRuntime(config, logger, storage, plugins, pluginLoader);
   const orchestrator = new Orchestrator(eventStore, eventBus, storage, new DiscoveryEngine());
@@ -39,6 +43,8 @@ export function createEngineContext(
     storage,
     discoveryProjection,
     plugins,
+    parserRegistry,
+    parserManager,
     orchestrator,
   };
 }
