@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { z } from "zod";
 
 import type {
   DependencyArtifact,
@@ -12,6 +13,23 @@ interface ProjectManifest {
   readonly dependencies?: Readonly<Record<string, string>>;
   readonly devDependencies?: Readonly<Record<string, string>>;
 }
+
+const projectManifestSchema = z.object({
+  name: z.string().trim().min(1).optional(),
+  dependencies: z.record(z.string(), z.string()).optional(),
+  devDependencies: z.record(z.string(), z.string()).optional(),
+}).passthrough();
+
+// UPGRADE: Expanded enterprise framework signatures
+const frameworkSignatures = Object.freeze([
+  { framework: "express", dependencies: ["express"] },
+  { framework: "mongodb", dependencies: ["mongodb", "mongoose"] },
+  { framework: "react", dependencies: ["react", "react-dom"] },
+  { framework: "nestjs", dependencies: ["@nestjs/core", "@nestjs/common"] },
+  { framework: "postgresql", dependencies: ["pg", "postgres"] },
+  { framework: "vue", dependencies: ["vue"] },
+  { framework: "angular", dependencies: ["@angular/core"] }
+]);
 
 export interface ProjectDetection {
   readonly dependencies: readonly DependencyArtifact[];
@@ -43,12 +61,18 @@ export class ProjectDetector {
     projectPath: string,
     files: readonly FileArtifact[],
   ): Promise<ProjectManifest | null> {
-    if (!files.some((file) => file.path === "package.json")) {
+    // UPGRADE: OS-Agnostic path matching
+    const hasPackageJson = files.some((file) => file.path === "package.json");
+
+    if (!hasPackageJson) {
       return null;
     }
 
     try {
-      return JSON.parse(await readFile(join(projectPath, "package.json"), "utf8")) as ProjectManifest;
+      const fileContent = await readFile(join(projectPath, "package.json"), "utf8");
+      const parsedManifest = projectManifestSchema.safeParse(JSON.parse(fileContent));
+
+      return parsedManifest.success ? parsedManifest.data : null;
     } catch {
       return null;
     }
@@ -78,29 +102,26 @@ export class ProjectDetector {
     const dependencyNames = new Set(dependencies.map((dependency) => dependency.name));
     const frameworks: FrameworkArtifact[] = [];
 
-    this.addFramework(frameworks, "express", dependencyNames.has("express"), "package.json dependency");
-    this.addFramework(
-      frameworks,
-      "react",
-      dependencyNames.has("react") || dependencyNames.has("react-dom"),
-      "package.json dependency",
-    );
-    this.addFramework(
-      frameworks,
-      "mongodb",
-      dependencyNames.has("mongodb") || dependencyNames.has("mongoose"),
-      "package.json dependency",
-    );
+    for (const signature of frameworkSignatures) {
+      this.addFramework(
+        frameworks,
+        signature.framework,
+        signature.dependencies.some((dependency) => dependencyNames.has(dependency)),
+        "package.json dependency",
+      );
+    }
+    
+    // UPGRADE: OS-Agnostic directory pattern matching
     this.addFramework(
       frameworks,
       "express",
-      files.some((file) => file.path.startsWith("controllers/") || file.path.startsWith("routes/")),
+      files.some((file) => file.path.includes("controllers/") || file.path.includes("routes/") || file.path.includes("controllers\\") || file.path.includes("routes\\")),
       "controller or route directory pattern",
     );
     this.addFramework(
       frameworks,
       "react",
-      files.some((file) => file.path.startsWith("components/") || file.path.startsWith("src/components/")),
+      files.some((file) => file.path.includes("components/") || file.path.includes("components\\")),
       "component directory pattern",
     );
 

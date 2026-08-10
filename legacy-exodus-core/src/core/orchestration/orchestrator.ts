@@ -8,8 +8,10 @@ import { EventBus } from "@core/events/event-bus";
 import { reduceProjectState } from "@core/events/event-reducer";
 import { InMemoryEventStore } from "@core/events/event-store";
 import { DiscoveryEngine } from "@discovery/index";
+import { JavaScriptParser, ParserManager, ParserRegistry } from "@parser/index";
 import { LegacyExodusError } from "@shared/errors";
 import type { StorageManager } from "@storage/index";
+import { JavaScriptSymbolExtractor } from "@symbols/index";
 
 import {
   DiscoverProjectHandler,
@@ -27,15 +29,19 @@ export class Orchestrator {
   private readonly discoverProjectHandler = new DiscoverProjectHandler();
   private readonly updateKnowledgeHandler = new UpdateKnowledgeHandler();
   private readonly analyzeProjectHandler: AnalyzeProjectHandler;
+  private readonly initialState: ProjectState;
 
   public constructor(
     private readonly eventStore: InMemoryEventStore,
     private readonly eventBus: EventBus,
     private readonly storage: StorageManager,
     discoveryEngine: DiscoveryEngine = new DiscoveryEngine(),
-    private readonly initialState: ProjectState = createProjectState("Uninitialized Project"),
+    initialState: ProjectState | undefined = undefined,
+    parserManager: ParserManager = createDefaultParserManager(),
+    symbolExtractor: JavaScriptSymbolExtractor = new JavaScriptSymbolExtractor(),
   ) {
-    this.analyzeProjectHandler = new AnalyzeProjectHandler(discoveryEngine);
+    this.initialState = initialState ?? createProjectState("Uninitialized Project");
+    this.analyzeProjectHandler = new AnalyzeProjectHandler(discoveryEngine, parserManager, symbolExtractor);
   }
 
   public async execute(command: unknown): Promise<CommandExecution> {
@@ -87,4 +93,10 @@ export class Orchestrator {
         return this.analyzeProjectHandler.handle(command);
     }
   }
+}
+
+function createDefaultParserManager(): ParserManager {
+  const registry = new ParserRegistry();
+  registry.register(new JavaScriptParser());
+  return new ParserManager(registry);
 }

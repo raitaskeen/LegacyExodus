@@ -7,7 +7,11 @@ export type DiscoveryArtifactName =
   | "files.json"
   | "dependencies.json"
   | "frameworks.json"
-  | "summary.json";
+  | "summary.json"
+  | "dependency-graph.json"
+  | "modules.json"
+  | "symbols.json"
+  | "knowledge.json";
 
 export interface DiscoveryArtifact {
   readonly name: DiscoveryArtifactName;
@@ -25,6 +29,10 @@ const artifactNames: readonly DiscoveryArtifactName[] = [
   "dependencies.json",
   "frameworks.json",
   "summary.json",
+  "dependency-graph.json",
+  "modules.json",
+  "symbols.json",
+  "knowledge.json",
 ];
 
 const discoveryProjectionSchema = z.object({

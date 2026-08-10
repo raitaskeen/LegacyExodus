@@ -38,6 +38,20 @@ const discoveryStoragePayloadSchema = z.object({
   discoveredAt: z.string().datetime(),
 });
 
+const dependencyGraphStoragePayloadSchema = z.object({
+  projectId: z.string().uuid(),
+  nodes: z.array(z.object({ id: z.string(), filePath: z.string(), symbolId: z.string() })),
+  edges: z.array(z.object({
+    id: z.string(), sourceFilePath: z.string(), targetFilePath: z.string(), importSymbolId: z.string(),
+    targetExportSymbolId: z.string(), moduleSpecifier: z.string(),
+  })),
+  cycles: z.array(z.array(z.string())),
+});
+const symbolTableStoragePayloadSchema = z.object({ projectId: z.string().uuid(), path: z.string(), symbols: z.array(z.object({
+  id: z.string(), kind: z.string(), name: z.string(), filePath: z.string(), exported: z.boolean(), defaultExport: z.boolean(), moduleSpecifier: z.string().nullable(),
+})) });
+const knowledgeGraphStoragePayloadSchema = z.object({ projectId: z.string().uuid(), nodes: z.array(z.object({ id: z.string(), kind: z.string(), name: z.string(), filePath: z.string() })), edges: z.array(z.object({ id: z.string(), from: z.string(), to: z.string(), relationship: z.string() })) });
+
 export class DiscoveryProjectionService {
   public constructor(
     private readonly storage: StorageManager,
@@ -66,6 +80,22 @@ export class DiscoveryProjectionService {
     }
 
     const payload = parsedPayload.data;
+    const graphRecords = await this.storage.findAll("dependency-graph");
+    const graphRecord = graphRecords.find((candidate) => {
+      const parsedGraph = dependencyGraphStoragePayloadSchema.safeParse(candidate.payload);
+      return parsedGraph.success && parsedGraph.data.projectId === payload.projectId;
+    });
+    const graph = graphRecord === undefined ? null : dependencyGraphStoragePayloadSchema.parse(graphRecord.payload);
+    const symbolRecords = await this.storage.findAll("symbol-table");
+    const symbols = symbolRecords.flatMap((candidate) => {
+      const parsed = symbolTableStoragePayloadSchema.safeParse(candidate.payload);
+      return parsed.success && parsed.data.projectId === payload.projectId ? parsed.data.symbols : [];
+    });
+    const knowledgeRecord = (await this.storage.findAll("knowledge-graph")).find((candidate) => {
+      const parsed = knowledgeGraphStoragePayloadSchema.safeParse(candidate.payload);
+      return parsed.success && parsed.data.projectId === payload.projectId;
+    });
+    const knowledge = knowledgeRecord === undefined ? null : knowledgeGraphStoragePayloadSchema.parse(knowledgeRecord.payload);
     const projection = createDiscoveryProjection({
       projectPath: payload.projectPath,
       artifacts: [
@@ -90,6 +120,14 @@ export class DiscoveryProjectionService {
             languages: payload.languages,
           },
         },
+        ...(graph === null
+          ? []
+          : [
+              { name: "dependency-graph.json" as const, payload: graph },
+              { name: "modules.json" as const, payload: payload.files.map((file) => ({ path: file.path, language: file.language })) },
+              { name: "symbols.json" as const, payload: symbols },
+              ...(knowledge === null ? [] : [{ name: "knowledge.json" as const, payload: knowledge }]),
+            ]),
       ],
     });
 

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import type { ASTNode, ASTResult } from "@parser/index";
+import { validateASTResult, type ASTNode, type ASTResult } from "@parser/index";
 
 import type { SymbolExtractor } from "./symbol-extractor";
 import {
@@ -25,16 +25,18 @@ const initialContext: ExtractionContext = Object.freeze({
 
 export class JavaScriptSymbolExtractor implements SymbolExtractor {
   public extract(ast: ASTResult): SymbolTable {
-    if (ast.metadata.language !== "javascript") {
-      throw new UnsupportedSymbolLanguageError(ast.metadata.language);
+    const validatedAst = validateASTResult(ast);
+
+    if (validatedAst.metadata.language !== "javascript") {
+      throw new UnsupportedSymbolLanguageError(validatedAst.metadata.language);
     }
 
     const symbols: CodeSymbol[] = [];
-    this.visit(ast.root, ast, initialContext, symbols);
+    this.visit(validatedAst.root, validatedAst, initialContext, symbols);
 
     return validateSymbolTable({
-      filePath: ast.metadata.sourcePath,
-      language: ast.metadata.language,
+      filePath: validatedAst.metadata.sourcePath,
+      language: validatedAst.metadata.language,
       symbols,
       summary: createSummary(symbols),
     });
@@ -54,6 +56,11 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       case "ExportDefaultDeclaration":
         this.addExportSymbol(node, ast, true, symbols);
         this.visitChildren(node, ast, { ...context, exported: true, defaultExport: true }, symbols);
+        return;
+      case "ExportAllDeclaration":
+        symbols.push(this.createSymbol("export", "*", node, ast, { exported: true, defaultExport: false }, {
+          moduleSpecifier: findStringLiteral(node),
+        }));
         return;
       case "ImportDeclaration":
         this.addImportSymbols(node, ast, symbols);
@@ -107,6 +114,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       symbols.push(
         this.createSymbol("import", getName(specifier) ?? moduleSpecifier, specifier, ast, initialContext, {
           moduleSpecifier,
+          defaultExport: specifier.type === "ImportDefaultSpecifier",
         }),
       );
     }
@@ -163,6 +171,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       this.createSymbol("export", defaultExport ? "default" : target, node, ast, {
         exported: true,
         defaultExport,
+        ...(findStringLiteral(node) === undefined ? {} : { moduleSpecifier: findStringLiteral(node) }),
       }),
     );
   }

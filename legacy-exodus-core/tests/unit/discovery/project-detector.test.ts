@@ -41,4 +41,22 @@ describe("ProjectDetector", () => {
       await rm(projectPath, { force: true, recursive: true });
     }
   });
+
+  test("safely ignores malformed package manifests", async (): Promise<void> => {
+    const projectPath = await mkdtemp(join(tmpdir(), "legacy-exodus-invalid-manifest-"));
+    const files: readonly FileArtifact[] = [
+      { id: "package", path: "package.json", language: "unknown", size: 1 },
+    ];
+
+    try {
+      await writeFile(join(projectPath, "package.json"), "{ invalid json", "utf8");
+
+      const detection = await new ProjectDetector().detect(projectPath, files);
+
+      expect(detection.dependencies).toEqual([]);
+      expect(detection.frameworks).toEqual([]);
+    } finally {
+      await rm(projectPath, { force: true, recursive: true });
+    }
+  });
 });

@@ -32,6 +32,20 @@ export interface DiscoveryCompletedPayload {
   readonly frameworkCount: number;
 }
 
+export interface FileParsedPayload {
+  readonly fileId: string;
+  readonly path: string;
+  readonly parserId: string;
+  readonly nodeCount: number;
+  readonly errorCount: number;
+}
+
+export interface SymbolsExtractedPayload {
+  readonly fileId: string;
+  readonly path: string;
+  readonly symbolCount: number;
+}
+
 export type ProjectInitialized = DomainEvent<ProjectInitializedPayload, "ProjectInitialized">;
 
 export type FileDiscovered = DomainEvent<FileDiscoveredPayload, "FileDiscovered">;
@@ -43,3 +57,5 @@ export type DependencyDetected = DomainEvent<DependencyDetectedPayload, "Depende
 export type FrameworkDetected = DomainEvent<FrameworkDetectedPayload, "FrameworkDetected">;
 
 export type DiscoveryCompleted = DomainEvent<DiscoveryCompletedPayload, "DiscoveryCompleted">;
+export type FileParsed = DomainEvent<FileParsedPayload, "FileParsed">;
+export type SymbolsExtracted = DomainEvent<SymbolsExtractedPayload, "SymbolsExtracted">;
