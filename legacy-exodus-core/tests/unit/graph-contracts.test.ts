@@ -14,6 +14,7 @@ describe("DependencyGraph contracts", () => {
         targetExportSymbolId: "export-b",
         moduleSpecifier: "./billing.js",
       }],
+      cycles: [],
     });
 
     expect(Object.isFrozen(graph)).toBe(true);

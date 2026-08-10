@@ -20,6 +20,7 @@ export interface DependencyGraphEdge {
 export interface DependencyGraph {
   readonly nodes: readonly DependencyGraphNode[];
   readonly edges: readonly DependencyGraphEdge[];
+  readonly cycles: readonly (readonly string[])[];
 }
 
 export interface DependencyGraphService {
@@ -41,7 +42,7 @@ const edgeSchema = z.object({
   moduleSpecifier: z.string().min(1),
 });
 
-const graphSchema = z.object({ nodes: z.array(nodeSchema), edges: z.array(edgeSchema) });
+const graphSchema = z.object({ nodes: z.array(nodeSchema), edges: z.array(edgeSchema), cycles: z.array(z.array(z.string().min(1)).min(2)) });
 
 export function validateDependencyGraph(graph: unknown): DependencyGraph {
   const parsedGraph = graphSchema.parse(graph);
@@ -49,5 +50,6 @@ export function validateDependencyGraph(graph: unknown): DependencyGraph {
   return Object.freeze({
     nodes: Object.freeze(parsedGraph.nodes.map((node) => Object.freeze({ ...node }))),
     edges: Object.freeze(parsedGraph.edges.map((edge) => Object.freeze({ ...edge }))),
+    cycles: Object.freeze(parsedGraph.cycles.map((cycle) => Object.freeze([...cycle]))),
   });
 }

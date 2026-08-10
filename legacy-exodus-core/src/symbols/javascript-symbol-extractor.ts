@@ -57,6 +57,11 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         this.addExportSymbol(node, ast, true, symbols);
         this.visitChildren(node, ast, { ...context, exported: true, defaultExport: true }, symbols);
         return;
+      case "ExportAllDeclaration":
+        symbols.push(this.createSymbol("export", "*", node, ast, { exported: true, defaultExport: false }, {
+          moduleSpecifier: findStringLiteral(node),
+        }));
+        return;
       case "ImportDeclaration":
         this.addImportSymbols(node, ast, symbols);
         return;
@@ -109,6 +114,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       symbols.push(
         this.createSymbol("import", getName(specifier) ?? moduleSpecifier, specifier, ast, initialContext, {
           moduleSpecifier,
+          defaultExport: specifier.type === "ImportDefaultSpecifier",
         }),
       );
     }
@@ -165,6 +171,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       this.createSymbol("export", defaultExport ? "default" : target, node, ast, {
         exported: true,
         defaultExport,
+        ...(findStringLiteral(node) === undefined ? {} : { moduleSpecifier: findStringLiteral(node) }),
       }),
     );
   }

@@ -52,6 +52,12 @@ describe("analyze project integration", () => {
         frameworkCount: 3,
         languages: ["javascript"],
       });
+      const knowledge = JSON.parse(await readFile(join(projectPath, ".discovery", "knowledge.json"), "utf8")) as {
+        readonly nodes: readonly { readonly kind: string }[];
+        readonly edges: readonly { readonly relationship: string }[];
+      };
+      expect(knowledge.nodes.some((node) => node.kind === "file")).toBe(true);
+      expect(knowledge.edges.some((edge) => edge.relationship === "contains")).toBe(true);
 
       await engine.shutdown();
     } finally {

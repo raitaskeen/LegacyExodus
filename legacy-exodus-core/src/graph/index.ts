@@ -5,3 +5,6 @@ export type {
   DependencyGraphService,
 } from "./dependency-graph-contracts";
 export { validateDependencyGraph } from "./dependency-graph-contracts";
+export { DeterministicDependencyGraphBuilder } from "./dependency-graph-builder";
+export { ModuleResolver } from "./module-resolver";
+export type { ResolvedImport } from "./module-resolver";

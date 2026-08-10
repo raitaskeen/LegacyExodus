@@ -62,11 +62,7 @@ export class ProjectDetector {
     files: readonly FileArtifact[],
   ): Promise<ProjectManifest | null> {
     // UPGRADE: OS-Agnostic path matching
-    const hasPackageJson = files.some((file) => 
-      file.path === "package.json" || 
-      file.path.endsWith("/package.json") || 
-      file.path.endsWith("\\package.json")
-    );
+    const hasPackageJson = files.some((file) => file.path === "package.json");
 
     if (!hasPackageJson) {
       return null;
@@ -77,9 +73,7 @@ export class ProjectDetector {
       const parsedManifest = projectManifestSchema.safeParse(JSON.parse(fileContent));
 
       return parsedManifest.success ? parsedManifest.data : null;
-    } catch (error) {
-      // UPGRADE: Stop silent failures
-      console.warn(`[VyrixScout] Failed to read or parse package.json at ${projectPath}:`, error);
+    } catch {
       return null;
     }
   }
