@@ -17,6 +17,7 @@
     <img src="https://img.shields.io/badge/TypeScript-Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript Strict">
     <img src="https://img.shields.io/badge/Architecture-CQRS_%7C_Event_Sourced-0f172a?style=for-the-badge" alt="CQRS">
     <img src="https://img.shields.io/badge/Status-Phase_2.8_Active-success?style=for-the-badge" alt="Phase 2.8">
+   
   </p>
 
   <p>
