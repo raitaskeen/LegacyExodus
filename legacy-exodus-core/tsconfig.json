@@ -1,0 +1,40 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ESNext"],
+    "types": ["bun", "node"],
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "forceConsistentCasingInFileNames": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "skipLibCheck": true,
+    "verbatimModuleSyntax": true,
+    "paths": {
+      "@runtime/*": ["./src/runtime/*"],
+      "@core/*": ["./src/core/*"],
+      "@contracts/*": ["./src/contracts/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@cli/*": ["./src/cli/*"],
+      "@discovery/*": ["./src/discovery/*"],
+      "@parser/*": ["./src/parser/*"],
+      "@graph/*": ["./src/graph/*"],
+      "@knowledge/*": ["./src/knowledge/*"],
+      "@ai/*": ["./src/ai/*"],
+      "@compiler/*": ["./src/compiler/*"],
+      "@storage/*": ["./src/storage/*"],
+      "@symbols/*": ["./src/symbols/*"],
+      "@governance/*": ["./src/governance/*"],
+      "@plugins/*": ["./src/plugins/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["node_modules", "coverage"]
+}

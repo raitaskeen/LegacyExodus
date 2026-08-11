@@ -1,0 +1,26 @@
+# Bun
+node_modules/
+bun.lockb
+
+# Bun lock
+# bun.lock
+
+# Coverage
+coverage/
+
+# Build
+dist/
+
+# Local discovery output
+.discovery/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

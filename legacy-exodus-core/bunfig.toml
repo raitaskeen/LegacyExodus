@@ -1,0 +1,11 @@
+telemetry = false
+
+[install]
+exact = true
+
+[test]
+root = "./tests"
+coverage = true
+coverageSkipTestFiles = true
+coverageReporter = ["text", "lcov"]
+coverageDir = "./coverage"
