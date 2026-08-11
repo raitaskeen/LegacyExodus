@@ -18,6 +18,8 @@ export interface CodeSymbol {
   readonly declarationKind?: "const" | "let" | "var";
   readonly value?: string | number | boolean | null;
   readonly moduleSpecifier?: string;
+  /** Original exported name when this symbol is a named re-export. */
+  readonly sourceSymbolName?: string;
   readonly containerName?: string;
   readonly location?: {
     readonly start: { readonly line: number; readonly column: number };
@@ -58,6 +60,7 @@ const codeSymbolSchema = z.object({
   declarationKind: z.enum(["const", "let", "var"]).optional(),
   value: z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
   moduleSpecifier: z.string().min(1).optional(),
+  sourceSymbolName: z.string().min(1).optional(),
   containerName: z.string().min(1).optional(),
   location: z.object({ start: positionSchema, end: positionSchema }).optional(),
 });

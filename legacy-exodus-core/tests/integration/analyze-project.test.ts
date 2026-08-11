@@ -75,6 +75,7 @@ describe("analyze project integration", () => {
         "export class BillingService { processPayment(amount) { return amount; } }",
         "utf8",
       );
+      await writeFile(join(projectPath, "src", "types.ts"), "export interface BillingRecord { id: string; }", "utf8");
       const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
 
       await context.orchestrator.execute({
@@ -87,10 +88,10 @@ describe("analyze project integration", () => {
         },
       });
 
-      expect(context.eventStore.getByType("FileParsed")).toHaveLength(1);
-      expect(context.eventStore.getByType("SymbolsExtracted")).toHaveLength(1);
-      expect(await context.storage.findAll("ast-result")).toHaveLength(1);
-      expect(await context.storage.findAll("symbol-table")).toHaveLength(1);
+      expect(context.eventStore.getByType("FileParsed")).toHaveLength(2);
+      expect(context.eventStore.getByType("SymbolsExtracted")).toHaveLength(2);
+      expect(await context.storage.findAll("ast-result")).toHaveLength(2);
+      expect(await context.storage.findAll("symbol-table")).toHaveLength(2);
     } finally {
       await rm(projectPath, { force: true, recursive: true });
     }

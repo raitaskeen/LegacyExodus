@@ -111,17 +111,20 @@ export class ProjectDetector {
       );
     }
     
-    // UPGRADE: OS-Agnostic directory pattern matching
+    const hasDirectory = (directory: string): boolean => files.some((file) =>
+      file.path.split(/[\\/]/).some((segment) => segment === directory),
+    );
+
     this.addFramework(
       frameworks,
       "express",
-      files.some((file) => file.path.includes("controllers/") || file.path.includes("routes/") || file.path.includes("controllers\\") || file.path.includes("routes\\")),
+      hasDirectory("controllers") || hasDirectory("routes"),
       "controller or route directory pattern",
     );
     this.addFramework(
       frameworks,
       "react",
-      files.some((file) => file.path.includes("components/") || file.path.includes("components\\")),
+      hasDirectory("components"),
       "component directory pattern",
     );
 

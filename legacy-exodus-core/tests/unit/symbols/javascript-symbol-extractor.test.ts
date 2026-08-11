@@ -66,4 +66,16 @@ describe("JavaScriptSymbolExtractor", () => {
     expect(Object.isFrozen(first.symbols)).toBe(true);
     expect(Object.isFrozen(first.symbols[0] ?? {})).toBe(true);
   });
+
+  test("extracts every named export and preserves aliased re-export provenance", async (): Promise<void> => {
+    const parser = new JavaScriptParser();
+    const extractor = new JavaScriptSymbolExtractor();
+    const source = 'export { foo, bar as renamedBar } from "./source";';
+    const table = extractor.extract((await parser.parse(createRequest(source))).result);
+    const exports = table.symbols.filter((symbol) => symbol.kind === "export");
+
+    expect(exports.map((symbol) => symbol.name)).toEqual(["foo", "renamedBar"]);
+    expect(exports.map((symbol) => symbol.sourceSymbolName)).toEqual(["foo", "bar"]);
+    expect(exports.map((symbol) => symbol.moduleSpecifier)).toEqual(["./source", "./source"]);
+  });
 });

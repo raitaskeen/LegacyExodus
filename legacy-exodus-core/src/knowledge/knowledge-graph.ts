@@ -49,7 +49,10 @@ export class DeterministicKnowledgeGraphBuilder {
       edges.push(createEdge(`symbol:${edge.importSymbolId}`, `symbol:${edge.targetExportSymbolId}`, "imports"));
     }
     const parsed = graphSchema.parse({ nodes, edges });
-    return Object.freeze({ nodes: Object.freeze(parsed.nodes.map((node) => Object.freeze(node))), edges: Object.freeze(parsed.edges.map((edge) => Object.freeze(edge))) });
+    return Object.freeze({
+      nodes: Object.freeze(parsed.nodes.sort((left, right) => left.id.localeCompare(right.id)).map((node) => Object.freeze(node))),
+      edges: Object.freeze(parsed.edges.sort((left, right) => left.id.localeCompare(right.id)).map((edge) => Object.freeze(edge))),
+    });
   }
 }
 

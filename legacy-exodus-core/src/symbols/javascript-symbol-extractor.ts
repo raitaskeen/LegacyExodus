@@ -23,11 +23,13 @@ const initialContext: ExtractionContext = Object.freeze({
   defaultExport: false,
 });
 
+const supportedLanguages = new Set(["javascript", "typescript"]);
+
 export class JavaScriptSymbolExtractor implements SymbolExtractor {
   public extract(ast: ASTResult): SymbolTable {
     const validatedAst = validateASTResult(ast);
 
-    if (validatedAst.metadata.language !== "javascript") {
+    if (!supportedLanguages.has(validatedAst.metadata.language)) {
       throw new UnsupportedSymbolLanguageError(validatedAst.metadata.language);
     }
 
@@ -59,7 +61,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         return;
       case "ExportAllDeclaration":
         symbols.push(this.createSymbol("export", "*", node, ast, { exported: true, defaultExport: false }, {
-          moduleSpecifier: findStringLiteral(node),
+          moduleSpecifier: findModuleSpecifier(node),
         }));
         return;
       case "ImportDeclaration":
@@ -112,7 +114,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
 
     for (const specifier of specifiers) {
       symbols.push(
-        this.createSymbol("import", getName(specifier) ?? moduleSpecifier, specifier, ast, initialContext, {
+        this.createSymbol("import", readStringAttribute(specifier, "importedName") ?? getName(specifier) ?? moduleSpecifier, specifier, ast, initialContext, {
           moduleSpecifier,
           defaultExport: specifier.type === "ImportDefaultSpecifier",
         }),
@@ -166,12 +168,52 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
   }
 
   private addExportSymbol(node: ASTNode, ast: ASTResult, defaultExport: boolean, symbols: CodeSymbol[]): void {
-    const target = findDeclaredName(node) ?? "default";
+    const moduleSpecifier = findModuleSpecifier(node);
+    const specifiers = node.children.filter((child) =>
+      child.role === "specifiers" && (child.type === "ExportSpecifier" || child.type === "ExportNamespaceSpecifier"),
+    );
+
+    if (specifiers.length === 0) {
+      this.addExport(
+        node,
+        ast,
+        defaultExport ? "default" : findDeclaredName(node) ?? "default",
+        defaultExport,
+        moduleSpecifier,
+        undefined,
+        symbols,
+      );
+      return;
+    }
+
+    for (const specifier of specifiers) {
+      const exportedName = readStringAttribute(specifier, "exportedName")
+        ?? readIdentifierName(specifier.children.find((child) => child.role === "exported"))
+        ?? "default";
+      const sourceSymbolName = specifier.type === "ExportNamespaceSpecifier"
+        ? "*"
+        : readStringAttribute(specifier, "sourceSymbolName")
+          ?? readIdentifierName(specifier.children.find((child) => child.role === "local"));
+      this.addExport(node, ast, defaultExport ? "default" : exportedName, defaultExport, moduleSpecifier, sourceSymbolName, symbols);
+    }
+  }
+
+  private addExport(
+    node: ASTNode,
+    ast: ASTResult,
+    name: string,
+    defaultExport: boolean,
+    moduleSpecifier: string | undefined,
+    sourceSymbolName: string | undefined,
+    symbols: CodeSymbol[],
+  ): void {
     symbols.push(
-      this.createSymbol("export", defaultExport ? "default" : target, node, ast, {
+      this.createSymbol("export", name, node, ast, {
         exported: true,
         defaultExport,
-        ...(findStringLiteral(node) === undefined ? {} : { moduleSpecifier: findStringLiteral(node) }),
+      }, {
+        ...(moduleSpecifier === undefined ? {} : { moduleSpecifier }),
+        ...(sourceSymbolName === undefined ? {} : { sourceSymbolName }),
       }),
     );
   }
@@ -258,6 +300,21 @@ function findStringLiteral(node: ASTNode): string | undefined {
   return undefined;
 }
 
+function findModuleSpecifier(node: ASTNode): string | undefined {
+  const sourceAttribute = node.attributes.source;
+  if (typeof sourceAttribute === "string") {
+    return sourceAttribute;
+  }
+
+  const source = node.children.find((child) => child.role === "source");
+  const sourceValue = source?.attributes.value;
+  if (typeof sourceValue === "string") {
+    return sourceValue;
+  }
+
+  return source === undefined ? findStringLiteral(node) : findStringLiteral(source);
+}
+
 function findParameterNames(node: ASTNode): readonly string[] {
   if (node.type === "Identifier") {
     const name = readIdentifierName(node);
@@ -271,6 +328,11 @@ function readIdentifierName(node: ASTNode | undefined): string | undefined {
   const name = node?.attributes.name;
 
   return typeof name === "string" ? name : undefined;
+}
+
+function readStringAttribute(node: ASTNode, key: string): string | undefined {
+  const value = node.attributes[key];
+  return typeof value === "string" ? value : undefined;
 }
 
 function readDeclarationKind(node: ASTNode): "const" | "let" | "var" | undefined {

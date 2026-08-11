@@ -16,7 +16,7 @@ describe("DeterministicKnowledgeGraphBuilder", () => {
     const api = extractor.extract((await parser.parse({ file: files[0], source: 'import { login } from "./auth";' })).result);
     const auth = extractor.extract((await parser.parse({ file: files[1], source: "export function login() {}" })).result);
     const dependencyGraph = new DeterministicDependencyGraphBuilder().build([api, auth], files);
-    const graph = new DeterministicKnowledgeGraphBuilder().build([api, auth], dependencyGraph);
+    const graph = new DeterministicKnowledgeGraphBuilder().build([auth, api], dependencyGraph);
 
     expect(graph.nodes.some((node) => node.kind === "file" && node.filePath === "src/api.js")).toBe(true);
     expect(graph.nodes.some((node) => node.kind === "symbol" && node.name === "login")).toBe(true);
@@ -24,5 +24,7 @@ describe("DeterministicKnowledgeGraphBuilder", () => {
     expect(graph.edges.some((edge) => edge.relationship === "imports")).toBe(true);
     expect(Object.isFrozen(graph)).toBe(true);
     expect(Object.isFrozen(graph.nodes)).toBe(true);
+    expect(graph.nodes.map((node) => node.id)).toEqual([...graph.nodes].map((node) => node.id).sort());
+    expect(graph.edges.map((edge) => edge.id)).toEqual([...graph.edges].map((edge) => edge.id).sort());
   });
 });
