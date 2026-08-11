@@ -13,6 +13,8 @@ const languageByExtension: Readonly<Record<string, string>> = {
   ".go": "go",
   ".java": "java",
   ".js": "javascript",
+  ".cjs": "javascript",
+  ".mjs": "javascript",
   ".jsx": "javascript",
   ".php": "php",
   ".py": "python",

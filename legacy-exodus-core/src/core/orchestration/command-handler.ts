@@ -102,10 +102,20 @@ export class AnalyzeProjectHandler {
         continue;
       }
 
-      const ast = await this.parserManager.parse({
-        file,
-        source: await readFile(resolve(discovery.projectPath, file.path), "utf8"),
-      });
+      let ast;
+      try {
+        ast = await this.parserManager.parse({
+          file,
+          source: await readFile(resolve(discovery.projectPath, file.path), "utf8"),
+        });
+      } catch (error: unknown) {
+        events.push(createDomainEvent({
+          type: "ParserFailure",
+          aggregateId: discovery.projectId,
+          payload: { fileId: file.id, path: file.path, code: error instanceof Error ? error.name : "PARSER_FAILURE" },
+        }));
+        continue;
+      }
       records.push(
         createStorageRecord("ast-result", {
           fileId: file.id,

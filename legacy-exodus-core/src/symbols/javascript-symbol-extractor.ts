@@ -59,7 +59,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         return;
       case "ExportAllDeclaration":
         symbols.push(this.createSymbol("export", "*", node, ast, { exported: true, defaultExport: false }, {
-          moduleSpecifier: findStringLiteral(node),
+          moduleSpecifier: findModuleSpecifier(node),
         }));
         return;
       case "ImportDeclaration":
@@ -166,12 +166,26 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
   }
 
   private addExportSymbol(node: ASTNode, ast: ASTResult, defaultExport: boolean, symbols: CodeSymbol[]): void {
-    const target = findDeclaredName(node) ?? "default";
+    const reExport = node.children.find((child) =>
+      child.role === "specifiers" && (child.type === "ExportSpecifier" || child.type === "ExportNamespaceSpecifier"),
+    );
+    const exportedName = reExport === undefined
+      ? undefined
+      : readStringAttribute(reExport, "exportedName") ?? readIdentifierName(reExport.children.find((child) => child.role === "exported"));
+    const sourceSymbolName = reExport === undefined
+      ? undefined
+      : reExport.type === "ExportNamespaceSpecifier"
+        ? "*"
+        : readStringAttribute(reExport, "sourceSymbolName") ?? readIdentifierName(reExport.children.find((child) => child.role === "local"));
+    const target = defaultExport ? "default" : exportedName ?? findDeclaredName(node) ?? "default";
+    const moduleSpecifier = findModuleSpecifier(node);
     symbols.push(
       this.createSymbol("export", defaultExport ? "default" : target, node, ast, {
         exported: true,
         defaultExport,
-        ...(findStringLiteral(node) === undefined ? {} : { moduleSpecifier: findStringLiteral(node) }),
+      }, {
+        ...(moduleSpecifier === undefined ? {} : { moduleSpecifier }),
+        ...(sourceSymbolName === undefined ? {} : { sourceSymbolName }),
       }),
     );
   }
@@ -258,6 +272,21 @@ function findStringLiteral(node: ASTNode): string | undefined {
   return undefined;
 }
 
+function findModuleSpecifier(node: ASTNode): string | undefined {
+  const sourceAttribute = node.attributes.source;
+  if (typeof sourceAttribute === "string") {
+    return sourceAttribute;
+  }
+
+  const source = node.children.find((child) => child.role === "source");
+  const sourceValue = source?.attributes.value;
+  if (typeof sourceValue === "string") {
+    return sourceValue;
+  }
+
+  return source === undefined ? findStringLiteral(node) : findStringLiteral(source);
+}
+
 function findParameterNames(node: ASTNode): readonly string[] {
   if (node.type === "Identifier") {
     const name = readIdentifierName(node);
@@ -271,6 +300,11 @@ function readIdentifierName(node: ASTNode | undefined): string | undefined {
   const name = node?.attributes.name;
 
   return typeof name === "string" ? name : undefined;
+}
+
+function readStringAttribute(node: ASTNode, key: string): string | undefined {
+  const value = node.attributes[key];
+  return typeof value === "string" ? value : undefined;
 }
 
 function readDeclarationKind(node: ASTNode): "const" | "let" | "var" | undefined {

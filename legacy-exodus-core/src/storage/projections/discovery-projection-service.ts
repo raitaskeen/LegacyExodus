@@ -80,18 +80,21 @@ export class DiscoveryProjectionService {
     }
 
     const payload = parsedPayload.data;
-    const graphRecords = await this.storage.findAll("dependency-graph");
+    const [graphRecords, symbolRecords, knowledgeRecords] = await Promise.all([
+      this.storage.findAll("dependency-graph"),
+      this.storage.findAll("symbol-table"),
+      this.storage.findAll("knowledge-graph"),
+    ]);
     const graphRecord = graphRecords.find((candidate) => {
       const parsedGraph = dependencyGraphStoragePayloadSchema.safeParse(candidate.payload);
       return parsedGraph.success && parsedGraph.data.projectId === payload.projectId;
     });
     const graph = graphRecord === undefined ? null : dependencyGraphStoragePayloadSchema.parse(graphRecord.payload);
-    const symbolRecords = await this.storage.findAll("symbol-table");
     const symbols = symbolRecords.flatMap((candidate) => {
       const parsed = symbolTableStoragePayloadSchema.safeParse(candidate.payload);
       return parsed.success && parsed.data.projectId === payload.projectId ? parsed.data.symbols : [];
     });
-    const knowledgeRecord = (await this.storage.findAll("knowledge-graph")).find((candidate) => {
+    const knowledgeRecord = knowledgeRecords.find((candidate) => {
       const parsed = knowledgeGraphStoragePayloadSchema.safeParse(candidate.payload);
       return parsed.success && parsed.data.projectId === payload.projectId;
     });

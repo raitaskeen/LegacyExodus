@@ -22,8 +22,12 @@ export class ModuleResolver {
       `${basePath}.jsx`,
       `${basePath}.ts`,
       `${basePath}.tsx`,
+      `${basePath}.mjs`,
+      `${basePath}.cjs`,
       `${basePath}/index.js`,
       `${basePath}/index.ts`,
+      `${basePath}/index.mjs`,
+      `${basePath}/index.cjs`,
     ];
     const resolvedPath = candidates.find((candidate) => knownPaths.has(normalize(candidate).replaceAll("\\", "/"))) ?? null;
 

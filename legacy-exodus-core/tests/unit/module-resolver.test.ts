@@ -45,4 +45,94 @@ describe("ModuleResolver", () => {
     const graph = new DeterministicDependencyGraphBuilder().build([a, b], cycleFiles);
     expect(graph.cycles.length).toBeGreaterThan(0);
   });
+
+  test("resolves named re-exports to the originating symbol", async (): Promise<void> => {
+    const parser = new JavaScriptParser();
+    const extractor = new JavaScriptSymbolExtractor();
+    const barrelFiles = [
+      { id: "app", path: "src/app.js", language: "javascript", size: 1 },
+      { id: "barrel", path: "src/services/index.js", language: "javascript", size: 1 },
+      { id: "auth", path: "src/services/auth.js", language: "javascript", size: 1 },
+    ] as const;
+    const app = extractor.extract((await parser.parse({ file: barrelFiles[0], source: 'import { login } from "./services";' })).result);
+    const barrel = extractor.extract((await parser.parse({ file: barrelFiles[1], source: 'export { login } from "./auth";' })).result);
+    const auth = extractor.extract((await parser.parse({ file: barrelFiles[2], source: "export function login() {}" })).result);
+    expect(barrel.symbols.find((symbol) => symbol.kind === "export")?.moduleSpecifier).toBe("./auth");
+    const graph = new DeterministicDependencyGraphBuilder().build([app, barrel, auth], barrelFiles);
+    expect(graph.edges).toHaveLength(1);
+    expect(graph.edges[0]?.targetFilePath).toBe("src/services/auth.js");
+  });
+
+  test("resolves aliased named re-exports to the original symbol", async (): Promise<void> => {
+    const parser = new JavaScriptParser();
+    const extractor = new JavaScriptSymbolExtractor();
+    const fixtureFiles = [
+      { id: "app", path: "src/app.js", language: "javascript", size: 1 },
+      { id: "barrel", path: "src/services/index.js", language: "javascript", size: 1 },
+      { id: "auth", path: "src/services/auth.js", language: "javascript", size: 1 },
+    ] as const;
+    const app = extractor.extract((await parser.parse({ file: fixtureFiles[0], source: 'import { signIn } from "./services";' })).result);
+    const barrel = extractor.extract((await parser.parse({ file: fixtureFiles[1], source: 'export { login as signIn } from "./auth";' })).result);
+    const auth = extractor.extract((await parser.parse({ file: fixtureFiles[2], source: "export function login() {}" })).result);
+    const graph = new DeterministicDependencyGraphBuilder().build([app, barrel, auth], fixtureFiles);
+
+    expect(barrel.symbols.find((symbol) => symbol.kind === "export")?.sourceSymbolName).toBe("login");
+    expect(graph.edges[0]?.targetFilePath).toBe("src/services/auth.js");
+    expect(graph.edges[0]?.targetExportSymbolId).toBe(auth.symbols.find((symbol) => symbol.kind === "export")?.id);
+  });
+
+  test("resolves wildcard exports through recursive barrel files", async (): Promise<void> => {
+    const parser = new JavaScriptParser();
+    const extractor = new JavaScriptSymbolExtractor();
+    const fixtureFiles = [
+      { id: "app", path: "src/app.js", language: "javascript", size: 1 },
+      { id: "services", path: "src/services/index.js", language: "javascript", size: 1 },
+      { id: "api", path: "src/services/api/index.ts", language: "javascript", size: 1 },
+      { id: "auth", path: "src/services/api/auth.ts", language: "javascript", size: 1 },
+    ] as const;
+    const app = extractor.extract((await parser.parse({ file: fixtureFiles[0], source: 'import { login } from "./services";' })).result);
+    const services = extractor.extract((await parser.parse({ file: fixtureFiles[1], source: 'export * from "./api";' })).result);
+    const api = extractor.extract((await parser.parse({ file: fixtureFiles[2], source: 'export * from "./auth";' })).result);
+    const auth = extractor.extract((await parser.parse({ file: fixtureFiles[3], source: "export function login() {}" })).result);
+    const graph = new DeterministicDependencyGraphBuilder().build([app, services, api, auth], fixtureFiles);
+
+    expect(graph.edges).toHaveLength(1);
+    expect(graph.edges[0]?.targetFilePath).toBe("src/services/api/auth.ts");
+    expect(graph.edges[0]?.targetExportSymbolId).toBe(auth.symbols.find((symbol) => symbol.kind === "export")?.id);
+  });
+
+  test("resolves namespace wildcard re-exports to their source module", async (): Promise<void> => {
+    const parser = new JavaScriptParser();
+    const extractor = new JavaScriptSymbolExtractor();
+    const fixtureFiles = [
+      { id: "app", path: "src/app.js", language: "javascript", size: 1 },
+      { id: "barrel", path: "src/services/index.js", language: "javascript", size: 1 },
+      { id: "auth", path: "src/services/auth.js", language: "javascript", size: 1 },
+    ] as const;
+    const app = extractor.extract((await parser.parse({ file: fixtureFiles[0], source: 'import { authNamespace } from "./services";' })).result);
+    const barrel = extractor.extract((await parser.parse({ file: fixtureFiles[1], source: 'export * as authNamespace from "./auth";' })).result);
+    const auth = extractor.extract((await parser.parse({ file: fixtureFiles[2], source: "export function login() {}" })).result);
+    const graph = new DeterministicDependencyGraphBuilder().build([app, barrel, auth], fixtureFiles);
+
+    expect(barrel.symbols.find((symbol) => symbol.kind === "export")?.sourceSymbolName).toBe("*");
+    expect(graph.edges[0]?.targetFilePath).toBe("src/services/auth.js");
+  });
+
+  test("records cyclic barrels while preserving their valid import edges", async (): Promise<void> => {
+    const parser = new JavaScriptParser();
+    const extractor = new JavaScriptSymbolExtractor();
+    const fixtureFiles = [
+      { id: "app", path: "src/app.js", language: "javascript", size: 1 },
+      { id: "a", path: "src/a/index.js", language: "javascript", size: 1 },
+      { id: "b", path: "src/b/index.js", language: "javascript", size: 1 },
+    ] as const;
+    const app = extractor.extract((await parser.parse({ file: fixtureFiles[0], source: 'import a from "./a";' })).result);
+    const a = extractor.extract((await parser.parse({ file: fixtureFiles[1], source: 'import b from "../b"; export default b;' })).result);
+    const b = extractor.extract((await parser.parse({ file: fixtureFiles[2], source: 'import a from "../a"; export default a;' })).result);
+    const graph = new DeterministicDependencyGraphBuilder().build([app, a, b], fixtureFiles);
+
+    expect(graph.edges.some((edge) => edge.sourceFilePath === "src/a/index.js" && edge.targetFilePath === "src/b/index.js")).toBe(true);
+    expect(graph.edges.some((edge) => edge.sourceFilePath === "src/b/index.js" && edge.targetFilePath === "src/a/index.js")).toBe(true);
+    expect(graph.cycles).toContainEqual(["src/a/index.js", "src/b/index.js", "src/a/index.js"]);
+  });
 });

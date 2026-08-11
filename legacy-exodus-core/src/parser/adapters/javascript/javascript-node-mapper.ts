@@ -64,6 +64,18 @@ function mapNode(node: BabelNode, role?: string): JavaScriptNodeMapping {
     }
   }
 
+  if (node.type === "ExportSpecifier" || node.type === "ExportNamespaceSpecifier") {
+    const exportedName = readBabelIdentifierName(node.exported);
+    const sourceSymbolName = readBabelIdentifierName(node.local);
+
+    if (exportedName !== undefined) {
+      attributes.exportedName = exportedName;
+    }
+    if (sourceSymbolName !== undefined) {
+      attributes.sourceSymbolName = sourceSymbolName;
+    }
+  }
+
   return {
     node: {
       type: node.type,
@@ -74,6 +86,19 @@ function mapNode(node: BabelNode, role?: string): JavaScriptNodeMapping {
     },
     nodeCount,
   };
+}
+
+function readBabelIdentifierName(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (typeof value !== "object" || value === null || !("name" in value)) {
+    return undefined;
+  }
+
+  const name = (value as { readonly name: unknown }).name;
+  return typeof name === "string" ? name : undefined;
 }
 
 function isBabelNode(value: unknown): value is BabelNode {
