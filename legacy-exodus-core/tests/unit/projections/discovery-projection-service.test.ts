@@ -44,4 +44,53 @@ describe("DiscoveryProjectionService", () => {
       await rm(projectPath, { force: true, recursive: true });
     }
   });
+
+  test("projects graph, knowledge, and symbols from only the active analysis run", async (): Promise<void> => {
+    const projectPath = await mkdtemp(join(tmpdir(), "legacy-exodus-run-scoped-projection-"));
+    const storage = new StorageManager(new MemoryStorageProvider());
+    const projectId = "00000000-0000-4000-8000-000000000050";
+    const staleRunId = "00000000-0000-4000-8000-000000000051";
+    const activeRunId = "00000000-0000-4000-8000-000000000052";
+    const discovery = createStorageRecord("project-discovery", {
+      projectId,
+      analysisRunId: activeRunId,
+      projectName: "library-system",
+      projectPath,
+      files: [{ id: "file-1", path: "src/index.js", language: "javascript", size: 20 }],
+      dependencies: [], frameworks: [], languages: ["javascript"], discoveredAt: "2026-08-08T00:00:00.000Z",
+    });
+    const graph = (analysisRunId: string, id: string) => createStorageRecord("dependency-graph", {
+      projectId, analysisRunId, nodes: [], edges: [], cycles: [[id, id]],
+    });
+    const symbols = (analysisRunId: string, name: string) => createStorageRecord("symbol-table", {
+      projectId, analysisRunId, path: "src/index.js", symbols: [{
+        id: name, kind: "export", name, filePath: "src/index.js", exported: true, defaultExport: false,
+        moduleSpecifier: null, sourceSymbolName: name === "signIn" ? "login" : null,
+      }],
+    });
+    const knowledge = (analysisRunId: string, id: string) => createStorageRecord("knowledge-graph", {
+      projectId, analysisRunId, nodes: [{ id, kind: "symbol", name: id, filePath: "src/index.js" }], edges: [],
+    });
+
+    try {
+      await storage.save(discovery);
+      await storage.save(graph(staleRunId, "stale"));
+      await storage.save(graph(activeRunId, "active"));
+      await storage.save(symbols(staleRunId, "stale"));
+      await storage.save(symbols(activeRunId, "signIn"));
+      await storage.save(knowledge(staleRunId, "stale"));
+      await storage.save(knowledge(activeRunId, "active"));
+      await new DiscoveryProjectionService(storage, new FileDiscoveryProjectionAdapter()).project(discovery.id);
+
+      expect(JSON.parse(await readFile(join(projectPath, ".discovery", "symbols.json"), "utf8"))).toEqual([{
+        id: "signIn", kind: "export", name: "signIn", filePath: "src/index.js", exported: true, defaultExport: false,
+        moduleSpecifier: null, sourceSymbolName: "login",
+      }]);
+      expect(JSON.parse(await readFile(join(projectPath, ".discovery", "knowledge.json"), "utf8"))).toEqual({
+        projectId, analysisRunId: activeRunId, nodes: [{ id: "active", kind: "symbol", name: "active", filePath: "src/index.js" }], edges: [],
+      });
+    } finally {
+      await rm(projectPath, { force: true, recursive: true });
+    }
+  });
 });

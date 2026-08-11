@@ -59,4 +59,19 @@ describe("ProjectDetector", () => {
       await rm(projectPath, { force: true, recursive: true });
     }
   });
+
+  test("uses exact directory segments for framework file-pattern detection", async (): Promise<void> => {
+    const projectPath = await mkdtemp(join(tmpdir(), "legacy-exodus-segment-detection-"));
+    const files: readonly FileArtifact[] = [
+      { id: "false-controller", path: "src/mycontrollers/book.ts", language: "typescript", size: 1 },
+      { id: "false-component", path: "src/mycomponents/book.tsx", language: "typescript", size: 1 },
+    ];
+
+    try {
+      const detection = await new ProjectDetector().detect(projectPath, files);
+      expect(detection.frameworks).toEqual([]);
+    } finally {
+      await rm(projectPath, { force: true, recursive: true });
+    }
+  });
 });

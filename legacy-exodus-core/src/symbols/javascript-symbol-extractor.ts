@@ -23,11 +23,13 @@ const initialContext: ExtractionContext = Object.freeze({
   defaultExport: false,
 });
 
+const supportedLanguages = new Set(["javascript", "typescript"]);
+
 export class JavaScriptSymbolExtractor implements SymbolExtractor {
   public extract(ast: ASTResult): SymbolTable {
     const validatedAst = validateASTResult(ast);
 
-    if (validatedAst.metadata.language !== "javascript") {
+    if (!supportedLanguages.has(validatedAst.metadata.language)) {
       throw new UnsupportedSymbolLanguageError(validatedAst.metadata.language);
     }
 
@@ -112,7 +114,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
 
     for (const specifier of specifiers) {
       symbols.push(
-        this.createSymbol("import", getName(specifier) ?? moduleSpecifier, specifier, ast, initialContext, {
+        this.createSymbol("import", readStringAttribute(specifier, "importedName") ?? getName(specifier) ?? moduleSpecifier, specifier, ast, initialContext, {
           moduleSpecifier,
           defaultExport: specifier.type === "ImportDefaultSpecifier",
         }),
@@ -166,21 +168,47 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
   }
 
   private addExportSymbol(node: ASTNode, ast: ASTResult, defaultExport: boolean, symbols: CodeSymbol[]): void {
-    const reExport = node.children.find((child) =>
+    const moduleSpecifier = findModuleSpecifier(node);
+    const specifiers = node.children.filter((child) =>
       child.role === "specifiers" && (child.type === "ExportSpecifier" || child.type === "ExportNamespaceSpecifier"),
     );
-    const exportedName = reExport === undefined
-      ? undefined
-      : readStringAttribute(reExport, "exportedName") ?? readIdentifierName(reExport.children.find((child) => child.role === "exported"));
-    const sourceSymbolName = reExport === undefined
-      ? undefined
-      : reExport.type === "ExportNamespaceSpecifier"
+
+    if (specifiers.length === 0) {
+      this.addExport(
+        node,
+        ast,
+        defaultExport ? "default" : findDeclaredName(node) ?? "default",
+        defaultExport,
+        moduleSpecifier,
+        undefined,
+        symbols,
+      );
+      return;
+    }
+
+    for (const specifier of specifiers) {
+      const exportedName = readStringAttribute(specifier, "exportedName")
+        ?? readIdentifierName(specifier.children.find((child) => child.role === "exported"))
+        ?? "default";
+      const sourceSymbolName = specifier.type === "ExportNamespaceSpecifier"
         ? "*"
-        : readStringAttribute(reExport, "sourceSymbolName") ?? readIdentifierName(reExport.children.find((child) => child.role === "local"));
-    const target = defaultExport ? "default" : exportedName ?? findDeclaredName(node) ?? "default";
-    const moduleSpecifier = findModuleSpecifier(node);
+        : readStringAttribute(specifier, "sourceSymbolName")
+          ?? readIdentifierName(specifier.children.find((child) => child.role === "local"));
+      this.addExport(node, ast, defaultExport ? "default" : exportedName, defaultExport, moduleSpecifier, sourceSymbolName, symbols);
+    }
+  }
+
+  private addExport(
+    node: ASTNode,
+    ast: ASTResult,
+    name: string,
+    defaultExport: boolean,
+    moduleSpecifier: string | undefined,
+    sourceSymbolName: string | undefined,
+    symbols: CodeSymbol[],
+  ): void {
     symbols.push(
-      this.createSymbol("export", defaultExport ? "default" : target, node, ast, {
+      this.createSymbol("export", name, node, ast, {
         exported: true,
         defaultExport,
       }, {

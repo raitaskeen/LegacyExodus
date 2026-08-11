@@ -76,6 +76,13 @@ function mapNode(node: BabelNode, role?: string): JavaScriptNodeMapping {
     }
   }
 
+  if (node.type === "ImportSpecifier") {
+    const importedName = readBabelIdentifierName(node.imported);
+    if (importedName !== undefined) {
+      attributes.importedName = importedName;
+    }
+  }
+
   return {
     node: {
       type: node.type,

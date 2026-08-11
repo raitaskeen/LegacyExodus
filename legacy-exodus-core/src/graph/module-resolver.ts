@@ -25,7 +25,9 @@ export class ModuleResolver {
       `${basePath}.mjs`,
       `${basePath}.cjs`,
       `${basePath}/index.js`,
+      `${basePath}/index.jsx`,
       `${basePath}/index.ts`,
+      `${basePath}/index.tsx`,
       `${basePath}/index.mjs`,
       `${basePath}/index.cjs`,
     ];

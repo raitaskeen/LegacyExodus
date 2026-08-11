@@ -91,6 +91,7 @@ export class AnalyzeProjectHandler {
       frameworks: discovery.frameworks.map((framework) => ({ ...framework })),
       languages: [...discovery.languages],
       discoveredAt: discovery.discoveredAt.toISOString(),
+      analysisRunId: command.id,
     });
 
     const events: DomainEvent[] = [...this.discoveryEngine.createEvents(discovery)];
@@ -98,7 +99,7 @@ export class AnalyzeProjectHandler {
     const symbolTables: SymbolTable[] = [];
 
     for (const file of discovery.files) {
-      if (file.language !== "javascript") {
+      if (file.language !== "javascript" && file.language !== "typescript") {
         continue;
       }
 
@@ -112,7 +113,7 @@ export class AnalyzeProjectHandler {
         events.push(createDomainEvent({
           type: "ParserFailure",
           aggregateId: discovery.projectId,
-          payload: { fileId: file.id, path: file.path, code: error instanceof Error ? error.name : "PARSER_FAILURE" },
+          payload: { fileId: file.id, path: file.path, code: getErrorCode(error) },
         }));
         continue;
       }
@@ -146,6 +147,7 @@ export class AnalyzeProjectHandler {
           fileId: file.id,
           path: file.path,
           projectId: discovery.projectId,
+          analysisRunId: command.id,
           symbolCount: table.symbols.length,
           classes: table.summary.classes,
           functions: table.summary.functions,
@@ -155,6 +157,7 @@ export class AnalyzeProjectHandler {
             id: symbol.id, kind: symbol.kind, name: symbol.name, filePath: symbol.filePath,
             exported: symbol.exported, defaultExport: symbol.defaultExport,
             moduleSpecifier: symbol.moduleSpecifier ?? null,
+            sourceSymbolName: symbol.sourceSymbolName ?? null,
           })),
         }),
       );
@@ -171,6 +174,7 @@ export class AnalyzeProjectHandler {
     records.push(
       createStorageRecord("dependency-graph", {
         projectId: discovery.projectId,
+        analysisRunId: command.id,
         nodes: dependencyGraph.nodes.map((node) => ({ ...node })),
         edges: dependencyGraph.edges.map((edge) => ({ ...edge })),
         cycles: dependencyGraph.cycles.map((cycle) => [...cycle]),
@@ -180,6 +184,7 @@ export class AnalyzeProjectHandler {
     records.push(
       createStorageRecord("knowledge-graph", {
         projectId: discovery.projectId,
+        analysisRunId: command.id,
         nodes: knowledgeGraph.nodes.map((node) => ({ ...node })),
         edges: knowledgeGraph.edges.map((edge) => ({ ...edge })),
       }),
@@ -187,4 +192,15 @@ export class AnalyzeProjectHandler {
 
     return { events: Object.freeze(events), records: Object.freeze(records), discovery };
   }
+}
+
+function getErrorCode(error: unknown): string {
+  if (typeof error === "object" && error !== null && "code" in error) {
+    const code = (error as { readonly code: unknown }).code;
+    if (typeof code === "string" && code.length > 0) {
+      return code;
+    }
+  }
+
+  return "PARSER_FAILURE";
 }

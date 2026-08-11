@@ -20,6 +20,34 @@ describe("ModuleResolver", () => {
     expect(resolver.resolve("src/api.js", "express", files).resolvedPath).toBeNull();
   });
 
+  test("resolves JSX and TSX directory index modules", (): void => {
+    const resolver = new ModuleResolver();
+    const jsxFiles: readonly FileArtifact[] = [
+      { id: "api", path: "src/api.js", language: "javascript", size: 1 },
+      { id: "jsx", path: "src/ui/index.jsx", language: "javascript", size: 1 },
+      { id: "tsx", path: "src/view/index.tsx", language: "typescript", size: 1 },
+    ];
+
+    expect(resolver.resolve("src/api.js", "./ui", jsxFiles).resolvedPath).toBe("src/ui/index.jsx");
+    expect(resolver.resolve("src/api.js", "./view", jsxFiles).resolvedPath).toBe("src/view/index.tsx");
+  });
+
+  test("does not fabricate edges for unavailable named exports", async (): Promise<void> => {
+    const parser = new JavaScriptParser();
+    const extractor = new JavaScriptSymbolExtractor();
+    const fixtureFiles = [
+      { id: "app", path: "src/app.js", language: "javascript", size: 1 },
+      { id: "barrel", path: "src/services/index.js", language: "javascript", size: 1 },
+      { id: "auth", path: "src/services/auth.js", language: "javascript", size: 1 },
+    ] as const;
+    const app = extractor.extract((await parser.parse({ file: fixtureFiles[0], source: 'import { missing } from "./services";' })).result);
+    const barrel = extractor.extract((await parser.parse({ file: fixtureFiles[1], source: 'export * from "./auth";' })).result);
+    const auth = extractor.extract((await parser.parse({ file: fixtureFiles[2], source: "export function login() {}" })).result);
+    const graph = new DeterministicDependencyGraphBuilder().build([app, barrel, auth], fixtureFiles);
+
+    expect(graph.edges).toEqual([]);
+  });
+
   test("builds a directed edge from a local import to a target export", async (): Promise<void> => {
     const parser = new JavaScriptParser();
     const extractor = new JavaScriptSymbolExtractor();

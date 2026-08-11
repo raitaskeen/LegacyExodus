@@ -23,11 +23,11 @@ export class JavaScriptParser implements Parser {
   public readonly id = "javascript-parser";
   public readonly name = "JavaScript Parser";
   public readonly version = "1.0.0";
-  public readonly supportedLanguages = Object.freeze(["javascript"]);
+  public readonly supportedLanguages = Object.freeze(["javascript", "typescript"]);
   public readonly capabilities = Object.freeze(["ast", "comments", "exports", "imports", "locations"] as const);
 
   public canHandle(request: ParseRequest): boolean {
-    return request.file.language.toLowerCase() === "javascript";
+    return ["javascript", "typescript"].includes(request.file.language.toLowerCase());
   }
 
   public async parse(request: ParseRequest): Promise<ParseResponse> {
@@ -42,7 +42,7 @@ export class JavaScriptParser implements Parser {
         result: {
           metadata: {
             parserId: this.id,
-            language: "javascript",
+            language: request.file.language.toLowerCase(),
             sourcePath: request.file.path,
           },
           root: mapping.node,
@@ -59,7 +59,7 @@ export class JavaScriptParser implements Parser {
         result: {
           metadata: {
             parserId: this.id,
-            language: "javascript",
+            language: request.file.language.toLowerCase(),
             sourcePath: request.file.path,
           },
           root: createEmptyProgram(),
