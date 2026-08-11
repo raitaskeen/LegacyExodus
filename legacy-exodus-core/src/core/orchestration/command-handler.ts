@@ -12,10 +12,12 @@ import type {
 import { createDomainEvent, type DomainEvent } from "@core/events/domain-event";
 import { DiscoveryEngine, type DiscoveryResult } from "@discovery/index";
 import { DeterministicDependencyGraphBuilder } from "@graph/index";
+import { DeterministicFlowAnalysisEngine } from "@flow/index";
 import { DeterministicKnowledgeGraphBuilder } from "@knowledge/index";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { ParserManager } from "@parser/index";
+import { ParserManager, type ASTResult } from "@parser/index";
+import { DeterministicSemanticAnalysisEngine } from "@semantic/index";
 import { createStorageRecord, type StorageRecord } from "@storage/index";
 import { JavaScriptSymbolExtractor, type SymbolTable } from "@symbols/index";
 
@@ -97,13 +99,14 @@ export class AnalyzeProjectHandler {
     const events: DomainEvent[] = [...this.discoveryEngine.createEvents(discovery)];
     const records: StorageRecord[] = [record];
     const symbolTables: SymbolTable[] = [];
+    const astResults: ASTResult[] = [];
 
     for (const file of discovery.files) {
       if (file.language !== "javascript" && file.language !== "typescript") {
         continue;
       }
 
-      let ast;
+      let ast: ASTResult;
       try {
         ast = await this.parserManager.parse({
           file,
@@ -141,6 +144,7 @@ export class AnalyzeProjectHandler {
       );
 
       const table = this.symbolExtractor.extract(ast);
+      astResults.push(ast);
       symbolTables.push(table);
       records.push(
         createStorageRecord("symbol-table", {
@@ -178,6 +182,41 @@ export class AnalyzeProjectHandler {
         nodes: dependencyGraph.nodes.map((node) => ({ ...node })),
         edges: dependencyGraph.edges.map((edge) => ({ ...edge })),
         cycles: dependencyGraph.cycles.map((cycle) => [...cycle]),
+      }),
+    );
+    const semantic = new DeterministicSemanticAnalysisEngine().analyze({
+      astResults,
+      dependencyGraph,
+      symbolTables,
+    });
+    records.push(
+      createStorageRecord("semantic-analysis", {
+        projectId: discovery.projectId,
+        analysisRunId: command.id,
+        calls: semantic.calls.map((call) => ({ ...call, ...(call.location === undefined ? {} : { location: { ...call.location } }) })),
+        references: semantic.references.map((reference) => ({ ...reference })),
+        scopes: semantic.scopes.map((scope) => ({ ...scope, declaredSymbols: [...scope.declaredSymbols], referencedNames: [...scope.referencedNames] })),
+        deadCode: semantic.deadCode.map((finding) => ({ ...finding })),
+        unusedImports: semantic.unusedImports.map((finding) => ({ ...finding })),
+        unusedExports: semantic.unusedExports.map((finding) => ({ ...finding })),
+        entryPoints: semantic.entryPoints.map((entryPoint) => ({ ...entryPoint })),
+        routes: semantic.routes.map((route) => ({ ...route, middleware: [...route.middleware] })),
+        middlewareChains: semantic.middlewareChains.map((chain) => ({ ...chain, middleware: [...chain.middleware] })),
+      }),
+    );
+    const flow = new DeterministicFlowAnalysisEngine().analyze(astResults);
+    records.push(
+      createStorageRecord("control-flow-analysis", {
+        projectId: discovery.projectId,
+        analysisRunId: command.id,
+        graphs: flow.controlFlowGraphs.map((graph) => ({ ...graph, blocks: graph.blocks.map((block) => ({ ...block, statements: block.statements.map((statement) => ({ ...statement })) })), edges: graph.edges.map((edge) => ({ ...edge })), dominators: graph.dominators.map((dominator) => ({ ...dominator })), loops: graph.loops.map((loop) => ({ ...loop, blockIds: [...loop.blockIds] })), unreachableBlockIds: [...graph.unreachableBlockIds], deadCodeNodeIds: [...graph.deadCodeNodeIds] })),
+      }),
+    );
+    records.push(
+      createStorageRecord("data-flow-analysis", {
+        projectId: discovery.projectId,
+        analysisRunId: command.id,
+        graphs: flow.dataFlowGraphs.map((graph) => ({ ...graph, definitions: graph.definitions.map((definition) => ({ ...definition })), uses: graph.uses.map((use) => ({ ...use })), defUseChains: graph.defUseChains.map((chain) => ({ ...chain, useIds: [...chain.useIds] })), lifetimes: graph.lifetimes.map((lifetime) => ({ ...lifetime, useIds: [...lifetime.useIds] })), taintFlows: graph.taintFlows.map((flow) => ({ ...flow, path: [...flow.path] })) })),
       }),
     );
     const knowledgeGraph = new DeterministicKnowledgeGraphBuilder().build(symbolTables, dependencyGraph);

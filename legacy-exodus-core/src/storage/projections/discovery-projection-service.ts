@@ -44,6 +44,16 @@ const knowledgeGraphStoragePayloadSchema = z.object({
   edges: z.array(z.object({ id: z.string(), from: z.string(), to: z.string(), relationship: z.string() })),
 });
 
+const semanticAnalysisStoragePayloadSchema = z.object({
+  projectId: z.string().uuid(),
+  analysisRunId: z.string().uuid().optional(),
+  calls: z.array(z.json()), references: z.array(z.json()), scopes: z.array(z.json()), deadCode: z.array(z.json()),
+  unusedImports: z.array(z.json()), unusedExports: z.array(z.json()), entryPoints: z.array(z.json()),
+  routes: z.array(z.json()), middlewareChains: z.array(z.json()),
+});
+const controlFlowStoragePayloadSchema = z.object({ projectId: z.string().uuid(), analysisRunId: z.string().uuid().optional(), graphs: z.array(z.json()) });
+const dataFlowStoragePayloadSchema = z.object({ projectId: z.string().uuid(), analysisRunId: z.string().uuid().optional(), graphs: z.array(z.json()) });
+
 type RunScopedPayload = { readonly projectId: string; readonly analysisRunId?: string };
 
 export class DiscoveryProjectionService {
@@ -64,13 +74,19 @@ export class DiscoveryProjectionService {
     }
 
     const payload = discovery.data;
-    const [graphRecords, symbolRecords, knowledgeRecords] = await Promise.all([
+    const [graphRecords, symbolRecords, knowledgeRecords, semanticRecords, controlFlowRecords, dataFlowRecords] = await Promise.all([
       this.storage.findAll("dependency-graph"),
       this.storage.findAll("symbol-table"),
       this.storage.findAll("knowledge-graph"),
+      this.storage.findAll("semantic-analysis"),
+      this.storage.findAll("control-flow-analysis"),
+      this.storage.findAll("data-flow-analysis"),
     ]);
     const graph = latestPayload(graphRecords, dependencyGraphStoragePayloadSchema, payload.projectId, payload.analysisRunId);
     const knowledge = latestPayload(knowledgeRecords, knowledgeGraphStoragePayloadSchema, payload.projectId, payload.analysisRunId);
+    const semantic = latestPayload(semanticRecords, semanticAnalysisStoragePayloadSchema, payload.projectId, payload.analysisRunId);
+    const controlFlow = latestPayload(controlFlowRecords, controlFlowStoragePayloadSchema, payload.projectId, payload.analysisRunId);
+    const dataFlow = latestPayload(dataFlowRecords, dataFlowStoragePayloadSchema, payload.projectId, payload.analysisRunId);
     const symbols = symbolRecords
       .flatMap((candidate) => {
         const parsed = symbolTableStoragePayloadSchema.safeParse(candidate.payload);
@@ -93,6 +109,9 @@ export class DiscoveryProjectionService {
               { name: "modules.json" as const, payload: payload.files.map((file) => ({ path: file.path, language: file.language })) },
               { name: "symbols.json" as const, payload: symbols },
               ...(knowledge === undefined ? [] : [{ name: "knowledge.json" as const, payload: knowledge }]),
+              ...(semantic === undefined ? [] : [{ name: "semantic.json" as const, payload: semantic }]),
+              ...(controlFlow === undefined ? [] : [{ name: "cfg.json" as const, payload: controlFlow.graphs }, { name: "control-flow.json" as const, payload: controlFlow }]),
+              ...(dataFlow === undefined ? [] : [{ name: "data-flow.json" as const, payload: dataFlow }]),
             ]),
       ],
     });

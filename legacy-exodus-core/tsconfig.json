@@ -27,6 +27,8 @@
       "@parser/*": ["./src/parser/*"],
       "@graph/*": ["./src/graph/*"],
       "@knowledge/*": ["./src/knowledge/*"],
+      "@semantic/*": ["./src/semantic/*"],
+      "@flow/*": ["./src/flow/*"],
       "@ai/*": ["./src/ai/*"],
       "@compiler/*": ["./src/compiler/*"],
       "@storage/*": ["./src/storage/*"],
