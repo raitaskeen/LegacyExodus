@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { DeterministicControlFlowGraphBuilder, DeterministicDataFlowGraphBuilder } from "@flow/index";
+import { DeterministicControlFlowGraphBuilder, DeterministicDataFlowGraphBuilder, DeterministicFlowAnalysisEngine } from "@flow/index";
 import { JavaScriptParser } from "@parser/index";
 
 describe("control and data flow analysis", () => {
@@ -38,5 +38,29 @@ describe("control and data flow analysis", () => {
     expect(graph.lifetimes.find((lifetime) => lifetime.name === "id")?.declarationId).toBe(id?.id);
     expect(graph.taintFlows).toEqual([]);
     expect(Object.isFrozen(graph)).toBe(true);
+  });
+
+  test("creates independent module, function, arrow-function, and method CFGs", async (): Promise<void> => {
+    const source = `
+      function calculate(value) { if (value) return value; return 0; }
+      const normalize = (input) => { return input; };
+      class Catalog { load(id) { while (id) { break; } return id; } }
+    `;
+    const ast = (await new JavaScriptParser().parse({ file: { id: "scopes", path: "src/scopes.js", language: "javascript", size: source.length }, source })).result;
+    const result = new DeterministicFlowAnalysisEngine().analyze([ast]);
+
+    expect(result.controlFlowGraphs.map((graph) => graph.scopeName)).toEqual(expect.arrayContaining(["module", expect.stringMatching(/^calculate@/), expect.stringMatching(/^anonymous@/), expect.stringMatching(/^load@/)]));
+    expect(result.controlFlowGraphs.filter((graph) => graph.scopeName !== "module").every((graph) => graph.blocks.length >= 2)).toBe(true);
+    expect(result.controlFlowGraphs.map((graph) => graph.id)).toEqual([...result.controlFlowGraphs].map((graph) => graph.id).sort());
+  });
+
+  test("marks compile-time false branches and loops as unreachable", async (): Promise<void> => {
+    const source = "if (false) { console.log('never'); } while (false) { console.log('also-never'); }";
+    const ast = (await new JavaScriptParser().parse({ file: { id: "constants", path: "src/constants.js", language: "javascript", size: source.length }, source })).result;
+    const graph = new DeterministicControlFlowGraphBuilder().build(ast);
+
+    expect(graph.unreachableBlockIds.length).toBeGreaterThan(0);
+    expect(graph.deadCodeNodeIds.length).toBeGreaterThan(0);
+    expect(graph.edges.filter((edge) => edge.kind === "true")).toHaveLength(0);
   });
 });
