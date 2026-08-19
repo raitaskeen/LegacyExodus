@@ -11,6 +11,13 @@ export class CliError extends Error {
   }
 }
 
+export class UnexpectedEngineResultError extends LegacyExodusError {
+  public constructor(expectedType: string, actualType: string) {
+    super({ code: "CLI_ENGINE_RESULT_INVALID", message: "Engine returned an unexpected command result.", metadata: { expectedType, actualType } });
+    this.name = "UnexpectedEngineResultError";
+  }
+}
+
 export interface CliErrorResponse {
   readonly code: string;
   readonly message: string;

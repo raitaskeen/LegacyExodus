@@ -6,6 +6,7 @@ import { createLegacyExodusEngine, type LegacyExodusEngine } from "@core/engine"
 
 import { formatAnalyzeOutput } from "../output/formatter";
 import { formatJsonOutput } from "../output/json-output";
+import { UnexpectedEngineResultError } from "../errors";
 
 export interface AnalyzeProjectReport {
   readonly projectName: string;
@@ -32,7 +33,7 @@ export async function analyzeProject(
     });
 
     if (result.type !== "AnalyzeProject") {
-      throw new Error("AnalyzeProject returned an unexpected engine result.");
+      throw new UnexpectedEngineResultError("AnalyzeProject", result.type);
     }
 
     return {
