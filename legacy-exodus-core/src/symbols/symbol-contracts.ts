@@ -13,6 +13,8 @@ export interface CodeSymbol {
   readonly exported: boolean;
   readonly defaultExport: boolean;
   readonly async: boolean;
+  /** True when a syntax construct has no stable declared name. */
+  readonly anonymous: boolean;
   readonly visibility: "public";
   readonly parameters: readonly string[];
   readonly declarationKind?: "const" | "let" | "var";
@@ -55,6 +57,7 @@ const codeSymbolSchema = z.object({
   exported: z.boolean(),
   defaultExport: z.boolean(),
   async: z.boolean(),
+  anonymous: z.boolean(),
   visibility: z.literal("public"),
   parameters: z.array(z.string().min(1)),
   declarationKind: z.enum(["const", "let", "var"]).optional(),

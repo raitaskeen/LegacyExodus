@@ -240,6 +240,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       exported: context.exported,
       defaultExport: context.defaultExport,
       async: node.attributes.async === true,
+      anonymous: name.startsWith("anonymous-"),
       visibility: "public",
       parameters: [],
       containerName: context.containerName,

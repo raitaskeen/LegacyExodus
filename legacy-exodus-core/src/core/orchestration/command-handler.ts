@@ -216,7 +216,7 @@ export class AnalyzeProjectHandler {
       createStorageRecord("data-flow-analysis", {
         projectId: discovery.projectId,
         analysisRunId: command.id,
-        graphs: flow.dataFlowGraphs.map((graph) => ({ ...graph, definitions: graph.definitions.map((definition) => ({ ...definition })), uses: graph.uses.map((use) => ({ ...use })), defUseChains: graph.defUseChains.map((chain) => ({ ...chain, useIds: [...chain.useIds] })), lifetimes: graph.lifetimes.map((lifetime) => ({ ...lifetime, useIds: [...lifetime.useIds] })), taintFlows: graph.taintFlows.map((flow) => ({ ...flow, path: [...flow.path] })) })),
+        graphs: flow.dataFlowGraphs.map((graph) => ({ ...graph, definitions: graph.definitions.map((definition) => ({ ...definition })), uses: graph.uses.map((use) => ({ ...use })), defUseChains: graph.defUseChains.map((chain) => ({ ...chain, useIds: [...chain.useIds] })), lifetimes: graph.lifetimes.map((lifetime) => ({ ...lifetime, useIds: [...lifetime.useIds] })), taintFlows: graph.taintFlows.map((flow) => ({ ...flow, path: [...flow.path] })), interproceduralFlows: graph.interproceduralFlows.map((flow) => ({ ...flow })) })),
       }),
     );
     const knowledgeGraph = new DeterministicKnowledgeGraphBuilder().build(symbolTables, dependencyGraph);
