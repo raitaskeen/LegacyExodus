@@ -1,0 +1,620 @@
+<div align="center">
+  <picture>
+    <img src="docs/assets/branding/banner.png" alt="LegacyExodus Banner" width="100%">
+  </picture>
+
+  <h1>LegacyExodus</h1>
+  <p><strong>Enterprise-Grade Autonomous Software Modernization Platform</strong></p>
+
+  <p>
+    <a href="docs/community/CODE_OF_CONDUCT.md"><img src="https://img.shields.io/badge/Code_of_Conduct-purple?style=for-the-badge" alt="Code of Conduct"></a>
+    <a href="docs/development/contribution-guide.md"><img src="https://img.shields.io/badge/Contributing-blue?style=for-the-badge" alt="Contributing"></a>
+    <a href="docs/security/security-principles.md"><img src="https://img.shields.io/badge/Security-red?style=for-the-badge" alt="Security"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-BSD--3--Clause-success?style=for-the-badge" alt="BSD-3-Clause"></a>
+  </p>
+  <p>
+    <img src="https://img.shields.io/badge/Runtime-Bun_v1.0+-f9f8f6?style=for-the-badge&logo=bun" alt="Bun">
+    <img src="https://img.shields.io/badge/TypeScript-Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript Strict">
+    <img src="https://img.shields.io/badge/Target-Rust_/_Axum_/_SQLx-dea584?style=for-the-badge&logo=rust&logoColor=white" alt="Rust Target">
+    <img src="https://img.shields.io/badge/Architecture-CQRS_%7C_Event_Sourced-0f172a?style=for-the-badge" alt="CQRS">
+    <img src="https://img.shields.io/badge/Status-Phase_2.9_Active-success?style=for-the-badge" alt="Phase 2.9 Active">
+  </p>
+
+  <p>
+    <em>A knowledge-first engineering platform that systematically maps, documents, and safely transforms complex legacy software systems into memory-safe architectures.</em>
+  </p>
+</div>
+
+---
+
+## 1. Executive Vision
+
+Software modernization must be driven by rigorous deterministic understanding, not by blind, probabilistic code generation. 
+
+LegacyExodus is not a simple Large Language Model (LLM) wrapper, nor is it a basic AST transpiler. It is a **strictly typed, CQRS-based compiler pipeline**. It is designed to ingest massive, undocumented codebases, extract their underlying architectural knowledge, model their business behavior, and produce high-confidence migrations to memory-safe languages (like Rust) under strict human oversight.
+
+> **Principal Insight: The Epistemological Imperative** <br>
+> *Understand deterministically first. Transform probabilistically second. Verify cryptographically always.* <br>
+> Naive AI tools attempt to modernize software by predicting tokens. LegacyExodus modernizes software by reconstructing the mathematical and topological reality of the system *before* a single line of target code is generated. By treating migration as a continuous, verifiable engineering pipeline rather than a prompt-engineering trick, LegacyExodus preserves business logic, systematically eliminates technical debt, and maintains absolute developer trust.
+
+---
+
+## 2. The Legacy Crisis & The Pipeline Architecture
+
+Millions of mission-critical enterprise applications run on fragile, tightly coupled technology stacks. When attempting to modernize these systems, organizations increasingly turn to naive AI generation—feeding raw legacy files into an LLM and asking for a Rust/Go translation. 
+
+This approach fatally ignores the realities of enterprise software. It results in **topological hallucinations**, missed dependency graphs, and complete architectural failure because LLMs lack the global deterministic context of the application state. LegacyExodus completely decouples *comprehension* from *generation* via four heavily isolated architectural stages.
+
+### The Autonomous Architecture Flow
+
+```mermaid
+flowchart TD
+    subgraph Stage1 [Stage 1: VyrixScout — Discovery]
+        A[Untrusted Legacy Source Code] -->|Sandboxed Traversal| B(File Inventory & Manifests)
+        B -->|Static Dependency Mapping| C(Runtime Signals & Risk Seeds)
+    end
+
+    subgraph Stage2 [Stage 2: NolaraStruct — Understanding]
+        C -->|AST Extraction & Token Diet| D(Unified Intermediate Representation)
+        D -->|Symbol Resolution & CFG/DFG| E[(SQLite / Parquet Knowledge Graph)]
+    end
+
+    subgraph Stage3 [Stage 3: ZelvoxForge — Transformation]
+        E -->|Sanitized Context Slices| F(AI Gateway & Prompt Engine)
+        F -->|Multi-Agent Swarm| G[Draft Rust / Axum / SQLx Artifacts]
+    end
+
+    subgraph Stage4 [Stage 4: VymosGate — Verification & Governance]
+        G --> H(Isolated Compiler Sandbox)
+        H -->|cargo check / cargo test| I{Compilation & Tests Pass?}
+        I -->|Diagnostic Errors| J[Self-Healing Loop ──► RepairAgent]
+        J --> F
+        I -->|Pass| K[Human-in-the-Loop Approval]
+        K --> L[Validated Modern Production Software]
+    end
+```
+
+---
+
+## 3. The Four-Stage Modernization Pipeline
+
+LegacyExodus executes its migration via four distinct, strictly governed architectural stages.
+
+<table>
+  <thead>
+    <tr>
+      <th align="left" width="15%">Pipeline Stage</th>
+      <th align="left" width="15%">Codename</th>
+      <th align="left" width="50%">Primary Responsibility</th>
+      <th align="left" width="20%">Paradigm</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td align="left"><b>Stage 1</b></td>
+      <td align="left"><code>VyrixScout</code></td>
+      <td align="left"><b>Legacy Intelligence Discovery.</b> Maps physical boundaries, detects languages, maps static dependencies, and surfaces framework signals. It builds the initial immutable <code>ProjectState</code> without modifying source files.</td>
+      <td align="left"><img src="https://img.shields.io/badge/100%25-Deterministic-blue?style=flat-square" alt="100% Deterministic"></td>
+    </tr>
+    <tr>
+      <td align="left"><b>Stage 2</b></td>
+      <td align="left"><code>NolaraStruct</code></td>
+      <td align="left"><b>Knowledge Reconstruction.</b> Parses ASTs, extracts cross-file symbols, resolves import/export graphs, and discovers abstract business rules. Transforms raw syntax into a vendor-agnostic Knowledge Graph.</td>
+      <td align="left"><img src="https://img.shields.io/badge/100%25-Deterministic-blue?style=flat-square" alt="100% Deterministic"></td>
+    </tr>
+    <tr>
+      <td align="left"><b>Stage 3</b></td>
+      <td align="left"><code>ZelvoxForge</code></td>
+      <td align="left"><b>Modern Architecture Generation.</b> AI agents systematically plan architectures and generate modern code (Rust/Axum/SQLx) based <i>strictly</i> on the Knowledge Graph, never the raw source files.</td>
+      <td align="left"><img src="https://img.shields.io/badge/Governed-Probabilistic_(AI)-purple?style=flat-square" alt="Governed Probabilistic"></td>
+    </tr>
+    <tr>
+      <td align="left"><b>Stage 4</b></td>
+      <td align="left"><code>VymosGate</code></td>
+      <td align="left"><b>Verification & Governance.</b> Enforces Zero-Trust security, executes native compilation checks, runs automated testing, and acts as the Human-in-the-Loop (HITL) approval gate.</td>
+      <td align="left"><img src="https://img.shields.io/badge/100%25-Deterministic-blue?style=flat-square" alt="100% Deterministic"></td>
+    </tr>
+  </tbody>
+</table>
+
+---
+
+## 4. Deep Dive: The Understanding Phase (`NolaraStruct`)
+
+The true power of LegacyExodus lies not in how it writes code, but in how it *reads* it. Before probabilistic AI is ever engaged, the platform utilizes deterministic parsing to extract the core business logic of the enterprise.
+
+### Core Business Logic Extraction
+Legacy software hides critical business decisions (e.g., *"If the user has been active for 5 years, bypass the standard authorization check"*) inside deeply nested, undocumented, and fragile `if` statements scattered across multiple controllers. 
+
+If you feed this directly to an LLM, it attempts to recreate the exact syntactic mess in the new language. 
+
+`NolaraStruct` solves this by traversing the Abstract Syntax Tree (AST) and abstracting these conditionals into a semantic, mathematical model:
+
+1. **AST Token Diet:** Standard ASTs produce massive JSON payloads (e.g., 700 lines for 7 lines of code). NolaraStruct filters out noisy metadata (line numbers, loc, formatting, comments) to generate a clean, compressed Unified Intermediate Representation (UIR).
+2. **Symbol & Scope Tables:** Functions, classes, variables, and parameters are cataloged into relational tables, differentiating definitions from call-site occurrences.
+3. **Control & Data Flow Graphs (CFG/DFG):** Constructs directed graphs modeling state mutations, conditional branches, and data flows.
+4. **Pure `BusinessRule` Entities:** Extracts business invariants into schema-defined objects connecting preconditions, operations, and state side-effects.
+
+```text
+Source Code ──► Lexer/Parser ──► Token Diet ──► AST ──► CFG/DFG ──► BusinessRule Entity
+```
+
+---
+
+## 5. Deep Dive: Generation & The Autonomous Self-Healing Loop
+
+Once the system has been mapped deterministically, LegacyExodus engages its probabilistic AI swarms inside a strictly governed sandbox. 
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Z as ZelvoxForge (AI Swarm)
+    participant V as VymosGate (Compiler Sandbox)
+    participant C as Native Rust Toolchain (cargo)
+    participant R as RepairAgent (AI Heuristic)
+    participant H as Human Architect (HITL)
+
+    Z->>V: Submit Generated Rust Code (.rs crates)
+    V->>C: Execute cargo check & cargo test
+    alt Compilation / Test Failure
+        C-->>V: JSON Diagnostic Errors (e.g., E0382 borrow checker)
+        V->>R: Package Error Log + Faulty Code + AST Context
+        R->>Z: Generate Minimal Lifetime / Ownership Patch
+        Z->>V: Resubmit Patched Rust Code
+    else Compilation & Tests Pass (Exit Code 0)
+        C-->>V: Build Succeeded + Tests Green
+        V->>H: Request Human-in-the-Loop Review & Sign-Off
+        H-->>V: Cryptographic Approval Granted
+        V->>V: Commit to Production Artifacts
+    end
+```
+
+### Self-Healing Mechanics
+1. **Compilation Attempt:** `VymosGate` executes `cargo check` on generated Rust artifacts in an isolated sandbox.
+2. **Diagnostic Capture:** The native compiler captures structured JSON errors (e.g., borrow-checker conflicts, lifetime mismatches).
+3. **Feedback Routing:** `VymosGate` bundles the raw diagnostic, the failing code, and the upstream AST symbol coordinates.
+4. **Iterative Repair:** The `RepairAgent` analyzes the ownership defect and issues a targeted patch.
+5. **Success & Memory Retention:** The loop repeats until `cargo test` passes with exit code `0`. Successful repair patterns are permanently recorded in the repair knowledge base.
+
+---
+
+## 6. Core Engineering Paradigms
+
+To survive in an enterprise environment, LegacyExodus adheres to strict engineering constraints. We prioritize architectural purity, mathematical traceability, and deterministic safety over rapid prototyping.
+
+### 6.1 Domain-Driven Design (DDD): Ubiquitous Language
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           LEGACYEXODUS DOMAIN MAP                           │
+├──────────────────────────────────────┬──────────────────────────────────────┤
+│          THE ENGINE DOMAIN           │         THE WORKFLOW DOMAIN          │
+│       (Static System Knowledge)      │      (Stateful Execution Tasks)      │
+├──────────────────────────────────────┼──────────────────────────────────────┤
+│ Workspace                            │ Command                              │
+│ Root container for a migration run.  │ Imperative intent to execute action. │
+│                                      │                                      │
+│ Project                              │ Event                                │
+│ Discrete deployable codebase/unit.   │ Immutable fact of a state change.    │
+│                                      │                                      │
+│ File                                 │ MigrationTask                        │
+│ Physical source file with SHA-256.   │ Discrete unit of modernization work. │
+│                                      │                                      │
+│ Module                               │ Risk                                 │
+│ Logical namespace / module boundary. │ Flagged security or complexity item. │
+│                                      │                                      │
+│ Symbol                               │ ChangeSet                            │
+│ Function, Class, Interface, or Type. │ Multi-file atomic filesystem patch.  │
+│                                      │                                      │
+│ CodeSpan                             │ Diagnostic                           │
+│ Physical file coordinate (lines/cols)│ Native compiler output/error log.    │
+│                                      │                                      │
+│ Dependency                           │ Approval                             │
+│ Directed edge (import, call, query). │ Cryptographic human sign-off token.  │
+│                                      │                                      │
+│ Endpoint                             │ Checkpoint                           │
+│ Exposed REST/gRPC/GraphQL route.     │ Serialized snapshot for safe resume. │
+│                                      │                                      │
+│ BusinessRule                         │ PolicyResult                         │
+│ Pure logic extracted from syntax.    │ Deterministic pass/fail evaluation.  │
+└──────────────────────────────────────┴──────────────────────────────────────┘
+```
+
+### 6.2 CQRS & Hybrid Event Sourcing
+Agents and deterministic services **never** mutate state directly:
+
+```mermaid
+flowchart LR
+    A[Actor / Agent] -->|Issues| B[Command]
+    B -->|Zero-Trust Policy| C[Governance Engine]
+    C -->|Validated| D[Orchestrator Committer]
+    D -->|Append-Only| E[(Event Store .jsonl)]
+    E -->|Synchronous Reducers| F[(SQLite Projections)]
+    E -->|Async Broadcast| G[WebSocket / UI Views]
+    F -->|Read-Only| H[Queries]
+```
+
+### 6.3 The Canonical Message Envelope
+Every message crossing component or process boundaries enforces this strict TypeScript contract:
+
+```typescript
+export interface MessageEnvelope<T = unknown> {
+  /** Unique UUID v4 identifying the message */
+  readonly messageId: string;
+  
+  /** Qualified message type (e.g., "AnalyzeProjectCommand", "ProjectDiscovered") */
+  readonly messageType: string;
+  
+  /** SemVer contract version (e.g., "1.0.0") */
+  readonly messageVersion: string;
+  
+  /** ISO-8601 UTC timestamp */
+  readonly timestamp: string;
+  
+  /** Distributed tracing identifier spanning the entire migration run */
+  readonly correlationId: string;
+  
+  /** Identifier of the parent message that directly triggered this message */
+  readonly causationId: string;
+  
+  /** Optional tenant or organization identifier for multi-tenant isolation */
+  readonly tenantId?: string;
+  
+  /** Identity of the originating service or human operator */
+  readonly actor: string;
+  
+  /** Strongly typed, Zod-validated payload */
+  readonly payload: T;
+}
+```
+
+---
+
+## 7. Component Map & Control Plane
+
+```mermaid
+flowchart TD
+    CLI[CLI / API Layer] -->|Commands| ORCH[Orchestrator Control Plane]
+    
+    subgraph Deterministic Services
+        ORCH --> DISC[Discovery Service]
+        ORCH --> PARS[Parser Service]
+        ORCH --> GRAPH[Graph Service]
+        ORCH --> KNOW[Knowledge Service]
+        ORCH --> COMP[Compiler Service]
+    end
+
+    subgraph Intelligence & Safety
+        KNOW -->|Sanitized Slices| AIGW[AI Gateway]
+        AIGW --> SWARM[AI Agent Swarm]
+        SWARM -->|Proposals| GOV[Governance Engine]
+    end
+
+    COMP --> GOV
+    GOV -->|Validated Events| STOR[Storage Service]
+    STOR -->|State Projections| ORCH
+```
+
+### Component Responsibility & Ownership Matrix
+
+| Component | Primary Ownership | Secondary Stakeholder | Core Responsibilities |
+|---|---|---|---|
+| **CLI** | Platform DX | Core Platform | Ingests user commands, parses flags, displays live progress DAGs, renders diffs, and manages exit codes. |
+| **Orchestrator** | Core Platform | Architecture Governance | Central execution brain. Manages stage progression, task queues, retries, stateful checkpoints, and OCC event commits. |
+| **Discovery Service** | Static Analysis | Core Modeling | Sandboxed directory traversal, language fingerprinting, dependency discovery, and `.discovery/*.json` projection. |
+| **Parser Service** | Language Infrastructure | Static Analysis | AST parsing, token extraction, "Token Diet" metadata stripping, and UIR generation. |
+| **Graph Service** | Core Modeling | Governance | Builds dependency graphs, call hierarchies, circularity detection, and blast-radius impact queries. |
+| **Knowledge Service** | Architecture Intelligence | Governance | Aggregates symbols, graph slices, and business rules into scoped context bundles with full provenance chains. |
+| **AI Gateway** | AI Platform & Safety | Security | Zero-Trust LLM proxy. Performs prompt assembly, secret redaction, token budgeting, model routing, and output schema validation. |
+| **Compiler Service** | Language Infrastructure | Build & Toolchain | Interfaces with native compiler toolchains (`cargo check`, `cargo test`, `clippy`) inside isolated sandboxes. |
+| **Governance Engine** | Architecture Governance | Security | Evaluates deterministic security rules, SAST policies, risk scoring, and Human-in-the-Loop approval gates. |
+| **Storage Service** | Data Platform | Reliability Engineering | System-of-record. Manages append-only `.jsonl` logs, SQLite projections, Parquet graphs, and content-addressed artifact blobs. |
+
+---
+
+## 8. Non-Negotiable Security Architecture & Compliance Matrix
+
+### 8.1 The Master Trust Boundary
+```text
+Untrusted Legacy Code ──► Sandbox ──► Parser ──► Knowledge Model ──► AI Gateway
+```
+*No transformation engine, agent, or service may consume raw legacy source code directly or bypass intermediate governance boundaries.*
+
+### 8.2 Boundary Compliance Matrix
+
+<table>
+  <thead>
+    <tr>
+      <th align="left">Boundary</th>
+      <th align="left">Allowed Input</th>
+      <th align="left">Required Controls</th>
+      <th align="left">Must-Fail Conditions</th>
+      <th align="left">Required Audit Events</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><b>Untrusted Code $\to$ Sandbox</b></td>
+      <td>Raw files, archives, repositories</td>
+      <td>File allowlist, size limits, bomb detection, network egress deny</td>
+      <td>Path traversal (<code>../</code>), expansion bombs, disallowed files</td>
+      <td><code>sandbox.intake.started</code><br><code>sandbox.intake.blocked</code><br><code>sandbox.intake.completed</code></td>
+    </tr>
+    <tr>
+      <td><b>Sandbox $\to$ Parser</b></td>
+      <td>Read-only sandbox artifacts</td>
+      <td>Process isolation, read-only mounts, CPU/RAM/time quotas</td>
+      <td>Outbound network attempts, memory exhaustion, timeout</td>
+      <td><code>parser.run.started</code><br><code>parser.run.failed</code><br><code>parser.run.completed</code></td>
+    </tr>
+    <tr>
+      <td><b>Parser $\to$ Knowledge Model</b></td>
+      <td>Parsed IR + provenance metadata</td>
+      <td>Strict schema validation, hash chaining, taint propagation</td>
+      <td>Missing provenance, schema mismatch, broken symbol links</td>
+      <td><code>km.ingest.started</code><br><code>km.ingest.rejected</code><br><code>km.ingest.completed</code></td>
+    </tr>
+    <tr>
+      <td><b>Knowledge Model $\to$ AI Gateway</b></td>
+      <td>Sanitized, policy-approved context slices</td>
+      <td>Field-level redaction, secret/PII filtering, prompt token budgets</td>
+      <td>Secret/token detection, policy deny, missing redaction receipt</td>
+      <td><code>aigw.request.blocked</code><br><code>aigw.request.redacted</code><br><code>aigw.request.sent</code></td>
+    </tr>
+    <tr>
+      <td><b>AI Gateway $\to$ Downstream</b></td>
+      <td>Structured model response</td>
+      <td>Schema validation, tool allowlist, confidence scoring</td>
+      <td>Invalid schema, disallowed tool call, confidence &lt; threshold</td>
+      <td><code>aigw.response.rejected</code><br><code>aigw.response.accepted</code></td>
+    </tr>
+    <tr>
+      <td><b>ZelvoxForge $\to$ VymosGate</b></td>
+      <td>Candidate transforms + trace maps</td>
+      <td>Signed bundles, memory-safety verification, compiler checks</td>
+      <td>Missing trace map, borrow-check failure, test regression</td>
+      <td><code>forge.bundle.created</code><br><code>gate.validation.failed</code><br><code>gate.validation.passed</code></td>
+    </tr>
+  </tbody>
+</table>
+
+---
+
+## 9. The AI Constitution & Governed Intelligence Model
+
+AI operates strictly as an advisory cognitive worker, never as an authoritative controller.
+
+$$\text{Deterministic Core} + \text{Probabilistic Intelligence} = \text{Controlled AI System}$$
+
+```
+AI Suggestion ──► Evidence Collection ──► Schema Validation ──► HITL Approval ──► Execution
+```
+
+### The 16 Invariant AI Engineering Rules
+1. **Never assume the cause of an observed failure without concrete evidence.**
+2. **Never redesign architecture based solely on intuition.**
+3. **Never remove validation merely to make tests pass.**
+4. **Never weaken schemas to accommodate malformed or unexpected data.**
+5. **Never introduce speculative abstractions without a concrete, immediate need.**
+6. **Every control-flow change requires dedicated regression tests.**
+7. **Every data-flow change requires dedicated regression tests.**
+8. **Mathematical and graph algorithms must have invariant-based test coverage.**
+9. **Performance claims must be benchmarked and measured.**
+10. **Memory and resource claims must be empirically verified via instrumentation.**
+11. **Passing tests do not automatically prove semantic correctness.**
+12. **No AI agent may declare a milestone, task, or phase complete.**
+13. **The repository, test suites, benchmarks, and explicit acceptance criteria are the sole authorities.**
+14. **Preserve existing runtime behavior unless the task explicitly mandates a change.**
+15. **Prefer small, reviewable, incremental pull requests over massive rewrites.**
+16. **When uncertain, report the uncertainty explicitly rather than inventing behavior.**
+
+---
+
+## 10. Plugin-First Extension Architecture
+
+LegacyExodus uses a **stable core** extended via **isolated, contract-first plugins**.
+
+```
+                                  Stable Core
+                                       │
+                                Plugin Interface
+                                       │
+    ┌──────────────────┬───────────────┼───────────────┬──────────────────┐
+    ▼                  ▼               ▼               ▼                  ▼
+Parser Plugins    Migration       AI Provider       Storage           Validation
+ (JS, TS, PHP,    Strategies        Plugins         Plugins            Plugins
+  Python, Java)  (Decomposition) (Local/Cloud)   (Postgres/Parquet) (Security/SAST)
+```
+
+### Mandatory Plugin Manifest Contract
+Every plugin must supply a versioned, machine-readable manifest (`plugin.json`):
+
+```json
+{
+  "name": "express-to-axum-strategy",
+  "version": "1.0.0",
+  "type": "migration-strategy",
+  "contractVersion": "1",
+  "capabilities": [
+    "route-mapping",
+    "middleware-synthesis",
+    "sqlx-query-generation"
+  ],
+  "permissions": {
+    "filesystem": "read:sandbox-input",
+    "network": "deny",
+    "secrets": "none"
+  }
+}
+```
+
+---
+
+## 11. Data Flow, Storage Architecture, & Checkpoints
+
+```mermaid
+flowchart LR
+    A[(Legacy Repo)] --> B[VyrixScout]
+    B --> C[inventory.json]
+    C --> D[NolaraStruct]
+    D --> E[(UIR & Knowledge Graph)]
+    E --> F[ZelvoxForge]
+    F --> G[Rust Crates + Trace Map]
+    G --> H[VymosGate Sandbox]
+    H --> I[(Validated Production Rust)]
+
+    subgraph Durable Stores
+        J[(Event Store .jsonl)]
+        K[(SQLite Projections)]
+        L[(Parquet KG Store)]
+        M[(Artifact Store)]
+    end
+
+    B -.-> J
+    D -.-> L
+    F -.-> M
+    H -.-> K
+```
+
+### Primary Storage Tiers
+1. **Event Store:** Append-only `.jsonl` files (the ground truth for all state transitions).
+2. **Artifact Store:** Content-addressed, hash-verified immutable files and code bundles.
+3. **Knowledge Graph Store:** Parquet and SQLite databases for node/edge relationship queries.
+4. **Operational Metadata Store:** Task queues, locks, retries, and approval states.
+5. **Projection Store:** Query-optimized SQLite read models for CLI, API, and UI queries.
+
+### Resumable Checkpoints
+Checkpoints are created atomically at:
+- Run initialization
+- Stage completion boundaries
+- Pre- and post-high-risk transformation batches
+- Pre-validation gate execution
+
+Resuming a run loads the latest valid checkpoint, verifies artifact hashes, rebuilds in-memory projections up to the event sequence watermark, and re-queues incomplete tasks without re-executing completed stages.
+
+---
+
+## 12. Failure Recovery & Scalability Strategy
+
+### 12.1 Failure Classification & Handling
+
+| Failure Domain | Examples | Recovery Strategy |
+|---|---|---|
+| **Transient Infrastructure** | Network timeout, rate limits, queue lease expiry | Bounded retry with exponential backoff + jitter. |
+| **Deterministic Processing** | Parser crash, schema mismatch, invariant violation | Fail-fast $\to$ Dead-Letter Queue (DLQ) quarantine $\to$ Operator triage. |
+| **Resource Exhaustion** | Out of Memory (OOM), CPU throttling | Rebalance resources $\to$ Route to constrained recovery worker tier. |
+| **Human / Governance Gated** | Approval timeout, risk policy rejection | Pause pipeline $\to$ Emit `EscalationRaised` $\to$ Await HITL decision. |
+
+### 12.2 Capacity Classes & Worker Pools
+Worker pools scale horizontally and independently:
+- **`vyrixscout-workers`:** Fast directory traversal and I/O intake.
+- **`nolara-parse-workers`:** CPU-bound parsing, Token Diet, and AST reduction.
+- **`zelvox-transform-workers`:** Network-bound LLM routing and Rust synthesis.
+- **`vymos-verify-workers`:** CPU-bound sandboxed native compilation and test sharding.
+
+```text
+Class S (Small)     ──► Single-module tools and small utility repositories.
+Class M (Medium)    ──► Standard backend services with moderate graph complexity.
+Class L (Large)     ──► Enterprise services with deep dependency DAGs.
+Class XL (Monorepo) ──► Enterprise monorepos with multi-tenant namespace partitioning.
+```
+
+---
+
+## 13. Technology Stack Decisions & Tradeoffs
+
+```text
+┌────────────────────────┬────────────────────────────────────────────────────────┐
+│ Layer                  │ Technology Selection & Rationale                       │
+├────────────────────────┼────────────────────────────────────────────────────────┤
+│ Core Engine & CLI      │ Bun v1.0+ + TypeScript (Strict Mode)                   │
+│                        │ • Ultra-fast I/O, native TS execution, embedded SQLite │
+├────────────────────────┼────────────────────────────────────────────────────────┤
+│ Target Modernization   │ Rust + Axum + SQLx                                     │
+│                        │ • Guaranteed memory safety, fearless concurrency,      │
+│                        │   zero-cost abstractions, compile-time SQL verification│
+├────────────────────────┼────────────────────────────────────────────────────────┤
+│ Operator Console       │ React + Vite + Tailwind CSS                            │
+│                        │ • Fast local rendering for complex ASTs and DAG graphs │
+├────────────────────────┼────────────────────────────────────────────────────────┤
+│ Validation & Contracts │ OpenAPI + Zod (Strict runtime schema boundaries)       │
+├────────────────────────┼────────────────────────────────────────────────────────┤
+│ Persistence Stores     │ Append-only .jsonl (Events), SQLite / Postgres         │
+│                        │ (Projections), Parquet (Knowledge Graph)               │
+├────────────────────────┼────────────────────────────────────────────────────────┤
+│ Observability          │ OpenTelemetry-compatible tracing, Pino logging         │
+└────────────────────────┴────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 14. Multi-AI Operating Framework & Role Division
+
+To maintain engineering discipline and prevent AI drift across sessions:
+
+```mermaid
+flowchart TD
+    A[Taskeen Haider — Chief Architect] -->|Specifications & ADR Decisions| B[Primary Builder: Codex / Gemini]
+    B -->|Code, Tests, Diff| C[GitHub Repository — Single Source of Truth]
+    
+    C -->|Repository Context| D[Claude Free — Adversarial Reviewer]
+    C -->|Local Completions| E[Copilot — IDE Acceleration]
+    
+    D -->|Counterexamples & Edge Cases| B
+    B -->|Verify & Fix| F{Quality Gate: typecheck + test + diff}
+    F -->|Green Pass| A
+```
+
+1. **Chief Architect (Taskeen):** Sets specifications, reviews architecture, resolves tradeoffs, and signs off on pull requests.
+2. **Primary Builder (Codex / Gemini):** Inspects the repository, implements minimal idiomatic code, and writes regression tests.
+3. **Adversarial Reviewer (Claude Free):** Analyzes diffs strictly to attack the code, finding counterexamples, mathematical inaccuracies, and unhandled edge cases without writing feature code.
+4. **IDE Acceleration (Copilot):** Provides local autocomplete, repetitive interface/schema boilerplate, and small edits.
+5. **Canonical Repository:** The GitHub repository is the sole permanent memory and source of truth.
+
+---
+
+## 15. Quality Gate & Definition of Done
+
+No milestone or pull request is accepted based on AI claims. Every change must pass the non-negotiable quality gate:
+
+```bash
+# 1. Strict static type checking
+bun run typecheck
+
+# 2. Comprehensive test suite execution
+bun test
+
+# 3. Git whitespace and format verification
+git diff --check
+```
+
+### Definition of Done Checklist
+- [ ] **Problem Scope Documented:** Boundaries, contracts, and failure modes explicitly defined.
+- [ ] **No Speculative Code:** Implementation solves verified requirements without premature abstractions.
+- [ ] **100% Strict Typing:** Zero `any` types permitted; all boundary inputs validated with Zod.
+- [ ] **Regression & Invariant Tests:** Unit tests, mathematical invariant tests, and edge-case coverage pass.
+- [ ] **Traceability Preserved:** Emitted artifacts maintain lineage links and input hashes.
+- [ ] **Fail-Closed Security:** Sandboxing, secret redaction, and prompt isolation verified.
+- [ ] **Quality Gate Green:** `bun run typecheck`, `bun test`, and `git diff --check` return exit code `0`.
+- [ ] **Architect Sign-Off:** Human review completed and committed to Git history.
+
+---
+
+### Recent Contributions
+
+<div align="center">
+  <a href="https://github.com/raitaskeen/LegacyExodus/graphs/contributors">
+    <img src="https://repobeats.axiom.co/api/embed/ad6cb9c1edcc45f447fc783b17ebbc8c483e178a.svg" alt="Repobeats analytics image" />
+  </a>
+</div>
+
+---
+
+## License
+
+LegacyExodus is open-source software licensed under the **[BSD-3-Clause License](LICENSE)**.
+
+<div align="center">
+  <br>
+  <i>Built for the future of software engineering.</i>
+</div>
