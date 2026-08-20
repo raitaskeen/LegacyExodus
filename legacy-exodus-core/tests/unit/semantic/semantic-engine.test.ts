@@ -40,8 +40,20 @@ describe("DeterministicSemanticAnalysisEngine", () => {
     expect(analysis.deadCode.some((finding) => finding.name === "unused")).toBe(true);
     expect(analysis.entryPoints.some((entry) => entry.filePath === "src/server.js")).toBe(true);
     expect(analysis.routes).toEqual([expect.objectContaining({ filePath: "src/server.js", method: "GET", path: "/books" })]);
+    expect(analysis.routes[0]?.state).toBe("CONFIRMED");
     expect(analysis.middlewareChains).toEqual([expect.objectContaining({ filePath: "src/server.js", middleware: ["authenticate"] })]);
     expect(analysis.calls.map((call) => call.id)).toEqual([...analysis.calls].map((call) => call.id).sort());
     expect(Object.isFrozen(analysis)).toBe(true);
+  });
+
+  test("requires an Express app or router receiver before recording routes", async (): Promise<void> => {
+    const parser = new JavaScriptParser();
+    const source = "const axios = createClient(); const customClient = createClient(); axios.get('/remote'); customClient.post('/books'); cache.get('book');";
+    const ast = (await parser.parse({ file: { id: "clients", path: "src/clients.js", language: "javascript", size: source.length }, source })).result;
+    const symbols = new JavaScriptSymbolExtractor().extract(ast);
+    const graph = new DeterministicDependencyGraphBuilder().build([symbols], [{ id: "clients", path: "src/clients.js", language: "javascript", size: 1 }]);
+    const analysis = new DeterministicSemanticAnalysisEngine().analyze({ astResults: [ast], dependencyGraph: graph, symbolTables: [symbols] });
+
+    expect(analysis.routes).toEqual([]);
   });
 });

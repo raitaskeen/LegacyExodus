@@ -1,8 +1,10 @@
 ## Security Architecture Compliance Matrix
 
+> **Target-state design, not current enforcement.** The current engine performs deterministic local static analysis and does not implement a sandbox, AI Gateway, secret redaction, tenant isolation, archive-bomb defense, malware scanning, or hosted execution controls. The controls below are mandatory requirements for those planned subsystems.
+
 This section converts the trust-boundary architecture into enforceable controls, required evidence, and fail-closed rules.
 
-### Trust Boundary (Normative)
+### Target Trust Boundary (Normative for Future Implementations)
 
 All processing in LegacyExodus **MUST** follow this sequence:
 

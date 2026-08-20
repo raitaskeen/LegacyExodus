@@ -31,6 +31,7 @@ export class JavaScriptParser implements Parser {
   }
 
   public async parse(request: ParseRequest): Promise<ParseResponse> {
+    const startedAt = performance.now();
     try {
       const parsedFile = parse(request.source, {
         ...javascriptParserOptions,
@@ -47,7 +48,7 @@ export class JavaScriptParser implements Parser {
           },
           root: mapping.node,
           statistics: {
-            durationMs: 0,
+            durationMs: performance.now() - startedAt,
             nodeCount: mapping.nodeCount,
           },
           warnings: [],
@@ -64,7 +65,7 @@ export class JavaScriptParser implements Parser {
           },
           root: createEmptyProgram(),
           statistics: {
-            durationMs: 0,
+            durationMs: performance.now() - startedAt,
             nodeCount: 1,
           },
           warnings: [],

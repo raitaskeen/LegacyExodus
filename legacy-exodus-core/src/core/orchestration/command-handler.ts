@@ -11,7 +11,7 @@ import type {
 } from "@contracts/events";
 import { createDomainEvent, type DomainEvent } from "@core/events/domain-event";
 import { DiscoveryEngine, type DiscoveryResult } from "@discovery/index";
-import { DeterministicDependencyGraphBuilder } from "@graph/index";
+import { DeterministicDependencyGraphBuilder, ModuleResolver, type ModuleResolutionOptions } from "@graph/index";
 import { DeterministicFlowAnalysisEngine } from "@flow/index";
 import { DeterministicKnowledgeGraphBuilder } from "@knowledge/index";
 import { readFile } from "node:fs/promises";
@@ -174,7 +174,9 @@ export class AnalyzeProjectHandler {
       );
     }
 
-    const dependencyGraph = new DeterministicDependencyGraphBuilder().build(symbolTables, discovery.files);
+    const dependencyGraph = new DeterministicDependencyGraphBuilder(
+      new ModuleResolver(await readPathAliases(discovery.projectPath)),
+    ).build(symbolTables, discovery.files);
     records.push(
       createStorageRecord("dependency-graph", {
         projectId: discovery.projectId,
@@ -231,6 +233,20 @@ export class AnalyzeProjectHandler {
 
     return { events: Object.freeze(events), records: Object.freeze(records), discovery };
   }
+}
+
+async function readPathAliases(projectPath: string): Promise<ModuleResolutionOptions> {
+  try {
+    const parsed: unknown = JSON.parse(await readFile(resolve(projectPath, "tsconfig.json"), "utf8"));
+    if (typeof parsed !== "object" || parsed === null || !("compilerOptions" in parsed)) return {};
+    const compilerOptions = (parsed as { readonly compilerOptions: unknown }).compilerOptions;
+    if (typeof compilerOptions !== "object" || compilerOptions === null) return {};
+    const options = compilerOptions as { readonly baseUrl?: unknown; readonly paths?: unknown };
+    const paths = typeof options.paths === "object" && options.paths !== null
+      ? Object.fromEntries(Object.entries(options.paths).flatMap(([key, targets]) => Array.isArray(targets) && targets.every((target) => typeof target === "string") ? [[key, Object.freeze([...targets].sort())]] : []))
+      : undefined;
+    return { ...(typeof options.baseUrl === "string" ? { baseUrl: options.baseUrl } : {}), ...(paths === undefined ? {} : { paths }) };
+  } catch { return {}; }
 }
 
 function getErrorCode(error: unknown): string {

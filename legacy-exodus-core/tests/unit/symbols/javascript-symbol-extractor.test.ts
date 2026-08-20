@@ -78,4 +78,15 @@ describe("JavaScriptSymbolExtractor", () => {
     expect(exports.map((symbol) => symbol.sourceSymbolName)).toEqual(["foo", "bar"]);
     expect(exports.map((symbol) => symbol.moduleSpecifier)).toEqual(["./source", "./source"]);
   });
+
+  test("represents variable-assigned arrow and function expressions as named functions", async (): Promise<void> => {
+    const parser = new JavaScriptParser();
+    const source = "const handler = async (value) => value; const Component = (props) => props; const legacy = function (item) { return item; };";
+    const table = new JavaScriptSymbolExtractor().extract((await parser.parse(createRequest(source))).result);
+    const functions = table.symbols.filter((symbol) => symbol.kind === "function");
+
+    expect(functions.map((symbol) => symbol.name)).toEqual(["handler", "Component", "legacy"]);
+    expect(functions.map((symbol) => symbol.parameters)).toEqual([["value"], ["props"], ["item"]]);
+    expect(functions.every((symbol) => !symbol.anonymous)).toBe(true);
+  });
 });

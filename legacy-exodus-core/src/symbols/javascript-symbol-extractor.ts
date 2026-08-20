@@ -143,6 +143,13 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
             ...(value === undefined ? {} : { value }),
           }),
         );
+        const initializer = declarator.children.find((child) => child.role === "init");
+        if (initializer !== undefined && isAssignedFunction(initializer)) {
+          symbols.push(this.createSymbol("function", name, initializer, ast, context, {
+            parameters: getParameters(initializer),
+            anonymous: false,
+          }));
+        }
       }
     }
   }
@@ -349,4 +356,8 @@ function readLiteralInitializer(node: ASTNode): string | number | boolean | null
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean" || value === null
     ? value
     : undefined;
+}
+
+function isAssignedFunction(node: ASTNode): boolean {
+  return node.type === "ArrowFunctionExpression" || node.type === "FunctionExpression";
 }

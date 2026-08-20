@@ -12,6 +12,19 @@ const files: readonly FileArtifact[] = [
 ];
 
 describe("ModuleResolver", () => {
+  test("resolves explicit and wildcard TypeScript path aliases without resolving packages", (): void => {
+    const resolver = new ModuleResolver({ baseUrl: "src", paths: { "@/*": ["*"], "@services/*": ["services/*"], "external": ["missing"] } });
+    const files = [
+      { id: "api", path: "src/api.ts", language: "typescript", size: 1 },
+      { id: "service", path: "src/services/users.ts", language: "typescript", size: 1 },
+    ] as const;
+
+    expect(resolver.resolve("src/main.ts", "@/api", files).resolvedPath).toBe("src/api.ts");
+    expect(resolver.resolve("src/main.ts", "@services/users", files).resolvedPath).toBe("src/services/users.ts");
+    expect(resolver.resolve("src/main.ts", "express", files).resolvedPath).toBeNull();
+    expect(resolver.resolve("src/main.ts", "external", files).resolvedPath).toBeNull();
+  });
+
   test("resolves relative paths, extensions, and directory index modules deterministically", (): void => {
     const resolver = new ModuleResolver();
 
