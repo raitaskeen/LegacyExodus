@@ -1,22 +1,26 @@
 import { createHash } from "node:crypto";
 import type { ASTNode, ASTResult } from "@parser/index";
-import { createDataFlowGraph, type DataFlowGraph, type InterproceduralFlow, type TaintFlow, type VariableDefinition, type VariableUse } from "./flow-contracts";
+import type { CodeSymbol } from "@symbols/index";
+import { createDataFlowGraph, createProvenCallTargets, type CallFlowBinding, type DataFlowGraph, type FunctionFlowSummary, type InterproceduralFlow, type ProvenCallTarget, type TaintFlow, type VariableDefinition, type VariableUse } from "./flow-contracts";
 
 interface Scope { readonly parent?: Scope; readonly definitions: Map<string, VariableDefinition>; }
-interface FunctionRecord { readonly name: string; readonly node: ASTNode; readonly parameters: VariableDefinition[]; readonly returns: VariableDefinition[]; }
-interface PendingCall { readonly id: string; readonly callee: FunctionRecord; readonly argumentDefinitionIds: readonly (string | undefined)[]; readonly argumentSourceIds: readonly (string | undefined)[]; readonly receiverDefinitionId?: string; }
+interface FunctionRecord { readonly name: string; readonly node: ASTNode; readonly parameters: VariableDefinition[]; readonly returns: VariableDefinition[]; readonly symbolId?: string; }
+interface PendingCall { readonly id: string; readonly targetSymbolId?: string; readonly callee?: FunctionRecord; readonly argumentDefinitionIds: readonly (string | undefined)[]; readonly argumentSourceIds: readonly (string | undefined)[]; readonly receiverDefinitionId?: string; }
 interface TaintTransfer { readonly sourceDefinitionId: string; readonly targetDefinitionId: string; }
 interface PendingSink { readonly id: string; readonly name: string; readonly argumentDefinitionIds: readonly string[]; }
-interface FlowState { readonly definitions: VariableDefinition[]; readonly uses: VariableUse[]; readonly taintPaths: Map<string, Map<string, readonly string[]>>; readonly transfers: TaintTransfer[]; readonly sinks: PendingSink[]; readonly functions: Map<ASTNode, FunctionRecord>; readonly resolvableFunctions: Map<string, FunctionRecord>; readonly pendingCalls: PendingCall[]; readonly interproceduralFlows: InterproceduralFlow[]; }
+interface FlowState { readonly definitions: VariableDefinition[]; readonly uses: VariableUse[]; readonly taintPaths: Map<string, Map<string, readonly string[]>>; readonly transfers: TaintTransfer[]; readonly sinks: PendingSink[]; readonly functions: Map<ASTNode, FunctionRecord>; readonly resolvableFunctions: Map<string, FunctionRecord>; readonly functionsBySymbolId: Map<string, FunctionRecord>; readonly provenTargets: ReadonlyMap<string, ProvenCallTarget>; readonly hasSemanticResolution: boolean; readonly pendingCalls: PendingCall[]; readonly interproceduralFlows: InterproceduralFlow[]; }
 
 const sources = new Set(["process.env", "req.body", "req.params", "req.query"]);
 const sinks = new Set(["child_process.exec", "exec", "res.send", "res.json"]);
 const sanitizers = new Set(["validator.escape"]);
 
 export class DeterministicDataFlowGraphBuilder {
-  public build(ast: ASTResult): DataFlowGraph {
-    const state: FlowState = { definitions: [], uses: [], taintPaths: new Map(), transfers: [], sinks: [], functions: collectFunctions(ast.root), resolvableFunctions: new Map(), pendingCalls: [], interproceduralFlows: [] };
+  public build(ast: ASTResult, provenCallTargets?: readonly ProvenCallTarget[], symbols: readonly CodeSymbol[] = []): DataFlowGraph {
+    const functions = collectFunctions(ast.root, symbols);
+    const targets = provenCallTargets === undefined ? undefined : createProvenCallTargets(provenCallTargets);
+    const state: FlowState = { definitions: [], uses: [], taintPaths: new Map(), transfers: [], sinks: [], functions, resolvableFunctions: new Map(), functionsBySymbolId: new Map(), provenTargets: new Map((targets ?? []).map((target) => [callLocationKey(target.sourceFilePath, target.location), target])), hasSemanticResolution: targets !== undefined, pendingCalls: [], interproceduralFlows: [] };
     for (const record of state.functions.values()) if (record.name.length > 0 && [...state.functions.values()].filter((candidate) => candidate.name === record.name).length === 1) state.resolvableFunctions.set(record.name, record);
+    for (const record of state.functions.values()) if (record.symbolId !== undefined) state.functionsBySymbolId.set(record.symbolId, record);
     this.visit(ast.root, createScope(), ast.metadata.sourcePath, state);
     this.connectCalls(state);
     this.propagateTaint(state);
@@ -28,6 +32,8 @@ export class DeterministicDataFlowGraphBuilder {
       lifetimes: definitions.map((definition) => ({ name: definition.name, filePath: definition.filePath, declarationId: definition.id, useIds: uses.filter((use) => use.definitionId === definition.id).map((use) => use.id).sort() })),
       taintFlows: this.taintFlows(state),
       interproceduralFlows: state.interproceduralFlows.sort(byId),
+      functionSummaries: functionSummaries(state, ast.metadata.sourcePath),
+      callBindings: callBindings(state),
     });
   }
 
@@ -85,8 +91,9 @@ export class DeterministicDataFlowGraphBuilder {
   private call(node: ASTNode, scope: Scope, filePath: string, state: FlowState, receiverDefinitionId?: string): void {
     const callee = node.children.find((child) => child.role === "callee"); const name = memberPath(callee) ?? identifierName(callee);
     const argumentsNodes = node.children.filter((child) => child.role === "arguments"); for (const argument of argumentsNodes) this.visit(argument, scope, filePath, state);
-    const resolved = resolveFunction(name, state.resolvableFunctions);
-    if (resolved !== undefined) state.pendingCalls.push({ id: hash(`call:${filePath}:${name}:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`), callee: resolved, argumentDefinitionIds: argumentsNodes.map((argument) => this.definitionFor(argument, scope)?.id), argumentSourceIds: argumentsNodes.map((argument) => this.source(argument, filePath)), ...(receiverDefinitionId === undefined ? {} : { receiverDefinitionId }) });
+    const proven = node.location === undefined ? undefined : state.provenTargets.get(callLocationKey(filePath, node.location.start));
+    const resolved = state.hasSemanticResolution ? (proven === undefined ? undefined : state.functionsBySymbolId.get(proven.targetSymbolId)) : resolveFunction(name, state.resolvableFunctions);
+    if (resolved !== undefined || proven !== undefined) state.pendingCalls.push({ id: proven?.callId ?? hash(`call:${filePath}:${name}:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`), ...(proven === undefined ? {} : { targetSymbolId: proven.targetSymbolId }), ...(resolved === undefined ? {} : { callee: resolved }), argumentDefinitionIds: argumentsNodes.map((argument) => this.definitionFor(argument, scope)?.id), argumentSourceIds: argumentsNodes.map((argument) => this.source(argument, filePath)), ...(receiverDefinitionId === undefined ? {} : { receiverDefinitionId }) });
     if (name === undefined || !sinks.has(name)) return;
     state.sinks.push({ id: hash(`sink:${filePath}:${name}:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`), name, argumentDefinitionIds: argumentsNodes.flatMap((argument) => { const definition = this.definitionFor(argument, scope); return definition === undefined ? [] : [definition.id]; }) });
   }
@@ -95,12 +102,12 @@ export class DeterministicDataFlowGraphBuilder {
   private connectCalls(state: FlowState): void {
     for (const call of state.pendingCalls.sort(byId)) {
       for (const [index, argumentDefinitionId] of call.argumentDefinitionIds.entries()) {
-        const parameter = call.callee.parameters[index];
+        const parameter = call.callee?.parameters[index];
         if (argumentDefinitionId !== undefined && parameter !== undefined) this.addInterproceduralFlow(state, call.id, "argument-to-parameter", argumentDefinitionId, parameter.id);
         const sourceId = call.argumentSourceIds[index];
         if (sourceId !== undefined && parameter !== undefined) this.setTaintPath(state, parameter.id, sourceId, [sourceId, parameter.id]);
       }
-      if (call.receiverDefinitionId !== undefined) for (const returned of call.callee.returns) this.addInterproceduralFlow(state, call.id, "return-to-receiver", returned.id, call.receiverDefinitionId);
+      if (call.receiverDefinitionId !== undefined) for (const returned of call.callee?.returns ?? []) this.addInterproceduralFlow(state, call.id, "return-to-receiver", returned.id, call.receiverDefinitionId);
     }
     for (const flow of state.interproceduralFlows) state.transfers.push({ sourceDefinitionId: flow.sourceDefinitionId, targetDefinitionId: flow.targetDefinitionId });
   }
@@ -146,7 +153,7 @@ export class DeterministicDataFlowGraphBuilder {
 }
 
 function createScope(parent?: Scope): Scope { return { parent, definitions: new Map() }; }
-function collectFunctions(root: ASTNode): Map<ASTNode, FunctionRecord> { const records = new Map<ASTNode, FunctionRecord>(); const visit = (node: ASTNode): void => { if (isFunction(node)) { const name = functionName(node); if (name !== undefined) records.set(node, { name, node, parameters: [], returns: [] }); } for (const child of node.children) visit(child); }; visit(root); return records; }
+function collectFunctions(root: ASTNode, symbols: readonly CodeSymbol[]): Map<ASTNode, FunctionRecord> { const records = new Map<ASTNode, FunctionRecord>(); const visit = (node: ASTNode): void => { if (isFunction(node)) { const name = functionName(node); if (name !== undefined) { const symbol = symbols.filter((candidate) => (candidate.kind === "function" || candidate.kind === "method") && candidate.name === name && sameLocation(candidate.location, node.location)); records.set(node, { name, node, parameters: [], returns: [], ...(symbol.length === 1 && symbol[0] !== undefined ? { symbolId: symbol[0].id } : {}) }); } } for (const child of node.children) visit(child); }; visit(root); return records; }
 function resolveFunction(name: string | undefined, functions: ReadonlyMap<string, FunctionRecord>): FunctionRecord | undefined { if (name === undefined) return undefined; const direct = functions.get(name); if (direct !== undefined) return direct; const property = name.split(".").at(-1); return property === undefined ? undefined : functions.get(property); }
 function resolve(scope: Scope | undefined, name: string): VariableDefinition | undefined { for (let current = scope; current !== undefined; current = current.parent) { const definition = current.definitions.get(name); if (definition !== undefined) return definition; } return undefined; }
 function isFunction(node: ASTNode): boolean { return ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ObjectMethod"].includes(node.type); }
@@ -160,3 +167,7 @@ function stringValue(node: ASTNode | undefined): string | undefined { return typ
 function sanitized(node: ASTNode): boolean { if (node.type !== "CallExpression") return false; const callee = node.children.find((child) => child.role === "callee"); const name = memberPath(callee) ?? identifierName(callee); return name !== undefined && sanitizers.has(name); }
 function byId<T extends { readonly id: string }>(left: T, right: T): number { return left.id.localeCompare(right.id); }
 function hash(value: string): string { return createHash("sha256").update(value).digest("hex"); }
+function callLocationKey(filePath: string, location: { readonly line: number; readonly column: number }): string { return `${filePath}:${location.line}:${location.column}`; }
+function sameLocation(symbolLocation: CodeSymbol["location"] | undefined, nodeLocation: ASTNode["location"] | undefined): boolean { return symbolLocation !== undefined && nodeLocation !== undefined && symbolLocation.start.line === nodeLocation.start.line && symbolLocation.start.column === nodeLocation.start.column; }
+function functionSummaries(state: FlowState, filePath: string): readonly FunctionFlowSummary[] { return [...state.functions.values()].flatMap((record) => record.symbolId === undefined ? [] : [{ symbolId: record.symbolId, filePath, parameterDefinitionIds: record.parameters.map((definition) => definition.id), returnDefinitionIds: record.returns.map((definition) => definition.id) }]).sort((left, right) => left.symbolId.localeCompare(right.symbolId)); }
+function callBindings(state: FlowState): readonly CallFlowBinding[] { return state.pendingCalls.flatMap((call) => call.targetSymbolId === undefined ? [] : [{ callId: call.id, targetSymbolId: call.targetSymbolId, argumentDefinitionIds: call.argumentDefinitionIds, ...(call.receiverDefinitionId === undefined ? {} : { receiverDefinitionId: call.receiverDefinitionId }) }]).sort((left, right) => left.callId.localeCompare(right.callId)); }

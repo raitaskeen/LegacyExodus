@@ -12,7 +12,7 @@ describe("analyze project integration", () => {
 
     try {
       await mkdir(join(projectPath, "src", "components"), { recursive: true });
-      await writeFile(join(projectPath, "src", "components", "Books.jsx"), "export {};", "utf8");
+      await writeFile(join(projectPath, "src", "components", "Books.jsx"), "export const Books = {};", "utf8");
       await writeFile(
         join(projectPath, "package.json"),
         JSON.stringify({
@@ -88,6 +88,7 @@ describe("analyze project integration", () => {
         "utf8",
       );
       await writeFile(join(projectPath, "src", "types.ts"), "export interface BillingRecord { id: string; }", "utf8");
+      await writeFile(join(projectPath, "src", "empty-module.js"), 'import ""; export const valid = true;', "utf8");
       const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
 
       await context.orchestrator.execute({
@@ -100,12 +101,28 @@ describe("analyze project integration", () => {
         },
       });
 
-      expect(context.eventStore.getByType("FileParsed")).toHaveLength(2);
-      expect(context.eventStore.getByType("SymbolsExtracted")).toHaveLength(2);
-      expect(await context.storage.findAll("ast-result")).toHaveLength(2);
-      expect(await context.storage.findAll("symbol-table")).toHaveLength(2);
+      expect(context.eventStore.getByType("FileParsed")).toHaveLength(3);
+      expect(context.eventStore.getByType("SymbolsExtracted")).toHaveLength(3);
+      expect(context.eventStore.getByType("SymbolsExtractionFailure")).toHaveLength(0);
+      expect(await context.storage.findAll("ast-result")).toHaveLength(3);
+      expect(await context.storage.findAll("symbol-table")).toHaveLength(3);
     } finally {
       await rm(projectPath, { force: true, recursive: true });
     }
+  });
+
+  test("continues with valid source files after a recovered parser failure", async (): Promise<void> => {
+    const projectPath = await mkdtemp(join(tmpdir(), "legacy-exodus-file-isolation-"));
+    try {
+      await writeFile(join(projectPath, "first.js"), "export const first = 1;", "utf8");
+      await writeFile(join(projectPath, "broken.js"), "export const = ;", "utf8");
+      await writeFile(join(projectPath, "last.ts"), "export const last: number = 2;", "utf8");
+      const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+      await context.orchestrator.execute({ id: "00000000-0000-4000-8000-000000000042", type: "AnalyzeProject", createdAt: new Date(), payload: { projectId: "00000000-0000-4000-8000-000000000043", path: projectPath } });
+
+      expect(context.eventStore.getByType("ParserFailure")[0]).toMatchObject({ payload: { path: "broken.js", code: expect.any(String) } });
+      expect(context.eventStore.getByType("SymbolsExtracted").map((event) => (event.payload as { readonly path: string }).path)).toEqual(["first.js", "last.ts"]);
+      expect(await context.storage.findAll("symbol-table")).toHaveLength(2);
+    } finally { await rm(projectPath, { force: true, recursive: true }); }
   });
 });

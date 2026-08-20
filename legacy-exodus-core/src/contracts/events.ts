@@ -50,6 +50,11 @@ export interface ParserFailurePayload {
   readonly path: string;
   readonly code: string;
 }
+export interface SymbolsExtractionFailurePayload {
+  readonly fileId: string;
+  readonly path: string;
+  readonly code: string;
+}
 
 export type ProjectInitialized = DomainEvent<ProjectInitializedPayload, "ProjectInitialized">;
 
@@ -65,3 +70,4 @@ export type DiscoveryCompleted = DomainEvent<DiscoveryCompletedPayload, "Discove
 export type FileParsed = DomainEvent<FileParsedPayload, "FileParsed">;
 export type SymbolsExtracted = DomainEvent<SymbolsExtractedPayload, "SymbolsExtracted">;
 export type ParserFailure = DomainEvent<ParserFailurePayload, "ParserFailure">;
+export type SymbolsExtractionFailure = DomainEvent<SymbolsExtractionFailurePayload, "SymbolsExtractionFailure">;

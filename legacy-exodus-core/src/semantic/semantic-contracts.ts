@@ -5,6 +5,7 @@ export interface SemanticCall {
   readonly sourceFilePath: string;
   readonly callerName: string;
   readonly calleeName: string;
+  readonly resolutionState: "RESOLVED" | "UNRESOLVED";
   readonly targetSymbolId?: string;
   readonly location?: { readonly line: number; readonly column: number };
 }
@@ -14,6 +15,7 @@ export interface SymbolReference {
   readonly filePath: string;
   readonly name: string;
   readonly kind: "call" | "identifier";
+  readonly resolutionState: "RESOLVED" | "UNRESOLVED";
   readonly resolvedSymbolId?: string;
 }
 
@@ -66,8 +68,9 @@ export interface SemanticAnalysis {
 }
 
 const locationSchema = z.object({ line: z.number().int().positive(), column: z.number().int().nonnegative() });
-const callSchema = z.object({ id: z.string().min(1), sourceFilePath: z.string().min(1), callerName: z.string().min(1), calleeName: z.string().min(1), targetSymbolId: z.string().min(1).optional(), location: locationSchema.optional() });
-const referenceSchema = z.object({ id: z.string().min(1), filePath: z.string().min(1), name: z.string().min(1), kind: z.enum(["call", "identifier"]), resolvedSymbolId: z.string().min(1).optional() });
+const resolutionStateSchema = z.enum(["RESOLVED", "UNRESOLVED"]);
+const callSchema = z.object({ id: z.string().min(1), sourceFilePath: z.string().min(1), callerName: z.string().min(1), calleeName: z.string().min(1), resolutionState: resolutionStateSchema, targetSymbolId: z.string().min(1).optional(), location: locationSchema.optional() });
+const referenceSchema = z.object({ id: z.string().min(1), filePath: z.string().min(1), name: z.string().min(1), kind: z.enum(["call", "identifier"]), resolutionState: resolutionStateSchema, resolvedSymbolId: z.string().min(1).optional() });
 const scopeSchema = z.object({ id: z.string().min(1), filePath: z.string().min(1), name: z.string().min(1), declaredSymbols: z.array(z.string().min(1)), referencedNames: z.array(z.string().min(1)) });
 const evidenceStateSchema = z.enum(["CONFIRMED", "INFERRED", "UNRESOLVED", "UNSUPPORTED", "REQUIRES_REVIEW"]);
 const findingSchema = z.object({ symbolId: z.string().min(1), filePath: z.string().min(1), name: z.string().min(1), reason: z.enum(["unreferenced-local-symbol", "unused-import", "unused-export"]), state: evidenceStateSchema });

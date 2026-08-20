@@ -120,6 +120,14 @@ export class AnalyzeProjectHandler {
         }));
         continue;
       }
+      if (ast.errors.length > 0) {
+        events.push(createDomainEvent({
+          type: "ParserFailure",
+          aggregateId: discovery.projectId,
+          payload: { fileId: file.id, path: file.path, code: ast.errors[0]?.code ?? "PARSER_FAILURE" },
+        }));
+        continue;
+      }
       records.push(
         createStorageRecord("ast-result", {
           fileId: file.id,
@@ -143,7 +151,17 @@ export class AnalyzeProjectHandler {
         }),
       );
 
-      const table = this.symbolExtractor.extract(ast);
+      let table: SymbolTable;
+      try {
+        table = this.symbolExtractor.extract(ast);
+      } catch (error: unknown) {
+        events.push(createDomainEvent({
+          type: "SymbolsExtractionFailure",
+          aggregateId: discovery.projectId,
+          payload: { fileId: file.id, path: file.path, code: getErrorCode(error) },
+        }));
+        continue;
+      }
       astResults.push(ast);
       symbolTables.push(table);
       records.push(
@@ -206,7 +224,7 @@ export class AnalyzeProjectHandler {
         middlewareChains: semantic.middlewareChains.map((chain) => ({ ...chain, middleware: [...chain.middleware] })),
       }),
     );
-    const flow = new DeterministicFlowAnalysisEngine().analyze(astResults);
+    const flow = new DeterministicFlowAnalysisEngine().analyze(astResults, semantic.calls, symbolTables);
     records.push(
       createStorageRecord("control-flow-analysis", {
         projectId: discovery.projectId,
@@ -218,7 +236,7 @@ export class AnalyzeProjectHandler {
       createStorageRecord("data-flow-analysis", {
         projectId: discovery.projectId,
         analysisRunId: command.id,
-        graphs: flow.dataFlowGraphs.map((graph) => ({ ...graph, definitions: graph.definitions.map((definition) => ({ ...definition })), uses: graph.uses.map((use) => ({ ...use })), defUseChains: graph.defUseChains.map((chain) => ({ ...chain, useIds: [...chain.useIds] })), lifetimes: graph.lifetimes.map((lifetime) => ({ ...lifetime, useIds: [...lifetime.useIds] })), taintFlows: graph.taintFlows.map((flow) => ({ ...flow, path: [...flow.path] })), interproceduralFlows: graph.interproceduralFlows.map((flow) => ({ ...flow })) })),
+        graphs: flow.dataFlowGraphs.map((graph) => ({ ...graph, definitions: graph.definitions.map((definition) => ({ ...definition })), uses: graph.uses.map((use) => ({ ...use })), defUseChains: graph.defUseChains.map((chain) => ({ ...chain, useIds: [...chain.useIds] })), lifetimes: graph.lifetimes.map((lifetime) => ({ ...lifetime, useIds: [...lifetime.useIds] })), taintFlows: graph.taintFlows.map((flow) => ({ ...flow, path: [...flow.path] })), interproceduralFlows: graph.interproceduralFlows.map((flow) => ({ ...flow })), functionSummaries: graph.functionSummaries.map((summary) => ({ ...summary, parameterDefinitionIds: [...summary.parameterDefinitionIds], returnDefinitionIds: [...summary.returnDefinitionIds] })), callBindings: graph.callBindings.map((binding) => ({ callId: binding.callId, targetSymbolId: binding.targetSymbolId, argumentDefinitionIds: binding.argumentDefinitionIds.map((definitionId) => definitionId ?? null), ...(binding.receiverDefinitionId === undefined ? {} : { receiverDefinitionId: binding.receiverDefinitionId }) })) })),
       }),
     );
     const knowledgeGraph = new DeterministicKnowledgeGraphBuilder().build(symbolTables, dependencyGraph);
