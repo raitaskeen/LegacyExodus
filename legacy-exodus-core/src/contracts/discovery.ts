@@ -6,8 +6,26 @@ export interface FileArtifact {
   readonly id: string;
   readonly path: string;
   readonly language: string;
+  /** Present for scanner output; optional while historical persisted artifacts are upgraded. */
+  readonly fileKind?: FileKind;
   readonly size: number;
 }
+
+export type FileKind =
+  | "source"
+  | "configuration"
+  | "manifest"
+  | "documentation"
+  | "markup"
+  | "stylesheet"
+  | "data"
+  | "database-schema"
+  | "ci-cd"
+  | "container"
+  | "build"
+  | "generated"
+  | "binary"
+  | "unknown";
 
 export interface DependencyArtifact {
   readonly name: string;
@@ -35,6 +53,7 @@ const fileArtifactSchema = z.object({
   id: z.string().min(1),
   path: z.string().min(1),
   language: z.string().min(1),
+  fileKind: z.enum(["source", "configuration", "manifest", "documentation", "markup", "stylesheet", "data", "database-schema", "ci-cd", "container", "build", "generated", "binary", "unknown"]).optional(),
   size: z.number().nonnegative(),
 });
 

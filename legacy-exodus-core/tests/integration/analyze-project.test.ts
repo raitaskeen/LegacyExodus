@@ -50,7 +50,7 @@ describe("analyze project integration", () => {
         fileCount: 2,
         dependencyCount: 3,
         frameworkCount: 3,
-        languages: ["javascript"],
+        languages: ["javascript", "json"],
       });
       const knowledge = JSON.parse(await readFile(join(projectPath, ".discovery", "knowledge.json"), "utf8")) as {
         readonly nodes: readonly { readonly kind: string }[];

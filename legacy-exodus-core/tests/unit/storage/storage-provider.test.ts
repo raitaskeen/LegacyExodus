@@ -17,4 +17,16 @@ describe("StorageProvider contract", () => {
 
     expect(storedRecord).toEqual(record);
   });
+
+  test("uses canonical content identities independent of runtime metadata", (): void => {
+    const first = createStorageRecord("project", { nested: { b: 2, a: 1 } });
+    const second = createStorageRecord("project", { nested: { a: 1, b: 2 } });
+    const differentPayload = createStorageRecord("project", { nested: { a: 1, b: 3 } });
+    const differentType = createStorageRecord("artifact", { nested: { a: 1, b: 2 } });
+
+    expect(first.id).toBe(second.id);
+    expect(first.id).not.toBe(differentPayload.id);
+    expect(first.id).not.toBe(differentType.id);
+    expect(first.createdAt).not.toBe(first.updatedAt);
+  });
 });

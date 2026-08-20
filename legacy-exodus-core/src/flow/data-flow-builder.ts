@@ -10,8 +10,8 @@ interface PendingSink { readonly id: string; readonly name: string; readonly arg
 interface FlowState { readonly definitions: VariableDefinition[]; readonly uses: VariableUse[]; readonly taintPaths: Map<string, Map<string, readonly string[]>>; readonly transfers: TaintTransfer[]; readonly sinks: PendingSink[]; readonly functions: Map<ASTNode, FunctionRecord>; readonly resolvableFunctions: Map<string, FunctionRecord>; readonly pendingCalls: PendingCall[]; readonly interproceduralFlows: InterproceduralFlow[]; }
 
 const sources = new Set(["process.env", "req.body", "req.params", "req.query"]);
-const sinks = new Set(["child_process.exec", "exec", "res.send", "res.json", "query", "execute"]);
-const sanitizers = new Set(["escape", "sanitize", "validator.escape"]);
+const sinks = new Set(["child_process.exec", "exec", "res.send", "res.json"]);
+const sanitizers = new Set(["validator.escape"]);
 
 export class DeterministicDataFlowGraphBuilder {
   public build(ast: ASTResult): DataFlowGraph {
@@ -135,7 +135,7 @@ export class DeterministicDataFlowGraphBuilder {
   }
 
   private taintFlows(state: FlowState): readonly TaintFlow[] {
-    const flows = state.sinks.flatMap((sink) => sink.argumentDefinitionIds.flatMap((definitionId) => [...(state.taintPaths.get(definitionId)?.entries() ?? [])].map(([sourceId, path]) => ({ sourceId, sinkId: sink.id, path: Object.freeze([...path, sink.name]) }))));
+    const flows = state.sinks.flatMap((sink) => sink.argumentDefinitionIds.flatMap((definitionId) => [...(state.taintPaths.get(definitionId)?.entries() ?? [])].map(([sourceId, path]) => ({ sourceId, sinkId: sink.id, path: Object.freeze([...path, sink.name]), state: "CONFIRMED" as const }))));
     return Object.freeze([...new Map(flows.map((flow) => [`${flow.sourceId}:${flow.sinkId}`, flow])).values()].sort((left, right) => `${left.sourceId}:${left.sinkId}`.localeCompare(`${right.sourceId}:${right.sinkId}`)));
   }
 

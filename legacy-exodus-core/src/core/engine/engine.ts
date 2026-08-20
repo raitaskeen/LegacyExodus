@@ -69,7 +69,7 @@ export class LegacyExodusEngine {
           });
         }
 
-        const discoveryRecord = execution.records[0];
+        const discoveryRecord = execution.records.find((record) => record.type === "project-discovery");
 
         if (discoveryRecord === undefined) {
           throw new LegacyExodusError({

@@ -79,7 +79,8 @@ function identifier(node: ASTNode | undefined): string | undefined {
 }
 
 function findLocalSymbol(table: SymbolTable | undefined, name: string): string | undefined {
-  return table?.symbols.find((symbol) => symbol.name === name && ["function", "method", "class", "variable"].includes(symbol.kind))?.id;
+  const candidates = table?.symbols.filter((symbol) => symbol.name === name && ["function", "method", "class", "variable"].includes(symbol.kind)) ?? [];
+  return candidates.length === 1 ? candidates[0]?.id : undefined;
 }
 
 function hash(value: string): string {

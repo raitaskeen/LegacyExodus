@@ -30,6 +30,7 @@ export interface DeadCodeFinding {
   readonly filePath: string;
   readonly name: string;
   readonly reason: "unreferenced-local-symbol" | "unused-import" | "unused-export";
+  readonly state: "CONFIRMED" | "INFERRED" | "UNRESOLVED" | "UNSUPPORTED" | "REQUIRES_REVIEW";
 }
 
 export interface SemanticEntryPoint {
@@ -44,6 +45,7 @@ export interface ExpressRoute {
   readonly path: string;
   readonly handlerName?: string;
   readonly middleware: readonly string[];
+  readonly state: "CONFIRMED" | "INFERRED" | "UNRESOLVED" | "UNSUPPORTED" | "REQUIRES_REVIEW";
 }
 
 export interface MiddlewareChain {
@@ -67,9 +69,10 @@ const locationSchema = z.object({ line: z.number().int().positive(), column: z.n
 const callSchema = z.object({ id: z.string().min(1), sourceFilePath: z.string().min(1), callerName: z.string().min(1), calleeName: z.string().min(1), targetSymbolId: z.string().min(1).optional(), location: locationSchema.optional() });
 const referenceSchema = z.object({ id: z.string().min(1), filePath: z.string().min(1), name: z.string().min(1), kind: z.enum(["call", "identifier"]), resolvedSymbolId: z.string().min(1).optional() });
 const scopeSchema = z.object({ id: z.string().min(1), filePath: z.string().min(1), name: z.string().min(1), declaredSymbols: z.array(z.string().min(1)), referencedNames: z.array(z.string().min(1)) });
-const findingSchema = z.object({ symbolId: z.string().min(1), filePath: z.string().min(1), name: z.string().min(1), reason: z.enum(["unreferenced-local-symbol", "unused-import", "unused-export"]) });
+const evidenceStateSchema = z.enum(["CONFIRMED", "INFERRED", "UNRESOLVED", "UNSUPPORTED", "REQUIRES_REVIEW"]);
+const findingSchema = z.object({ symbolId: z.string().min(1), filePath: z.string().min(1), name: z.string().min(1), reason: z.enum(["unreferenced-local-symbol", "unused-import", "unused-export"]), state: evidenceStateSchema });
 const entryPointSchema = z.object({ filePath: z.string().min(1), reason: z.enum(["conventional-file", "http-listener"]) });
-const routeSchema = z.object({ id: z.string().min(1), filePath: z.string().min(1), method: z.string().min(1), path: z.string().min(1), handlerName: z.string().min(1).optional(), middleware: z.array(z.string().min(1)) });
+const routeSchema = z.object({ id: z.string().min(1), filePath: z.string().min(1), method: z.string().min(1), path: z.string().min(1), handlerName: z.string().min(1).optional(), middleware: z.array(z.string().min(1)), state: evidenceStateSchema });
 const middlewareSchema = z.object({ filePath: z.string().min(1), middleware: z.array(z.string().min(1)) });
 const semanticSchema = z.object({ calls: z.array(callSchema), references: z.array(referenceSchema), scopes: z.array(scopeSchema), deadCode: z.array(findingSchema), unusedImports: z.array(findingSchema), unusedExports: z.array(findingSchema), entryPoints: z.array(entryPointSchema), routes: z.array(routeSchema), middlewareChains: z.array(middlewareSchema) });
 

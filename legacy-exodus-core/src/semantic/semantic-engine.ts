@@ -39,7 +39,7 @@ function createScope(filePath: string, declaredSymbols: readonly string[], refer
 }
 
 function finding(symbolId: string, filePath: string, name: string, reason: DeadCodeFinding["reason"]): DeadCodeFinding {
-  return { symbolId, filePath, name, reason };
+  return { symbolId, filePath, name, reason, state: "INFERRED" };
 }
 
 function entryPoints(paths: readonly string[], calls: readonly { readonly sourceFilePath: string; readonly calleeName: string }[]): readonly SemanticEntryPoint[] {
@@ -49,6 +49,7 @@ function entryPoints(paths: readonly string[], calls: readonly { readonly source
 }
 
 function findHttpCalls(root: ASTNode, filePath: string): { readonly routes: readonly ExpressRoute[]; readonly middlewareChains: readonly MiddlewareChain[] } {
+  const receivers = expressReceivers(root);
   const middleware: string[] = [];
   const routes: ExpressRoute[] = [];
   const visit = (node: ASTNode): void => {
@@ -56,20 +57,37 @@ function findHttpCalls(root: ASTNode, filePath: string): { readonly routes: read
       const callee = readCallee(node);
       const method = callee?.split(".").at(-1)?.toLowerCase();
       const argumentsNodes = node.children.filter((child) => child.role === "arguments");
-      if (method === "use") {
+      const receiver = callee?.split(".")[0];
+      const isExpressReceiver = receiver !== undefined && receivers.has(receiver);
+      if (method === "use" && isExpressReceiver) {
         const names = argumentsNodes.map(readName).filter((name): name is string => name !== undefined && !name.startsWith("/"));
         middleware.push(...names);
       }
-      if (method !== undefined && ["get", "post", "put", "patch", "delete", "all"].includes(method)) {
+      if (isExpressReceiver && method !== undefined && ["get", "post", "put", "patch", "delete", "all"].includes(method)) {
         const path = argumentsNodes.map(readString).find((value): value is string => value !== undefined) ?? "/";
         const handlerName = argumentsNodes.map(readName).find((name): name is string => name !== undefined && name !== path);
-        routes.push({ id: hash(`route:${filePath}:${method}:${path}:${node.location?.start.line ?? 0}`), filePath, method: method.toUpperCase(), path, ...(handlerName === undefined ? {} : { handlerName }), middleware: uniqueSorted(middleware) });
+        routes.push({ id: hash(`route:${filePath}:${method}:${path}:${node.location?.start.line ?? 0}`), filePath, method: method.toUpperCase(), path, ...(handlerName === undefined ? {} : { handlerName }), middleware: uniqueSorted(middleware), state: "CONFIRMED" });
       }
     }
     for (const child of node.children) visit(child);
   };
   visit(root);
   return { routes, middlewareChains: middleware.length === 0 ? [] : [{ filePath, middleware: uniqueSorted(middleware) }] };
+}
+
+function expressReceivers(root: ASTNode): ReadonlySet<string> {
+  const receivers = new Set<string>();
+  const visit = (node: ASTNode): void => {
+    if (node.type === "VariableDeclarator") {
+      const name = readName(node.children.find((child) => child.role === "id") ?? node);
+      const init = node.children.find((child) => child.role === "init");
+      const initCallee = init?.type === "CallExpression" ? readCallee(init) : undefined;
+      if (name !== undefined && (initCallee === "express" || initCallee === "Router" || initCallee === "express.Router")) receivers.add(name);
+    }
+    for (const child of node.children) visit(child);
+  };
+  visit(root);
+  return receivers;
 }
 
 function readCallee(node: ASTNode): string | undefined {

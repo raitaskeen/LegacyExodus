@@ -12,16 +12,34 @@ const languageByExtension: Readonly<Record<string, string>> = {
   ".cs": "csharp",
   ".go": "go",
   ".java": "java",
+  ".html": "html",
   ".js": "javascript",
   ".cjs": "javascript",
   ".mjs": "javascript",
   ".jsx": "javascript",
+  ".css": "css",
+  ".md": "markdown",
+  ".mdx": "mdx",
   ".php": "php",
   ".py": "python",
   ".rb": "ruby",
   ".rs": "rust",
   ".ts": "typescript",
   ".tsx": "typescript",
+  ".yaml": "yaml",
+  ".yml": "yaml",
+};
+
+const knownFiles: Readonly<Record<string, { readonly language: string; readonly fileKind: FileArtifact["fileKind"] }>> = {
+  ".gitignore": { language: "gitignore", fileKind: "configuration" },
+  "dockerfile": { language: "dockerfile", fileKind: "container" },
+  "package.json": { language: "json", fileKind: "manifest" },
+  "tsconfig.json": { language: "json", fileKind: "configuration" },
+};
+
+const fileKindByExtension: Readonly<Record<string, FileArtifact["fileKind"]>> = {
+  ".c": "source", ".cs": "source", ".go": "source", ".java": "source", ".js": "source", ".cjs": "source", ".mjs": "source", ".jsx": "source", ".php": "source", ".py": "source", ".rb": "source", ".rs": "source", ".ts": "source", ".tsx": "source",
+  ".html": "markup", ".htm": "markup", ".md": "documentation", ".mdx": "documentation", ".css": "stylesheet", ".scss": "stylesheet", ".json": "data", ".yaml": "data", ".yml": "data", ".sql": "database-schema", ".dockerignore": "container",
 };
 
 export class FileScanner {
@@ -78,10 +96,12 @@ export class FileScanner {
     const extensionIndex = path.lastIndexOf(".");
     const extension = extensionIndex < 0 ? "" : path.slice(extensionIndex).toLowerCase();
 
+    const known = knownFiles[path.split("/").at(-1)?.toLowerCase() ?? ""];
     return Object.freeze({
       id: createHash("sha256").update(path).digest("hex"),
       path,
-      language: languageByExtension[extension] ?? "unknown",
+      language: known?.language ?? languageByExtension[extension] ?? "unknown",
+      fileKind: known?.fileKind ?? fileKindByExtension[extension] ?? "unknown",
       size: fileStats.size,
     });
   }

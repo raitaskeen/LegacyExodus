@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 
 import { z } from "zod";
 
@@ -27,7 +27,7 @@ export interface StorageRecord<Payload extends SerializedPayload = SerializedPay
 }
 
 const storageRecordSchema = z.object({
-  id: z.string().uuid(),
+  id: z.string().regex(/^[a-f0-9]{64}$/),
   type: z.string().trim().min(1),
   payload: z.json(),
   createdAt: z.date(),
@@ -41,12 +41,32 @@ export function createStorageRecord<Payload extends SerializedPayload>(
   const timestamp = new Date();
 
   return validateStorageRecord({
-    id: randomUUID(),
+    id: contentIdentity(type, payload),
     type,
     payload,
     createdAt: timestamp,
     updatedAt: timestamp,
   });
+}
+
+/** Stable content identity; timestamps remain observability metadata only. */
+function contentIdentity(type: string, payload: SerializedPayload): string {
+  return createHash("sha256")
+    .update(canonicalize({ payload, type }))
+    .digest("hex");
+}
+
+function canonicalize(value: SerializedPayload | SerializedObject): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => canonicalize(item)).join(",")}]`;
+  }
+
+  const object = value as SerializedObject;
+  return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${canonicalize(object[key] ?? null)}`).join(",")}}`;
 }
 
 export function validateStorageRecord<Payload extends SerializedPayload>(

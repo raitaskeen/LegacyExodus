@@ -12,7 +12,7 @@ const discoveryStoragePayloadSchema = z.object({
   analysisRunId: z.string().uuid().optional(),
   projectName: z.string().min(1),
   projectPath: z.string().min(1),
-  files: z.array(z.object({ id: z.string().min(1), path: z.string().min(1), language: z.string().min(1), size: z.number().nonnegative() })),
+  files: z.array(z.object({ id: z.string().min(1), path: z.string().min(1), language: z.string().min(1), fileKind: z.string().min(1).optional(), size: z.number().nonnegative() })),
   dependencies: z.array(z.object({ name: z.string().min(1), version: z.string().min(1), kind: z.enum(["production", "development"]) })),
   frameworks: z.array(z.object({ name: z.string().min(1), evidence: z.string().min(1) })),
   languages: z.array(z.string().min(1)),
@@ -106,7 +106,7 @@ export class DiscoveryProjectionService {
           ? []
           : [
               { name: "dependency-graph.json" as const, payload: graph },
-              { name: "modules.json" as const, payload: payload.files.map((file) => ({ path: file.path, language: file.language })) },
+              { name: "modules.json" as const, payload: payload.files.map((file) => ({ path: file.path, language: file.language, ...(file.fileKind === undefined ? {} : { fileKind: file.fileKind }) })) },
               { name: "symbols.json" as const, payload: symbols },
               ...(knowledge === undefined ? [] : [{ name: "knowledge.json" as const, payload: knowledge }]),
               ...(semantic === undefined ? [] : [{ name: "semantic.json" as const, payload: semantic }]),
