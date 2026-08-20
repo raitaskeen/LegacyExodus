@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
 import { DeterministicControlFlowGraphBuilder, DeterministicDataFlowGraphBuilder, DeterministicFlowAnalysisEngine } from "@flow/index";
+import { DeterministicDependencyGraphBuilder } from "@graph/index";
 import { JavaScriptParser } from "@parser/index";
+import { DeterministicSemanticAnalysisEngine } from "@semantic/index";
+import { JavaScriptSymbolExtractor } from "@symbols/index";
 
 describe("control and data flow analysis", () => {
   test("builds deterministic branch, loop, dominator, reachability, and dead-code information", async (): Promise<void> => {
@@ -704,6 +707,86 @@ describe("control and data flow analysis", () => {
     expect(dynamic.taintFlows).toEqual([]);
     expect(JSON.stringify(dynamic)).toBe(JSON.stringify(await buildDataFlowGraph("taint-dynamic", `const input = req.body.name; const result = object[userControlledName](input); exec(result);`)));
   });
+
+  test("uses the proven semantic function target and canonical call id for interprocedural flow", async (): Promise<void> => {
+    const source = "function process(value) { return value; } const input = sourceValue; const result = process(input);";
+    const { graph, semantic } = await buildResolvedDataFlow("semantic-function", source);
+    const call = semantic.calls.find((candidate) => candidate.calleeName === "process");
+    const input = definition(graph, "input", "declaration");
+    const parameter = definition(graph, "value", "parameter");
+
+    expect(call?.resolutionState).toBe("RESOLVED");
+    expect(flowExists(graph, "argument-to-parameter", input.id, parameter.id)).toBe(true);
+    expect(graph.interproceduralFlows.find((flow) => flow.kind === "argument-to-parameter")?.callId).toBe(call?.id);
+  });
+
+  test("uses a proven class method target for interprocedural flow", async (): Promise<void> => {
+    const source = "class Service { transform(value) { return value; } } const service = new Service(); const input = sourceValue; const result = service.transform(input);";
+    const { graph, semantic } = await buildResolvedDataFlow("semantic-method", source);
+    const call = semantic.calls.find((candidate) => candidate.calleeName === "service.transform");
+    const input = definition(graph, "input", "declaration");
+    const parameter = definition(graph, "value", "parameter");
+
+    expect(call?.resolutionState).toBe("RESOLVED");
+    expect(flowExists(graph, "argument-to-parameter", input.id, parameter.id)).toBe(true);
+    expect(graph.interproceduralFlows.some((flow) => flow.callId === call?.id && flow.kind === "return-to-receiver")).toBe(true);
+  });
+
+  test("does not create DFG transfers for an unresolved receiver", async (): Promise<void> => {
+    const { graph, semantic } = await buildResolvedDataFlow("semantic-unknown-receiver", "const input = sourceValue; const object = unknownFactory(); const result = object.handle(input);");
+
+    expect(semantic.calls.find((call) => call.calleeName === "object.handle")?.resolutionState).toBe("UNRESOLVED");
+    expect(graph.interproceduralFlows).toEqual([]);
+  });
+
+  test("does not select an ambiguous same-name method for DFG flow", async (): Promise<void> => {
+    const source = "class A { handle(value) { return value; } } class B { handle(value) { return value; } } const input = sourceValue; const receiver = condition ? new A() : new B(); const result = receiver.handle(input);";
+    const { graph, semantic } = await buildResolvedDataFlow("semantic-ambiguous-method", source);
+    const call = semantic.calls.find((candidate) => candidate.calleeName === "receiver.handle");
+
+    expect(call?.resolutionState).toBe("UNRESOLVED");
+    expect(graph.interproceduralFlows.some((flow) => flow.callId === call?.id)).toBe(false);
+  });
+
+  test("does not create DFG transfers for computed dynamic calls", async (): Promise<void> => {
+    const { graph, semantic } = await buildResolvedDataFlow("semantic-computed", "const input = sourceValue; const method = getMethod(); const result = object[method](input);");
+
+    expect(semantic.calls.some((call) => call.calleeName.includes("object"))).toBe(false);
+    expect(graph.interproceduralFlows).toEqual([]);
+  });
+
+  test("connects a resolved imported function to its cross-file parameter and return", async (): Promise<void> => {
+    const files = [
+      { id: "service", path: "src/service.js", language: "javascript", size: 1 },
+      { id: "consumer", path: "src/consumer.js", language: "javascript", size: 1 },
+    ] as const;
+    const sources = ["export function normalize(value) { return value; }", "import { normalize } from './service'; const input = sourceValue; const result = normalize(input);"] as const;
+    const parser = new JavaScriptParser();
+    const asts = await Promise.all(files.map((file, index) => {
+      const source = sources[index];
+      if (source === undefined) throw new Error("Cross-file fixture source is missing.");
+      return parser.parse({ file, source });
+    }));
+    const results = asts.map((response) => response.result);
+    const extractor = new JavaScriptSymbolExtractor();
+    const tables = results.map((result) => extractor.extract(result));
+    const dependencies = new DeterministicDependencyGraphBuilder().build(tables, files);
+    const semantic = new DeterministicSemanticAnalysisEngine().analyze({ astResults: results, dependencyGraph: dependencies, symbolTables: tables });
+    const flow = new DeterministicFlowAnalysisEngine().analyze(results, semantic.calls, tables);
+    const consumer = flow.dataFlowGraphs.find((graph) => graph.filePath === "src/consumer.js");
+    const service = flow.dataFlowGraphs.find((graph) => graph.filePath === "src/service.js");
+    const call = semantic.calls.find((candidate) => candidate.sourceFilePath === "src/consumer.js" && candidate.calleeName === "normalize");
+    if (consumer === undefined || service === undefined || call === undefined) throw new Error("Expected resolved cross-file fixture artifacts.");
+    const input = definition(consumer, "input", "declaration");
+    const result = definition(consumer, "result", "declaration");
+    const parameter = definition(service, "value", "parameter");
+    const returned = definition(service, "normalize:return", "return");
+
+    expect(call.resolutionState).toBe("RESOLVED");
+    expect(flowExists(consumer, "argument-to-parameter", input.id, parameter.id)).toBe(true);
+    expect(flowExists(consumer, "return-to-receiver", returned.id, result.id)).toBe(true);
+    expect(consumer.interproceduralFlows.some((transfer) => transfer.callId === call.id && transfer.targetDefinitionId === parameter.id)).toBe(true);
+  });
 });
 
 async function buildControlFlowGraph(id: string, source: string) {
@@ -714,6 +797,17 @@ async function buildControlFlowGraph(id: string, source: string) {
 async function buildDataFlowGraph(id: string, source: string) {
   const ast = (await new JavaScriptParser().parse({ file: { id, path: `src/${id}.js`, language: "javascript", size: source.length }, source })).result;
   return new DeterministicDataFlowGraphBuilder().build(ast);
+}
+
+async function buildResolvedDataFlow(id: string, source: string) {
+  const file = { id, path: `src/${id}.js`, language: "javascript", size: source.length } as const;
+  const ast = (await new JavaScriptParser().parse({ file, source })).result;
+  const symbols = new JavaScriptSymbolExtractor().extract(ast);
+  const dependencyGraph = new DeterministicDependencyGraphBuilder().build([symbols], [file]);
+  const semantic = new DeterministicSemanticAnalysisEngine().analyze({ astResults: [ast], dependencyGraph, symbolTables: [symbols] });
+  const graph = new DeterministicFlowAnalysisEngine().analyze([ast], semantic.calls, [symbols]).dataFlowGraphs[0];
+  if (graph === undefined) throw new Error("Expected a data-flow graph.");
+  return { graph, semantic };
 }
 
 function findBlock(graph: Awaited<ReturnType<typeof buildControlFlowGraph>>, statementType: string) {

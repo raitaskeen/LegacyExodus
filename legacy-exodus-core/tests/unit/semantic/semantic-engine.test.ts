@@ -56,4 +56,77 @@ describe("DeterministicSemanticAnalysisEngine", () => {
 
     expect(analysis.routes).toEqual([]);
   });
+
+  test("resolves nested lexical bindings by their exact scope and preserves shadowing", async (): Promise<void> => {
+    const source = `
+      function outer() {
+        function handle() { return "outer"; }
+        return handle();
+      }
+      function other() {
+        function handle() { return "other"; }
+        return handle();
+      }
+      function shadowed() {
+        function handle() { return "outer"; }
+        { function handle() { return "inner"; } handle(); }
+      }
+    `;
+    const file = { id: "lexical", path: "src/lexical.js", language: "javascript", size: source.length } as const;
+    const ast = (await new JavaScriptParser().parse({ file, source })).result;
+    const symbols = new JavaScriptSymbolExtractor().extract(ast);
+    const graph = new DeterministicDependencyGraphBuilder().build([symbols], [file]);
+    const analysis = new DeterministicSemanticAnalysisEngine().analyze({ astResults: [ast], dependencyGraph: graph, symbolTables: [symbols] });
+    const handles = symbols.symbols
+      .filter((symbol) => symbol.kind === "function" && symbol.name === "handle")
+      .sort((left, right) => (left.location?.start.line ?? 0) - (right.location?.start.line ?? 0));
+    const [outerHandle, otherHandle, shadowedOuterHandle, innerHandle] = handles;
+    const outerCall = analysis.calls.find((call) => call.callerName === "outer" && call.calleeName === "handle");
+    const otherCall = analysis.calls.find((call) => call.callerName === "other" && call.calleeName === "handle");
+    const shadowedCall = analysis.calls.find((call) => call.callerName === "shadowed" && call.calleeName === "handle");
+
+    expect(outerHandle?.id).toBeDefined();
+    expect(otherHandle?.id).toBeDefined();
+    expect(shadowedOuterHandle?.id).toBeDefined();
+    expect(innerHandle?.id).toBeDefined();
+    expect(outerCall?.targetSymbolId).toBe(outerHandle?.id);
+    expect(otherCall?.targetSymbolId).toBe(otherHandle?.id);
+    expect(shadowedCall?.targetSymbolId).toBe(innerHandle?.id);
+    expect(shadowedCall?.targetSymbolId).not.toBe(shadowedOuterHandle?.id);
+  });
+
+  test("uses proven class construction and class context without guessing dynamic receivers", async (): Promise<void> => {
+    const source = `
+      class A { handle() {} invoke() { return this.handle(); } }
+      class B { handle() {} }
+      const a = new A();
+      a.handle();
+      const unknown = unknownFactory();
+      unknown.handle();
+      const fn = getUnknownFunction();
+      fn();
+      const receiver = condition ? new A() : new B();
+      receiver.handle();
+      unknown["handle"]();
+    `;
+    const file = { id: "containers", path: "src/containers.js", language: "javascript", size: source.length } as const;
+    const ast = (await new JavaScriptParser().parse({ file, source })).result;
+    const symbols = new JavaScriptSymbolExtractor().extract(ast);
+    const graph = new DeterministicDependencyGraphBuilder().build([symbols], [file]);
+    const engine = new DeterministicSemanticAnalysisEngine();
+    const analysis = engine.analyze({ astResults: [ast], dependencyGraph: graph, symbolTables: [symbols] });
+    const repeat = engine.analyze({ astResults: [ast], dependencyGraph: graph, symbolTables: [symbols] });
+    const aHandle = symbols.symbols.find((symbol) => symbol.kind === "method" && symbol.name === "handle" && symbol.containerName === "A");
+    const calls = analysis.calls.filter((call) => call.calleeName.endsWith(".handle"));
+
+    expect(aHandle?.id).toBeDefined();
+    expect(calls.filter((call) => call.calleeName === "this.handle").map((call) => call.targetSymbolId)).toEqual([aHandle?.id]);
+    expect(calls.filter((call) => call.calleeName === "a.handle").map((call) => call.targetSymbolId)).toEqual([aHandle?.id]);
+    expect(calls.filter((call) => call.calleeName === "unknown.handle").map((call) => call.targetSymbolId)).toEqual([undefined]);
+    expect(calls.filter((call) => call.calleeName === "receiver.handle").map((call) => call.targetSymbolId)).toEqual([undefined]);
+    expect(analysis.calls.find((call) => call.calleeName === "fn")?.resolutionState).toBe("UNRESOLVED");
+    expect(analysis.calls.find((call) => call.calleeName === "unknown.handle")?.resolutionState).toBe("UNRESOLVED");
+    expect(analysis.calls.some((call) => call.calleeName.includes("["))).toBe(false);
+    expect(repeat.calls).toEqual(analysis.calls);
+  });
 });

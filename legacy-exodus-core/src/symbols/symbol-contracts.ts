@@ -22,7 +22,11 @@ export interface CodeSymbol {
   readonly moduleSpecifier?: string;
   /** Original exported name when this symbol is a named re-export. */
   readonly sourceSymbolName?: string;
+  /** Lexical declaration scope, derived deterministically from the normalized AST. */
+  readonly scopeId?: string;
   readonly containerName?: string;
+  /** Canonical class symbol identity for members declared by that class. */
+  readonly containerId?: string;
   readonly location?: {
     readonly start: { readonly line: number; readonly column: number };
     readonly end: { readonly line: number; readonly column: number };
@@ -64,7 +68,9 @@ const codeSymbolSchema = z.object({
   value: z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
   moduleSpecifier: z.string().min(1).optional(),
   sourceSymbolName: z.string().min(1).optional(),
+  scopeId: z.string().min(1).optional(),
   containerName: z.string().min(1).optional(),
+  containerId: z.string().min(1).optional(),
   location: z.object({ start: positionSchema, end: positionSchema }).optional(),
 });
 
@@ -99,6 +105,14 @@ export function validateSymbolTable(table: unknown): SymbolTable {
     symbols: Object.freeze(parsedTable.data.symbols.map(freezeCodeSymbol)),
     summary: Object.freeze({ ...parsedTable.data.summary }),
   });
+}
+
+export function createLexicalScopeId(
+  type: string,
+  location: CodeSymbol["location"] | undefined,
+): string {
+  if (location === undefined) return `scope:${type}:unknown`;
+  return `scope:${type}:${location.start.line}:${location.start.column}`;
 }
 
 function freezeCodeSymbol(symbol: CodeSymbol): CodeSymbol {

@@ -12,6 +12,7 @@ import { DiscoveryEngine } from "@discovery/index";
 import { ParserManager, ParserRegistry, type Parser } from "@parser/index";
 import { LegacyExodusError } from "@shared/errors";
 import { MemoryStorageProvider, StorageManager } from "@storage/index";
+import { JavaScriptSymbolExtractor } from "@symbols/index";
 
 describe("Orchestrator", () => {
   test("handles an initialization command and stores its event", async (): Promise<void> => {
@@ -72,7 +73,31 @@ describe("Orchestrator", () => {
       await rm(projectPath, { force: true, recursive: true });
     }
   });
+
+  test("isolates symbol extraction failure to the affected file", async (): Promise<void> => {
+    const projectPath = await mkdtemp(join(tmpdir(), "legacy-exodus-symbol-failure-"));
+    const eventStore = new InMemoryEventStore();
+    const orchestrator = new Orchestrator(
+      eventStore, new EventBus(), new StorageManager(new MemoryStorageProvider()),
+      new DiscoveryEngine(), undefined, undefined, new FailingSymbolExtractor(),
+    );
+    try {
+      await writeFile(join(projectPath, "bad.js"), "export const bad = 1;", "utf8");
+      await writeFile(join(projectPath, "good.js"), "export const good = 1;", "utf8");
+      await orchestrator.execute({ id: "00000000-0000-4000-8000-000000000062", type: "AnalyzeProject", createdAt: new Date(), payload: { projectId: "00000000-0000-4000-8000-000000000063", path: projectPath } });
+
+      expect(eventStore.getByType("SymbolsExtractionFailure")[0]).toMatchObject({ payload: { fileId: expect.any(String), path: "bad.js", code: "SYMBOL_EXTRACTION_FAILED" } });
+      expect(eventStore.getByType("SymbolsExtracted")[0]).toMatchObject({ payload: { path: "good.js" } });
+    } finally { await rm(projectPath, { force: true, recursive: true }); }
+  });
 });
+
+class FailingSymbolExtractor extends JavaScriptSymbolExtractor {
+  public override extract(ast: Parameters<JavaScriptSymbolExtractor["extract"]>[0]): ReturnType<JavaScriptSymbolExtractor["extract"]> {
+    if (ast.metadata.sourcePath === "bad.js") throw new LegacyExodusError({ code: "SYMBOL_EXTRACTION_FAILED", message: "Synthetic extraction failure." });
+    return super.extract(ast);
+  }
+}
 
 function createFailingParser(): Parser {
   return {
