@@ -49,4 +49,61 @@ describe("FileScanner", () => {
       expect(byPath.get("LICENSE")).toMatchObject({ language: "unknown", fileKind: "unknown" });
     } finally { await rm(projectPath, { force: true, recursive: true }); }
   });
+
+  test("accurately classifies all source languages and distinguishes genuine non-source and unclassified files", async (): Promise<void> => {
+    const projectPath = await mkdtemp(join(tmpdir(), "legacy-exodus-sources-"));
+    try {
+      const fixtures = [
+        // Case A: Known unsupported source
+        "service.rs",
+        // Case B: Previously unrecognized source-like extensions
+        "Main.kt", "App.vue", "widget.swift", "Program.scala", "app.dart", "native.cpp", "header.hpp", "script.sh", "module.zig",
+        // Case C: Real documentation non-source
+        "README.md", "notes.txt",
+        // Case D: Stylesheet non-source
+        "styles.css", "theme.scss",
+        // Case E: Manifest / Config / Data non-source
+        "package.json", "data.json", "schema.sql",
+        // Case F: Unknown / Unclassified file
+        "foo.data", "backup.tmp",
+      ];
+      for (const name of fixtures) {
+        await writeFile(join(projectPath, name), "", "utf8");
+      }
+      const byPath = new Map((await new FileScanner().scan(projectPath)).map((file) => [file.path, file]));
+
+      // Case A
+      expect(byPath.get("service.rs")).toMatchObject({ language: "rust", fileKind: "source" });
+
+      // Case B
+      expect(byPath.get("Main.kt")).toMatchObject({ language: "kotlin", fileKind: "source" });
+      expect(byPath.get("App.vue")).toMatchObject({ language: "vue", fileKind: "source" });
+      expect(byPath.get("widget.swift")).toMatchObject({ language: "swift", fileKind: "source" });
+      expect(byPath.get("Program.scala")).toMatchObject({ language: "scala", fileKind: "source" });
+      expect(byPath.get("app.dart")).toMatchObject({ language: "dart", fileKind: "source" });
+      expect(byPath.get("native.cpp")).toMatchObject({ language: "cpp", fileKind: "source" });
+      expect(byPath.get("header.hpp")).toMatchObject({ language: "cpp", fileKind: "source" });
+      expect(byPath.get("script.sh")).toMatchObject({ language: "shell", fileKind: "source" });
+      expect(byPath.get("module.zig")).toMatchObject({ language: "zig", fileKind: "source" });
+
+      // Case C
+      expect(byPath.get("README.md")).toMatchObject({ language: "markdown", fileKind: "documentation" });
+      expect(byPath.get("notes.txt")).toMatchObject({ language: "text", fileKind: "documentation" });
+
+      // Case D
+      expect(byPath.get("styles.css")).toMatchObject({ language: "css", fileKind: "stylesheet" });
+      expect(byPath.get("theme.scss")).toMatchObject({ language: "scss", fileKind: "stylesheet" });
+
+      // Case E
+      expect(byPath.get("package.json")).toMatchObject({ language: "json", fileKind: "manifest" });
+      expect(byPath.get("data.json")).toMatchObject({ language: "json", fileKind: "data" });
+      expect(byPath.get("schema.sql")).toMatchObject({ language: "sql", fileKind: "database-schema" });
+
+      // Case F
+      expect(byPath.get("foo.data")).toMatchObject({ language: "unknown", fileKind: "unknown" });
+      expect(byPath.get("backup.tmp")).toMatchObject({ language: "unknown", fileKind: "unknown" });
+    } finally {
+      await rm(projectPath, { force: true, recursive: true });
+    }
+  });
 });

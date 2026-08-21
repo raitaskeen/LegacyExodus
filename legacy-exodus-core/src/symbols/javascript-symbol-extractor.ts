@@ -134,9 +134,22 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     }
 
     for (const specifier of specifiers) {
+      const localName = readStringAttribute(specifier, "localName")
+        ?? readIdentifierName(specifier.children.find((child) => child.role === "local"))
+        ?? getName(specifier)
+        ?? moduleSpecifier;
+      const importedName = specifier.type === "ImportDefaultSpecifier"
+        ? undefined
+        : specifier.type === "ImportNamespaceSpecifier"
+          ? "*"
+          : readStringAttribute(specifier, "importedName")
+            ?? readIdentifierName(specifier.children.find((child) => child.role === "imported"))
+            ?? localName;
+
       symbols.push(
-        this.createSymbol("import", readStringAttribute(specifier, "importedName") ?? getName(specifier) ?? moduleSpecifier, specifier, ast, initialContext, {
+        this.createSymbol("import", localName, specifier, ast, initialContext, {
           moduleSpecifier,
+          ...(importedName === undefined ? {} : { sourceSymbolName: importedName }),
           defaultExport: specifier.type === "ImportDefaultSpecifier",
         }),
       );
@@ -175,13 +188,40 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       }
       const required = requireSpecifier(initializer);
       if (required !== undefined) {
-        const importedNames = bindingNames(binding);
-        for (const importedName of importedNames) {
-          const property = requireProperty(initializer) ?? (binding?.type === "ObjectPattern" ? importedName : undefined);
-          symbols.push(this.createSymbol("import", property ?? importedName, declarator, ast, initialContext, {
-            moduleSpecifier: required,
-            defaultExport: property === undefined,
-          }));
+        if (binding?.type === "ObjectPattern") {
+          const properties = binding.children.filter((child) => child.type === "ObjectProperty");
+          if (properties.length > 0) {
+            for (const prop of properties) {
+              const keyName = readIdentifierName(prop.children.find((child) => child.role === "key")) ?? identifierName(prop);
+              const valName = readIdentifierName(prop.children.find((child) => child.role === "value")) ?? keyName;
+              if (valName !== undefined) {
+                symbols.push(this.createSymbol("import", valName, declarator, ast, initialContext, {
+                  moduleSpecifier: required,
+                  sourceSymbolName: keyName ?? valName,
+                  defaultExport: false,
+                }));
+              }
+            }
+          } else {
+            const importedNames = bindingNames(binding);
+            for (const importedName of importedNames) {
+              symbols.push(this.createSymbol("import", importedName, declarator, ast, initialContext, {
+                moduleSpecifier: required,
+                sourceSymbolName: importedName,
+                defaultExport: false,
+              }));
+            }
+          }
+        } else {
+          const importedNames = bindingNames(binding);
+          for (const importedName of importedNames) {
+            const property = requireProperty(initializer);
+            symbols.push(this.createSymbol("import", importedName, declarator, ast, initialContext, {
+              moduleSpecifier: required,
+              sourceSymbolName: property,
+              defaultExport: property === undefined,
+            }));
+          }
         }
       }
     }

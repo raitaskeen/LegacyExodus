@@ -3,19 +3,24 @@ import type { ASTNode, ASTResult } from "@parser/index";
 import type { CodeSymbol } from "@symbols/index";
 import { createDataFlowGraph, createProvenCallTargets, type CallFlowBinding, type DataFlowGraph, type FunctionFlowSummary, type InterproceduralFlow, type ProvenCallTarget, type TaintFlow, type VariableDefinition, type VariableUse } from "./flow-contracts";
 
-interface Scope { readonly parent?: Scope; readonly definitions: Map<string, VariableDefinition>; }
-interface FunctionRecord { readonly name: string; readonly node: ASTNode; readonly parameters: VariableDefinition[]; readonly returns: VariableDefinition[]; readonly symbolId?: string; }
-interface PendingCall { readonly id: string; readonly targetSymbolId?: string; readonly callee?: FunctionRecord; readonly argumentDefinitionIds: readonly (string | undefined)[]; readonly argumentSourceIds: readonly (string | undefined)[]; readonly receiverDefinitionId?: string; }
-interface TaintTransfer { readonly sourceDefinitionId: string; readonly targetDefinitionId: string; }
-interface PendingSink { readonly id: string; readonly name: string; readonly argumentDefinitionIds: readonly string[]; }
-interface FlowState { readonly definitions: VariableDefinition[]; readonly uses: VariableUse[]; readonly taintPaths: Map<string, Map<string, readonly string[]>>; readonly transfers: TaintTransfer[]; readonly sinks: PendingSink[]; readonly functions: Map<ASTNode, FunctionRecord>; readonly resolvableFunctions: Map<string, FunctionRecord>; readonly functionsBySymbolId: Map<string, FunctionRecord>; readonly provenTargets: ReadonlyMap<string, ProvenCallTarget>; readonly hasSemanticResolution: boolean; readonly pendingCalls: PendingCall[]; readonly interproceduralFlows: InterproceduralFlow[]; }
+export interface Scope { readonly parent?: Scope; readonly definitions: Map<string, VariableDefinition>; }
+export interface FunctionRecord { readonly name: string; readonly node: ASTNode; readonly parameters: VariableDefinition[]; readonly returns: VariableDefinition[]; readonly symbolId?: string; }
+export interface PendingCall { readonly id: string; readonly targetSymbolId?: string; readonly callee?: FunctionRecord; readonly argumentDefinitionIds: readonly (string | undefined)[]; readonly argumentSourceIds: readonly (string | undefined)[]; readonly receiverDefinitionId?: string; }
+export interface TaintTransfer { readonly sourceDefinitionId: string; readonly targetDefinitionId: string; }
+export interface PendingSink { readonly id: string; readonly name: string; readonly argumentDefinitionIds: readonly string[]; }
+export interface FlowState { readonly definitions: VariableDefinition[]; readonly uses: VariableUse[]; readonly taintPaths: Map<string, Map<string, readonly string[]>>; readonly transfers: TaintTransfer[]; readonly sinks: PendingSink[]; readonly functions: Map<ASTNode, FunctionRecord>; readonly resolvableFunctions: Map<string, FunctionRecord>; readonly functionsBySymbolId: Map<string, FunctionRecord>; readonly provenTargets: ReadonlyMap<string, ProvenCallTarget>; readonly hasSemanticResolution: boolean; readonly pendingCalls: PendingCall[]; readonly interproceduralFlows: InterproceduralFlow[]; }
+
+export interface BuildContextResult {
+  readonly graph: DataFlowGraph;
+  readonly state: FlowState;
+}
 
 const sources = new Set(["process.env", "req.body", "req.params", "req.query"]);
 const sinks = new Set(["child_process.exec", "res.send", "res.json"]);
 const sanitizers = new Set(["validator.escape"]);
 
 export class DeterministicDataFlowGraphBuilder {
-  public build(ast: ASTResult, provenCallTargets?: readonly ProvenCallTarget[], symbols: readonly CodeSymbol[] = []): DataFlowGraph {
+  public buildContext(ast: ASTResult, provenCallTargets?: readonly ProvenCallTarget[], symbols: readonly CodeSymbol[] = []): BuildContextResult {
     const functions = collectFunctions(ast.root, symbols);
     const targets = provenCallTargets === undefined ? undefined : createProvenCallTargets(provenCallTargets);
     const state: FlowState = { definitions: [], uses: [], taintPaths: new Map(), transfers: [], sinks: [], functions, resolvableFunctions: new Map(), functionsBySymbolId: new Map(), provenTargets: new Map((targets ?? []).map((target) => [callLocationKey(target.sourceFilePath, target.location), target])), hasSemanticResolution: targets !== undefined, pendingCalls: [], interproceduralFlows: [] };
@@ -26,7 +31,7 @@ export class DeterministicDataFlowGraphBuilder {
     this.propagateTaint(state);
     const definitions = state.definitions.sort(byId);
     const uses = state.uses.sort(byId);
-    return createDataFlowGraph({
+    const graph = createDataFlowGraph({
       id: hash(`dfg:${ast.metadata.sourcePath}`), filePath: ast.metadata.sourcePath, state: "INFERRED", definitions, uses,
       defUseChains: definitions.map((definition) => ({ definitionId: definition.id, useIds: uses.filter((use) => use.definitionId === definition.id).map((use) => use.id).sort() })),
       lifetimes: definitions.map((definition) => ({ name: definition.name, filePath: definition.filePath, declarationId: definition.id, useIds: uses.filter((use) => use.definitionId === definition.id).map((use) => use.id).sort() })),
@@ -35,6 +40,29 @@ export class DeterministicDataFlowGraphBuilder {
       functionSummaries: functionSummaries(state, ast.metadata.sourcePath),
       callBindings: callBindings(state),
     });
+    return { graph, state };
+  }
+
+  public build(ast: ASTResult, provenCallTargets?: readonly ProvenCallTarget[], symbols: readonly CodeSymbol[] = []): DataFlowGraph {
+    return this.buildContext(ast, provenCallTargets, symbols).graph;
+  }
+
+  public computeTaintFlows(state: FlowState, taintPaths: ReadonlyMap<string, ReadonlyMap<string, readonly string[]>>): readonly TaintFlow[] {
+    const flows = state.sinks.flatMap((sink) =>
+      sink.argumentDefinitionIds.flatMap((definitionId) =>
+        [...(taintPaths.get(definitionId)?.entries() ?? [])].map(([sourceId, path]) => ({
+          sourceId,
+          sinkId: sink.id,
+          path: Object.freeze([...path, sink.name]),
+          state: "CONFIRMED" as const,
+        })),
+      ),
+    );
+    return Object.freeze(
+      [...new Map(flows.map((flow) => [`${flow.sourceId}:${flow.sinkId}`, flow])).values()].sort((left, right) =>
+        `${left.sourceId}:${left.sinkId}`.localeCompare(`${right.sourceId}:${right.sinkId}`),
+      ),
+    );
   }
 
   private visit(node: ASTNode, scope: Scope, filePath: string, state: FlowState, currentFunction?: FunctionRecord, receiverDefinitionId?: string): void {

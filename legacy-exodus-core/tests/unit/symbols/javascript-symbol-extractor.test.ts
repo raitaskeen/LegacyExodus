@@ -137,4 +137,45 @@ describe("JavaScriptSymbolExtractor", () => {
     expect(method?.containerId).toBeUndefined();
     expect(method?.id).toBe(repeated?.id);
   });
+
+  test("preserves local binding name and imported source symbol name for renamed imports", async (): Promise<void> => {
+    const parser = new JavaScriptParser();
+    const source = `
+      import { service as aliasService, standard } from "./service";
+      import defaultService from "./default-service";
+      import * as namespaceService from "./namespace";
+      const { cjsHelper: cjsAlias, direct } = require("./cjs");
+    `;
+    const table = new JavaScriptSymbolExtractor().extract((await parser.parse(createRequest(source))).result);
+    const imports = table.symbols.filter((symbol) => symbol.kind === "import");
+
+    const renamedEsm = imports.find((s) => s.name === "aliasService");
+    const standardEsm = imports.find((s) => s.name === "standard");
+    const defaultEsm = imports.find((s) => s.name === "defaultService");
+    const namespaceEsm = imports.find((s) => s.name === "namespaceService");
+    const renamedCjs = imports.find((s) => s.name === "cjsAlias");
+    const directCjs = imports.find((s) => s.name === "direct");
+
+    expect(renamedEsm?.name).toBe("aliasService");
+    expect(renamedEsm?.sourceSymbolName).toBe("service");
+    expect(renamedEsm?.defaultExport).toBe(false);
+
+    expect(standardEsm?.name).toBe("standard");
+    expect(standardEsm?.sourceSymbolName).toBe("standard");
+    expect(standardEsm?.defaultExport).toBe(false);
+
+    expect(defaultEsm?.name).toBe("defaultService");
+    expect(defaultEsm?.defaultExport).toBe(true);
+
+    expect(namespaceEsm?.name).toBe("namespaceService");
+    expect(namespaceEsm?.sourceSymbolName).toBe("*");
+
+    expect(renamedCjs?.name).toBe("cjsAlias");
+    expect(renamedCjs?.sourceSymbolName).toBe("cjsHelper");
+    expect(renamedCjs?.defaultExport).toBe(false);
+
+    expect(directCjs?.name).toBe("direct");
+    expect(directCjs?.sourceSymbolName).toBe("direct");
+    expect(directCjs?.defaultExport).toBe(false);
+  });
 });

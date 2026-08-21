@@ -143,4 +143,92 @@ describe("DeterministicSemanticAnalysisEngine", () => {
     expect(analysis.calls.filter((call) => call.calleeName === "service.getUser").map((call) => call.resolutionState)).toEqual(["UNRESOLVED"]);
     expect(analysis.calls.filter((call) => call.calleeName === "unknown.getUser").map((call) => call.targetSymbolId)).toEqual([undefined]);
   });
+
+  test("isolates sibling scopes and correctly resolves module-level bindings", async (): Promise<void> => {
+    const source = `
+      function moduleHelper() { return "module"; }
+      function caller() {
+        privateHelper();
+        moduleHelper();
+      }
+      function container() {
+        function privateHelper() { return "private"; }
+        privateHelper();
+      }
+    `;
+    const file = { id: "lexical-isolation", path: "src/lexical-isolation.js", language: "javascript", size: source.length } as const;
+    const ast = (await new JavaScriptParser().parse({ file, source })).result;
+    const symbols = new JavaScriptSymbolExtractor().extract(ast);
+    const graph = new DeterministicDependencyGraphBuilder().build([symbols], [file]);
+    const analysis = new DeterministicSemanticAnalysisEngine().analyze({ astResults: [ast], dependencyGraph: graph, symbolTables: [symbols] });
+
+    const moduleHelperSymbol = symbols.symbols.find((s) => s.kind === "function" && s.name === "moduleHelper" && s.scopeId === "scope:module");
+    const privateHelperSymbol = symbols.symbols.find((s) => s.kind === "function" && s.name === "privateHelper");
+
+    const callerCalls = analysis.calls.filter((c) => c.callerName === "caller");
+    const containerCalls = analysis.calls.filter((c) => c.callerName === "container");
+
+    const callerPrivateCall = callerCalls.find((c) => c.calleeName === "privateHelper");
+    const callerModuleCall = callerCalls.find((c) => c.calleeName === "moduleHelper");
+    const containerPrivateCall = containerCalls.find((c) => c.calleeName === "privateHelper");
+
+    expect(callerPrivateCall?.resolutionState).toBe("UNRESOLVED");
+    expect(callerPrivateCall?.targetSymbolId).toBeUndefined();
+
+    expect(callerModuleCall?.resolutionState).toBe("RESOLVED");
+    expect(callerModuleCall?.targetSymbolId).toBe(moduleHelperSymbol?.id);
+
+    expect(containerPrivateCall?.resolutionState).toBe("RESOLVED");
+    expect(containerPrivateCall?.targetSymbolId).toBe(privateHelperSymbol?.id);
+  });
+
+  test("resolves renamed and multiple aliased imports to their exact canonical target export symbols", async (): Promise<void> => {
+    const parser = new JavaScriptParser();
+    const extractor = new JavaScriptSymbolExtractor();
+    const files = [
+      { id: "service", path: "src/service.js", language: "javascript", size: 1 },
+      { id: "consumer", path: "src/consumer.js", language: "javascript", size: 1 },
+    ] as const;
+    const serviceSource = `
+      export function actualA() { return "A"; }
+      export function actualB() { return "B"; }
+    `;
+    const consumerSource = `
+      import { actualA as aliasA, actualB as aliasB } from "./service";
+      function run() {
+        aliasA();
+        aliasB();
+        unrelatedLocal();
+      }
+    `;
+    const serviceAst = (await parser.parse({ file: files[0], source: serviceSource })).result;
+    const consumerAst = (await parser.parse({ file: files[1], source: consumerSource })).result;
+    const serviceSymbols = extractor.extract(serviceAst);
+    const consumerSymbols = extractor.extract(consumerAst);
+    const dependencyGraph = new DeterministicDependencyGraphBuilder().build([serviceSymbols, consumerSymbols], files);
+    const analysis = new DeterministicSemanticAnalysisEngine().analyze({
+      astResults: [serviceAst, consumerAst],
+      dependencyGraph,
+      symbolTables: [serviceSymbols, consumerSymbols],
+    });
+
+    const exportA = serviceSymbols.symbols.find((s) => s.kind === "export" && s.name === "actualA");
+    const exportB = serviceSymbols.symbols.find((s) => s.kind === "export" && s.name === "actualB");
+
+    const callA = analysis.calls.find((c) => c.sourceFilePath === "src/consumer.js" && c.calleeName === "aliasA");
+    const callB = analysis.calls.find((c) => c.sourceFilePath === "src/consumer.js" && c.calleeName === "aliasB");
+    const callUnrelated = analysis.calls.find((c) => c.sourceFilePath === "src/consumer.js" && c.calleeName === "unrelatedLocal");
+
+    expect(exportA?.id).toBeDefined();
+    expect(exportB?.id).toBeDefined();
+
+    expect(callA?.resolutionState).toBe("RESOLVED");
+    expect(callA?.targetSymbolId).toBe(exportA?.id);
+
+    expect(callB?.resolutionState).toBe("RESOLVED");
+    expect(callB?.targetSymbolId).toBe(exportB?.id);
+
+    expect(callUnrelated?.resolutionState).toBe("UNRESOLVED");
+    expect(callUnrelated?.targetSymbolId).toBeUndefined();
+  });
 });

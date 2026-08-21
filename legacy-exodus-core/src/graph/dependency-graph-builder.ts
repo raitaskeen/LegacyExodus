@@ -23,7 +23,7 @@ export class DeterministicDependencyGraphBuilder {
           const target = resolved.resolvedPath === null ? undefined : tablesByPath.get(resolved.resolvedPath);
           const exported = target === undefined
             ? undefined
-            : this.resolveExport(target, symbol.defaultExport ? "default" : symbol.name, files, tablesByPath, new Set());
+            : this.resolveExport(target, symbol.defaultExport ? "default" : (symbol.sourceSymbolName ?? symbol.name), files, tablesByPath, new Set());
 
           if (exported === undefined) {
             return [];
@@ -52,22 +52,54 @@ export class DeterministicDependencyGraphBuilder {
     name: string,
     files: readonly FileArtifact[],
     tables: ReadonlyMap<string, SymbolTable>,
-    visited: Set<string>,
+    visited: ReadonlySet<string>,
   ): CodeSymbol | undefined {
     if (visited.has(table.filePath)) {
       return this.findDirectExport(table, name);
     }
 
-    visited.add(table.filePath);
+    const nextVisited = new Set(visited);
+    nextVisited.add(table.filePath);
+
     const direct = this.findDirectExport(table, name);
-    if (direct?.moduleSpecifier === undefined) {
-      return direct;
+    if (direct !== undefined) {
+      if (direct.moduleSpecifier === undefined) {
+        return direct;
+      }
+
+      const resolved = this.resolver.resolve(table.filePath, direct.moduleSpecifier, files).resolvedPath;
+      const target = resolved === null ? undefined : tables.get(resolved);
+      const forwardedName = direct.sourceSymbolName ?? name;
+      return target === undefined ? direct : this.resolveExport(target, forwardedName, files, tables, nextVisited);
     }
 
-    const resolved = this.resolver.resolve(table.filePath, direct.moduleSpecifier, files).resolvedPath;
-    const target = resolved === null ? undefined : tables.get(resolved);
-    const forwardedName = direct.sourceSymbolName ?? name;
-    return target === undefined ? direct : this.resolveExport(target, forwardedName, files, tables, visited);
+    if (name === "default" || name === "*") {
+      return undefined;
+    }
+
+    const wildcardExports = table.symbols
+      .filter((symbol) => symbol.kind === "export" && symbol.name === "*" && symbol.moduleSpecifier !== undefined)
+      .sort((left, right) => (left.moduleSpecifier ?? "").localeCompare(right.moduleSpecifier ?? "") || left.id.localeCompare(right.id));
+
+    const matches: CodeSymbol[] = [];
+    for (const wildcard of wildcardExports) {
+      if (wildcard.moduleSpecifier === undefined) continue;
+      const resolved = this.resolver.resolve(table.filePath, wildcard.moduleSpecifier, files).resolvedPath;
+      if (resolved === null) continue;
+      const target = tables.get(resolved);
+      if (target === undefined || nextVisited.has(target.filePath)) continue;
+
+      const found = this.resolveExport(target, name, files, tables, nextVisited);
+      if (found !== undefined && !matches.some((m) => m.id === found.id)) {
+        matches.push(found);
+      }
+    }
+
+    if (matches.length === 1) {
+      return matches[0];
+    }
+
+    return undefined;
   }
 
   private findDirectExport(table: SymbolTable, name: string): CodeSymbol | undefined {
@@ -77,13 +109,11 @@ export class DeterministicDependencyGraphBuilder {
       return exact;
     }
 
-    if (name === "*" || name === "default") {
-      return name === "*"
-        ? exports.find((symbol) => symbol.moduleSpecifier === undefined)
-        : undefined;
+    if (name === "*") {
+      return exports.find((symbol) => symbol.moduleSpecifier === undefined);
     }
 
-    return exports.find((symbol) => symbol.name === "*" && symbol.moduleSpecifier !== undefined);
+    return undefined;
   }
 }
 
