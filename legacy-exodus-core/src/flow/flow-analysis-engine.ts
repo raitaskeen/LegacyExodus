@@ -12,8 +12,23 @@ export class DeterministicFlowAnalysisEngine {
   public analyze(astResults: readonly ASTResult[], semanticCalls?: readonly SemanticCall[], symbolTables: readonly SymbolTable[] = []): FlowAnalysisResult {
     const results = [...astResults].sort((left, right) => left.metadata.sourcePath.localeCompare(right.metadata.sourcePath));
     const symbolsByPath = new Map(symbolTables.map((table) => [table.filePath, table.symbols]));
-    const dataFlowGraphs = results.map((ast) => this.dataFlowBuilder.build(ast, semanticCalls === undefined ? undefined : createProvenCallTargets(semanticCalls.flatMap((call) => call.sourceFilePath === ast.metadata.sourcePath && call.resolutionState === "RESOLVED" && call.targetSymbolId !== undefined && call.location !== undefined ? [{ callId: call.id, sourceFilePath: call.sourceFilePath, location: call.location, targetSymbolId: call.targetSymbolId }] : [])), symbolsByPath.get(ast.metadata.sourcePath) ?? []));
-    const summaries = new Map(dataFlowGraphs.flatMap((graph) => graph.functionSummaries.map((summary) => [summary.symbolId, summary] as const)));
+    const contexts = results.map((ast) =>
+      this.dataFlowBuilder.buildContext(
+        ast,
+        semanticCalls === undefined
+          ? undefined
+          : createProvenCallTargets(
+              semanticCalls.flatMap((call) =>
+                call.sourceFilePath === ast.metadata.sourcePath && call.resolutionState === "RESOLVED" && call.targetSymbolId !== undefined && call.location !== undefined
+                  ? [{ callId: call.id, sourceFilePath: call.sourceFilePath, location: call.location, targetSymbolId: call.targetSymbolId }]
+                  : [],
+              ),
+            ),
+        symbolsByPath.get(ast.metadata.sourcePath) ?? [],
+      ),
+    );
+
+    const summaries = new Map(contexts.flatMap(({ graph }) => graph.functionSummaries.map((summary) => [summary.symbolId, summary] as const)));
     for (const table of symbolTables) {
       for (const exported of table.symbols.filter((symbol) => symbol.kind === "export" && symbol.moduleSpecifier === undefined)) {
         const localName = exported.sourceSymbolName ?? exported.name;
@@ -28,24 +43,92 @@ export class DeterministicFlowAnalysisEngine {
         if (summary !== undefined) summaries.set(exported.id, summary);
       }
     }
-    const connected = dataFlowGraphs.map((graph) => withCrossFileTransfers(graph, summaries));
-    return Object.freeze({ controlFlowGraphs: Object.freeze(results.flatMap((ast) => this.controlFlowBuilder.buildAll(ast))), dataFlowGraphs: Object.freeze(connected) });
+
+    const crossFileTransfersByGraph = new Map<string, InterproceduralFlow[]>();
+    const allCrossFileTransfers: { sourceDefinitionId: string; targetDefinitionId: string }[] = [];
+
+    for (const { graph } of contexts) {
+      const transfers: InterproceduralFlow[] = [...graph.interproceduralFlows];
+      for (const binding of graph.callBindings) {
+        const target = summaries.get(binding.targetSymbolId);
+        if (target === undefined || target.filePath === graph.filePath) continue;
+        for (const [index, sourceDefinitionId] of binding.argumentDefinitionIds.entries()) {
+          const parameterDefinitionId = target.parameterDefinitionIds[index];
+          if (sourceDefinitionId !== undefined && parameterDefinitionId !== undefined) {
+            transfers.push(createTransfer(binding.callId, "argument-to-parameter", sourceDefinitionId, parameterDefinitionId));
+            allCrossFileTransfers.push({ sourceDefinitionId, targetDefinitionId: parameterDefinitionId });
+          }
+        }
+        if (binding.receiverDefinitionId !== undefined) {
+          for (const returned of target.returnDefinitionIds) {
+            transfers.push(createTransfer(binding.callId, "return-to-receiver", returned, binding.receiverDefinitionId));
+            allCrossFileTransfers.push({ sourceDefinitionId: returned, targetDefinitionId: binding.receiverDefinitionId });
+          }
+        }
+      }
+      crossFileTransfersByGraph.set(graph.filePath, transfers);
+    }
+
+    const globalTaintPaths = new Map<string, Map<string, readonly string[]>>();
+    for (const { state } of contexts) {
+      for (const [defId, sourceMap] of state.taintPaths) {
+        const globalSourceMap = globalTaintPaths.get(defId) ?? new Map<string, readonly string[]>();
+        for (const [sourceId, path] of sourceMap) {
+          globalSourceMap.set(sourceId, [...path]);
+        }
+        globalTaintPaths.set(defId, globalSourceMap);
+      }
+    }
+
+    const allTransfers = [
+      ...contexts.flatMap(({ state }) => state.transfers),
+      ...allCrossFileTransfers,
+    ].sort((left, right) => `${left.sourceDefinitionId}:${left.targetDefinitionId}`.localeCompare(`${right.sourceDefinitionId}:${right.targetDefinitionId}`));
+
+    for (let changed = true; changed;) {
+      changed = false;
+      for (const transfer of allTransfers) {
+        const sourcePaths = globalTaintPaths.get(transfer.sourceDefinitionId);
+        if (sourcePaths === undefined) continue;
+        for (const [sourceId, path] of sourcePaths) {
+          if (setGlobalTaintPath(globalTaintPaths, transfer.targetDefinitionId, sourceId, [...path, transfer.targetDefinitionId])) {
+            changed = true;
+          }
+        }
+      }
+    }
+
+    const connected = contexts.map(({ graph, state }) => {
+      const transfers = crossFileTransfersByGraph.get(graph.filePath) ?? [...graph.interproceduralFlows];
+      const unique = [...new Map(transfers.map((transfer) => [transfer.id, transfer] as const)).values()].sort((left, right) => left.id.localeCompare(right.id));
+      const taintFlows = this.dataFlowBuilder.computeTaintFlows(state, globalTaintPaths);
+
+      return createDataFlowGraph({
+        ...graph,
+        interproceduralFlows: unique,
+        taintFlows,
+      });
+    });
+
+    return Object.freeze({
+      controlFlowGraphs: Object.freeze(results.flatMap((ast) => this.controlFlowBuilder.buildAll(ast))),
+      dataFlowGraphs: Object.freeze(connected),
+    });
   }
 }
 
-function withCrossFileTransfers(graph: DataFlowGraph, summaries: ReadonlyMap<string, DataFlowGraph["functionSummaries"][number]>): DataFlowGraph {
-  const transfers: InterproceduralFlow[] = [...graph.interproceduralFlows];
-  for (const binding of graph.callBindings) {
-    const target = summaries.get(binding.targetSymbolId);
-    if (target === undefined || target.filePath === graph.filePath) continue;
-    for (const [index, sourceDefinitionId] of binding.argumentDefinitionIds.entries()) {
-      const parameterDefinitionId = target.parameterDefinitionIds[index];
-      if (sourceDefinitionId !== undefined && parameterDefinitionId !== undefined) transfers.push(createTransfer(binding.callId, "argument-to-parameter", sourceDefinitionId, parameterDefinitionId));
-    }
-    if (binding.receiverDefinitionId !== undefined) for (const returned of target.returnDefinitionIds) transfers.push(createTransfer(binding.callId, "return-to-receiver", returned, binding.receiverDefinitionId));
-  }
-  const unique = [...new Map(transfers.map((transfer) => [transfer.id, transfer] as const)).values()].sort((left, right) => left.id.localeCompare(right.id));
-  return createDataFlowGraph({ ...graph, interproceduralFlows: unique });
+function setGlobalTaintPath(
+  taintPaths: Map<string, Map<string, readonly string[]>>,
+  definitionId: string,
+  sourceId: string,
+  path: readonly string[],
+): boolean {
+  const paths = taintPaths.get(definitionId) ?? new Map<string, readonly string[]>();
+  const existing = paths.get(sourceId);
+  if (existing !== undefined && existing.join(":") <= path.join(":")) return false;
+  paths.set(sourceId, Object.freeze([...path]));
+  taintPaths.set(definitionId, paths);
+  return true;
 }
 
 function createTransfer(callId: string, kind: InterproceduralFlow["kind"], sourceDefinitionId: string, targetDefinitionId: string): InterproceduralFlow {

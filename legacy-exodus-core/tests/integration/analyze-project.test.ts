@@ -146,4 +146,53 @@ describe("analyze project integration", () => {
       expect(execution.analysis?.durationMs).toBeGreaterThanOrEqual(0);
     } finally { await rm(projectPath, { force: true, recursive: true }); }
   });
+
+  test("accurately partitions supported source, unsupported source, and non-source artifacts in analysis summary", async (): Promise<void> => {
+    const projectPath = await mkdtemp(join(tmpdir(), "legacy-exodus-taxonomy-"));
+    try {
+      // 2 Supported JS/TS sources
+      await writeFile(join(projectPath, "app.js"), "export const a = 1;", "utf8");
+      await writeFile(join(projectPath, "main.ts"), "export const b: number = 2;", "utf8");
+
+      // 4 Unsupported sources across diverse language ecosystems
+      await writeFile(join(projectPath, "Service.kt"), "class Service", "utf8");
+      await writeFile(join(projectPath, "Widget.swift"), "struct Widget {}", "utf8");
+      await writeFile(join(projectPath, "App.vue"), "<template></template>", "utf8");
+      await writeFile(join(projectPath, "main.rs"), "fn main() {}", "utf8");
+
+      // 3 Genuine non-source artifacts (docs, stylesheet, manifest)
+      await writeFile(join(projectPath, "README.md"), "# Title", "utf8");
+      await writeFile(join(projectPath, "theme.css"), "body {}", "utf8");
+      await writeFile(join(projectPath, "package.json"), "{}", "utf8");
+
+      // 1 Unclassified file
+      await writeFile(join(projectPath, "custom.data"), "raw-bytes", "utf8");
+
+      const engine = createLegacyExodusEngine({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+      await engine.initialize();
+      const result = await engine.execute({
+        id: "00000000-0000-4000-8000-000000000050",
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: {
+          projectId: "00000000-0000-4000-8000-000000000051",
+          path: projectPath,
+        },
+      });
+
+      if (result.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject result.");
+
+      expect(result.analysis).toMatchObject({
+        filesDiscovered: 10,
+        filesAnalyzed: 2,
+        parserFailures: 0,
+        symbolExtractionFailures: 0,
+        unsupportedFiles: 4,     // Service.kt, Widget.swift, App.vue, main.rs
+        nonSourceArtifacts: 4,   // README.md, theme.css, package.json, custom.data
+      });
+      expect(result.discovery.languages).toEqual(expect.arrayContaining(["javascript", "kotlin", "markdown", "rust", "swift", "typescript", "vue"]));
+    } finally {
+      await rm(projectPath, { force: true, recursive: true });
+    }
+  });
 });

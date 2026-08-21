@@ -155,8 +155,7 @@ function nearestScoped(symbols: readonly CodeSymbol[], name: string, scope: Scop
     if (candidates.length === 1) return candidates[0];
     if (candidates.length > 1) return undefined;
   }
-  const candidates = symbols.filter((symbol) => symbol.name === name && symbol.kind === "function");
-  return candidates.length === 1 ? candidates[0] : undefined;
+  return undefined;
 }
 
 function isInScope(symbol: CodeSymbol, scope: ScopeFrame): boolean {

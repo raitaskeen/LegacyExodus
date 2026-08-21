@@ -899,6 +899,78 @@ describe("control and data flow analysis", () => {
     expect(flowExists(consumer, "return-to-receiver", returned.id, result.id)).toBe(true);
     expect(consumer.interproceduralFlows.some((transfer) => transfer.callId === call.id && transfer.targetDefinitionId === parameter.id)).toBe(true);
   });
+
+  test("propagates taint across files from caller argument into callee sink", async (): Promise<void> => {
+    const serviceSource = `
+      export function execute(cmd) {
+        child_process.exec(cmd);
+      }
+    `;
+    const consumerSource = `
+      import { execute } from "./service";
+      const userCmd = req.body.command;
+      execute(userCmd);
+    `;
+    const { service } = await buildCrossFileFlow("taint-param", serviceSource, consumerSource);
+
+    expect(service.taintFlows.length).toBe(1);
+    expect(service.taintFlows[0]?.state).toBe("CONFIRMED");
+    expect(service.taintFlows[0]?.path.at(-1)).toBe("child_process.exec");
+    expect(service.taintFlows[0]?.sourceId).toBeDefined();
+    expect(service.taintFlows[0]?.path.length).toBeGreaterThanOrEqual(3);
+  });
+
+  test("propagates taint across files from callee return value into caller sink", async (): Promise<void> => {
+    const serviceSource = `
+      export function identity(val) {
+        return val;
+      }
+    `;
+    const consumerSource = `
+      import { identity } from "./service";
+      const input = req.body.data;
+      const result = identity(input);
+      child_process.exec(result);
+    `;
+    const { consumer } = await buildCrossFileFlow("taint-return", serviceSource, consumerSource);
+
+    expect(consumer.taintFlows.length).toBe(1);
+    expect(consumer.taintFlows[0]?.state).toBe("CONFIRMED");
+    expect(consumer.taintFlows[0]?.path.at(-1)).toBe("child_process.exec");
+    expect(consumer.taintFlows[0]?.sourceId).toBeDefined();
+    expect(consumer.taintFlows[0]?.path.length).toBeGreaterThanOrEqual(3);
+  });
+
+  test("stops cross-file taint propagation when input is sanitized", async (): Promise<void> => {
+    const serviceSource = `
+      export function execute(cmd) {
+        child_process.exec(cmd);
+      }
+    `;
+    const consumerSource = `
+      import { execute } from "./service";
+      const cleanCmd = validator.escape(req.body.command);
+      execute(cleanCmd);
+    `;
+    const { service } = await buildCrossFileFlow("taint-sanitized", serviceSource, consumerSource);
+
+    expect(service.taintFlows.length).toBe(0);
+  });
+
+  test("does not propagate cross-file taint across unproven dynamic calls", async (): Promise<void> => {
+    const serviceSource = `
+      export function execute(cmd) {
+        child_process.exec(cmd);
+      }
+    `;
+    const consumerSource = `
+      const userCmd = req.body.command;
+      unknownCallee(userCmd);
+    `;
+    const { service } = await buildCrossFileFlow("taint-unproven", serviceSource, consumerSource);
+
+    expect(service.taintFlows.length).toBe(0);
+  });
 });
 
 async function buildControlFlowGraph(id: string, source: string) {

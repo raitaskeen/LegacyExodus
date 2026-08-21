@@ -78,8 +78,13 @@ function mapNode(node: BabelNode, role?: string): JavaScriptNodeMapping {
 
   if (node.type === "ImportSpecifier") {
     const importedName = readBabelIdentifierName(node.imported);
+    const localName = readBabelIdentifierName(node.local);
     if (importedName !== undefined) {
       attributes.importedName = importedName;
+      attributes.sourceSymbolName = importedName;
+    }
+    if (localName !== undefined) {
+      attributes.localName = localName;
     }
   }
 
