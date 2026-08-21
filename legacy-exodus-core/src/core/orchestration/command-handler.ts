@@ -4,6 +4,7 @@ import type {
   InitializeProjectCommand,
   UpdateKnowledgeCommand,
 } from "@contracts/commands";
+import { createAnalysisSummary, type AnalysisSummary } from "@contracts/engine";
 import type {
   FileDiscovered,
   KnowledgeUpdated,
@@ -25,6 +26,7 @@ export interface CommandExecution {
   readonly events: readonly DomainEvent[];
   readonly records: readonly StorageRecord[];
   readonly discovery?: DiscoveryResult;
+  readonly analysis?: AnalysisSummary;
 }
 
 export class InitializeProjectHandler {
@@ -80,6 +82,7 @@ export class AnalyzeProjectHandler {
   ) {}
 
   public async handle(command: AnalyzeProjectCommand): Promise<CommandExecution> {
+    const startedAt = performance.now();
     const discovery = await this.discoveryEngine.discover({
       projectId: command.payload.projectId,
       projectPath: command.payload.path,
@@ -249,7 +252,20 @@ export class AnalyzeProjectHandler {
       }),
     );
 
-    return { events: Object.freeze(events), records: Object.freeze(records), discovery };
+    return {
+      events: Object.freeze(events),
+      records: Object.freeze(records),
+      discovery,
+      analysis: createAnalysisSummary({
+        filesDiscovered: discovery.files.length,
+        filesAnalyzed: symbolTables.length,
+        parserFailures: events.filter((event) => event.type === "ParserFailure").length,
+        symbolExtractionFailures: events.filter((event) => event.type === "SymbolsExtractionFailure").length,
+        unsupportedFiles: discovery.files.filter((file) => file.fileKind === "source" && file.language !== "javascript" && file.language !== "typescript").length,
+        nonSourceArtifacts: discovery.files.filter((file) => file.fileKind !== "source").length,
+        durationMs: performance.now() - startedAt,
+      }),
+    };
   }
 }
 

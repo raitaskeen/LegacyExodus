@@ -100,6 +100,10 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         this.addMethodSymbol(node, ast, context, symbols);
         this.visitChildren(node, ast, { ...context, scopeId: createLexicalScopeId(node.type, node.location) }, symbols);
         return;
+      case "ObjectMethod":
+        this.addMethodSymbol(node, ast, context, symbols);
+        this.visitChildren(node, ast, { ...context, scopeId: createLexicalScopeId(node.type, node.location) }, symbols);
+        return;
       default:
         break;
     }

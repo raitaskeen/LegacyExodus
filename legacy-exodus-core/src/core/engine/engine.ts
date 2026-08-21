@@ -80,7 +80,14 @@ export class LegacyExodusEngine {
 
         await this.context.discoveryProjection.project(discoveryRecord.id);
 
-        return { type: "AnalyzeProject", discovery: execution.discovery };
+        if (execution.analysis === undefined) {
+          throw new LegacyExodusError({
+            code: "ANALYSIS_SUMMARY_MISSING",
+            message: "AnalyzeProject completed without an analysis summary.",
+          });
+        }
+
+        return { type: "AnalyzeProject", discovery: execution.discovery, analysis: execution.analysis };
       }
     }
   }

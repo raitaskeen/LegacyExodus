@@ -122,4 +122,19 @@ describe("JavaScriptSymbolExtractor", () => {
     expect(exports.map((symbol) => [symbol.name, symbol.defaultExport, symbol.sourceSymbolName])).toEqual([["default", true, "utils"], ["helper", false, "helper"], ["named", false, "named"]]);
     expect(imports.some((symbol) => symbol.name === "dynamic")).toBe(false);
   });
+
+  test("models object methods as deterministic lexical method symbols without class identity", async (): Promise<void> => {
+    const parser = new JavaScriptParser();
+    const source = "const service = { getUser(req, res) { return res.send(req.params.id); } }; service.getUser();";
+    const first = new JavaScriptSymbolExtractor().extract((await parser.parse(createRequest(source))).result);
+    const second = new JavaScriptSymbolExtractor().extract((await parser.parse(createRequest(source))).result);
+    const method = first.symbols.find((symbol) => symbol.kind === "method" && symbol.name === "getUser");
+    const repeated = second.symbols.find((symbol) => symbol.kind === "method" && symbol.name === "getUser");
+
+    expect(method?.name).toBe("getUser");
+    expect(method?.parameters).toEqual(["req", "res"]);
+    expect(method?.scopeId).toBe("scope:module");
+    expect(method?.containerId).toBeUndefined();
+    expect(method?.id).toBe(repeated?.id);
+  });
 });

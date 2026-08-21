@@ -13,6 +13,9 @@ describe("analyze project integration", () => {
     try {
       await mkdir(join(projectPath, "src", "components"), { recursive: true });
       await writeFile(join(projectPath, "src", "components", "Books.jsx"), "export const Books = {};", "utf8");
+      await writeFile(join(projectPath, "src", "legacy.rs"), "fn main() {}", "utf8");
+      await writeFile(join(projectPath, "styles.css"), "body {}", "utf8");
+      await writeFile(join(projectPath, "README.md"), "# Library", "utf8");
       await writeFile(
         join(projectPath, "package.json"),
         JSON.stringify({
@@ -43,14 +46,23 @@ describe("analyze project integration", () => {
           "mongodb",
           "react",
         ]);
+        expect(result.analysis).toMatchObject({
+          filesDiscovered: 5,
+          filesAnalyzed: 1,
+          parserFailures: 0,
+          symbolExtractionFailures: 0,
+          unsupportedFiles: 1,
+          nonSourceArtifacts: 3,
+        });
+        expect(result.analysis.durationMs).toBeGreaterThanOrEqual(0);
       }
 
       expect(JSON.parse(await readFile(join(projectPath, ".discovery", "summary.json"), "utf8"))).toEqual({
         projectName: "library-management-system",
-        fileCount: 2,
+        fileCount: 5,
         dependencyCount: 3,
         frameworkCount: 3,
-        languages: ["javascript", "json"],
+        languages: ["css", "javascript", "json", "markdown", "rust"],
       });
       const knowledge = JSON.parse(await readFile(join(projectPath, ".discovery", "knowledge.json"), "utf8")) as {
         readonly nodes: readonly { readonly kind: string }[];
@@ -118,11 +130,20 @@ describe("analyze project integration", () => {
       await writeFile(join(projectPath, "broken.js"), "export const = ;", "utf8");
       await writeFile(join(projectPath, "last.ts"), "export const last: number = 2;", "utf8");
       const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
-      await context.orchestrator.execute({ id: "00000000-0000-4000-8000-000000000042", type: "AnalyzeProject", createdAt: new Date(), payload: { projectId: "00000000-0000-4000-8000-000000000043", path: projectPath } });
+      const execution = await context.orchestrator.execute({ id: "00000000-0000-4000-8000-000000000042", type: "AnalyzeProject", createdAt: new Date(), payload: { projectId: "00000000-0000-4000-8000-000000000043", path: projectPath } });
 
       expect(context.eventStore.getByType("ParserFailure")[0]).toMatchObject({ payload: { path: "broken.js", code: expect.any(String) } });
       expect(context.eventStore.getByType("SymbolsExtracted").map((event) => (event.payload as { readonly path: string }).path)).toEqual(["first.js", "last.ts"]);
       expect(await context.storage.findAll("symbol-table")).toHaveLength(2);
+      expect(execution.analysis).toMatchObject({
+        filesDiscovered: 3,
+        filesAnalyzed: 2,
+        parserFailures: 1,
+        symbolExtractionFailures: 0,
+        unsupportedFiles: 0,
+        nonSourceArtifacts: 0,
+      });
+      expect(execution.analysis?.durationMs).toBeGreaterThanOrEqual(0);
     } finally { await rm(projectPath, { force: true, recursive: true }); }
   });
 });

@@ -533,9 +533,9 @@ describe("control and data flow analysis", () => {
       function render(value) { return value; }
       const input = req.query;
       const alias = input;
-      exec(alias);
+      child_process.exec(alias);
       const clean = sanitize(alias);
-      exec(clean);
+      child_process.exec(clean);
       user.name = alias;
     `;
     const ast = (await new JavaScriptParser().parse({ file: { id: "scope", path: "src/scope.js", language: "javascript", size: source.length }, source })).result;
@@ -546,7 +546,7 @@ describe("control and data flow analysis", () => {
     expect(graph.uses.filter((use) => use.name === "value").map((use) => use.definitionId)).toEqual([values[1]?.id]);
     expect(graph.definitions.some((definition) => definition.name === "user.name" && definition.kind === "assignment")).toBe(true);
     expect(graph.taintFlows).toHaveLength(1);
-    expect(graph.taintFlows[0]?.path.at(-1)).toBe("exec");
+    expect(graph.taintFlows[0]?.path.at(-1)).toBe("child_process.exec");
     expect(graph.state).toBe("INFERRED");
   });
 
@@ -649,63 +649,175 @@ describe("control and data flow analysis", () => {
   });
 
   test("propagates direct local taint through each proven assignment to its sink", async (): Promise<void> => {
-    const graph = await buildDataFlowGraph("taint-local", `const a = req.body.name; const b = a; const c = b; exec(c);`);
+    const graph = await buildDataFlowGraph("taint-local", `const a = req.body.name; const b = a; const c = b; child_process.exec(c);`);
     const a = definition(graph, "a", "declaration");
     const b = definition(graph, "b", "declaration");
     const c = definition(graph, "c", "declaration");
-    const flow = taintFlowTo(graph, "exec");
+    const flow = taintFlowTo(graph, "child_process.exec");
 
-    expect(flow.path.slice(1)).toEqual([a.id, b.id, c.id, "exec"]);
+    expect(flow.path.slice(1)).toEqual([a.id, b.id, c.id, "child_process.exec"]);
     expect(flow.path[0]).toBe(flow.sourceId);
     expect(graph.taintFlows).toHaveLength(1);
   });
 
   test("propagates taint through direct and nested resolved function returns", async (): Promise<void> => {
-    const direct = await buildDataFlowGraph("taint-direct-call", `function normalize(value) { return value.trim(); } const name = req.body.name; const result = normalize(name); exec(result);`);
+    const direct = await buildDataFlowGraph("taint-direct-call", `function normalize(value) { return value.trim(); } const name = req.body.name; const result = normalize(name); child_process.exec(result);`);
     const name = definition(direct, "name", "declaration");
     const value = definition(direct, "value", "parameter");
     const returned = definition(direct, "normalize:return", "return");
     const result = definition(direct, "result", "declaration");
-    expect(taintFlowTo(direct, "exec").path.slice(1)).toEqual([name.id, value.id, returned.id, result.id, "exec"]);
+    expect(taintFlowTo(direct, "child_process.exec").path.slice(1)).toEqual([name.id, value.id, returned.id, result.id, "child_process.exec"]);
 
-    const nested = await buildDataFlowGraph("taint-nested-call", `function inner(value) { return value; } function outer(input) { return inner(input); } const result = outer(req.body.name); exec(result);`);
+    const nested = await buildDataFlowGraph("taint-nested-call", `function inner(value) { return value; } function outer(input) { return inner(input); } const result = outer(req.body.name); child_process.exec(result);`);
     const outerInput = definition(nested, "input", "parameter");
     const innerValue = definition(nested, "value", "parameter");
     const innerReturn = definition(nested, "inner:return", "return");
     const outerReturn = definition(nested, "outer:return", "return");
     const nestedResult = definition(nested, "result", "declaration");
-    expect(taintFlowTo(nested, "exec").path.slice(1)).toEqual([outerInput.id, innerValue.id, innerReturn.id, outerReturn.id, nestedResult.id, "exec"]);
+    expect(taintFlowTo(nested, "child_process.exec").path.slice(1)).toEqual([outerInput.id, innerValue.id, innerReturn.id, outerReturn.id, nestedResult.id, "child_process.exec"]);
   });
 
   test("stops recognized sanitizers while retaining non-sanitized proven paths", async (): Promise<void> => {
-    const sanitized = await buildDataFlowGraph("taint-sanitized", `const input = req.body.name; const clean = sanitize(input); exec(clean);`);
+    const sanitized = await buildDataFlowGraph("taint-sanitized", `const input = req.body.name; const clean = sanitize(input); child_process.exec(clean);`);
     expect(sanitized.taintFlows).toEqual([]);
 
-    const acrossCall = await buildDataFlowGraph("taint-sanitized-call", `function send(value) { return value; } const input = req.body.name; const clean = sanitize(input); const output = send(clean); exec(output);`);
+    const acrossCall = await buildDataFlowGraph("taint-sanitized-call", `function send(value) { return value; } const input = req.body.name; const clean = sanitize(input); const output = send(clean); child_process.exec(output);`);
     expect(acrossCall.taintFlows).toEqual([]);
 
-    const unrecognized = await buildDataFlowGraph("taint-unrecognized", `const input = req.body.name; const output = unknownTransform(input); exec(output);`);
+    const unrecognized = await buildDataFlowGraph("taint-unrecognized", `const input = req.body.name; const output = unknownTransform(input); child_process.exec(output);`);
     expect(unrecognized.taintFlows).toEqual([]);
   });
 
   test("tracks supported property paths and separate source and sink provenance", async (): Promise<void> => {
-    const property = await buildDataFlowGraph("taint-property", `const user = {}; user.name = req.body.name; exec(user.name);`);
+    const property = await buildDataFlowGraph("taint-property", `const user = {}; user.name = req.body.name; child_process.exec(user.name);`);
     const userName = definition(property, "user.name", "assignment");
-    expect(taintFlowTo(property, "exec").path.slice(1)).toEqual([userName.id, "exec"]);
+    expect(taintFlowTo(property, "child_process.exec").path.slice(1)).toEqual([userName.id, "child_process.exec"]);
 
-    const multiple = await buildDataFlowGraph("taint-multiple", `const body = req.body.name; const query = req.query.id; exec(body); exec(query);`);
+    const multiple = await buildDataFlowGraph("taint-multiple", `const body = req.body.name; const query = req.query.id; child_process.exec(body); child_process.exec(query);`);
     expect(multiple.taintFlows).toHaveLength(2);
     expect(new Set(multiple.taintFlows.map((flow) => flow.sourceId)).size).toBe(2);
     expect(new Set(multiple.taintFlows.map((flow) => flow.sinkId)).size).toBe(2);
   });
 
   test("remains conservative for branch-local and dynamic call results", async (): Promise<void> => {
-    const branch = await buildDataFlowGraph("taint-branch", `const input = req.body.name; let value; if (condition) { value = input; } exec(value);`);
+    const branch = await buildDataFlowGraph("taint-branch", `const input = req.body.name; let value; if (condition) { value = input; } child_process.exec(value);`);
     expect(branch.taintFlows).toEqual([]);
 
-    const dynamic = await buildDataFlowGraph("taint-dynamic", `const input = req.body.name; const result = object[userControlledName](input); exec(result);`);
+    const dynamic = await buildDataFlowGraph("taint-dynamic", `const input = req.body.name; const result = object[userControlledName](input); child_process.exec(result);`);
     expect(dynamic.taintFlows).toEqual([]);
-    expect(JSON.stringify(dynamic)).toBe(JSON.stringify(await buildDataFlowGraph("taint-dynamic", `const input = req.body.name; const result = object[userControlledName](input); exec(result);`)));
+    expect(JSON.stringify(dynamic)).toBe(JSON.stringify(await buildDataFlowGraph("taint-dynamic", `const input = req.body.name; const result = object[userControlledName](input); child_process.exec(result);`)));
+  });
+
+  test("uses the proven semantic function target and canonical call id for interprocedural flow", async (): Promise<void> => {
+    const source = "function process(value) { return value; } const input = sourceValue; const result = process(input);";
+    const { graph, semantic } = await buildResolvedDataFlow("semantic-function", source);
+    const call = semantic.calls.find((candidate) => candidate.calleeName === "process");
+    const input = definition(graph, "input", "declaration");
+    const parameter = definition(graph, "value", "parameter");
+
+    expect(call?.resolutionState).toBe("RESOLVED");
+    expect(flowExists(graph, "argument-to-parameter", input.id, parameter.id)).toBe(true);
+    expect(graph.interproceduralFlows.find((flow) => flow.kind === "argument-to-parameter")?.callId).toBe(call?.id);
+  });
+
+  test("uses a proven class method target for interprocedural flow", async (): Promise<void> => {
+    const source = "class Service { transform(value) { return value; } } const service = new Service(); const input = sourceValue; const result = service.transform(input);";
+    const { graph, semantic } = await buildResolvedDataFlow("semantic-method", source);
+    const call = semantic.calls.find((candidate) => candidate.calleeName === "service.transform");
+    const input = definition(graph, "input", "declaration");
+    const parameter = definition(graph, "value", "parameter");
+
+    expect(call?.resolutionState).toBe("RESOLVED");
+    expect(flowExists(graph, "argument-to-parameter", input.id, parameter.id)).toBe(true);
+    expect(graph.interproceduralFlows.some((flow) => flow.callId === call?.id && flow.kind === "return-to-receiver")).toBe(true);
+  });
+
+  test("does not create DFG transfers for an unresolved receiver", async (): Promise<void> => {
+    const { graph, semantic } = await buildResolvedDataFlow("semantic-unknown-receiver", "const input = sourceValue; const object = unknownFactory(); const result = object.handle(input);");
+
+    expect(semantic.calls.find((call) => call.calleeName === "object.handle")?.resolutionState).toBe("UNRESOLVED");
+    expect(graph.interproceduralFlows).toEqual([]);
+  });
+
+  test("does not select an ambiguous same-name method for DFG flow", async (): Promise<void> => {
+    const source = "class A { handle(value) { return value; } } class B { handle(value) { return value; } } const input = sourceValue; const receiver = condition ? new A() : new B(); const result = receiver.handle(input);";
+    const { graph, semantic } = await buildResolvedDataFlow("semantic-ambiguous-method", source);
+    const call = semantic.calls.find((candidate) => candidate.calleeName === "receiver.handle");
+
+    expect(call?.resolutionState).toBe("UNRESOLVED");
+    expect(graph.interproceduralFlows.some((flow) => flow.callId === call?.id)).toBe(false);
+  });
+
+  test("does not create DFG transfers for computed dynamic calls", async (): Promise<void> => {
+    const { graph, semantic } = await buildResolvedDataFlow("semantic-computed", "const input = sourceValue; const method = getMethod(); const result = object[method](input);");
+
+    expect(semantic.calls.some((call) => call.calleeName.includes("object"))).toBe(false);
+    expect(graph.interproceduralFlows).toEqual([]);
+  });
+
+  test("connects a resolved imported function to its cross-file parameter and return", async (): Promise<void> => {
+    const files = [
+      { id: "service", path: "src/service.js", language: "javascript", size: 1 },
+      { id: "consumer", path: "src/consumer.js", language: "javascript", size: 1 },
+    ] as const;
+    const sources = ["export function normalize(value) { return value; }", "import { normalize } from './service'; const input = sourceValue; const result = normalize(input);"] as const;
+    const parser = new JavaScriptParser();
+    const asts = await Promise.all(files.map((file, index) => {
+      const source = sources[index];
+      if (source === undefined) throw new Error("Cross-file fixture source is missing.");
+      return parser.parse({ file, source });
+    }));
+    const results = asts.map((response) => response.result);
+    const extractor = new JavaScriptSymbolExtractor();
+    const tables = results.map((result) => extractor.extract(result));
+    const dependencies = new DeterministicDependencyGraphBuilder().build(tables, files);
+    const semantic = new DeterministicSemanticAnalysisEngine().analyze({ astResults: results, dependencyGraph: dependencies, symbolTables: tables });
+    const flow = new DeterministicFlowAnalysisEngine().analyze(results, semantic.calls, tables);
+    const consumer = flow.dataFlowGraphs.find((graph) => graph.filePath === "src/consumer.js");
+    const service = flow.dataFlowGraphs.find((graph) => graph.filePath === "src/service.js");
+    const call = semantic.calls.find((candidate) => candidate.sourceFilePath === "src/consumer.js" && candidate.calleeName === "normalize");
+    if (consumer === undefined || service === undefined || call === undefined) throw new Error("Expected resolved cross-file fixture artifacts.");
+    const input = definition(consumer, "input", "declaration");
+    const result = definition(consumer, "result", "declaration");
+    const parameter = definition(service, "value", "parameter");
+    const returned = definition(service, "normalize:return", "return");
+
+    expect(call.resolutionState).toBe("RESOLVED");
+    expect(flowExists(consumer, "argument-to-parameter", input.id, parameter.id)).toBe(true);
+    expect(flowExists(consumer, "return-to-receiver", returned.id, result.id)).toBe(true);
+    expect(consumer.interproceduralFlows.some((transfer) => transfer.callId === call.id && transfer.targetDefinitionId === parameter.id)).toBe(true);
+  });
+
+  test("links renamed ESM and CommonJS exports to their canonical local function summaries", async (): Promise<void> => {
+    const cases = [
+      { id: "renamed-esm", service: "function foo(value) { return value; } export { foo as bar };", consumer: "import { bar } from './service'; const input = sourceValue; const result = bar(input);", callee: "bar" },
+      { id: "commonjs-default", service: "function foo(value) { return value; } module.exports = foo;", consumer: "const foo = require('./service'); const input = sourceValue; const result = foo(input);", callee: "foo" },
+      { id: "commonjs-named", service: "function foo(value) { return value; } exports.bar = foo;", consumer: "const { bar } = require('./service'); const input = sourceValue; const result = bar(input);", callee: "bar" },
+    ] as const;
+
+    for (const testCase of cases) {
+      const { consumer, service, semantic } = await buildCrossFileFlow(testCase.id, testCase.service, testCase.consumer);
+      const call = semantic.calls.find((candidate) => candidate.sourceFilePath === "src/consumer.js" && candidate.calleeName === testCase.callee);
+      if (call === undefined) throw new Error(`Expected ${testCase.id} semantic call.`);
+      const input = definition(consumer, "input", "declaration");
+      const result = definition(consumer, "result", "declaration");
+      const parameter = definition(service, "value", "parameter");
+      const returned = definition(service, "foo:return", "return");
+
+      expect(call.resolutionState).toBe("RESOLVED");
+      expect(flowExists(consumer, "argument-to-parameter", input.id, parameter.id)).toBe(true);
+      expect(flowExists(consumer, "return-to-receiver", returned.id, result.id)).toBe(true);
+      expect(consumer.interproceduralFlows.some((transfer) => transfer.callId === call.id && transfer.targetDefinitionId === parameter.id)).toBe(true);
+    }
+  });
+
+  test("does not treat RegExp.exec as a command-execution sink", async (): Promise<void> => {
+    const source = "const input = req.body.name; const match = pattern.exec(input); child_process.exec(input);";
+    const graph = await buildDataFlowGraph("taint-qualified-exec", source);
+
+    expect(graph.taintFlows).toHaveLength(1);
+    expect(graph.taintFlows[0]?.path.at(-1)).toBe("child_process.exec");
+    expect(graph.taintFlows[0]?.state).toBe("CONFIRMED");
   });
 
   test("uses the proven semantic function target and canonical call id for interprocedural flow", async (): Promise<void> => {
@@ -808,6 +920,25 @@ async function buildResolvedDataFlow(id: string, source: string) {
   const graph = new DeterministicFlowAnalysisEngine().analyze([ast], semantic.calls, [symbols]).dataFlowGraphs[0];
   if (graph === undefined) throw new Error("Expected a data-flow graph.");
   return { graph, semantic };
+}
+
+async function buildCrossFileFlow(id: string, serviceSource: string, consumerSource: string) {
+  const files = [
+    { id: `${id}-service`, path: "src/service.js", language: "javascript", size: serviceSource.length },
+    { id: `${id}-consumer`, path: "src/consumer.js", language: "javascript", size: consumerSource.length },
+  ] as const;
+  const parser = new JavaScriptParser();
+  const results = await Promise.all([parser.parse({ file: files[0], source: serviceSource }), parser.parse({ file: files[1], source: consumerSource })]);
+  const astResults = results.map((result) => result.result);
+  const extractor = new JavaScriptSymbolExtractor();
+  const tables = astResults.map((result) => extractor.extract(result));
+  const dependencyGraph = new DeterministicDependencyGraphBuilder().build(tables, files);
+  const semantic = new DeterministicSemanticAnalysisEngine().analyze({ astResults, dependencyGraph, symbolTables: tables });
+  const flow = new DeterministicFlowAnalysisEngine().analyze(astResults, semantic.calls, tables);
+  const service = flow.dataFlowGraphs.find((graph) => graph.filePath === "src/service.js");
+  const consumer = flow.dataFlowGraphs.find((graph) => graph.filePath === "src/consumer.js");
+  if (service === undefined || consumer === undefined) throw new Error("Expected cross-file data-flow graphs.");
+  return { service, consumer, semantic };
 }
 
 function findBlock(graph: Awaited<ReturnType<typeof buildControlFlowGraph>>, statementType: string) {
