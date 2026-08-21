@@ -129,4 +129,18 @@ describe("DeterministicSemanticAnalysisEngine", () => {
     expect(analysis.calls.some((call) => call.calleeName.includes("["))).toBe(false);
     expect(repeat.calls).toEqual(analysis.calls);
   });
+
+  test("keeps object-method calls unresolved without receiver construction evidence", async (): Promise<void> => {
+    const source = "const service = { getUser(req, res) { return res.send(req.params.id); } }; service.getUser(); const unknown = getService(); unknown.getUser();";
+    const file = { id: "object-method", path: "src/object-method.js", language: "javascript", size: source.length } as const;
+    const ast = (await new JavaScriptParser().parse({ file, source })).result;
+    const symbols = new JavaScriptSymbolExtractor().extract(ast);
+    const graph = new DeterministicDependencyGraphBuilder().build([symbols], [file]);
+    const analysis = new DeterministicSemanticAnalysisEngine().analyze({ astResults: [ast], dependencyGraph: graph, symbolTables: [symbols] });
+    const method = symbols.symbols.find((symbol) => symbol.kind === "method" && symbol.name === "getUser");
+
+    expect(method?.parameters).toEqual(["req", "res"]);
+    expect(analysis.calls.filter((call) => call.calleeName === "service.getUser").map((call) => call.resolutionState)).toEqual(["UNRESOLVED"]);
+    expect(analysis.calls.filter((call) => call.calleeName === "unknown.getUser").map((call) => call.targetSymbolId)).toEqual([undefined]);
+  });
 });

@@ -16,7 +16,13 @@ export class DeterministicFlowAnalysisEngine {
     const summaries = new Map(dataFlowGraphs.flatMap((graph) => graph.functionSummaries.map((summary) => [summary.symbolId, summary] as const)));
     for (const table of symbolTables) {
       for (const exported of table.symbols.filter((symbol) => symbol.kind === "export" && symbol.moduleSpecifier === undefined)) {
-        const local = table.symbols.find((symbol) => (symbol.kind === "function" || symbol.kind === "method") && symbol.name === exported.name);
+        const localName = exported.sourceSymbolName ?? exported.name;
+        const candidates = table.symbols.filter((symbol) =>
+          (symbol.kind === "function" || symbol.kind === "method")
+          && symbol.name === localName
+          && symbol.scopeId === exported.scopeId,
+        );
+        const local = candidates.length === 1 ? candidates[0] : undefined;
         if (local === undefined) continue;
         const summary = summaries.get(local.id);
         if (summary !== undefined) summaries.set(exported.id, summary);

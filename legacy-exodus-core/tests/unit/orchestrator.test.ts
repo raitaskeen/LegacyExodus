@@ -84,10 +84,19 @@ describe("Orchestrator", () => {
     try {
       await writeFile(join(projectPath, "bad.js"), "export const bad = 1;", "utf8");
       await writeFile(join(projectPath, "good.js"), "export const good = 1;", "utf8");
-      await orchestrator.execute({ id: "00000000-0000-4000-8000-000000000062", type: "AnalyzeProject", createdAt: new Date(), payload: { projectId: "00000000-0000-4000-8000-000000000063", path: projectPath } });
+      const execution = await orchestrator.execute({ id: "00000000-0000-4000-8000-000000000062", type: "AnalyzeProject", createdAt: new Date(), payload: { projectId: "00000000-0000-4000-8000-000000000063", path: projectPath } });
 
       expect(eventStore.getByType("SymbolsExtractionFailure")[0]).toMatchObject({ payload: { fileId: expect.any(String), path: "bad.js", code: "SYMBOL_EXTRACTION_FAILED" } });
       expect(eventStore.getByType("SymbolsExtracted")[0]).toMatchObject({ payload: { path: "good.js" } });
+      expect(execution.analysis).toMatchObject({
+        filesDiscovered: 2,
+        filesAnalyzed: 1,
+        parserFailures: 0,
+        symbolExtractionFailures: 1,
+        unsupportedFiles: 0,
+        nonSourceArtifacts: 0,
+      });
+      expect(execution.analysis?.durationMs).toBeGreaterThanOrEqual(0);
     } finally { await rm(projectPath, { force: true, recursive: true }); }
   });
 });

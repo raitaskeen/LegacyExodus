@@ -11,7 +11,7 @@ interface PendingSink { readonly id: string; readonly name: string; readonly arg
 interface FlowState { readonly definitions: VariableDefinition[]; readonly uses: VariableUse[]; readonly taintPaths: Map<string, Map<string, readonly string[]>>; readonly transfers: TaintTransfer[]; readonly sinks: PendingSink[]; readonly functions: Map<ASTNode, FunctionRecord>; readonly resolvableFunctions: Map<string, FunctionRecord>; readonly functionsBySymbolId: Map<string, FunctionRecord>; readonly provenTargets: ReadonlyMap<string, ProvenCallTarget>; readonly hasSemanticResolution: boolean; readonly pendingCalls: PendingCall[]; readonly interproceduralFlows: InterproceduralFlow[]; }
 
 const sources = new Set(["process.env", "req.body", "req.params", "req.query"]);
-const sinks = new Set(["child_process.exec", "exec", "res.send", "res.json"]);
+const sinks = new Set(["child_process.exec", "res.send", "res.json"]);
 const sanitizers = new Set(["validator.escape"]);
 
 export class DeterministicDataFlowGraphBuilder {
