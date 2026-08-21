@@ -95,6 +95,7 @@ describe("Orchestrator", () => {
         symbolExtractionFailures: 1,
         unsupportedFiles: 0,
         nonSourceArtifacts: 0,
+        unclassifiedArtifacts: 0,
       });
       expect(execution.analysis?.durationMs).toBeGreaterThanOrEqual(0);
     } finally { await rm(projectPath, { force: true, recursive: true }); }

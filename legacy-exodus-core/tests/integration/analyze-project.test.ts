@@ -53,6 +53,7 @@ describe("analyze project integration", () => {
           symbolExtractionFailures: 0,
           unsupportedFiles: 1,
           nonSourceArtifacts: 3,
+          unclassifiedArtifacts: 0,
         });
         expect(result.analysis.durationMs).toBeGreaterThanOrEqual(0);
       }
@@ -142,12 +143,13 @@ describe("analyze project integration", () => {
         symbolExtractionFailures: 0,
         unsupportedFiles: 0,
         nonSourceArtifacts: 0,
+        unclassifiedArtifacts: 0,
       });
       expect(execution.analysis?.durationMs).toBeGreaterThanOrEqual(0);
     } finally { await rm(projectPath, { force: true, recursive: true }); }
   });
 
-  test("accurately partitions supported source, unsupported source, and non-source artifacts in analysis summary", async (): Promise<void> => {
+  test("accurately partitions supported source, unsupported source, non-source, and unclassified artifacts", async (): Promise<void> => {
     const projectPath = await mkdtemp(join(tmpdir(), "legacy-exodus-taxonomy-"));
     try {
       // 2 Supported JS/TS sources
@@ -188,8 +190,17 @@ describe("analyze project integration", () => {
         parserFailures: 0,
         symbolExtractionFailures: 0,
         unsupportedFiles: 4,     // Service.kt, Widget.swift, App.vue, main.rs
-        nonSourceArtifacts: 4,   // README.md, theme.css, package.json, custom.data
+        nonSourceArtifacts: 3,   // README.md, theme.css, package.json
+        unclassifiedArtifacts: 1, // custom.data
       });
+      expect(result.analysis.filesDiscovered).toBe(
+        result.analysis.filesAnalyzed +
+        result.analysis.parserFailures +
+        result.analysis.symbolExtractionFailures +
+        result.analysis.unsupportedFiles +
+        result.analysis.nonSourceArtifacts +
+        result.analysis.unclassifiedArtifacts
+      );
       expect(result.discovery.languages).toEqual(expect.arrayContaining(["javascript", "kotlin", "markdown", "rust", "swift", "typescript", "vue"]));
     } finally {
       await rm(projectPath, { force: true, recursive: true });

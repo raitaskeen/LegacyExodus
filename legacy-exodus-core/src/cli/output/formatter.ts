@@ -32,6 +32,7 @@ export function formatAnalyzeOutput(report: AnalyzeProjectReport): string {
     `Symbol extraction failures: ${report.symbolExtractionFailures}`,
     `Unsupported source files: ${report.unsupportedFiles}`,
     `Non-source artifacts: ${report.nonSourceArtifacts}`,
+    `Unclassified files: ${report.unclassifiedArtifacts}`,
     `Analysis duration: ${report.durationMs.toFixed(2)}ms`,
     `Languages: ${report.languages.join(", ") || "none"}`,
     `Frameworks: ${report.frameworks.join(", ") || "none"}`,

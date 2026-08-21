@@ -971,6 +971,87 @@ describe("control and data flow analysis", () => {
 
     expect(service.taintFlows.length).toBe(0);
   });
+
+  test("terminates and preserves bounded deterministic taint paths in self-recursive functions", async (): Promise<void> => {
+    const source = `
+      function loop(val, done) {
+        if (done) return val;
+        return loop(val, true);
+      }
+      const input = req.body.cmd;
+      const res = loop(input, false);
+      child_process.exec(res);
+    `;
+    const { graph } = await buildResolvedDataFlow("self-recursion", source);
+
+    const flow = graph.taintFlows[0];
+    expect(flow?.state).toBe("CONFIRMED");
+    expect(flow?.path.at(-1)).toBe("child_process.exec");
+    expect(flow?.sourceId).toBeDefined();
+    // Bounded path without cyclic repetition
+    expect(new Set(flow?.path).size).toBe(flow?.path.length ?? 0);
+  });
+
+  test("terminates and bounds paths in mutually recursive cross-file flows", async (): Promise<void> => {
+    const serviceSource = `
+      import { ping } from "./consumer";
+      export function pong(val, depth) {
+        if (depth > 0) return ping(val, depth - 1);
+        return val;
+      }
+    `;
+    const consumerSource = `
+      import { pong } from "./service";
+      export function ping(val, depth) {
+        if (depth > 0) return pong(val, depth - 1);
+        return val;
+      }
+      const input = req.body.x;
+      const res = pong(input, 2);
+      child_process.exec(res);
+    `;
+    const { consumer } = await buildCrossFileFlow("mutual-recursion", serviceSource, consumerSource);
+
+    const flow = consumer.taintFlows[0];
+    expect(consumer.taintFlows.length).toBe(1);
+    expect(flow?.state).toBe("CONFIRMED");
+    expect(flow?.path.at(-1)).toBe("child_process.exec");
+    // Ensure no duplicate node in simple path
+    expect(new Set(flow?.path).size).toBe(flow?.path.length ?? 0);
+  });
+
+  test("halts taint propagation through recursive cycles when sanitizer is applied", async (): Promise<void> => {
+    const source = `
+      function loop(val, done) {
+        if (done) return val;
+        return loop(val, true);
+      }
+      const input = validator.escape(req.body.cmd);
+      const res = loop(input, false);
+      child_process.exec(res);
+    `;
+    const { graph } = await buildResolvedDataFlow("sanitized-recursion", source);
+
+    expect(graph.taintFlows.length).toBe(0);
+  });
+
+  test("handles diamond graph with cycle deterministically without path explosion", async (): Promise<void> => {
+    const source = `
+      function stepA(v) { return v; }
+      function stepB(v) { return v; }
+      function cycle(v) { return cycle(v); }
+      const input = req.body.data;
+      const a = stepA(input);
+      const b = stepB(input);
+      const c = cycle(a);
+      child_process.exec(b);
+    `;
+    const { graph } = await buildResolvedDataFlow("diamond-cycle", source);
+
+    expect(graph.taintFlows.length).toBe(1);
+    expect(graph.taintFlows[0]?.state).toBe("CONFIRMED");
+    expect(graph.taintFlows[0]?.path.at(-1)).toBe("child_process.exec");
+  });
 });
 
 async function buildControlFlowGraph(id: string, source: string) {

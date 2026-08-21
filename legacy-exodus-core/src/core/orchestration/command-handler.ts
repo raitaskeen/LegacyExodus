@@ -262,7 +262,8 @@ export class AnalyzeProjectHandler {
         parserFailures: events.filter((event) => event.type === "ParserFailure").length,
         symbolExtractionFailures: events.filter((event) => event.type === "SymbolsExtractionFailure").length,
         unsupportedFiles: discovery.files.filter((file) => file.fileKind === "source" && file.language !== "javascript" && file.language !== "typescript").length,
-        nonSourceArtifacts: discovery.files.filter((file) => file.fileKind !== "source").length,
+        nonSourceArtifacts: discovery.files.filter((file) => file.fileKind !== "source" && file.fileKind !== "unknown" && file.fileKind !== undefined).length,
+        unclassifiedArtifacts: discovery.files.filter((file) => file.fileKind === "unknown" || file.fileKind === undefined).length,
         durationMs: performance.now() - startedAt,
       }),
     };

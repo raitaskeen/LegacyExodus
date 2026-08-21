@@ -32,6 +32,8 @@ export interface AnalysisSummary {
   readonly unsupportedFiles: number;
   /** Discovered artifacts intentionally outside source-code analysis (manifests, docs, styles, data, etc.). */
   readonly nonSourceArtifacts: number;
+  /** Discovered files whose kind or language cannot be confidently classified. */
+  readonly unclassifiedArtifacts: number;
   /** Monotonic wall-clock observation; never persisted in deterministic analysis artifacts. */
   readonly durationMs: number;
 }
@@ -43,6 +45,7 @@ const analysisSummarySchema = z.object({
   symbolExtractionFailures: z.number().int().nonnegative(),
   unsupportedFiles: z.number().int().nonnegative(),
   nonSourceArtifacts: z.number().int().nonnegative(),
+  unclassifiedArtifacts: z.number().int().nonnegative(),
   durationMs: z.number().nonnegative(),
 }).strict();
 

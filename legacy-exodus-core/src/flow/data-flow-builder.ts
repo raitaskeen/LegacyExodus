@@ -140,7 +140,6 @@ export class DeterministicDataFlowGraphBuilder {
     for (const flow of state.interproceduralFlows) state.transfers.push({ sourceDefinitionId: flow.sourceDefinitionId, targetDefinitionId: flow.targetDefinitionId });
   }
   private addInterproceduralFlow(state: FlowState, callId: string, kind: InterproceduralFlow["kind"], sourceDefinitionId: string, targetDefinitionId: string): void { state.interproceduralFlows.push({ id: hash(`interprocedural:${callId}:${kind}:${sourceDefinitionId}:${targetDefinitionId}`), callId, kind, sourceDefinitionId, targetDefinitionId }); }
-
   private transferTaint(node: ASTNode, targetDefinitionId: string, scope: Scope, filePath: string, state: FlowState): void {
     if (sanitized(node)) return;
     if (node.type === "CallExpression") return;
@@ -161,9 +160,10 @@ export class DeterministicDataFlowGraphBuilder {
   }
 
   private setTaintPath(state: FlowState, definitionId: string, sourceId: string, path: readonly string[]): boolean {
+    if (path.slice(0, -1).includes(definitionId)) return false;
     const paths = state.taintPaths.get(definitionId) ?? new Map<string, readonly string[]>();
     const existing = paths.get(sourceId);
-    if (existing !== undefined && existing.join(":") <= path.join(":")) return false;
+    if (existing !== undefined && (existing.length <= path.length || existing.join(":") <= path.join(":"))) return false;
     paths.set(sourceId, Object.freeze([...path]));
     state.taintPaths.set(definitionId, paths);
     return true;
