@@ -30,6 +30,7 @@ describe("Phase 2.9 controlled golden fixture", () => {
         symbolExtractionFailures: 0,
         unsupportedFiles: 0,
         nonSourceArtifacts: 2,
+        unclassifiedArtifacts: 0,
       });
       expect(result.analysis.durationMs).toBeGreaterThanOrEqual(0);
 

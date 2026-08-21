@@ -123,9 +123,10 @@ function setGlobalTaintPath(
   sourceId: string,
   path: readonly string[],
 ): boolean {
+  if (path.slice(0, -1).includes(definitionId)) return false;
   const paths = taintPaths.get(definitionId) ?? new Map<string, readonly string[]>();
   const existing = paths.get(sourceId);
-  if (existing !== undefined && existing.join(":") <= path.join(":")) return false;
+  if (existing !== undefined && (existing.length <= path.length || existing.join(":") <= path.join(":"))) return false;
   paths.set(sourceId, Object.freeze([...path]));
   taintPaths.set(definitionId, paths);
   return true;

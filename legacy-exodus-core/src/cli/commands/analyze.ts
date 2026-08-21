@@ -22,6 +22,7 @@ export interface AnalyzeProjectReport {
   /** Source files whose language has no parser registered in this runtime. */
   readonly unsupportedFiles: number;
   readonly nonSourceArtifacts: number;
+  readonly unclassifiedArtifacts: number;
   readonly durationMs: number;
 }
 
@@ -57,6 +58,7 @@ export async function analyzeProject(
       symbolExtractionFailures: result.analysis.symbolExtractionFailures,
       unsupportedFiles: result.analysis.unsupportedFiles,
       nonSourceArtifacts: result.analysis.nonSourceArtifacts,
+      unclassifiedArtifacts: result.analysis.unclassifiedArtifacts,
       durationMs: result.analysis.durationMs,
     };
   } finally {
