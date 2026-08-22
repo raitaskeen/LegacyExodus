@@ -1,0 +1,8 @@
+# Downloaded benchmark repositories
+.cache/
+
+# Generated benchmark run results
+results/
+
+# Generated discovery output anywhere in the benchmark workspace
+**/.discovery/
