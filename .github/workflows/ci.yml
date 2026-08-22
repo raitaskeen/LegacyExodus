@@ -2,18 +2,74 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
+      - phase-2.8-hardening
   pull_request:
+
+permissions:
+  contents: read
+  security-events: write
 
 jobs:
   verify:
+    name: Verify Core
     runs-on: ubuntu-latest
+
     defaults:
       run:
         working-directory: legacy-exodus-core
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
-      - run: bun run typecheck
-      - run: bun test
-      - run: git diff --check
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun test
+
+      - name: Git diff check
+        run: git diff --check
+
+      - name: Benchmark governance audit
+        run: bun run benchmark audit
+
+  dependency-review:
+    name: Dependency Review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v5
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4

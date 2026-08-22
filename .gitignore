@@ -1,18 +1,21 @@
-# Bun
+# Dependencies
 node_modules/
-bun.lockb
 
-# Bun lock
-# bun.lock
+# Bun legacy binary lockfile
+bun.lockb
 
 # Coverage
 coverage/
 
-# Build
+# Build output
 dist/
 
-# Local discovery output
+# Generated LegacyExodus analysis
 .discovery/
+
+# Generated benchmark artifacts
+legacy-exodus-core/benchmarks/.cache/
+legacy-exodus-core/benchmarks/results/
 
 # Logs
 *.log
