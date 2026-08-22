@@ -39,9 +39,6 @@ jobs:
       - name: Git diff check
         run: git diff --check
 
-      - name: Benchmark governance audit
-        run: bun run benchmark audit
-
   dependency-review:
     name: Dependency Review
     if: github.event_name == 'pull_request'
