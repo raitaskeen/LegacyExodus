@@ -127,6 +127,8 @@ export class FileScanner {
     for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
       const entryPath = resolve(currentPath, entry.name);
 
+      // Intentional traversal policy: Symbolic links are skipped to protect against
+      // traversal cycles, duplicate source analysis, and escaping repository boundaries.
       if (entry.isSymbolicLink()) {
         continue;
       }

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -102,6 +102,36 @@ describe("FileScanner", () => {
       // Case F
       expect(byPath.get("foo.data")).toMatchObject({ language: "unknown", fileKind: "unknown" });
       expect(byPath.get("backup.tmp")).toMatchObject({ language: "unknown", fileKind: "unknown" });
+    } finally {
+      await rm(projectPath, { force: true, recursive: true });
+    }
+  });
+
+  test("safely skips symbolic links and junctions to prevent traversal cycles and duplicate discovery", async (): Promise<void> => {
+    const projectPath = await mkdtemp(join(tmpdir(), "legacy-exodus-symlinks-"));
+    try {
+      await mkdir(join(projectPath, "src"));
+      await writeFile(join(projectPath, "src", "index.js"), "export const ok = true;", "utf8");
+
+      // Attempt to create a directory symlink or junction pointing to src/
+      try {
+        await symlink(join(projectPath, "src"), join(projectPath, "linked_src"), "junction");
+      } catch {
+        // Fallback for non-Windows platforms
+        try {
+          await symlink(join(projectPath, "src"), join(projectPath, "linked_src"), "dir");
+        } catch {
+          // If OS forbids symlink creation in unprivileged environment, test passes trivially
+        }
+      }
+
+      const files = await new FileScanner().scan(projectPath);
+      const paths = files.map((file) => file.path);
+
+      // Only the real file is discovered; the symlink/junction is excluded
+      expect(paths).toEqual(["src/index.js"]);
+      expect(files[0]?.fileKind).toBe("source");
+      expect(files[0]?.language).toBe("javascript");
     } finally {
       await rm(projectPath, { force: true, recursive: true });
     }
