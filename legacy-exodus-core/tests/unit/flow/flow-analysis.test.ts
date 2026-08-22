@@ -43,6 +43,33 @@ describe("control and data flow analysis", () => {
     expect(Object.isFrozen(graph)).toBe(true);
   });
 
+  test("maintains indexed def-use chains and lifetimes matching definition and use sets", async (): Promise<void> => {
+    const source = `
+      let x = 1;
+      const u1 = x;
+      const u2 = x;
+      x = 2;
+      const u3 = x;
+    `;
+    const ast = (await new JavaScriptParser().parse({ file: { id: "chains", path: "src/chains.js", language: "javascript", size: source.length }, source })).result;
+    const graph = new DeterministicDataFlowGraphBuilder().build(ast);
+    const xDefs = graph.definitions.filter((d) => d.name === "x");
+    expect(xDefs).toHaveLength(2);
+
+    const initialDef = xDefs.find((d) => d.kind === "declaration");
+    const reassignDef = xDefs.find((d) => d.kind === "assignment");
+    expect(initialDef).toBeDefined();
+    expect(reassignDef).toBeDefined();
+
+    const initialChain = graph.defUseChains.find((c) => c.definitionId === initialDef?.id);
+    const reassignChain = graph.defUseChains.find((c) => c.definitionId === reassignDef?.id);
+    expect(initialChain?.useIds).toHaveLength(2);
+    expect(reassignChain?.useIds).toHaveLength(1);
+
+    const initialLifetime = graph.lifetimes.find((l) => l.declarationId === initialDef?.id);
+    expect(initialLifetime?.useIds).toEqual(initialChain?.useIds);
+  });
+
   test("creates independent module, function, arrow-function, and method CFGs", async (): Promise<void> => {
     const source = `
       function calculate(value) { if (value) return value; return 0; }
@@ -90,6 +117,30 @@ describe("control and data flow analysis", () => {
 
     expect(conditionBlock).toBeDefined();
     expect(graph.dominators.find((dominator) => dominator.blockId === trueTarget)?.immediateDominatorId).toBe(conditionBlock?.id);
+  });
+
+  test("computes correct immediate dominators in loop with conditional branches without predecessor set corruption", async (): Promise<void> => {
+    const source = `
+      for (const key in obj) {
+        if (check(key)) {
+          handleTrue();
+        } else {
+          handleFalse();
+        }
+      }
+    `;
+    const ast = (await new JavaScriptParser().parse({ file: { id: "loop-dom", path: "src/loop-dom.js", language: "javascript", size: source.length }, source })).result;
+    const graph = new DeterministicControlFlowGraphBuilder().build(ast);
+    const loopHeader = graph.blocks.find((block) => block.statements.some((statement) => statement.type === "ForInStatement"));
+    const ifBlock = graph.blocks.find((block) => block.statements.some((statement) => statement.type === "IfStatement"));
+    const trueTarget = graph.edges.find((edge) => edge.fromBlockId === ifBlock?.id && edge.kind === "true")?.toBlockId;
+    const falseTarget = graph.edges.find((edge) => edge.fromBlockId === ifBlock?.id && edge.kind === "false")?.toBlockId;
+
+    expect(loopHeader).toBeDefined();
+    expect(ifBlock).toBeDefined();
+    expect(graph.dominators.find((d) => d.blockId === ifBlock?.id)?.immediateDominatorId).toBe(loopHeader?.id);
+    expect(graph.dominators.find((d) => d.blockId === trueTarget)?.immediateDominatorId).toBe(ifBlock?.id);
+    expect(graph.dominators.find((d) => d.blockId === falseTarget)?.immediateDominatorId).toBe(ifBlock?.id);
   });
 
   test("resolves labeled break and continue to the declared outer loop topology", async (): Promise<void> => {

@@ -1,0 +1,16 @@
+{
+  "name": "cookie-parser",
+  "repository": "https://github.com/expressjs/cookie-parser.git",
+  "revision": "1.4.7",
+  "tier": "tier-1",
+  "languageProfile": ["javascript"],
+  "frameworkProfile": ["express"],
+  "sizeClass": "small",
+  "license": "MIT",
+  "reason": "Small Express middleware — CJS patterns, cookie handling, minimal dependency tree. Tests basic import/export resolution and module graph construction.",
+  "knownFeatures": [
+    "CommonJS module.exports",
+    "Express middleware pattern",
+    "Cookie signature verification"
+  ]
+}

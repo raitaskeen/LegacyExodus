@@ -1,0 +1,562 @@
+{
+  "repository": "express-session",
+  "sampledAt": "2026-08-22T04:02:49.794Z",
+  "sampleSize": 20,
+  "methodology": "Random uniform sampling, min(20, available) per category. Deterministic seed not used — re-run produces different samples.",
+  "resolvedCalls": [
+    {
+      "id": "6deb737e93232a5a82e436d8b03b2fd6bd8e247db6b809d6ee68d471af403cc4",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "cookie",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "f3800d13494c5dfa993eb50a2d282d30252b68b6a4f592b6a3805dc2da07b3da",
+      "location": {
+        "line": 2060,
+        "column": 33
+      }
+    },
+    {
+      "id": "7bdd5d0919a6e73253ca2dcd7ef407f242205f6a31c7badad04b1dfccdcf7122",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "createServer",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "345027a4f52069622bd673ed526c73618492705551a8308a0e6ff22df5ababf1",
+      "location": {
+        "line": 118,
+        "column": 17
+      }
+    },
+    {
+      "id": "132c793b57429d5b5e46e8a075066d7242b003ba75f03017dc95351eb576dd76",
+      "sourceFilePath": "index.js",
+      "callerName": "inflate",
+      "calleeName": "wrapmethods",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "4962e6e7566ddf780d78845b48603068de8d8c7eb2f58c3122e2c401b0f57d95",
+      "location": {
+        "line": 388,
+        "column": 6
+      }
+    },
+    {
+      "id": "83a10a632448da58926657b46a4d3d23e2a3ae439fd21ff93d3e179127bcce55",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "shouldSetCookie",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "6fab00b18158e7c1dcdf9ced0e3983d9b2aa791f8b426de3aeede2face80c8d4",
+      "location": {
+        "line": 479,
+        "column": 14
+      }
+    },
+    {
+      "id": "a184b45247e8c2e12ebfdb8adc96144b964c5574ac46e88b8a0fc21085a68736",
+      "sourceFilePath": "index.js",
+      "callerName": "session",
+      "calleeName": "issecure",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "c62e8ca6cb3e8e81e153fae1cdd7696ee1848077cd2c4101137828611b0067b4",
+      "location": {
+        "line": 164,
+        "column": 34
+      }
+    },
+    {
+      "id": "0bb8561a03b7696bb23bb92fda91e95a6dcfe258d6e7c9049d22a90bf5d54ed6",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "cookie",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "f3800d13494c5dfa993eb50a2d282d30252b68b6a4f592b6a3805dc2da07b3da",
+      "location": {
+        "line": 911,
+        "column": 23
+      }
+    },
+    {
+      "id": "571d44223bfb6ff64e57c0c2bfa9c483fc00f84f21865107209e58ec808a9a16",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "cookie",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "f3800d13494c5dfa993eb50a2d282d30252b68b6a4f592b6a3805dc2da07b3da",
+      "location": {
+        "line": 88,
+        "column": 21
+      }
+    },
+    {
+      "id": "6ebdd425b8c94c5c0637de18edf6451215f2f41531a2f9fcec82778630b91ef1",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "createSession",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "105b40dbefa0d05f387b8a58e3352afe724929c7f5241f2b1dd972335cd5c8a2",
+      "location": {
+        "line": 2384,
+        "column": 13
+      }
+    },
+    {
+      "id": "46a22b8efb6293387f1f1e869dc34758c533ec4dd4b6fdb3ad140998ae897157",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "shouldSetSessionInStore",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "e6b5c18d745c6f9ac2217363246e7d1469b2835b1d609b83d846f6a8f35b2445",
+      "location": {
+        "line": 1837,
+        "column": 20
+      }
+    },
+    {
+      "id": "a7025e4accf5677d3713d9ebbe65df906a9b8247f6e65ccf1b953a6c8ceaf2c3",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "shouldSetCookie",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "6fab00b18158e7c1dcdf9ced0e3983d9b2aa791f8b426de3aeede2face80c8d4",
+      "location": {
+        "line": 1127,
+        "column": 14
+      }
+    },
+    {
+      "id": "1b8e6d2d7f95ebc749cb8d14a162b8467f13c246d43bd63d90cfa5e17e376b33",
+      "sourceFilePath": "scripts/lint-readme.js",
+      "callerName": "module",
+      "calleeName": "expect",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "462c6cfbd747918a775a18a7c67247ab175ab045c7b9a73da614103cb79216c7",
+      "location": {
+        "line": 54,
+        "column": 10
+      }
+    },
+    {
+      "id": "d1159bfdbc06f4e49623b66df6eb4c5a678d4d87462d7e64a80cd62e47b0ef94",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "shouldNotHaveHeader",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "0b8dd8703b2bdc1d3441d9e7b0144d39abe6a3f12d48d32b8869621bb2e64247",
+      "location": {
+        "line": 650,
+        "column": 16
+      }
+    },
+    {
+      "id": "7f12c6e3b40c668a739ff9a908614db1dd56d23c9060a8e471fc7467700dfcbd",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "shouldSetSessionInStore",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "e6b5c18d745c6f9ac2217363246e7d1469b2835b1d609b83d846f6a8f35b2445",
+      "location": {
+        "line": 970,
+        "column": 16
+      }
+    },
+    {
+      "id": "3355e40d57f41a632ae2eaf01e6e42246365fbe71bfa31ac4027faf7b4d8161e",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "shouldNotHaveHeader",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "0b8dd8703b2bdc1d3441d9e7b0144d39abe6a3f12d48d32b8869621bb2e64247",
+      "location": {
+        "line": 1920,
+        "column": 20
+      }
+    },
+    {
+      "id": "f18a0ef5d1b829d82236afe959fb93ee21e029a6cfe43b9db54e5a4005ca52ff",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "shouldSetCookie",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "6fab00b18158e7c1dcdf9ced0e3983d9b2aa791f8b426de3aeede2face80c8d4",
+      "location": {
+        "line": 1213,
+        "column": 16
+      }
+    },
+    {
+      "id": "54eb877f88774115a2c6ae703ccb6fd29e91e8bc077e01f64b50db97946f5e4b",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "createServer",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "345027a4f52069622bd673ed526c73618492705551a8308a0e6ff22df5ababf1",
+      "location": {
+        "line": 2251,
+        "column": 25
+      }
+    },
+    {
+      "id": "4d003674d1a301c854f07cedcc11f3a6b56277617af6b83c7208d65703d28a57",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "cookie",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "f3800d13494c5dfa993eb50a2d282d30252b68b6a4f592b6a3805dc2da07b3da",
+      "location": {
+        "line": 990,
+        "column": 25
+      }
+    },
+    {
+      "id": "3367a03daa94c53d1fa10729f8381fb32a3f8d7ef6d00b3f7c34ee234c087972",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "createServer",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "345027a4f52069622bd673ed526c73618492705551a8308a0e6ff22df5ababf1",
+      "location": {
+        "line": 325,
+        "column": 19
+      }
+    },
+    {
+      "id": "a274118044a809108f603e14281cf8a842e0ee21bb12e55a012a7b8121a8c94f",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "cookie",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "f3800d13494c5dfa993eb50a2d282d30252b68b6a4f592b6a3805dc2da07b3da",
+      "location": {
+        "line": 377,
+        "column": 27
+      }
+    },
+    {
+      "id": "3ced56e0c8204088b12ad4f37d03e2fa7a18b20e3a653e3caef74f02186af1f5",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "createServer",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "345027a4f52069622bd673ed526c73618492705551a8308a0e6ff22df5ababf1",
+      "location": {
+        "line": 1144,
+        "column": 19
+      }
+    }
+  ],
+  "unresolvedCalls": [
+    {
+      "id": "20d341be0ef43d21836b0c665455a91d8f981d3bae3586ee76748152cb4ca4ed",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "before",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 594,
+        "column": 6
+      }
+    },
+    {
+      "id": "207c68d4813460a87824ef368438a93b4be2ec2b8b3ee4eb679a29dff8b894aa",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "JSON.stringify",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 2044,
+        "column": 20
+      }
+    },
+    {
+      "id": "90af27702daba684b2e98d5a78224c2ddf0df0de162a9e6ce55b6e88be9bd2ec",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "done",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 85,
+        "column": 22
+      }
+    },
+    {
+      "id": "ed4623bc873c954a94db7ba5550ca0b50d3c5411de72df7a60f21719859558e9",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "done",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 908,
+        "column": 24
+      }
+    },
+    {
+      "id": "588964951b6372eea77ecd97c7973a57c013bd7a41b9722adb9285adbb87e73c",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "done",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 1237,
+        "column": 26
+      }
+    },
+    {
+      "id": "3bc7616dea63498ca03412d3d0f04851e634f629b52edad47759f71312917016",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "res.write",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 269,
+        "column": 6
+      }
+    },
+    {
+      "id": "308a7b3e48f3cb5682cce98a1ea55d0f6e03dde2dfae8ab346e830a1b9de3c96",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "it",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 702,
+        "column": 6
+      }
+    },
+    {
+      "id": "cf46d23ec06c93ba49258da615778d4cebe568eda9022194be78a0b099e75579",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "it",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 1580,
+        "column": 4
+      }
+    },
+    {
+      "id": "6cbe91336a91f7e1c286f924dd2a2221a4b980a3f7f1f97b021dbfe71ee8db87",
+      "sourceFilePath": "test/session.js",
+      "callerName": "shouldSetCookieWithoutAttribute",
+      "calleeName": "assert.ok",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 2565,
+        "column": 4
+      }
+    },
+    {
+      "id": "e114063b4a6ec66a4f706225d7eb9571ce0a06f7ab4b807fe4b0c7a6f0288c18",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "request",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 282,
+        "column": 8
+      }
+    },
+    {
+      "id": "7021b9f6da759c7c95893d146ca505d32480fd371cb6ec73bb334717552fe11c",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "setTimeout",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 281,
+        "column": 6
+      }
+    },
+    {
+      "id": "87536d32097964348da3b9d8bedc39910ab046c59e2a0112bee89230808ef00c",
+      "sourceFilePath": "test/session.js",
+      "callerName": "destroy",
+      "calleeName": "callback",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 1404,
+        "column": 8
+      }
+    },
+    {
+      "id": "da63f99cdbe3e094d7eb2ba9d117dfbe30da88af558d358ac40a46002bbc3128",
+      "sourceFilePath": "session/memory.js",
+      "callerName": "all",
+      "calleeName": "Object.keys",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 59,
+        "column": 19
+      }
+    },
+    {
+      "id": "a0b0a5a9b65ac337cb91201e0b8988f5a1bc97d3c6e8af4da12d463ee631ea38",
+      "sourceFilePath": "test/session.js",
+      "callerName": "shouldSetCookieToExpireIn",
+      "calleeName": "Date.parse",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 2524,
+        "column": 51
+      }
+    },
+    {
+      "id": "33b7d9ce2ef06ba4afc236742c91d7654aee5a69d8bb6b660e3850861610dea9",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "assert.strictEqual",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 373,
+        "column": 10
+      }
+    },
+    {
+      "id": "2fa5f0c010020f2f6b2acfa98dbde259d5d630e1c1484f4a602be46f36d32cf4",
+      "sourceFilePath": "index.js",
+      "callerName": "setcookie",
+      "calleeName": "cookie.serialize",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 665,
+        "column": 13
+      }
+    },
+    {
+      "id": "92861297c2e59e20041d879847fdc50ec0359b6ede5dc53cadff5d5caca0720c",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "it",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 898,
+        "column": 4
+      }
+    },
+    {
+      "id": "a2ea3c6aca0c7960cbaf8a2cd77db657354565aaab4df74d192cbc06a8d79624",
+      "sourceFilePath": "test/session.js",
+      "callerName": "module",
+      "calleeName": "done",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 1705,
+        "column": 26
+      }
+    },
+    {
+      "id": "6ff930f9ad2f19b4a894cd05bf42a650c2d89d364f3b9ca5bc4071062b7df196",
+      "sourceFilePath": "test/cookie.js",
+      "callerName": "module",
+      "calleeName": "assert.strictEqual",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 27,
+        "column": 4
+      }
+    },
+    {
+      "id": "99b541d94ce2f0f2c235f136501c4e2282aaf7cd70938cf57c4c037d12fa3be5",
+      "sourceFilePath": "session/memory.js",
+      "callerName": "get",
+      "calleeName": "defer",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 107,
+        "column": 2
+      }
+    }
+  ],
+  "dependencyEdges": [
+    {
+      "id": "6eba0e468ae3fa79859891dfd8a9a11250307ff9aacf7140de55df130b01c996",
+      "sourceFilePath": "session/store.js",
+      "targetFilePath": "session/session.js",
+      "importSymbolId": "803d274a6f3ae6c5fa1fcbcb305d9fc9a37bcf24c86787fedcc8c39bc3414013",
+      "targetExportSymbolId": "4bc33142e4db01d43849c629d038adc70f37f4139b562410f674cf389db26a44",
+      "moduleSpecifier": "./session"
+    },
+    {
+      "id": "ddcca9ab2ec44bfb859e717ec39d8a0742dfcae72c2c453c2f4380e84646d2b2",
+      "sourceFilePath": "index.js",
+      "targetFilePath": "session/cookie.js",
+      "importSymbolId": "2de0aaef5512d5551abb07a240e9d50776e5cb85607eb023bc40284fc9561473",
+      "targetExportSymbolId": "a680302df0fdee1a7168f0c6c677272d1880abacf790289d199926452e2c3667",
+      "moduleSpecifier": "./session/cookie"
+    },
+    {
+      "id": "e5da8db7c18582332d590d09dc5ae878c425f218041db3d0550b5274776d3852",
+      "sourceFilePath": "index.js",
+      "targetFilePath": "session/memory.js",
+      "importSymbolId": "af73c2a4fc7fa7caf6f9b16f9b6ee82d58e0ee45241c1b95fafaa1b39de8ae58",
+      "targetExportSymbolId": "a9f51839bac63ef139607f9a4671d7530eeb413babd66f1a4142a0808e2d501c",
+      "moduleSpecifier": "./session/memory"
+    },
+    {
+      "id": "b1834118d7630a35e35b2e3ef64e314e31efb69d3e491df9df77e8c6c529ab06",
+      "sourceFilePath": "index.js",
+      "targetFilePath": "session/session.js",
+      "importSymbolId": "e11aeca700a5dc3fcaa0c389369b717d4e76e0d35b5b1bc3a436be24ee873a14",
+      "targetExportSymbolId": "4bc33142e4db01d43849c629d038adc70f37f4139b562410f674cf389db26a44",
+      "moduleSpecifier": "./session/session"
+    },
+    {
+      "id": "93d41abfaad3b88ba1adf2e48d44ccdc38e14a229e04873cc7b8110ef6cb89fe",
+      "sourceFilePath": "test/session.js",
+      "targetFilePath": "test/support/sync-store.js",
+      "importSymbolId": "cbb080ba47a57b08c2ab7c9305f22599cc626671cc94583fefdab11cb21bfaae",
+      "targetExportSymbolId": "e1586a7de3866f3cff1edf703b113e69b9d05afe4684474ae582ba79fcefd57f",
+      "moduleSpecifier": "./support/sync-store"
+    },
+    {
+      "id": "9c4970317e0dfa18744c4952387ddf2798f4f8665209888aad94fcb9c8e29098",
+      "sourceFilePath": "index.js",
+      "targetFilePath": "session/store.js",
+      "importSymbolId": "862a005c74897afe3688336bcea6d9aaccdaeb4bf1a806cd368f36d42c3bc097",
+      "targetExportSymbolId": "5eead75d829c2edf945517b720ee407dc7a9e662057d5d76f06ab351c41c9986",
+      "moduleSpecifier": "./session/store"
+    },
+    {
+      "id": "f8734204d9d173c158d7c05e435ca638f5d72a7f1d0a133dbb99adef5903a466",
+      "sourceFilePath": "test/cookie.js",
+      "targetFilePath": "session/cookie.js",
+      "importSymbolId": "adb3ce75a5bbff5400c28a6302198bcc30379e87f5696322d5927dc0cd17939b",
+      "targetExportSymbolId": "a680302df0fdee1a7168f0c6c677272d1880abacf790289d199926452e2c3667",
+      "moduleSpecifier": "../session/cookie"
+    },
+    {
+      "id": "9aedae991723d2c04df2e7df650cd9cd4da9a29f440fc81c69433ce3f4e51b51",
+      "sourceFilePath": "test/session.js",
+      "targetFilePath": "session/cookie.js",
+      "importSymbolId": "5e8c98e7920b90f129e674dbbb1a4ba840b072c3fde982e1f7218a44acf6158d",
+      "targetExportSymbolId": "a680302df0fdee1a7168f0c6c677272d1880abacf790289d199926452e2c3667",
+      "moduleSpecifier": "../session/cookie"
+    },
+    {
+      "id": "5ac85ddcb8c7cdd551803feef70641ce95d4465bf88fed6abd06f6e3a9c78949",
+      "sourceFilePath": "test/session.js",
+      "targetFilePath": "test/support/smart-store.js",
+      "importSymbolId": "4da57dc2f835dd79350b7f8cfb65f0f95f79ece631455f567ce92eb9eaa87a38",
+      "targetExportSymbolId": "fbc53d421264d525983c4dd8f529dc05e39de4605bba79fb3fcd1a10f6cccb54",
+      "moduleSpecifier": "./support/smart-store"
+    },
+    {
+      "id": "1940080452412a1d121dd43fa1b85475ee9298cff92dd9ab48d045fb8c8060e7",
+      "sourceFilePath": "session/memory.js",
+      "targetFilePath": "session/store.js",
+      "importSymbolId": "a76a4bda8d055824d7c81bd9eb19182a49bd60ab57366fcf9d337b4509b1a705",
+      "targetExportSymbolId": "5eead75d829c2edf945517b720ee407dc7a9e662057d5d76f06ab351c41c9986",
+      "moduleSpecifier": "./store"
+    },
+    {
+      "id": "e2007bd015e7f595870bf97135a56fc8fa9fbc4763140f199f2573fc813c0bd0",
+      "sourceFilePath": "session/store.js",
+      "targetFilePath": "session/cookie.js",
+      "importSymbolId": "13759e1dc4adf40963b22c42164093453e6d328c7b70abd24ecf4ef33245f9fd",
+      "targetExportSymbolId": "a680302df0fdee1a7168f0c6c677272d1880abacf790289d199926452e2c3667",
+      "moduleSpecifier": "./cookie"
+    }
+  ],
+  "taintFlows": [],
+  "confidence": "Sample-based precision only. 20 samples per category. Not statistically representative of full population without larger sample sizes."
+}

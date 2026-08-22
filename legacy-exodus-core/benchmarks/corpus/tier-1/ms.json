@@ -1,0 +1,16 @@
+{
+  "name": "ms",
+  "repository": "https://github.com/vercel/ms.git",
+  "revision": "2.1.3",
+  "tier": "tier-1",
+  "languageProfile": ["javascript"],
+  "frameworkProfile": [],
+  "sizeClass": "small",
+  "license": "MIT",
+  "reason": "Tiny utility package — minimal source files, simple CJS exports, edge-case-free baseline. Tests that the engine handles the smallest viable real-world package correctly.",
+  "knownFeatures": [
+    "Single-file CJS module",
+    "String/number coercion",
+    "Regex patterns"
+  ]
+}

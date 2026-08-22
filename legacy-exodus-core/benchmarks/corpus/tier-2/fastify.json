@@ -1,0 +1,25 @@
+{
+  "name": "fastify",
+  "repository": "https://github.com/fastify/fastify.git",
+  "revision": "v5.3.3",
+  "tier": "tier-2",
+  "languageProfile": ["javascript", "typescript"],
+  "frameworkProfile": ["fastify"],
+  "sizeClass": "medium",
+  "license": "MIT",
+  "reason": "High-performance Node.js web framework — complex plugin architecture, route registration, schema validation, lifecycle hooks, and moderate module graph. First serious Tier 2 benchmark stressing the engine beyond small utilities.",
+  "knownHotspots": [
+    "lib/route.js — complex route registration",
+    "lib/hooks.js — lifecycle hook chains",
+    "lib/reply.js — response handling",
+    "lib/request.js — request decoration"
+  ],
+  "knownFeatures": [
+    "Plugin architecture",
+    "Route registration",
+    "Lifecycle hooks",
+    "JSON schema validation",
+    "Request/Reply decoration",
+    "Encapsulation contexts"
+  ]
+}

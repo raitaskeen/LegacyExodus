@@ -31,10 +31,32 @@ export class DeterministicDataFlowGraphBuilder {
     this.propagateTaint(state);
     const definitions = state.definitions.sort(byId);
     const uses = state.uses.sort(byId);
+    const usesByDefinitionId = new Map<string, string[]>();
+    for (let i = 0; i < uses.length; i++) {
+      const use = uses[i];
+      if (use !== undefined && use.definitionId !== undefined) {
+        let list = usesByDefinitionId.get(use.definitionId);
+        if (list === undefined) {
+          list = [];
+          usesByDefinitionId.set(use.definitionId, list);
+        }
+        list.push(use.id);
+      }
+    }
+    const defUseChains = definitions.map((definition) => ({
+      definitionId: definition.id,
+      useIds: usesByDefinitionId.get(definition.id) ?? [],
+    }));
+    const lifetimes = definitions.map((definition) => ({
+      name: definition.name,
+      filePath: definition.filePath,
+      declarationId: definition.id,
+      useIds: usesByDefinitionId.get(definition.id) ?? [],
+    }));
     const graph = createDataFlowGraph({
       id: hash(`dfg:${ast.metadata.sourcePath}`), filePath: ast.metadata.sourcePath, state: "INFERRED", definitions, uses,
-      defUseChains: definitions.map((definition) => ({ definitionId: definition.id, useIds: uses.filter((use) => use.definitionId === definition.id).map((use) => use.id).sort() })),
-      lifetimes: definitions.map((definition) => ({ name: definition.name, filePath: definition.filePath, declarationId: definition.id, useIds: uses.filter((use) => use.definitionId === definition.id).map((use) => use.id).sort() })),
+      defUseChains,
+      lifetimes,
       taintFlows: this.taintFlows(state),
       interproceduralFlows: state.interproceduralFlows.sort(byId),
       functionSummaries: functionSummaries(state, ast.metadata.sourcePath),

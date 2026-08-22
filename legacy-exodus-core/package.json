@@ -17,7 +17,8 @@
     "test": "bun test --coverage",
     "test:watch": "bun test --watch",
     "typecheck": "tsc --noEmit",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "benchmark": "bun run benchmarks/cli.ts"
   },
   "dependencies": {
     "@babel/parser": "8.0.4",

@@ -166,7 +166,49 @@ class FlowState {
   private block(id: string): MutableBlock { const block = this.blocks.find((candidate) => candidate.id === id); if (block === undefined) throw new ControlFlowInvariantError(id); return block; }
   private retagCompletionEdge(fromBlockId: string, toBlockId: string, sourceKind: ControlFlowEdgeKind, targetKind: ControlFlowEdgeKind): void { const edge = this.edges.find((candidate) => candidate.fromBlockId === fromBlockId && candidate.toBlockId === toBlockId && candidate.kind === sourceKind); if (edge === undefined) return; const index = this.edges.indexOf(edge); this.edges[index] = { ...edge, id: hash(`${fromBlockId}:${toBlockId}:${targetKind}`), kind: targetKind }; }
   private retagIncomingEdges(toBlockId: string | undefined, sourceKind: ControlFlowEdgeKind, targetKind: ControlFlowEdgeKind): void { if (toBlockId === undefined) return; for (const [index, edge] of this.edges.entries()) { if (edge.toBlockId === toBlockId && edge.kind === sourceKind) this.edges[index] = { ...edge, id: hash(`${edge.fromBlockId}:${toBlockId}:${targetKind}`), kind: targetKind }; } }
-  public finish(entry: string, exit: string): ControlFlowGraph { const reachable = reachableBlocks(entry, this.edges); const blocks: BasicBlock[] = this.blocks.map((block) => ({ id: block.id, statements: block.statements, predecessorIds: this.edges.filter((edge) => edge.toBlockId === block.id).map((edge) => edge.fromBlockId).sort(), successorIds: this.edges.filter((edge) => edge.fromBlockId === block.id).map((edge) => edge.toBlockId).sort(), ...(block.terminator === undefined ? {} : { terminator: block.terminator }) })); const dominators = calculateDominators(entry, blocks, this.edges); const loops = this.edges.filter((edge) => edge.kind === "loop-back").map((edge) => ({ headerBlockId: edge.toBlockId, blockIds: [edge.toBlockId, edge.fromBlockId].sort() })); const unreachableBlockIds = blocks.filter((block) => !reachable.has(block.id)).map((block) => block.id).sort(); return createControlFlowGraph({ id: hash(`cfg:${this.filePath}:${this.scopeName}`), filePath: this.filePath, scopeName: this.scopeName, state: "RESOLVED", entryBlockId: entry, exitBlockId: exit, blocks: blocks.sort((left, right) => left.id.localeCompare(right.id)), edges: this.edges.sort((left, right) => left.id.localeCompare(right.id)), dominators, loops, unreachableBlockIds, deadCodeNodeIds: blocks.filter((block) => unreachableBlockIds.includes(block.id)).flatMap((block) => block.statements.map((statement) => statement.id)).sort() }); }
+  public finish(entry: string, exit: string): ControlFlowGraph {
+    const predecessorsByBlock = new Map<string, string[]>();
+    const successorsByBlock = new Map<string, string[]>();
+    for (const block of this.blocks) {
+      predecessorsByBlock.set(block.id, []);
+      successorsByBlock.set(block.id, []);
+    }
+    for (const edge of this.edges) {
+      successorsByBlock.get(edge.fromBlockId)?.push(edge.toBlockId);
+      predecessorsByBlock.get(edge.toBlockId)?.push(edge.fromBlockId);
+    }
+
+    const reachable = reachableBlocks(entry, successorsByBlock);
+    const blocks: BasicBlock[] = this.blocks.map((block) => ({
+      id: block.id,
+      statements: block.statements,
+      predecessorIds: (predecessorsByBlock.get(block.id) ?? []).sort(),
+      successorIds: (successorsByBlock.get(block.id) ?? []).sort(),
+      ...(block.terminator === undefined ? {} : { terminator: block.terminator }),
+    }));
+    const dominators = calculateDominators(entry, blocks, this.edges);
+    const loops = this.edges
+      .filter((edge) => edge.kind === "loop-back")
+      .map((edge) => ({ headerBlockId: edge.toBlockId, blockIds: [edge.toBlockId, edge.fromBlockId].sort() }));
+    const unreachableBlockIds = blocks.filter((block) => !reachable.has(block.id)).map((block) => block.id).sort();
+    return createControlFlowGraph({
+      id: hash(`cfg:${this.filePath}:${this.scopeName}`),
+      filePath: this.filePath,
+      scopeName: this.scopeName,
+      state: "RESOLVED",
+      entryBlockId: entry,
+      exitBlockId: exit,
+      blocks: blocks.sort((left, right) => left.id.localeCompare(right.id)),
+      edges: this.edges.sort((left, right) => left.id.localeCompare(right.id)),
+      dominators,
+      loops,
+      unreachableBlockIds,
+      deadCodeNodeIds: blocks
+        .filter((block) => unreachableBlockIds.includes(block.id))
+        .flatMap((block) => block.statements.map((statement) => statement.id))
+        .sort(),
+    });
+  }
 }
 function collectFunctions(root: ASTNode): readonly { readonly name: string; readonly node: ASTNode }[] { const functions: { name: string; node: ASTNode }[] = []; const visit = (node: ASTNode): void => { if (isFunction(node)) { const name = functionName(node); functions.push({ name: `${name}@${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`, node }); } for (const child of node.children) visit(child); }; for (const child of root.children) visit(child); return functions.sort((left, right) => left.name.localeCompare(right.name)); }
 function functionName(node: ASTNode): string { const name = node.children.find((child) => child.role === "id" || child.role === "key")?.attributes.name; return typeof name === "string" ? name : node.type === "ClassMethod" ? "method" : "anonymous"; }
@@ -183,6 +225,147 @@ function isFunction(node: ASTNode): boolean { return ["FunctionDeclaration", "Fu
 function isTerminator(node: ASTNode): boolean { return node.type === "ReturnStatement" || node.type === "ThrowStatement"; }
 function isLoop(node: ASTNode): boolean { return ["WhileStatement", "DoWhileStatement", "ForStatement", "ForInStatement", "ForOfStatement"].includes(node.type); }
 function staticBoolean(node: ASTNode | undefined): boolean | undefined { const value = node?.attributes.value; return typeof value === "boolean" ? value : undefined; }
-function reachableBlocks(entry: string, edges: readonly ControlFlowEdge[]): Set<string> { const seen = new Set<string>(); const pending = [entry]; while (pending.length > 0) { const current = pending.pop(); if (current === undefined || seen.has(current)) continue; seen.add(current); for (const edge of edges.filter((candidate) => candidate.fromBlockId === current)) pending.push(edge.toBlockId); } return seen; }
-function calculateDominators(entry: string, blocks: readonly BasicBlock[], edges: readonly ControlFlowEdge[]): readonly { readonly blockId: string; readonly immediateDominatorId?: string }[] { const all = new Set(blocks.map((block) => block.id)); const sets = new Map(blocks.map((block) => [block.id, block.id === entry ? new Set([entry]) : new Set(all)])); for (let iteration = 0; iteration < blocks.length * blocks.length; iteration += 1) { let changed = false; for (const block of blocks.filter((candidate) => candidate.id !== entry)) { const predecessors = edges.filter((edge) => edge.toBlockId === block.id).map((edge) => edge.fromBlockId); const intersection = predecessors.length === 0 ? new Set<string>() : predecessors.map((id) => sets.get(id) ?? new Set<string>()).reduce((left, right) => new Set([...left].filter((value) => right.has(value)))); intersection.add(block.id); const previous = sets.get(block.id) ?? new Set<string>(); if (previous.size !== intersection.size || [...previous].some((value) => !intersection.has(value))) { sets.set(block.id, intersection); changed = true; } } if (!changed) break; } return blocks.map((block) => { if (block.id === entry) return { blockId: block.id }; const candidates = [...(sets.get(block.id) ?? [])].filter((id) => id !== block.id); const immediate = candidates.find((candidate) => candidates.every((other) => other === candidate || sets.get(candidate)?.has(other) === true)); return { blockId: block.id, ...(immediate === undefined ? {} : { immediateDominatorId: immediate }) }; }).sort((left, right) => left.blockId.localeCompare(right.blockId)); }
+function reachableBlocks(entry: string, successorsByBlock: ReadonlyMap<string, readonly string[]>): Set<string> {
+  const seen = new Set<string>();
+  const pending = [entry];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === undefined || seen.has(current)) continue;
+    seen.add(current);
+    const successors = successorsByBlock.get(current);
+    if (successors !== undefined) {
+      for (const succ of successors) {
+        if (!seen.has(succ)) pending.push(succ);
+      }
+    }
+  }
+  return seen;
+}
+function calculateDominators(entry: string, blocks: readonly BasicBlock[], _edges: readonly ControlFlowEdge[]): readonly { readonly blockId: string; readonly immediateDominatorId?: string }[] {
+  const count = blocks.length;
+  if (count === 0) return [];
+  const firstBlock = blocks[0];
+  if (count === 1 && firstBlock !== undefined) return [{ blockId: firstBlock.id }];
+
+  const blockIndexById = new Map<string, number>();
+  const blockIds: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const b = blocks[i];
+    if (b !== undefined) {
+      blockIndexById.set(b.id, i);
+      blockIds.push(b.id);
+    }
+  }
+
+  const entryIndex = blockIndexById.get(entry);
+  const predecessorIndices: number[][] = [];
+  for (let i = 0; i < count; i++) {
+    const b = blocks[i];
+    const indices: number[] = [];
+    if (b !== undefined) {
+      for (const predId of b.predecessorIds) {
+        const idx = blockIndexById.get(predId);
+        if (idx !== undefined) indices.push(idx);
+      }
+    }
+    predecessorIndices.push(indices);
+  }
+
+  const wordsPerBlock = Math.ceil(count / 32);
+  const dom: Uint32Array[] = [];
+  for (let i = 0; i < count; i++) {
+    const bitset = new Uint32Array(wordsPerBlock);
+    if (entryIndex !== undefined && i === entryIndex) {
+      bitset[entryIndex >>> 5] = 1 << (entryIndex & 31);
+    } else {
+      bitset.fill(0xffffffff);
+    }
+    dom.push(bitset);
+  }
+
+  const temp = new Uint32Array(wordsPerBlock);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let i = 0; i < count; i++) {
+      if (entryIndex !== undefined && i === entryIndex) continue;
+      const preds = predecessorIndices[i] ?? [];
+
+      if (preds.length === 0) {
+        temp.fill(0);
+      } else {
+        const firstIdx = preds[0];
+        const first = firstIdx !== undefined ? dom[firstIdx] : undefined;
+        if (first !== undefined) {
+          for (let w = 0; w < wordsPerBlock; w++) {
+            temp[w] = first[w] ?? 0;
+          }
+          for (let p = 1; p < preds.length; p++) {
+            const nextIdx = preds[p];
+            const next = nextIdx !== undefined ? dom[nextIdx] : undefined;
+            if (next !== undefined) {
+              for (let w = 0; w < wordsPerBlock; w++) {
+                const tw = temp[w] ?? 0;
+                temp[w] = tw & (next[w] ?? 0);
+              }
+            }
+          }
+        }
+      }
+
+      temp[i >>> 5] = (temp[i >>> 5] ?? 0) | (1 << (i & 31));
+
+      const current = dom[i];
+      if (current !== undefined) {
+        for (let w = 0; w < wordsPerBlock; w++) {
+          const cw = current[w] ?? 0;
+          const tw = temp[w] ?? 0;
+          if (cw !== tw) {
+            current[w] = tw;
+            changed = true;
+          }
+        }
+      }
+    }
+  }
+
+  const result: { blockId: string; immediateDominatorId?: string }[] = [];
+  for (let i = 0; i < count; i++) {
+    const blockId = blockIds[i];
+    if (blockId === undefined) continue;
+    if (entryIndex !== undefined && i === entryIndex) {
+      result.push({ blockId });
+      continue;
+    }
+
+    const current = dom[i];
+    if (current === undefined) {
+      result.push({ blockId });
+      continue;
+    }
+
+    const candidates: number[] = [];
+    for (let c = 0; c < count; c++) {
+      if (c !== i && ((current[c >>> 5] ?? 0) & (1 << (c & 31))) !== 0) {
+        candidates.push(c);
+      }
+    }
+
+    const immediate = candidates.find((candidate) => {
+      const candidateDom = dom[candidate];
+      if (candidateDom === undefined) return false;
+      return candidates.every(
+        (other) => other === candidate || ((candidateDom[other >>> 5] ?? 0) & (1 << (other & 31))) !== 0,
+      );
+    });
+
+    const immediateId = immediate !== undefined ? blockIds[immediate] : undefined;
+    result.push({
+      blockId,
+      ...(immediateId === undefined ? {} : { immediateDominatorId: immediateId }),
+    });
+  }
+
+  return result.sort((left, right) => left.blockId.localeCompare(right.blockId));
+}
 function hash(value: string): string { return createHash("sha256").update(value).digest("hex"); }
