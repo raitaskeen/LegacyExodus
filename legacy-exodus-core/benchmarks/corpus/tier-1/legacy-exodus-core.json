@@ -1,0 +1,18 @@
+{
+  "name": "legacy-exodus-core",
+  "localPath": "../../../src",
+  "tier": "self-analysis",
+  "isSelfAnalysis": true,
+  "languageProfile": ["typescript"],
+  "frameworkProfile": [],
+  "sizeClass": "small",
+  "license": "MIT",
+  "reason": "Self-analysis baseline — the engine analyzing its own codebase as the simplest reproducible benchmark. Validates file accounting, determinism, and provides a performance reference point.",
+  "knownFeatures": [
+    "TypeScript path aliases",
+    "Zod schema validation",
+    "ES module imports/exports",
+    "Class-based architecture",
+    "Event sourcing pattern"
+  ]
+}

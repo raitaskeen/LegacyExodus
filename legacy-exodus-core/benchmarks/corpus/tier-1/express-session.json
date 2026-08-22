@@ -1,0 +1,18 @@
+{
+  "name": "express-session",
+  "repository": "https://github.com/expressjs/session.git",
+  "revision": "v1.18.1",
+  "tier": "tier-1",
+  "languageProfile": ["javascript"],
+  "frameworkProfile": ["express"],
+  "sizeClass": "small",
+  "license": "MIT",
+  "reason": "Moderate Express middleware — session management, store patterns, cookie integration. Tests class inheritance, callback patterns, and moderate module graph.",
+  "knownFeatures": [
+    "CommonJS exports",
+    "Express middleware pattern",
+    "Session store interface",
+    "Event emitter pattern",
+    "Prototype-based inheritance"
+  ]
+}

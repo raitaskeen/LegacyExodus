@@ -1,0 +1,413 @@
+{
+  "repository": "cookie-parser",
+  "sampledAt": "2026-08-22T04:02:43.889Z",
+  "sampleSize": 20,
+  "methodology": "Random uniform sampling, min(20, available) per category. Deterministic seed not used — re-run produces different samples.",
+  "resolvedCalls": [
+    {
+      "id": "fadbde6bf0e661da226a00747a74c08d45fecf94a52953ef7336f9d8bb2532c4",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "createServer",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "caca9cbcc1f316ffd33c9072514a3931150a8b4cc9ac243141b27ac446ee79d9",
+      "location": {
+        "line": 36,
+        "column": 14
+      }
+    },
+    {
+      "id": "66b08a9d85dbeaf953f5b694fc78cfc69acbca650073b4f8c5d3ce779ee87f5c",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "createServer",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "caca9cbcc1f316ffd33c9072514a3931150a8b4cc9ac243141b27ac446ee79d9",
+      "location": {
+        "line": 78,
+        "column": 14
+      }
+    },
+    {
+      "id": "302df25da910614eb60f3d48f859b27afb98e37d951005fb47f52303b7b9346d",
+      "sourceFilePath": "index.js",
+      "callerName": "cookieParser",
+      "calleeName": "signedCookies",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "cb13d8a97430d0763e13eb6b484bca4fdab3e69354e0b8703828b4be0c12c078",
+      "location": {
+        "line": 64,
+        "column": 26
+      }
+    },
+    {
+      "id": "b113865785f40fca51155b0bfeeb84c8399884e2cecab2f9e55b97baa5093a4d",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "createServer",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "caca9cbcc1f316ffd33c9072514a3931150a8b4cc9ac243141b27ac446ee79d9",
+      "location": {
+        "line": 43,
+        "column": 14
+      }
+    },
+    {
+      "id": "d2a461716914af417bde0da15c57e041bfdc504ef72444ca509617765f078443",
+      "sourceFilePath": "index.js",
+      "callerName": "signedCookies",
+      "calleeName": "signedCookie",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "c38edde5141da3b2f2758318f44ed0edb59e7241cf9702010ac66db8ca3dbfdf",
+      "location": {
+        "line": 173,
+        "column": 10
+      }
+    },
+    {
+      "id": "e2cb05a9cedc20e94aaafe6e7079efc3052cabd3743f62fa0d37a26af1a8c8ed",
+      "sourceFilePath": "index.js",
+      "callerName": "cookieParser",
+      "calleeName": "JSONCookies",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "28917b883c92fb3a3e27fbf0311e7ce74ed788c4f71b82d94e5812c3ca620bda",
+      "location": {
+        "line": 65,
+        "column": 26
+      }
+    },
+    {
+      "id": "81a8936da85be688e54d12c4fc1ef3fb8e83295c78e19c49ec6c02084ab39555",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "createServer",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "caca9cbcc1f316ffd33c9072514a3931150a8b4cc9ac243141b27ac446ee79d9",
+      "location": {
+        "line": 29,
+        "column": 14
+      }
+    },
+    {
+      "id": "79a41caeb1f43dfd978f62582d746d2f6ff82a4a0bc1d8036f129e69a289314d",
+      "sourceFilePath": "index.js",
+      "callerName": "cookieParser",
+      "calleeName": "JSONCookies",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "28917b883c92fb3a3e27fbf0311e7ce74ed788c4f71b82d94e5812c3ca620bda",
+      "location": {
+        "line": 69,
+        "column": 18
+      }
+    },
+    {
+      "id": "130ac77ab910c45d74b5c3323befd315a8ef5256b467d83f434450adf91a1628",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "createServer",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "caca9cbcc1f316ffd33c9072514a3931150a8b4cc9ac243141b27ac446ee79d9",
+      "location": {
+        "line": 109,
+        "column": 14
+      }
+    },
+    {
+      "id": "90a39475a19a4b90040d7598902c37d03bf381da2e2e747510344adcf3112ddf",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "createServer",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "caca9cbcc1f316ffd33c9072514a3931150a8b4cc9ac243141b27ac446ee79d9",
+      "location": {
+        "line": 15,
+        "column": 14
+      }
+    },
+    {
+      "id": "f4a280a599cb20e71e688593709709e92fa2a00e513281b926fddf515d2c92b3",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "createServer",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "caca9cbcc1f316ffd33c9072514a3931150a8b4cc9ac243141b27ac446ee79d9",
+      "location": {
+        "line": 92,
+        "column": 19
+      }
+    },
+    {
+      "id": "a178b6f2d15a99a9a40edc88f24d825ac9947394014f657dbe9be0a027a08a9c",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "createServer",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "caca9cbcc1f316ffd33c9072514a3931150a8b4cc9ac243141b27ac446ee79d9",
+      "location": {
+        "line": 119,
+        "column": 15
+      }
+    },
+    {
+      "id": "503d8bbdf88d4682a56669104b7bafb6f0b0f3cff4948f7b575b683ae45ecce0",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "createServer",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "caca9cbcc1f316ffd33c9072514a3931150a8b4cc9ac243141b27ac446ee79d9",
+      "location": {
+        "line": 85,
+        "column": 14
+      }
+    },
+    {
+      "id": "781745b4bbf5aa36ed5bc8ee2668cafcda7f02c63c767f6cc6a637e2b41deecb",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "createServer",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "caca9cbcc1f316ffd33c9072514a3931150a8b4cc9ac243141b27ac446ee79d9",
+      "location": {
+        "line": 21,
+        "column": 14
+      }
+    },
+    {
+      "id": "cb4966cbaa996733e797908c8bab23297e646ace9909ace6031d99444a488715",
+      "sourceFilePath": "index.js",
+      "callerName": "JSONCookies",
+      "calleeName": "JSONCookie",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "eed36be1d23738190fd5d7a370f9421ecba235775191c3d3cd003bd75cba27c2",
+      "location": {
+        "line": 110,
+        "column": 10
+      }
+    }
+  ],
+  "unresolvedCalls": [
+    {
+      "id": "85925150abccc842964037e695562d61dc6efc8e6ebbb86d352a4b6dde996168",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "cookieParser.signedCookie",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 186,
+        "column": 23
+      }
+    },
+    {
+      "id": "5d087cd74b938fdda717df8dfdbc7ece3300b87e564100e17df34ca1358482a7",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "assert.strictEqual",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 178,
+        "column": 4
+      }
+    },
+    {
+      "id": "a7f4252ddd38a005c84314d2bc46679e49c031a93a8ecc63d1353fd758d9b702",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "it",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 197,
+        "column": 4
+      }
+    },
+    {
+      "id": "a59d73eb15e7f8b2cb038290c0acf2ae3d059b2ddf3f1d9daf6d1ea156ed4af5",
+      "sourceFilePath": "index.js",
+      "callerName": "signedCookie",
+      "calleeName": "Array.isArray",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 138,
+        "column": 27
+      }
+    },
+    {
+      "id": "7da4be97c5e950c3162ab206e57b3c697c5f491833b8fe324eb3b6d5619b2179",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "assert.strictEqual",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 141,
+        "column": 4
+      }
+    },
+    {
+      "id": "e7c1b28b3540f67a90ef7064483fd220de968eef3dcd82c2dcc28fce07e79e05",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "describe",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 259,
+        "column": 2
+      }
+    },
+    {
+      "id": "9f3c09875a317a0427ef8399557af38216897894a3d3bcf7dc637c9a04849ce8",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "assert.strictEqual",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 176,
+        "column": 4
+      }
+    },
+    {
+      "id": "44e117282552379f26e24febce5b3ce4bb6fcfaff0ad68eecfb86b1540c94b7a",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "assert.deepEqual",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 245,
+        "column": 4
+      }
+    },
+    {
+      "id": "2103dea11bd427f83ea6fea400cecdb175a65a9c0ce62e2657e6d6684c395389",
+      "sourceFilePath": "index.js",
+      "callerName": "module",
+      "calleeName": "require",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 16,
+        "column": 16
+      }
+    },
+    {
+      "id": "eef7d5b652d6ed7ccab712ac7e42eadb14405a1d912c3963e885f266ba150020",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "it",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 156,
+        "column": 2
+      }
+    },
+    {
+      "id": "9f27f4517b67aedd25ecd4796471eaf0b30f07180d97de7f0d8d4f8f9656f78e",
+      "sourceFilePath": "index.js",
+      "callerName": "signedCookies",
+      "calleeName": "Object.keys",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 164,
+        "column": 16
+      }
+    },
+    {
+      "id": "2c00e61199517cd0ac19b7616a4f69dfa38773508f6ca60bb409f4da6da5ba1b",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "describe",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 139,
+        "column": 0
+      }
+    },
+    {
+      "id": "eb48a43e13419bcf0fcd0a295248d552e7cbc8e4179522fd8e064370f87c18f4",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "it",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 28,
+        "column": 4
+      }
+    },
+    {
+      "id": "857eba627b7c36d54fe663eeeb31b84aa13d07bcc17d2401ba91b278aa584f43",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "require",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 4,
+        "column": 11
+      }
+    },
+    {
+      "id": "bd1a12274cb249bd393b7ffa3e664e52d9ac0e005e2aabd70b5e939e439599e4",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "cookieParser.signedCookie",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 198,
+        "column": 25
+      }
+    },
+    {
+      "id": "03a413deb17a5fb5f5569b35c40febd753da69a4ca046dd94e7c7c383cc032a9",
+      "sourceFilePath": "index.js",
+      "callerName": "JSONCookies",
+      "calleeName": "Object.keys",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 104,
+        "column": 16
+      }
+    },
+    {
+      "id": "2d811e93152975bebd7666b5c7d91ec91412cb9edc295243596fa8b312307009",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "it",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 219,
+        "column": 2
+      }
+    },
+    {
+      "id": "a08a3f365d429a6abb9a852310b56c75edeb618d42a7e6a690301a13526388d3",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "createServer",
+      "calleeName": "cookieParser",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 287,
+        "column": 16
+      }
+    },
+    {
+      "id": "a03996a60b134d16e6440e504aec63577952251a62e3bb2dfb6e0a21c426febb",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "request",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 99,
+        "column": 10
+      }
+    },
+    {
+      "id": "2e5def91494b6601566dfec49d8a5f99fd15c7301eb38147af55c6c935e0ae17",
+      "sourceFilePath": "test/cookieParser.js",
+      "callerName": "module",
+      "calleeName": "cookieParser.signedCookie",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 191,
+        "column": 25
+      }
+    }
+  ],
+  "dependencyEdges": [],
+  "taintFlows": [],
+  "confidence": "Sample-based precision only. 20 samples per category. Not statistically representative of full population without larger sample sizes."
+}
