@@ -30,6 +30,13 @@ export interface DiscoveryCompletedPayload {
   readonly fileCount: number;
   readonly dependencyCount: number;
   readonly frameworkCount: number;
+  readonly enumerationFailureCount?: number;
+}
+
+export interface DiscoveryEnumerationFailurePayload {
+  readonly path: string;
+  readonly kind: "directory-read" | "entry-stat";
+  readonly code: string;
 }
 
 export interface FileParsedPayload {
@@ -67,6 +74,7 @@ export type DependencyDetected = DomainEvent<DependencyDetectedPayload, "Depende
 export type FrameworkDetected = DomainEvent<FrameworkDetectedPayload, "FrameworkDetected">;
 
 export type DiscoveryCompleted = DomainEvent<DiscoveryCompletedPayload, "DiscoveryCompleted">;
+export type DiscoveryEnumerationFailure = DomainEvent<DiscoveryEnumerationFailurePayload, "DiscoveryEnumerationFailure">;
 export type FileParsed = DomainEvent<FileParsedPayload, "FileParsed">;
 export type SymbolsExtracted = DomainEvent<SymbolsExtractedPayload, "SymbolsExtracted">;
 export type ParserFailure = DomainEvent<ParserFailurePayload, "ParserFailure">;

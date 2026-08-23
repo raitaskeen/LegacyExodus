@@ -8,6 +8,7 @@ export type DiscoveryArtifactName =
   | "dependencies.json"
   | "frameworks.json"
   | "summary.json"
+  | "enumeration-failures.json"
   | "dependency-graph.json"
   | "modules.json"
   | "symbols.json"
@@ -33,6 +34,7 @@ const artifactNames: readonly DiscoveryArtifactName[] = [
   "dependencies.json",
   "frameworks.json",
   "summary.json",
+  "enumeration-failures.json",
   "dependency-graph.json",
   "modules.json",
   "symbols.json",

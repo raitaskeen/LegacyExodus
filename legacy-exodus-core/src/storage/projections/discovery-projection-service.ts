@@ -16,6 +16,11 @@ const discoveryStoragePayloadSchema = z.object({
   dependencies: z.array(z.object({ name: z.string().min(1), version: z.string().min(1), kind: z.enum(["production", "development"]) })),
   frameworks: z.array(z.object({ name: z.string().min(1), evidence: z.string().min(1) })),
   languages: z.array(z.string().min(1)),
+  enumerationFailures: z.array(z.object({
+    path: z.string().min(1),
+    kind: z.enum(["directory-read", "entry-stat"]),
+    code: z.string().min(1),
+  })).optional(),
   discoveredAt: z.string().datetime(),
 });
 
@@ -101,7 +106,21 @@ export class DiscoveryProjectionService {
         { name: "files.json", payload: payload.files },
         { name: "dependencies.json", payload: payload.dependencies },
         { name: "frameworks.json", payload: payload.frameworks },
-        { name: "summary.json", payload: { projectName: payload.projectName, fileCount: payload.files.length, dependencyCount: payload.dependencies.length, frameworkCount: payload.frameworks.length, languages: payload.languages } },
+        {
+          name: "summary.json",
+          payload: {
+            projectName: payload.projectName,
+            fileCount: payload.files.length,
+            dependencyCount: payload.dependencies.length,
+            frameworkCount: payload.frameworks.length,
+            languages: payload.languages,
+            enumerationFailureCount: (payload.enumerationFailures ?? []).length,
+            discoveryComplete: (payload.enumerationFailures ?? []).length === 0,
+          },
+        },
+        ...(payload.enumerationFailures && payload.enumerationFailures.length > 0
+          ? [{ name: "enumeration-failures.json" as const, payload: payload.enumerationFailures }]
+          : []),
         ...(graph === undefined
           ? []
           : [

@@ -1,9 +1,12 @@
 import { createHash } from "node:crypto";
+import type { Dirent } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { relative, resolve, sep } from "node:path";
 
-import type { FileArtifact } from "@contracts/discovery";
+import type { DiscoveryEnumerationFailure, FileArtifact, FileScanResult } from "@contracts/discovery";
 import { LegacyExodusError } from "@shared/errors";
+
+export type { FileScanResult };
 
 const ignoredDirectories = new Set([".git", ".legacy-exodus", ".discovery", "node_modules"]);
 
@@ -99,8 +102,21 @@ const fileKindByExtension: Readonly<Record<string, FileArtifact["fileKind"]>> = 
   ".sql": "database-schema", ".dockerignore": "container",
 };
 
+export interface FileScannerOptions {
+  readonly readdir?: typeof readdir;
+  readonly stat?: typeof stat;
+}
+
 export class FileScanner {
-  public async scan(projectPath: string): Promise<readonly FileArtifact[]> {
+  private readonly readdirFn: typeof readdir;
+  private readonly statFn: typeof stat;
+
+  public constructor(options: FileScannerOptions = {}) {
+    this.readdirFn = options.readdir ?? readdir;
+    this.statFn = options.stat ?? stat;
+  }
+
+  public async scan(projectPath: string): Promise<FileScanResult> {
     const resolvedProjectPath = resolve(projectPath);
     const projectStats = await this.getProjectStats(resolvedProjectPath);
 
@@ -112,17 +128,39 @@ export class FileScanner {
       });
     }
 
-    const files = await this.scanDirectory(resolvedProjectPath, resolvedProjectPath);
+    const files: FileArtifact[] = [];
+    const enumerationFailures: DiscoveryEnumerationFailure[] = [];
 
-    return Object.freeze(files);
+    await this.scanDirectory(resolvedProjectPath, resolvedProjectPath, files, enumerationFailures);
+
+    enumerationFailures.sort((left, right) =>
+      left.path.localeCompare(right.path) || left.kind.localeCompare(right.kind) || left.code.localeCompare(right.code),
+    );
+
+    return Object.freeze({
+      files: Object.freeze(files),
+      enumerationFailures: Object.freeze(enumerationFailures),
+    });
   }
 
   private async scanDirectory(
     projectPath: string,
     currentPath: string,
-  ): Promise<FileArtifact[]> {
-    const entries = await readdir(currentPath, { withFileTypes: true });
-    const files: FileArtifact[] = [];
+    files: FileArtifact[],
+    failures: DiscoveryEnumerationFailure[],
+  ): Promise<void> {
+    let entries: Dirent[];
+    try {
+      entries = (await this.readdirFn(currentPath, { withFileTypes: true })) as unknown as Dirent[];
+    } catch (error: unknown) {
+      const relPath = relative(projectPath, currentPath).split(sep).join("/");
+      failures.push(Object.freeze({
+        path: relPath === "" ? "." : relPath,
+        kind: "directory-read",
+        code: getErrorCode(error),
+      }));
+      return;
+    }
 
     for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
       const entryPath = resolve(currentPath, entry.name);
@@ -135,22 +173,29 @@ export class FileScanner {
 
       if (entry.isDirectory()) {
         if (!ignoredDirectories.has(entry.name)) {
-          files.push(...(await this.scanDirectory(projectPath, entryPath)));
+          await this.scanDirectory(projectPath, entryPath, files, failures);
         }
 
         continue;
       }
 
       if (entry.isFile()) {
-        files.push(await this.createFileArtifact(projectPath, entryPath));
+        try {
+          files.push(await this.createFileArtifact(projectPath, entryPath));
+        } catch (error: unknown) {
+          const relPath = relative(projectPath, entryPath).split(sep).join("/");
+          failures.push(Object.freeze({
+            path: relPath,
+            kind: "entry-stat",
+            code: getErrorCode(error),
+          }));
+        }
       }
     }
-
-    return files;
   }
 
   private async createFileArtifact(projectPath: string, filePath: string): Promise<FileArtifact> {
-    const fileStats = await stat(filePath);
+    const fileStats = await this.statFn(filePath);
     const path = relative(projectPath, filePath).split(sep).join("/");
     const extensionIndex = path.lastIndexOf(".");
     const extension = extensionIndex < 0 ? "" : path.slice(extensionIndex).toLowerCase();
@@ -167,7 +212,7 @@ export class FileScanner {
 
   private async getProjectStats(projectPath: string): Promise<Awaited<ReturnType<typeof stat>>> {
     try {
-      return await stat(projectPath);
+      return await this.statFn(projectPath);
     } catch {
       throw new LegacyExodusError({
         code: "DISCOVERY_PATH_NOT_FOUND",
@@ -176,4 +221,17 @@ export class FileScanner {
       });
     }
   }
+}
+
+function getErrorCode(error: unknown): string {
+  if (typeof error === "object" && error !== null && "code" in error) {
+    const code = (error as { readonly code: unknown }).code;
+    if (typeof code === "string" && code.length > 0) {
+      return code;
+    }
+  }
+  if (error instanceof Error && error.name && error.name !== "Error") {
+    return error.name;
+  }
+  return "ENUMERATION_FAILURE";
 }

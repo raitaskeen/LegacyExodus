@@ -38,6 +38,17 @@ export interface FrameworkArtifact {
   readonly evidence: string;
 }
 
+export interface DiscoveryEnumerationFailure {
+  readonly path: string;
+  readonly kind: "directory-read" | "entry-stat";
+  readonly code: string;
+}
+
+export interface FileScanResult {
+  readonly files: readonly FileArtifact[];
+  readonly enumerationFailures: readonly DiscoveryEnumerationFailure[];
+}
+
 export interface ProjectDiscovery {
   readonly projectId: string;
   readonly projectName: string;
@@ -46,6 +57,7 @@ export interface ProjectDiscovery {
   readonly dependencies: readonly DependencyArtifact[];
   readonly frameworks: readonly FrameworkArtifact[];
   readonly languages: readonly string[];
+  readonly enumerationFailures: readonly DiscoveryEnumerationFailure[];
   readonly discoveredAt: Date;
 }
 
@@ -55,6 +67,12 @@ const fileArtifactSchema = z.object({
   language: z.string().min(1),
   fileKind: z.enum(["source", "configuration", "manifest", "documentation", "markup", "stylesheet", "data", "database-schema", "ci-cd", "container", "build", "generated", "binary", "unknown"]).optional(),
   size: z.number().nonnegative(),
+});
+
+const discoveryEnumerationFailureSchema = z.object({
+  path: z.string().min(1),
+  kind: z.enum(["directory-read", "entry-stat"]),
+  code: z.string().min(1),
 });
 
 const dependencyArtifactSchema = z.object({
@@ -76,6 +94,7 @@ const projectDiscoverySchema = z.object({
   dependencies: z.array(dependencyArtifactSchema),
   frameworks: z.array(frameworkArtifactSchema),
   languages: z.array(z.string().min(1)),
+  enumerationFailures: z.array(discoveryEnumerationFailureSchema).optional(),
   discoveredAt: z.date(),
 });
 
@@ -100,5 +119,8 @@ export function validateProjectDiscovery(discovery: unknown): ProjectDiscovery {
       parsedDiscovery.data.frameworks.map((framework) => Object.freeze({ ...framework })),
     ),
     languages: Object.freeze([...parsedDiscovery.data.languages]),
+    enumerationFailures: Object.freeze(
+      (parsedDiscovery.data.enumerationFailures ?? []).map((failure) => Object.freeze({ ...failure })),
+    ),
   });
 }

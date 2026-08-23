@@ -22,6 +22,8 @@ export function formatPluginListOutput(report: PluginListReport): string {
 }
 
 export function formatAnalyzeOutput(report: AnalyzeProjectReport): string {
+  const enumerationFailures = report.enumerationFailures ?? 0;
+  const discoveryComplete = report.discoveryComplete ?? (enumerationFailures === 0);
   return [
     "Discovery completed",
     "",
@@ -33,6 +35,8 @@ export function formatAnalyzeOutput(report: AnalyzeProjectReport): string {
     `Unsupported source files: ${report.unsupportedFiles}`,
     `Non-source artifacts: ${report.nonSourceArtifacts}`,
     `Unclassified files: ${report.unclassifiedArtifacts}`,
+    `Enumeration failures: ${enumerationFailures}`,
+    `Discovery complete: ${discoveryComplete ? "yes" : "no"}`,
     `Analysis duration: ${report.durationMs.toFixed(2)}ms`,
     `Languages: ${report.languages.join(", ") || "none"}`,
     `Frameworks: ${report.frameworks.join(", ") || "none"}`,

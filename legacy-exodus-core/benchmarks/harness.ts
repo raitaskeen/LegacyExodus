@@ -59,6 +59,8 @@ export async function executeBenchmarkRun(
       unsupportedFiles: result.analysis.unsupportedFiles,
       nonSourceArtifacts: result.analysis.nonSourceArtifacts,
       unclassifiedArtifacts: result.analysis.unclassifiedArtifacts,
+      enumerationFailures: result.analysis.enumerationFailures ?? 0,
+      discoveryComplete: result.analysis.discoveryComplete ?? true,
       durationMs: result.analysis.durationMs,
     };
 
@@ -67,7 +69,7 @@ export async function executeBenchmarkRun(
     const flow = await extractFlowSummary(discoveryDir);
     const artifactHashes = await hashDiscoveryArtifacts(discoveryDir);
     const fileAccounting = computeFileAccounting(disposition);
-    const contamination = detectContamination(projectPath, result.discovery.files);
+    const contamination = detectContamination(result.discovery.files);
     const completeness = verifyCompleteness(disposition, fileAccounting, contamination);
 
     return {

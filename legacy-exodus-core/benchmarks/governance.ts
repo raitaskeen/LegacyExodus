@@ -11,7 +11,7 @@
 
 import { execSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { arch, platform, version as bunVersion } from "node:process";
 
 import type {
@@ -72,12 +72,19 @@ export function verifyCompleteness(
   const duplicateDispositions: string[] = [];
   const details: string[] = [];
 
+  const enumerationFailures = disposition.enumerationFailures ?? 0;
+  const discoveryComplete = disposition.discoveryComplete ?? (enumerationFailures === 0);
+
   if (!accounting.reconciles) {
     details.push(`File accounting mismatch: discovered ${accounting.filesDiscovered} vs computed ${accounting.computedTotal} (delta: ${accounting.discrepancy})`);
   }
 
   if (contamination.isContaminated) {
     details.push(`Contamination detected in analyzed paths: ${contamination.benchmarkArtifactsExcluded.join(", ")}`);
+  }
+
+  if (!discoveryComplete || enumerationFailures > 0) {
+    details.push(`${enumerationFailures} filesystem enumeration failure(s) recorded during discovery traversal`);
   }
 
   if (disposition.parserFailures > 0) {
@@ -91,7 +98,13 @@ export function verifyCompleteness(
   let status: CompletenessStatus = "PASS";
   if (!accounting.reconciles || contamination.isContaminated) {
     status = "FAIL";
-  } else if (disposition.unclassifiedArtifacts > 0 || disposition.parserFailures > 0 || disposition.symbolExtractionFailures > 0) {
+  } else if (
+    !discoveryComplete ||
+    enumerationFailures > 0 ||
+    disposition.unclassifiedArtifacts > 0 ||
+    disposition.parserFailures > 0 ||
+    disposition.symbolExtractionFailures > 0
+  ) {
     status = "NEEDS_REVIEW";
   }
 
@@ -101,13 +114,15 @@ export function verifyCompleteness(
     unassignedFailures,
     duplicateDispositions,
     benchmarkCacheContaminationDetected: contamination.isContaminated,
+    enumerationFailures,
+    discoveryComplete,
     details,
   };
 }
 
 // ─── 3. Contamination Guard ───────────────────────────────────────────────────────
 
-export function detectContamination(repoPath: string, discoveredFiles: readonly { path: string }[]): ContaminationGuardReport {
+export function detectContamination(discoveredFiles: readonly { path: string }[]): ContaminationGuardReport {
   const ignoredDirectories = [".git", "node_modules", ".cache", ".discovery", "dist", "build", ".legacy-exodus"];
   const ignoredFiles: string[] = [];
   const generatedArtifactsExcluded: string[] = [];
