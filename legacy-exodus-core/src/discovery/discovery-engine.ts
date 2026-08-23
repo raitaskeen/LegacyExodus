@@ -16,7 +16,7 @@ export class DiscoveryEngine {
   ) {}
 
   public async discover(context: DiscoveryContext): Promise<DiscoveryResult> {
-    const files = await this.fileScanner.scan(context.projectPath);
+    const { files, enumerationFailures } = await this.fileScanner.scan(context.projectPath);
     const detection = await this.projectDetector.detect(context.projectPath, files);
 
     return validateProjectDiscovery({
@@ -27,6 +27,7 @@ export class DiscoveryEngine {
       dependencies: detection.dependencies,
       frameworks: detection.frameworks,
       languages: detection.languages,
+      enumerationFailures,
       discoveredAt: new Date(),
     });
   }
@@ -53,6 +54,13 @@ export class DiscoveryEngine {
         payload: { name: framework.name, evidence: framework.evidence },
       }),
     );
+    const failureEvents = (discovery.enumerationFailures ?? []).map((failure) =>
+      createDomainEvent({
+        type: "DiscoveryEnumerationFailure",
+        aggregateId: discovery.projectId,
+        payload: { path: failure.path, kind: failure.kind, code: failure.code },
+      }),
+    );
     const completionEvent = createDomainEvent({
       type: "DiscoveryCompleted",
       aggregateId: discovery.projectId,
@@ -61,9 +69,10 @@ export class DiscoveryEngine {
         fileCount: discovery.files.length,
         dependencyCount: discovery.dependencies.length,
         frameworkCount: discovery.frameworks.length,
+        enumerationFailureCount: (discovery.enumerationFailures ?? []).length,
       },
     });
 
-    return Object.freeze([...fileEvents, ...dependencyEvents, ...frameworkEvents, completionEvent]);
+    return Object.freeze([...fileEvents, ...dependencyEvents, ...frameworkEvents, ...failureEvents, completionEvent]);
   }
 }

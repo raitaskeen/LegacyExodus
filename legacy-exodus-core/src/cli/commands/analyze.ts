@@ -23,6 +23,8 @@ export interface AnalyzeProjectReport {
   readonly unsupportedFiles: number;
   readonly nonSourceArtifacts: number;
   readonly unclassifiedArtifacts: number;
+  readonly enumerationFailures?: number;
+  readonly discoveryComplete?: boolean;
   readonly durationMs: number;
 }
 
@@ -59,6 +61,8 @@ export async function analyzeProject(
       unsupportedFiles: result.analysis.unsupportedFiles,
       nonSourceArtifacts: result.analysis.nonSourceArtifacts,
       unclassifiedArtifacts: result.analysis.unclassifiedArtifacts,
+      enumerationFailures: result.analysis.enumerationFailures ?? 0,
+      discoveryComplete: result.analysis.discoveryComplete ?? true,
       durationMs: result.analysis.durationMs,
     };
   } finally {

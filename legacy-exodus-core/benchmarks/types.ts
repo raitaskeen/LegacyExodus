@@ -55,6 +55,8 @@ export interface AnalysisDisposition {
   readonly unsupportedFiles: number;
   readonly nonSourceArtifacts: number;
   readonly unclassifiedArtifacts: number;
+  readonly enumerationFailures?: number;
+  readonly discoveryComplete?: boolean;
   readonly durationMs: number;
 }
 
@@ -85,6 +87,8 @@ export interface AnalysisCompleteness {
   readonly unassignedFailures: readonly string[];
   readonly duplicateDispositions: readonly string[];
   readonly benchmarkCacheContaminationDetected: boolean;
+  readonly enumerationFailures?: number;
+  readonly discoveryComplete?: boolean;
   readonly details: readonly string[];
 }
 

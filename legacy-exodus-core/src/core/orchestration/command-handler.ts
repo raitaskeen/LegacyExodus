@@ -87,6 +87,7 @@ export class AnalyzeProjectHandler {
       projectId: command.payload.projectId,
       projectPath: command.payload.path,
     });
+    const enumerationFailures = discovery.enumerationFailures ?? [];
     const record = createStorageRecord("project-discovery", {
       projectId: discovery.projectId,
       projectName: discovery.projectName,
@@ -95,6 +96,7 @@ export class AnalyzeProjectHandler {
       dependencies: discovery.dependencies.map((dependency) => ({ ...dependency })),
       frameworks: discovery.frameworks.map((framework) => ({ ...framework })),
       languages: [...discovery.languages],
+      enumerationFailures: enumerationFailures.map((failure) => ({ ...failure })),
       discoveredAt: discovery.discoveredAt.toISOString(),
       analysisRunId: command.id,
     });
@@ -264,6 +266,8 @@ export class AnalyzeProjectHandler {
         unsupportedFiles: discovery.files.filter((file) => file.fileKind === "source" && file.language !== "javascript" && file.language !== "typescript").length,
         nonSourceArtifacts: discovery.files.filter((file) => file.fileKind !== "source" && file.fileKind !== "unknown" && file.fileKind !== undefined).length,
         unclassifiedArtifacts: discovery.files.filter((file) => file.fileKind === "unknown" || file.fileKind === undefined).length,
+        enumerationFailures: enumerationFailures.length,
+        discoveryComplete: enumerationFailures.length === 0,
         durationMs: performance.now() - startedAt,
       }),
     };

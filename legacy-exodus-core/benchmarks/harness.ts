@@ -59,6 +59,8 @@ export async function executeBenchmarkRun(
       unsupportedFiles: result.analysis.unsupportedFiles,
       nonSourceArtifacts: result.analysis.nonSourceArtifacts,
       unclassifiedArtifacts: result.analysis.unclassifiedArtifacts,
+      enumerationFailures: result.analysis.enumerationFailures ?? 0,
+      discoveryComplete: result.analysis.discoveryComplete ?? true,
       durationMs: result.analysis.durationMs,
     };
 

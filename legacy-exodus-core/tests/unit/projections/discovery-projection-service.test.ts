@@ -39,6 +39,8 @@ describe("DiscoveryProjectionService", () => {
         dependencyCount: 1,
         frameworkCount: 1,
         languages: ["javascript"],
+        enumerationFailureCount: 0,
+        discoveryComplete: true,
       });
     } finally {
       await rm(projectPath, { force: true, recursive: true });
@@ -89,6 +91,46 @@ describe("DiscoveryProjectionService", () => {
       expect(JSON.parse(await readFile(join(projectPath, ".discovery", "knowledge.json"), "utf8"))).toEqual({
         projectId, analysisRunId: activeRunId, nodes: [{ id: "active", kind: "symbol", name: "active", filePath: "src/index.js" }], edges: [],
       });
+    } finally {
+      await rm(projectPath, { force: true, recursive: true });
+    }
+  });
+
+  test("projects enumeration-failures.json when enumeration failures are recorded in discovery record", async (): Promise<void> => {
+    const projectPath = await mkdtemp(join(tmpdir(), "legacy-exodus-fail-projection-"));
+    const storage = new StorageManager(new MemoryStorageProvider());
+    const record = createStorageRecord("project-discovery", {
+      projectId: "00000000-0000-4000-8000-000000000070",
+      projectName: "partial-project",
+      projectPath,
+      files: [{ id: "file-1", path: "src/index.js", language: "javascript", size: 20 }],
+      dependencies: [],
+      frameworks: [],
+      languages: ["javascript"],
+      enumerationFailures: [
+        { path: "secret_dir", kind: "directory-read", code: "EACCES" },
+      ],
+      discoveredAt: "2026-08-08T00:00:00.000Z",
+    });
+    const service = new DiscoveryProjectionService(storage, new FileDiscoveryProjectionAdapter());
+
+    try {
+      await storage.save(record);
+      const projection = await service.project(record.id);
+
+      expect(projection.artifacts.some((a) => a.name === "enumeration-failures.json")).toBe(true);
+      expect(JSON.parse(await readFile(join(projectPath, ".discovery", "summary.json"), "utf8"))).toEqual({
+        projectName: "partial-project",
+        fileCount: 1,
+        dependencyCount: 0,
+        frameworkCount: 0,
+        languages: ["javascript"],
+        enumerationFailureCount: 1,
+        discoveryComplete: false,
+      });
+      expect(JSON.parse(await readFile(join(projectPath, ".discovery", "enumeration-failures.json"), "utf8"))).toEqual([
+        { path: "secret_dir", kind: "directory-read", code: "EACCES" },
+      ]);
     } finally {
       await rm(projectPath, { force: true, recursive: true });
     }

@@ -1,10 +1,13 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 import { describe, expect, test } from "bun:test";
 
 import { createEngineContext, createLegacyExodusEngine } from "@runtime/composition/services";
+import { DiscoveryEngine, FileScanner } from "@discovery/index";
+import { Orchestrator } from "@core/orchestration/orchestrator";
+import { JavaScriptSymbolExtractor } from "@symbols/index";
 
 describe("analyze project integration", () => {
   test("runs deterministic discovery through the engine facade", async (): Promise<void> => {
@@ -64,6 +67,8 @@ describe("analyze project integration", () => {
         dependencyCount: 3,
         frameworkCount: 3,
         languages: ["css", "javascript", "json", "markdown", "rust"],
+        enumerationFailureCount: 0,
+        discoveryComplete: true,
       });
       const knowledge = JSON.parse(await readFile(join(projectPath, ".discovery", "knowledge.json"), "utf8")) as {
         readonly nodes: readonly { readonly kind: string }[];
@@ -202,6 +207,85 @@ describe("analyze project integration", () => {
         result.analysis.unclassifiedArtifacts
       );
       expect(result.discovery.languages).toEqual(expect.arrayContaining(["javascript", "kotlin", "markdown", "rust", "swift", "typescript", "vue"]));
+    } finally {
+      await rm(projectPath, { force: true, recursive: true });
+    }
+  });
+
+  test("isolates discovery enumeration failures end-to-end without aborting pipeline analysis of valid files", async (): Promise<void> => {
+    const projectPath = await mkdtemp(join(tmpdir(), "legacy-exodus-adv-integration-"));
+    try {
+      await mkdir(join(projectPath, "src"));
+      await mkdir(join(projectPath, "restricted_dir"));
+      await writeFile(join(projectPath, "src", "index.js"), "export const ok = true;", "utf8");
+      await writeFile(join(projectPath, "package.json"), JSON.stringify({ name: "adv-test" }), "utf8");
+
+      const scanner = new FileScanner({
+        readdir: (async (path: string, options: any) => {
+          if (resolve(path).includes("restricted_dir")) {
+            const err = new Error("Access denied") as any;
+            err.code = "EACCES";
+            throw err;
+          }
+          return readdir(path, options);
+        }) as typeof readdir,
+      });
+
+      const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+      const orchestrator = new Orchestrator(
+        context.eventStore,
+        context.eventBus,
+        context.storage,
+        new DiscoveryEngine(scanner),
+        undefined,
+        context.parserManager,
+        new JavaScriptSymbolExtractor(),
+      );
+
+      const execution = await orchestrator.execute({
+        id: "00000000-0000-4000-8000-000000000060",
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: {
+          projectId: "00000000-0000-4000-8000-000000000061",
+          path: projectPath,
+        },
+      });
+
+      expect(execution.analysis).toMatchObject({
+        filesDiscovered: 2,
+        filesAnalyzed: 1,
+        enumerationFailures: 1,
+        discoveryComplete: false,
+      });
+
+      // Internal file accounting remains strictly exact
+      expect(execution.analysis?.filesDiscovered).toBe(
+        (execution.analysis?.filesAnalyzed ?? 0) +
+        (execution.analysis?.parserFailures ?? 0) +
+        (execution.analysis?.symbolExtractionFailures ?? 0) +
+        (execution.analysis?.unsupportedFiles ?? 0) +
+        (execution.analysis?.nonSourceArtifacts ?? 0) +
+        (execution.analysis?.unclassifiedArtifacts ?? 0)
+      );
+
+      const discoveryRecord = (await context.storage.findAll("project-discovery"))[0];
+      expect(discoveryRecord).toBeDefined();
+
+      // Project storage artifacts to disk
+      await context.discoveryProjection.project(discoveryRecord!.id);
+
+      const summary = JSON.parse(await readFile(join(projectPath, ".discovery", "summary.json"), "utf8"));
+      expect(summary).toMatchObject({
+        fileCount: 2,
+        enumerationFailureCount: 1,
+        discoveryComplete: false,
+      });
+
+      const failures = JSON.parse(await readFile(join(projectPath, ".discovery", "enumeration-failures.json"), "utf8"));
+      expect(failures).toEqual([
+        { path: "restricted_dir", kind: "directory-read", code: "EACCES" },
+      ]);
     } finally {
       await rm(projectPath, { force: true, recursive: true });
     }
