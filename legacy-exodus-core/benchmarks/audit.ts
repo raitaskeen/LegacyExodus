@@ -198,7 +198,7 @@ export async function runBenchmarkSelfAudit(baseDir = resolve(import.meta.dir, "
     { path: "benchmarks/.cache/repo/file.js" },
     { path: "node_modules/pkg/index.js" },
   ];
-  const contam = detectContamination("/repo", fakeDiscovered);
+  const contam = detectContamination(fakeDiscovered);
   if (contam.isContaminated && contam.benchmarkArtifactsExcluded.length > 0 && contam.ignoredFiles.length > 0) {
     passedChecks++;
   } else {

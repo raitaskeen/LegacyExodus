@@ -11,7 +11,7 @@
 
 import { execSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { arch, platform, version as bunVersion } from "node:process";
 
 import type {
@@ -122,7 +122,7 @@ export function verifyCompleteness(
 
 // ─── 3. Contamination Guard ───────────────────────────────────────────────────────
 
-export function detectContamination(repoPath: string, discoveredFiles: readonly { path: string }[]): ContaminationGuardReport {
+export function detectContamination(discoveredFiles: readonly { path: string }[]): ContaminationGuardReport {
   const ignoredDirectories = [".git", "node_modules", ".cache", ".discovery", "dist", "build", ".legacy-exodus"];
   const ignoredFiles: string[] = [];
   const generatedArtifactsExcluded: string[] = [];

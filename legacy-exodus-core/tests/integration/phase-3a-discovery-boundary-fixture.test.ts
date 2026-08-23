@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, test } from "bun:test";
 
-import { createEngineContext, createLegacyExodusEngine } from "@runtime/composition/services";
+import { createEngineContext } from "@runtime/composition/services";
 import { DiscoveryEngine, FileScanner } from "@discovery/index";
 import { Orchestrator } from "@core/orchestration/orchestrator";
 import { JavaScriptSymbolExtractor } from "@symbols/index";
@@ -327,7 +327,7 @@ describe("Phase 3A Discovery Boundary Hardening — Canonical Fixture Suite", ()
     expect(accounting.reconciles).toBe(true);
     expect(accounting.discrepancy).toBe(0);
 
-    const contamination = detectContamination("/fake/path", []);
+    const contamination = detectContamination([]);
     const completeness = verifyCompleteness(disposition, accounting, contamination);
 
     expect(completeness.status).toBe("NEEDS_REVIEW");
