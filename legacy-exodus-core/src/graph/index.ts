@@ -7,4 +7,4 @@ export type {
 export { validateDependencyGraph } from "./dependency-graph-contracts";
 export { DeterministicDependencyGraphBuilder } from "./dependency-graph-builder";
 export { ModuleResolver } from "./module-resolver";
-export type { ModuleResolutionOptions, ResolvedImport } from "./module-resolver";
+export type { KnownPathLookup, ModuleResolutionOptions, ResolvedImport } from "./module-resolver";

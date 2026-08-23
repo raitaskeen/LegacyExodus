@@ -129,7 +129,7 @@ export class DiscoveryProjectionService {
               { name: "symbols.json" as const, payload: symbols },
               ...(knowledge === undefined ? [] : [{ name: "knowledge.json" as const, payload: knowledge }]),
               ...(semantic === undefined ? [] : [{ name: "semantic.json" as const, payload: semantic }]),
-              ...(controlFlow === undefined ? [] : [{ name: "cfg.json" as const, payload: controlFlow.graphs }, { name: "control-flow.json" as const, payload: controlFlow }]),
+              ...(controlFlow === undefined ? [] : [{ name: "control-flow.json" as const, payload: controlFlow }]),
               ...(dataFlow === undefined ? [] : [{ name: "data-flow.json" as const, payload: dataFlow }]),
             ]),
       ],

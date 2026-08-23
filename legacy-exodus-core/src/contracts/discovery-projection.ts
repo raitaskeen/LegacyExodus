@@ -50,7 +50,7 @@ const discoveryProjectionSchema = z.object({
   artifacts: z.array(
     z.object({
       name: z.enum(artifactNames),
-      payload: z.json(),
+      payload: z.unknown(),
     }),
   ),
 });
@@ -78,6 +78,10 @@ export function createDiscoveryProjection(projection: DiscoveryProjection): Disc
 
 function deepFreeze(value: unknown): unknown {
   if (value === null || typeof value !== "object") {
+    return value;
+  }
+
+  if (Object.isFrozen(value)) {
     return value;
   }
 

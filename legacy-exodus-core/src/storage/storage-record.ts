@@ -38,14 +38,17 @@ export function createStorageRecord<Payload extends SerializedPayload>(
   type: string,
   payload: Payload,
 ): StorageRecord<Payload> {
-  const timestamp = new Date();
+  const createdAt = new Date();
+  const updatedAt = new Date(createdAt.getTime());
+  const id = contentIdentity(type, payload);
+  const frozenPayload = deepFreeze(structuredClone(payload));
 
   return validateStorageRecord({
-    id: contentIdentity(type, payload),
+    id,
     type,
-    payload,
-    createdAt: timestamp,
-    updatedAt: timestamp,
+    payload: frozenPayload,
+    createdAt,
+    updatedAt,
   });
 }
 
@@ -84,7 +87,17 @@ export function validateStorageRecord<Payload extends SerializedPayload>(
     throw new StorageValidationError("Storage record updatedAt must not precede createdAt.");
   }
 
-  return cloneStorageRecord(record);
+  if (Object.isFrozen(record) && Object.isFrozen(record.payload)) {
+    return record;
+  }
+
+  return Object.freeze({
+    id: record.id,
+    type: record.type,
+    payload: deepFreeze(record.payload),
+    createdAt: new Date(record.createdAt.getTime()),
+    updatedAt: new Date(record.updatedAt.getTime()),
+  });
 }
 
 export function cloneStorageRecord<Payload extends SerializedPayload>(
