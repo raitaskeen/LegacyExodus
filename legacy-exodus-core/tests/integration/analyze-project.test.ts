@@ -83,9 +83,7 @@ describe("analyze project integration", () => {
       expect(Array.isArray(semantic.calls)).toBe(true);
       expect(Array.isArray(semantic.scopes)).toBe(true);
       const controlFlow = JSON.parse(await readFile(join(projectPath, ".discovery", "control-flow.json"), "utf8")) as { readonly graphs: readonly unknown[] };
-      const cfg = JSON.parse(await readFile(join(projectPath, ".discovery", "cfg.json"), "utf8")) as readonly unknown[];
       const dataFlow = JSON.parse(await readFile(join(projectPath, ".discovery", "data-flow.json"), "utf8")) as { readonly graphs: readonly unknown[] };
-      expect(cfg.length).toBeGreaterThan(0);
       expect(controlFlow.graphs.length).toBeGreaterThan(0);
       expect(dataFlow.graphs.length).toBeGreaterThan(0);
 

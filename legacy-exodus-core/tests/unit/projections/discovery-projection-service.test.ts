@@ -135,4 +135,64 @@ describe("DiscoveryProjectionService", () => {
       await rm(projectPath, { force: true, recursive: true });
     }
   });
+
+  test("P0.3: projects canonical control-flow.json without emitting duplicate cfg.json", async (): Promise<void> => {
+    const projectPath = await mkdtemp(join(tmpdir(), "legacy-exodus-flow-projection-"));
+    const storage = new StorageManager(new MemoryStorageProvider());
+    const projectId = "00000000-0000-4000-8000-000000000080";
+    const analysisRunId = "00000000-0000-4000-8000-000000000081";
+    const discovery = createStorageRecord("project-discovery", {
+      projectId,
+      analysisRunId,
+      projectName: "flow-project",
+      projectPath,
+      files: [{ id: "file-1", path: "src/index.js", language: "javascript", size: 20 }],
+      dependencies: [],
+      frameworks: [],
+      languages: ["javascript"],
+      discoveredAt: "2026-08-08T00:00:00.000Z",
+    });
+    const graph = createStorageRecord("dependency-graph", {
+      projectId,
+      analysisRunId,
+      nodes: [],
+      edges: [],
+      cycles: [],
+    });
+    const controlFlow = createStorageRecord("control-flow-analysis", {
+      projectId,
+      analysisRunId,
+      graphs: [
+        {
+          id: "cfg-1",
+          functionName: "login",
+          filePath: "src/index.js",
+          blocks: [{ id: "b1", statements: [] }],
+          edges: [],
+          dominators: [],
+        },
+      ],
+    });
+    const service = new DiscoveryProjectionService(storage, new FileDiscoveryProjectionAdapter());
+
+    try {
+      await storage.save(discovery);
+      await storage.save(graph);
+      await storage.save(controlFlow);
+      const projection = await service.project(discovery.id);
+
+      expect(projection.artifacts.some((a) => a.name === "control-flow.json")).toBe(true);
+      expect(projection.artifacts.some((a) => a.name === "cfg.json")).toBe(false);
+
+      const writtenControlFlow = JSON.parse(
+        await readFile(join(projectPath, ".discovery", "control-flow.json"), "utf8"),
+      ) as { readonly projectId: string; readonly graphs: readonly { readonly functionName: string }[] };
+
+      expect(writtenControlFlow.projectId).toBe(projectId);
+      expect(writtenControlFlow.graphs).toHaveLength(1);
+      expect(writtenControlFlow.graphs[0]!.functionName).toBe("login");
+    } finally {
+      await rm(projectPath, { force: true, recursive: true });
+    }
+  });
 });

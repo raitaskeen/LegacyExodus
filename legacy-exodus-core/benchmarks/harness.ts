@@ -129,12 +129,11 @@ async function extractSemanticSummary(discoveryDir: string): Promise<SemanticSum
 // ─── Flow Summary Extraction ──────────────────────────────────────────────────
 
 async function extractFlowSummary(discoveryDir: string): Promise<FlowSummary> {
-  const cfg = await readJsonSafe(join(discoveryDir, "cfg.json"));
   const controlFlow = await readJsonSafe(join(discoveryDir, "control-flow.json"));
   const dataFlow = await readJsonSafe(join(discoveryDir, "data-flow.json"));
   const knowledge = await readJsonSafe(join(discoveryDir, "knowledge.json"));
 
-  const rawCfgs = Array.isArray(cfg) ? cfg : asArray(controlFlow?.graphs);
+  const rawCfgs = asArray(controlFlow?.graphs);
   const dfGraphs = asArray(dataFlow?.graphs);
 
   let basicBlockCount = 0;
