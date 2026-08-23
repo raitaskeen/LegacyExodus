@@ -14,42 +14,52 @@ export interface ModuleResolutionOptions {
   readonly paths?: Readonly<Record<string, readonly string[]>>;
 }
 
+export type KnownPathLookup = readonly FileArtifact[] | ReadonlySet<string>;
+
 export class ModuleResolver {
+  private readonly pathSetCache = new WeakMap<readonly FileArtifact[], ReadonlySet<string>>();
+
   public constructor(private readonly options: ModuleResolutionOptions = {}) {}
 
-  public resolve(importerPath: string, moduleSpecifier: string, files: readonly FileArtifact[]): ResolvedImport {
+  public resolve(
+    importerPath: string,
+    moduleSpecifier: string,
+    files: KnownPathLookup,
+  ): ResolvedImport {
+    const knownPaths = this.getKnownPathSet(files);
+
     if (!moduleSpecifier.startsWith(".")) {
-      const aliased = this.resolveAlias(moduleSpecifier, files);
+      const aliased = this.resolveAlias(moduleSpecifier, knownPaths);
       if (aliased !== null) {
         return Object.freeze({ importerPath, moduleSpecifier, resolvedPath: aliased });
       }
       return Object.freeze({ importerPath, moduleSpecifier, resolvedPath: null });
     }
 
-    const knownPaths = new Set(files.map((file) => file.path));
     const basePath = posix.normalize(posix.join(dirname(importerPath).replaceAll("\\", "/"), moduleSpecifier));
-    const candidates = [
-      basePath,
-      `${basePath}.js`,
-      `${basePath}.jsx`,
-      `${basePath}.ts`,
-      `${basePath}.tsx`,
-      `${basePath}.mjs`,
-      `${basePath}.cjs`,
-      `${basePath}/index.js`,
-      `${basePath}/index.jsx`,
-      `${basePath}/index.ts`,
-      `${basePath}/index.tsx`,
-      `${basePath}/index.mjs`,
-      `${basePath}/index.cjs`,
-    ];
+    const candidates = candidatesFor(basePath);
     const resolvedPath = candidates.find((candidate) => knownPaths.has(normalize(candidate).replaceAll("\\", "/"))) ?? null;
 
     return Object.freeze({ importerPath, moduleSpecifier, resolvedPath });
   }
 
-  private resolveAlias(moduleSpecifier: string, files: readonly FileArtifact[]): string | null {
-    const knownPaths = new Set(files.map((file) => file.path));
+  private getKnownPathSet(files: KnownPathLookup): ReadonlySet<string> {
+    if (files instanceof Set) {
+      return files;
+    }
+    if (!Array.isArray(files)) {
+      return files as ReadonlySet<string>;
+    }
+    const cached = this.pathSetCache.get(files);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const pathSet = new Set(files.map((file) => file.path));
+    this.pathSetCache.set(files, pathSet);
+    return pathSet;
+  }
+
+  private resolveAlias(moduleSpecifier: string, knownPaths: ReadonlySet<string>): string | null {
     const aliases = Object.entries(this.options.paths ?? {}).sort(([left], [right]) => left.localeCompare(right));
     for (const [pattern, targets] of aliases) {
       const wildcard = pattern.indexOf("*");
@@ -71,5 +81,19 @@ export class ModuleResolver {
 }
 
 function candidatesFor(basePath: string): readonly string[] {
-  return Object.freeze([basePath, `${basePath}.js`, `${basePath}.jsx`, `${basePath}.ts`, `${basePath}.tsx`, `${basePath}.mjs`, `${basePath}.cjs`, `${basePath}/index.js`, `${basePath}/index.jsx`, `${basePath}/index.ts`, `${basePath}/index.tsx`, `${basePath}/index.mjs`, `${basePath}/index.cjs`]);
+  return Object.freeze([
+    basePath,
+    `${basePath}.js`,
+    `${basePath}.jsx`,
+    `${basePath}.ts`,
+    `${basePath}.tsx`,
+    `${basePath}.mjs`,
+    `${basePath}.cjs`,
+    `${basePath}/index.js`,
+    `${basePath}/index.jsx`,
+    `${basePath}/index.ts`,
+    `${basePath}/index.tsx`,
+    `${basePath}/index.mjs`,
+    `${basePath}/index.cjs`,
+  ]);
 }

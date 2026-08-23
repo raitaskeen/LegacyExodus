@@ -176,4 +176,61 @@ describe("ModuleResolver", () => {
     expect(graph.edges.some((edge) => edge.sourceFilePath === "src/b/index.js" && edge.targetFilePath === "src/a/index.js")).toBe(true);
     expect(graph.cycles).toContainEqual(["src/a/index.js", "src/b/index.js", "src/a/index.js"]);
   });
+
+  test("P0.1: resolves identically whether provided FileArtifact array or precomputed ReadonlySet", (): void => {
+    const resolver = new ModuleResolver({ baseUrl: "src", paths: { "@/*": ["*"] } });
+    const fileSet = new Set(files.map((file) => file.path));
+
+    const arrayResult1 = resolver.resolve("src/api.js", "./billing", files);
+    const setResult1 = resolver.resolve("src/api.js", "./billing", fileSet);
+    expect(arrayResult1).toEqual(setResult1);
+
+    const arrayResult2 = resolver.resolve("src/api.js", "@/billing", files);
+    const setResult2 = resolver.resolve("src/api.js", "@/billing", fileSet);
+    expect(arrayResult2).toEqual(setResult2);
+
+    const arrayResult3 = resolver.resolve("src/api.js", "./missing", files);
+    const setResult3 = resolver.resolve("src/api.js", "./missing", fileSet);
+    expect(arrayResult3).toEqual(setResult3);
+  });
+
+  test("P0.1: enforces strict repository isolation without cross-repository cache contamination", (): void => {
+    const resolver = new ModuleResolver();
+    const repoAFiles: readonly FileArtifact[] = [
+      { id: "app-a", path: "src/app.js", language: "javascript", size: 1 },
+      { id: "auth-a", path: "src/auth.js", language: "javascript", size: 1 },
+    ];
+    const repoBFiles: readonly FileArtifact[] = [
+      { id: "app-b", path: "src/app.js", language: "javascript", size: 1 },
+      { id: "billing-b", path: "src/billing.js", language: "javascript", size: 1 },
+    ];
+
+    // Repo A has auth, does not have billing
+    expect(resolver.resolve("src/app.js", "./auth", repoAFiles).resolvedPath).toBe("src/auth.js");
+    expect(resolver.resolve("src/app.js", "./billing", repoAFiles).resolvedPath).toBeNull();
+
+    // Repo B has billing, does not have auth
+    expect(resolver.resolve("src/app.js", "./billing", repoBFiles).resolvedPath).toBe("src/billing.js");
+    expect(resolver.resolve("src/app.js", "./auth", repoBFiles).resolvedPath).toBeNull();
+
+    // Interleaved resolution on same resolver instance retains clean isolation
+    expect(resolver.resolve("src/app.js", "./auth", repoAFiles).resolvedPath).toBe("src/auth.js");
+    expect(resolver.resolve("src/app.js", "./billing", repoBFiles).resolvedPath).toBe("src/billing.js");
+  });
+
+  test("P0.1: reuses cached lookup across repeated resolutions without behavioral drift", (): void => {
+    const resolver = new ModuleResolver({ baseUrl: "src", paths: { "@/*": ["*"] } });
+
+    // Repeated resolution of many imports on the same files collection
+    for (let i = 0; i < 500; i++) {
+      const resBilling = resolver.resolve("src/api.js", "./billing", files);
+      expect(resBilling.resolvedPath).toBe("src/billing.js");
+
+      const resAlias = resolver.resolve("src/api.js", "@/utils", files);
+      expect(resAlias.resolvedPath).toBe("src/utils/index.js");
+
+      const resUnresolved = resolver.resolve("src/api.js", "non-existent-pkg", files);
+      expect(resUnresolved.resolvedPath).toBeNull();
+    }
+  });
 });

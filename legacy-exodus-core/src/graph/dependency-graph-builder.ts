@@ -1,15 +1,14 @@
 import { createHash } from "node:crypto";
 
-import type { FileArtifact } from "@contracts/discovery";
 import type { CodeSymbol, SymbolTable } from "@symbols/index";
 
 import { validateDependencyGraph, type DependencyGraph } from "./dependency-graph-contracts";
-import { ModuleResolver } from "./module-resolver";
+import { type KnownPathLookup, ModuleResolver } from "./module-resolver";
 
 export class DeterministicDependencyGraphBuilder {
   public constructor(private readonly resolver: ModuleResolver = new ModuleResolver()) {}
 
-  public build(symbolTables: readonly SymbolTable[], files: readonly FileArtifact[]): DependencyGraph {
+  public build(symbolTables: readonly SymbolTable[], files: KnownPathLookup): DependencyGraph {
     const orderedTables = [...symbolTables].sort((left, right) => left.filePath.localeCompare(right.filePath));
     const tablesByPath = new Map(orderedTables.map((table) => [table.filePath, table]));
     const nodes = orderedTables.flatMap((table) =>
@@ -50,7 +49,7 @@ export class DeterministicDependencyGraphBuilder {
   private resolveExport(
     table: SymbolTable,
     name: string,
-    files: readonly FileArtifact[],
+    files: KnownPathLookup,
     tables: ReadonlyMap<string, SymbolTable>,
     visited: ReadonlySet<string>,
   ): CodeSymbol | undefined {

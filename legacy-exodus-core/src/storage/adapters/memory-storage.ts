@@ -1,6 +1,5 @@
 import { StorageRecordNotFoundError } from "../storage-errors";
 import {
-  cloneStorageRecord,
   type SerializedPayload,
   type StorageRecord,
   validateStorageRecord,
@@ -21,15 +20,14 @@ export class MemoryStorageProvider implements StorageProvider {
   ): Promise<StorageRecord<Payload> | null> {
     const record = this.records.get(id);
 
-    return record === undefined ? null : cloneStorageRecord(record) as StorageRecord<Payload>;
+    return record === undefined ? null : (record as StorageRecord<Payload>);
   }
 
   public async findAll<Payload extends SerializedPayload>(
     type: string,
   ): Promise<StorageRecord<Payload>[]> {
     return [...this.records.values()]
-      .filter((record) => record.type === type)
-      .map((record) => cloneStorageRecord(record) as StorageRecord<Payload>);
+      .filter((record) => record.type === type) as StorageRecord<Payload>[];
   }
 
   public async delete(id: string): Promise<void> {
