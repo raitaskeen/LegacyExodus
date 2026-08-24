@@ -24,7 +24,15 @@ export class StorageManager {
     return this.provider.delete(id);
   }
 
+  public isPersistent(): boolean {
+    return this.provider.isPersistent ?? false;
+  }
+
   public clear(): Promise<void> {
     return this.provider.clear();
+  }
+
+  public async close(): Promise<void> {
+    await this.provider.close?.();
   }
 }

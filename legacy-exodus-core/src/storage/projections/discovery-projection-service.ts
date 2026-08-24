@@ -52,12 +52,12 @@ const knowledgeGraphStoragePayloadSchema = z.object({
 const semanticAnalysisStoragePayloadSchema = z.object({
   projectId: z.string().uuid(),
   analysisRunId: z.string().uuid().optional(),
-  calls: z.array(z.json()), references: z.array(z.json()), scopes: z.array(z.json()), deadCode: z.array(z.json()),
-  unusedImports: z.array(z.json()), unusedExports: z.array(z.json()), entryPoints: z.array(z.json()),
-  routes: z.array(z.json()), middlewareChains: z.array(z.json()),
+  calls: z.array(z.unknown()), references: z.array(z.unknown()), scopes: z.array(z.unknown()), deadCode: z.array(z.unknown()),
+  unusedImports: z.array(z.unknown()), unusedExports: z.array(z.unknown()), entryPoints: z.array(z.unknown()),
+  routes: z.array(z.unknown()), middlewareChains: z.array(z.unknown()),
 });
-const controlFlowStoragePayloadSchema = z.object({ projectId: z.string().uuid(), analysisRunId: z.string().uuid().optional(), graphs: z.array(z.json()) });
-const dataFlowStoragePayloadSchema = z.object({ projectId: z.string().uuid(), analysisRunId: z.string().uuid().optional(), graphs: z.array(z.json()) });
+const controlFlowStoragePayloadSchema = z.object({ projectId: z.string().uuid(), analysisRunId: z.string().uuid().optional(), graphs: z.array(z.unknown()) });
+const dataFlowStoragePayloadSchema = z.object({ projectId: z.string().uuid(), analysisRunId: z.string().uuid().optional(), graphs: z.array(z.unknown()) });
 
 type RunScopedPayload = { readonly projectId: string; readonly analysisRunId?: string };
 
@@ -133,6 +133,11 @@ export class DiscoveryProjectionService {
               ...(dataFlow === undefined ? [] : [{ name: "data-flow.json" as const, payload: dataFlow }]),
             ]),
       ],
+      metadata: {
+        projectId: payload.projectId,
+        analysisRunId: payload.analysisRunId,
+        projectName: payload.projectName,
+      },
     });
 
     await this.adapter.write(projection);

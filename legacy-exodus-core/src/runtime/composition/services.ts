@@ -14,7 +14,9 @@ import {
   DiscoveryProjectionService,
   FileDiscoveryProjectionAdapter,
   MemoryStorageProvider,
+  SqliteStorageProvider,
   StorageManager,
+  type StorageProvider,
 } from "@storage/index";
 
 export function createEngineContext(
@@ -22,7 +24,11 @@ export function createEngineContext(
 ): EngineContext {
   const config = loadRuntimeConfig(environment);
   const logger = createLogger(config, "runtime");
-  const storage = new StorageManager(new MemoryStorageProvider());
+  const provider: StorageProvider =
+    config.storageDriver === "sqlite"
+      ? new SqliteStorageProvider({ databasePath: config.storageDatabasePath })
+      : new MemoryStorageProvider();
+  const storage = new StorageManager(provider);
   const discoveryProjection = new DiscoveryProjectionService(
     storage,
     new FileDiscoveryProjectionAdapter(),

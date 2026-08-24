@@ -17,7 +17,7 @@ function createContext(): {
 } {
   return {
     eventBus: new EventBus(),
-    logger: createLogger({ environment: "test", logLevel: "silent" }, "plugin-test"),
+    logger: createLogger({ environment: "test", logLevel: "silent", storageDriver: "memory" }, "plugin-test"),
     storage: new StorageManager(new MemoryStorageProvider()),
   };
 }

@@ -27,7 +27,7 @@
 
 ---
 
-> **Implementation status:** Phase 2.8 is complete. This document also describes target architecture. IR/SSA, AI Gateway, sandboxing, SQLite/Parquet, tenant isolation, migration orchestration, and Rust generation are planned and are not present in the current codebase.
+> **Implementation status:** Phase 2.8 and Phase 3A (Memory Scalability, Fidelity Verification, Three-Universe Benchmark Governance, and SQLite Storage Provider) are complete. This document also describes target architecture. IR/SSA, AI Gateway, sandboxing, Parquet, tenant isolation, migration orchestration, and Rust generation are planned.
 
 ## 1. Executive Vision
 

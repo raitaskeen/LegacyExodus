@@ -89,7 +89,11 @@ export class ApplicationRuntime {
 
     this.status = "stopping";
     await this.stopStartedServices();
-    await this.storageManager.clear();
+    if (this.storageManager.isPersistent()) {
+      await this.storageManager.close();
+    } else {
+      await this.storageManager.clear();
+    }
     this.status = "stopped";
     this.logger.info("Application stopped");
   }

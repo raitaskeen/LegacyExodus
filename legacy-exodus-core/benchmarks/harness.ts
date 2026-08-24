@@ -191,7 +191,7 @@ async function hashDiscoveryArtifacts(discoveryDir: string): Promise<ArtifactHas
   const hashes: ArtifactHash[] = [];
 
   for (const entry of entries.sort()) {
-    if (!entry.endsWith(".json")) continue;
+    if (!entry.endsWith(".json") || entry === "manifest.json") continue;
 
     const filePath = join(discoveryDir, entry);
     const content = await readFile(filePath);

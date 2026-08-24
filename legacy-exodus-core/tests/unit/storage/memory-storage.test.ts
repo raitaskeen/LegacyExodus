@@ -128,4 +128,55 @@ describe("MemoryStorageProvider", () => {
 
     expect(await provider.findAll("artifact")).toEqual([]);
   });
+
+  test("P0.4: streaming canonical hash produces deterministic content identity regardless of key order", (): void => {
+    const record1 = createStorageRecord("test-type", { a: 1, b: "two", c: [true, false, null] });
+    const record2 = createStorageRecord("test-type", { c: [true, false, null], b: "two", a: 1 });
+
+    expect(record1.id).toBe(record2.id);
+    expect(record1.id).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  test("P0.4: streaming canonical hash distinguishes array ordering and primitive types", (): void => {
+    const recordA = createStorageRecord("test-type", { items: [1, 2, 3] });
+    const recordB = createStorageRecord("test-type", { items: [3, 2, 1] });
+    const recordC = createStorageRecord("test-type", { items: ["1", "2", "3"] });
+
+    expect(recordA.id).not.toBe(recordB.id);
+    expect(recordA.id).not.toBe(recordC.id);
+  });
+
+  test("P0.4: streaming canonical hash deterministically hashes complex nested graph structures", (): void => {
+    const cfgPayload1 = {
+      projectId: "00000000-0000-4000-8000-000000000001",
+      analysisRunId: "run-1",
+      graphs: [
+        {
+          id: "cfg-1",
+          scopeName: "main",
+          blocks: [{ id: "b1", statements: [{ id: "s1", type: "ReturnStatement" }] }],
+          edges: [{ id: "e1", fromBlockId: "b1", toBlockId: "b2", kind: "next" }],
+          dominators: [{ blockId: "b1" }],
+        },
+      ],
+    };
+    const cfgPayload2 = {
+      analysisRunId: "run-1",
+      projectId: "00000000-0000-4000-8000-000000000001",
+      graphs: [
+        {
+          dominators: [{ blockId: "b1" }],
+          id: "cfg-1",
+          scopeName: "main",
+          edges: [{ kind: "next", fromBlockId: "b1", toBlockId: "b2", id: "e1" }],
+          blocks: [{ statements: [{ type: "ReturnStatement", id: "s1" }], id: "b1" }],
+        },
+      ],
+    };
+
+    const rec1 = createStorageRecord("control-flow-analysis", cfgPayload1);
+    const rec2 = createStorageRecord("control-flow-analysis", cfgPayload2);
+
+    expect(rec1.id).toBe(rec2.id);
+  });
 });

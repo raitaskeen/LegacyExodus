@@ -20,6 +20,7 @@ import {
   resolveRepositoryIdentity,
 } from "./governance";
 import { generateQualitySample } from "./sample";
+import { CACHE_DIR, RESULTS_DIR, resolveBenchmarkRepoPath, resolveResultsDir } from "./paths";
 import type {
   BenchmarkManifest,
   BenchmarkResult,
@@ -36,7 +37,7 @@ export interface RunnerOptions {
 }
 
 export async function runBenchmark(options: RunnerOptions): Promise<BenchmarkResult> {
-  const targetPath = resolve(options.target);
+  const targetPath = resolveBenchmarkRepoPath(options.target);
   let manifest: BenchmarkManifest;
   let repoPath: string;
 
@@ -45,7 +46,7 @@ export async function runBenchmark(options: RunnerOptions): Promise<BenchmarkRes
     if (manifest.localPath) {
       repoPath = resolve(dirname(targetPath), manifest.localPath);
     } else {
-      repoPath = resolve(import.meta.dir, ".cache", manifest.name);
+      repoPath = resolve(CACHE_DIR, manifest.name);
     }
   } else {
     const name = basename(targetPath);
@@ -65,7 +66,7 @@ export async function runBenchmark(options: RunnerOptions): Promise<BenchmarkRes
   const repoIdentity = resolveRepositoryIdentity(manifest, repoPath);
 
   const runsCount = options.runs > 0 ? options.runs : 3;
-  const outputBase = options.outputDir ? resolve(options.outputDir) : resolve(import.meta.dir, "results");
+  const outputBase = resolveResultsDir(options.outputDir);
 
   console.log(`\n╔══════════════════════════════════════════════════════════╗`);
   console.log(`║  LegacyExodus Phase 3A — Benchmark Orchestrator          ║`);

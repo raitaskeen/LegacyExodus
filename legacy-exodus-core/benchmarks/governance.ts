@@ -95,6 +95,10 @@ export function verifyCompleteness(
     details.push(`${disposition.symbolExtractionFailures} symbol extraction failure(s) recorded`);
   }
 
+  if (disposition.unclassifiedArtifacts > 0) {
+    details.push(`${disposition.unclassifiedArtifacts} unclassified artifact(s) recorded`);
+  }
+
   let status: CompletenessStatus = "PASS";
   if (!accounting.reconciles || contamination.isContaminated) {
     status = "FAIL";

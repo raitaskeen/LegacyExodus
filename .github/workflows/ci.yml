@@ -5,6 +5,10 @@ on:
     branches:
       - main
       - phase-2.8-hardening
+      - phase-3a-memory-scalability
+      - phase-3a-discovery-boundary-hardening
+      - core-foundation
+      - docs-foundation
   pull_request:
 
 permissions:

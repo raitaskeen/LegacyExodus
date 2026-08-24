@@ -35,7 +35,7 @@ export class DeterministicCallGraphBuilder {
     const table = tablesByPath.get(ast.metadata.sourcePath);
     const nextContext = childContext(node, context, table);
     if (node.type === "VariableDeclarator") recordReceiverType(node, nextContext, table);
-    if (node.type === "CallExpression") {
+    if (node.type === "CallExpression" || node.type === "NewExpression") {
       const calleeName = callName(node);
       if (calleeName !== undefined) {
         const imported = importsByFile.get(ast.metadata.sourcePath)?.find((symbol) => symbol.name === calleeName);
@@ -115,7 +115,14 @@ function memberName(node: ASTNode): string | undefined {
   const property = node.children.find((child) => child.role === "property");
   const objectName = object === undefined ? undefined : memberName(object);
   const propertyName = property === undefined ? undefined : memberName(property);
-  return objectName === undefined || propertyName === undefined ? undefined : `${objectName}.${propertyName}`;
+  if (objectName === undefined || propertyName === undefined) return undefined;
+
+  // Unwrap .apply / .call / .bind invocations: e.g. server.listen.apply -> server.listen
+  if ((propertyName === "apply" || propertyName === "call" || propertyName === "bind") && objectName !== "this") {
+    return objectName;
+  }
+
+  return `${objectName}.${propertyName}`;
 }
 
 function identifier(node: ASTNode | undefined): string | undefined {
@@ -143,15 +150,30 @@ function resolveLocalCall(table: SymbolTable | undefined, name: string, context:
   if (pieces.length !== 2) return undefined;
   const [receiver, methodName] = pieces;
   if (receiver === undefined || methodName === undefined) return undefined;
+
+  // 1. Class instance / constructor receiver
   const classId = receiver === "this" ? context.containerId : receiverType(context.receiverTypes, context.scope, receiver);
-  if (classId === undefined) return undefined;
-  const candidates = table.symbols.filter((symbol) => symbol.kind === "method" && symbol.name === methodName && symbol.containerId === classId);
-  return candidates.length === 1 ? candidates[0]?.id : undefined;
+  if (classId !== undefined) {
+    const candidates = table.symbols.filter((symbol) => symbol.kind === "method" && symbol.name === methodName && symbol.containerId === classId);
+    if (candidates.length === 1) return candidates[0]?.id;
+  }
+
+  // 2. Prototype / object method receiver (e.g. this.defaultConfiguration, this.set, this.send, app.init)
+  if (receiver === "this" || receiver === "app" || receiver === "proto" || receiver === "req" || receiver === "res") {
+    const candidates = table.symbols.filter(
+      (symbol) => (symbol.kind === "method" || symbol.kind === "function") &&
+        symbol.name === methodName &&
+        (symbol.containerName === receiver || symbol.containerName === "app" || symbol.containerName === "proto" || symbol.containerName === "req" || symbol.containerName === "res" || receiver === "this"),
+    );
+    if (candidates.length === 1) return candidates[0]?.id;
+  }
+
+  return undefined;
 }
 
 function nearestScoped(symbols: readonly CodeSymbol[], name: string, scope: ScopeFrame): CodeSymbol | undefined {
   for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
-    const candidates = symbols.filter((symbol) => symbol.name === name && symbol.kind === "function" && symbol.scopeId === current.id);
+    const candidates = symbols.filter((symbol) => symbol.name === name && (symbol.kind === "function" || symbol.kind === "class") && symbol.scopeId === current.id);
     if (candidates.length === 1) return candidates[0];
     if (candidates.length > 1) return undefined;
   }
