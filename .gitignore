@@ -10,8 +10,13 @@ coverage/
 # Build output
 dist/
 
-# Generated LegacyExodus analysis
+# Generated LegacyExodus analysis & SQLite storage
 .discovery/
+.discoveries/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
 
 # Generated benchmark artifacts
 legacy-exodus-core/benchmarks/.cache/
