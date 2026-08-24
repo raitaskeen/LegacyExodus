@@ -19,28 +19,28 @@ It operates through a four-stage pipeline:
 
 If you are new to the architecture, read in this order:
 
-1. [components/orchestrator.md](./components/orchestrator.md) ⭐  
+1. [components/orchestrator.md](./components/orchestrator.md) ⭐
    The execution brain: lifecycle, retries, checkpoints, and stage coordination.
 
-2. [security-architecture.md](./security-architecture.md)  
+2. [security-architecture.md](./security-architecture.md)
    Trust boundaries and mandatory security controls.
 
-3. [ai-architecture.md](./ai-architecture.md)  
+3. [ai-architecture.md](./ai-architecture.md)
    How AI is integrated as governed intelligence without system control.
 
-4. [plugin-architecture.md](./plugin-architecture.md)  
+4. [plugin-architecture.md](./plugin-architecture.md)
    How capabilities expand without destabilizing core behavior.
 
-5. [components/README.md](./components/README.md)  
+5. [component-map.md](./component-map.md)
    Component map and stage-to-component relationships.
 
-6. [deployment-model.md](./deployment-model.md)  
+6. [deployment-model.md](./deployment-model.md)
    Local, enterprise, and cloud execution patterns.
 
-7. [scalability-plan.md](./scalability-plan.md)  
+7. [scalability-plan.md](./scalability-plan.md)
    Worker scaling, distributed processing, and enterprise growth strategy.
 
-8. [technology-stack.md](./technology-stack.md)  
+8. [technology-stack.md](./technology-stack.md)
    Final stack decisions, alternatives, and tradeoffs.
 
 ---
@@ -58,7 +58,7 @@ If you are new to the architecture, read in this order:
 
 ### Component Architecture
 
-- [components/README.md](./components/README.md)
+- [component-map.md](./component-map.md)
 - [components/orchestrator.md](./components/orchestrator.md)
 - [components/discovery-service.md](./components/discovery-service.md)
 - [components/parser-service.md](./components/parser-service.md)

@@ -1,0 +1,29 @@
+# CODEOWNERS
+# Canonical repository ownership for LegacyExodus
+
+# Default repository ownership
+* @raitaskeen @pamexo @rsexo
+
+# Application source code
+legacy-exodus-core/src/ @raitaskeen @pamexo @rsexo
+
+# Test suites
+legacy-exodus-core/tests/ @raitaskeen @pamexo @rsexo
+
+# Benchmark infrastructure & governance verification
+legacy-exodus-core/benchmarks/ @raitaskeen @pamexo @rsexo
+
+# Documentation
+docs/ @raitaskeen @pamexo @rsexo
+
+# GitHub configuration & issue templates
+.github/ @raitaskeen @pamexo @rsexo
+
+# Root governance & project entry points
+README.md @raitaskeen @pamexo @rsexo
+GOVERNANCE.md @raitaskeen @pamexo @rsexo
+SUPPORT.md @raitaskeen @pamexo @rsexo
+CODE_OF_CONDUCT.md @raitaskeen @pamexo @rsexo
+LICENSE @raitaskeen @pamexo @rsexo
+ROADMAP.md @raitaskeen @pamexo @rsexo
+CHANGELOG.md @raitaskeen @pamexo @rsexo
