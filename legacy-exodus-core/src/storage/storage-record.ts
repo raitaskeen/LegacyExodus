@@ -1,22 +1,16 @@
-import { createHash } from "node:crypto";
+import { createHash, type Hash } from "node:crypto";
 
 import { z } from "zod";
 
 import { StorageValidationError } from "./storage-errors";
 
 export interface SerializedObject {
-  readonly [key: string]: SerializedPayload;
+  readonly [key: string]: unknown;
 }
 
-export interface SerializedArray extends ReadonlyArray<SerializedPayload> {}
+export interface SerializedArray extends ReadonlyArray<unknown> {}
 
-export type SerializedPayload =
-  | string
-  | number
-  | boolean
-  | null
-  | SerializedArray
-  | SerializedObject;
+export type SerializedPayload = unknown;
 
 export interface StorageRecord<Payload extends SerializedPayload = SerializedPayload> {
   readonly id: string;
@@ -29,7 +23,7 @@ export interface StorageRecord<Payload extends SerializedPayload = SerializedPay
 const storageRecordSchema = z.object({
   id: z.string().regex(/^[a-f0-9]{64}$/),
   type: z.string().trim().min(1),
-  payload: z.json(),
+  payload: z.unknown(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -54,22 +48,38 @@ export function createStorageRecord<Payload extends SerializedPayload>(
 
 /** Stable content identity; timestamps remain observability metadata only. */
 function contentIdentity(type: string, payload: SerializedPayload): string {
-  return createHash("sha256")
-    .update(canonicalize({ payload, type }))
-    .digest("hex");
+  const hash = createHash("sha256");
+  updateCanonicalHash(hash, { payload, type });
+  return hash.digest("hex");
 }
 
-function canonicalize(value: SerializedPayload | SerializedObject): string {
+function updateCanonicalHash(hash: Hash, value: SerializedPayload | SerializedObject): void {
   if (value === null || typeof value !== "object") {
-    return JSON.stringify(value);
+    hash.update(JSON.stringify(value) ?? "null");
+    return;
   }
 
   if (Array.isArray(value)) {
-    return `[${value.map((item) => canonicalize(item)).join(",")}]`;
+    hash.update("[");
+    for (let i = 0; i < value.length; i++) {
+      if (i > 0) hash.update(",");
+      updateCanonicalHash(hash, value[i] as SerializedPayload);
+    }
+    hash.update("]");
+    return;
   }
 
   const object = value as SerializedObject;
-  return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${canonicalize(object[key] ?? null)}`).join(",")}}`;
+  const keys = Object.keys(object).sort();
+  hash.update("{");
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i]!;
+    if (i > 0) hash.update(",");
+    hash.update(JSON.stringify(key));
+    hash.update(":");
+    updateCanonicalHash(hash, object[key] ?? null);
+  }
+  hash.update("}");
 }
 
 export function validateStorageRecord<Payload extends SerializedPayload>(
@@ -113,7 +123,7 @@ export function cloneStorageRecord<Payload extends SerializedPayload>(
 }
 
 function deepFreeze<Payload extends SerializedPayload>(payload: Payload): Payload {
-  if (payload === null || typeof payload !== "object") {
+  if (payload === null || typeof payload !== "object" || Object.isFrozen(payload)) {
     return payload;
   }
 

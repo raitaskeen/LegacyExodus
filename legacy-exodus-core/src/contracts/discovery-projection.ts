@@ -3,6 +3,7 @@ import { z } from "zod";
 import { LegacyExodusError } from "@shared/errors";
 
 export type DiscoveryArtifactName =
+  | "manifest.json"
   | "project.json"
   | "files.json"
   | "dependencies.json"
@@ -23,12 +24,20 @@ export interface DiscoveryArtifact {
   readonly payload: unknown;
 }
 
+export interface DiscoveryProjectionMetadata {
+  readonly projectId?: string;
+  readonly analysisRunId?: string;
+  readonly projectName?: string;
+}
+
 export interface DiscoveryProjection {
   readonly projectPath: string;
   readonly artifacts: readonly DiscoveryArtifact[];
+  readonly metadata?: DiscoveryProjectionMetadata;
 }
 
 const artifactNames: readonly DiscoveryArtifactName[] = [
+  "manifest.json",
   "project.json",
   "files.json",
   "dependencies.json",
@@ -53,6 +62,13 @@ const discoveryProjectionSchema = z.object({
       payload: z.unknown(),
     }),
   ),
+  metadata: z
+    .object({
+      projectId: z.string().optional(),
+      analysisRunId: z.string().optional(),
+      projectName: z.string().optional(),
+    })
+    .optional(),
 });
 
 export function createDiscoveryProjection(projection: DiscoveryProjection): DiscoveryProjection {
@@ -73,6 +89,7 @@ export function createDiscoveryProjection(projection: DiscoveryProjection): Disc
         Object.freeze({ name: artifact.name, payload: deepFreeze(artifact.payload) }),
       ),
     ),
+    ...(parsedProjection.data.metadata ? { metadata: Object.freeze({ ...parsedProjection.data.metadata }) } : {}),
   });
 }
 

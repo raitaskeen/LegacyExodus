@@ -51,8 +51,51 @@ describe("FileScanner", () => {
       expect(byPath.get(".gitignore")).toMatchObject({ language: "gitignore", fileKind: "configuration" });
       expect(byPath.get("tsconfig.json")).toMatchObject({ language: "json", fileKind: "configuration" });
       expect(byPath.get("unknown.asset")).toMatchObject({ language: "unknown", fileKind: "unknown" });
-      expect(byPath.get("LICENSE")).toMatchObject({ language: "unknown", fileKind: "unknown" });
+      expect(byPath.get("LICENSE")).toMatchObject({ language: "text", fileKind: "documentation" });
     } finally { await rm(projectPath, { force: true, recursive: true }); }
+  });
+
+  test("Phase 3B.1: classifies standard repository configuration, ignore, legal, and asset files deterministically", async (): Promise<void> => {
+    const projectPath = await mkdtemp(join(tmpdir(), "legacy-exodus-phase-3b1-"));
+    try {
+      const filesToCreate = [
+        ".editorconfig",
+        ".gitattributes",
+        ".eslintignore",
+        ".npmignore",
+        ".prettierignore",
+        ".npmrc",
+        ".taprc",
+        "tap-parallel-not-ok",
+        "LICENSE",
+        "diagram.drawio",
+        "icon.svg",
+        "fixture.test._js_",
+        "genuinely-ambiguous.custom_bin",
+      ];
+      for (const name of filesToCreate) {
+        await writeFile(join(projectPath, name), "", "utf8");
+      }
+      const { files, enumerationFailures } = await new FileScanner().scan(projectPath);
+      const byPath = new Map(files.map((file) => [file.path, file]));
+
+      expect(enumerationFailures).toEqual([]);
+      expect(byPath.get(".editorconfig")).toMatchObject({ language: "ini", fileKind: "configuration" });
+      expect(byPath.get(".gitattributes")).toMatchObject({ language: "gitattributes", fileKind: "configuration" });
+      expect(byPath.get(".eslintignore")).toMatchObject({ language: "ignore", fileKind: "configuration" });
+      expect(byPath.get(".npmignore")).toMatchObject({ language: "ignore", fileKind: "configuration" });
+      expect(byPath.get(".prettierignore")).toMatchObject({ language: "ignore", fileKind: "configuration" });
+      expect(byPath.get(".npmrc")).toMatchObject({ language: "ini", fileKind: "configuration" });
+      expect(byPath.get(".taprc")).toMatchObject({ language: "yaml", fileKind: "configuration" });
+      expect(byPath.get("tap-parallel-not-ok")).toMatchObject({ language: "text", fileKind: "configuration" });
+      expect(byPath.get("LICENSE")).toMatchObject({ language: "text", fileKind: "documentation" });
+      expect(byPath.get("diagram.drawio")).toMatchObject({ language: "xml", fileKind: "data" });
+      expect(byPath.get("icon.svg")).toMatchObject({ language: "svg", fileKind: "markup" });
+      expect(byPath.get("fixture.test._js_")).toMatchObject({ language: "text", fileKind: "data" });
+      expect(byPath.get("genuinely-ambiguous.custom_bin")).toMatchObject({ language: "unknown", fileKind: "unknown" });
+    } finally {
+      await rm(projectPath, { force: true, recursive: true });
+    }
   });
 
   test("accurately classifies all source languages and distinguishes genuine non-source and unclassified files", async (): Promise<void> => {

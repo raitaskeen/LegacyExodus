@@ -1,0 +1,32 @@
+{
+  "name": "express",
+  "repository": "https://github.com/expressjs/express.git",
+  "revision": "4.21.2",
+  "tier": "tier-3",
+  "languageProfile": [
+    "javascript"
+  ],
+  "frameworkProfile": [
+    "express"
+  ],
+  "sizeClass": "large",
+  "license": "MIT",
+  "reason": "Iconic Node.js web application framework with extensive middleware routing, application prototyping, request/response pipeline, view rendering, and complex CommonJS export/require patterns. Tier-3 validation target.",
+  "knownHotspots": [
+    "lib/router/index.js — complex routing table and middleware dispatch",
+    "lib/router/layer.js — layer matching and path regexp",
+    "lib/router/route.js — route dispatch stack",
+    "lib/application.js — application initialization and middleware registration",
+    "lib/request.js — request prototype and property descriptors",
+    "lib/response.js — response prototype and headers formatting",
+    "lib/view.js — dynamic template engine loading"
+  ],
+  "knownFeatures": [
+    "Application factory and prototype inheritance",
+    "Router and Route layer middleware stacks",
+    "Request/Response proto decoration",
+    "View engine dynamic rendering",
+    "Error-handling middleware (4 arity)",
+    "CommonJS exports (module.exports = createApplication; exports.application = proto)"
+  ]
+}

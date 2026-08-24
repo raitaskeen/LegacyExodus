@@ -11,10 +11,8 @@
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { CACHE_DIR, CORPUS_DIR } from "../paths";
 import type { BenchmarkManifest } from "../types";
-
-const CACHE_DIR = resolve(import.meta.dir, "..", ".cache");
-const CORPUS_DIR = resolve(import.meta.dir, "..", "corpus");
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);

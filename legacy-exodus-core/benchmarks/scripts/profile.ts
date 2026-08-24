@@ -242,7 +242,7 @@ export async function profilePipeline(targetPath: string): Promise<ProfileReport
     frameworks: discovery.frameworks.map((f) => ({ ...f })),
     languages: [...discovery.languages],
     discoveredAt: discovery.discoveredAt.toISOString(),
-    analysisRunId: "profile-run",
+    analysisRunId: "00000000-0000-4000-8000-000000000002",
   });
 
   for (const ast of astResults) {
@@ -260,7 +260,7 @@ export async function profilePipeline(targetPath: string): Promise<ProfileReport
       fileId: table.filePath,
       path: table.filePath,
       projectId: discovery.projectId,
-      analysisRunId: "profile-run",
+      analysisRunId: "00000000-0000-4000-8000-000000000002",
       symbolCount: table.symbols.length,
       classes: table.summary.classes,
       functions: table.summary.functions,
@@ -272,7 +272,7 @@ export async function profilePipeline(targetPath: string): Promise<ProfileReport
 
   timedRecord("dependency-graph", {
     projectId: discovery.projectId,
-    analysisRunId: "profile-run",
+    analysisRunId: "00000000-0000-4000-8000-000000000002",
     nodes: dependencyGraph.nodes.map((n) => ({ ...n })),
     edges: dependencyGraph.edges.map((e) => ({ ...e })),
     cycles: dependencyGraph.cycles.map((c) => [...c]),
@@ -280,7 +280,7 @@ export async function profilePipeline(targetPath: string): Promise<ProfileReport
 
   timedRecord("semantic-analysis", {
     projectId: discovery.projectId,
-    analysisRunId: "profile-run",
+    analysisRunId: "00000000-0000-4000-8000-000000000002",
     calls: semantic.calls.map((c) => ({ ...c })),
     references: semantic.references.map((r) => ({ ...r })),
     scopes: semantic.scopes.map((s) => ({ ...s })),
@@ -294,7 +294,7 @@ export async function profilePipeline(targetPath: string): Promise<ProfileReport
 
   timedRecord("control-flow-analysis", {
     projectId: discovery.projectId,
-    analysisRunId: "profile-run",
+    analysisRunId: "00000000-0000-4000-8000-000000000002",
     graphs: flow.controlFlowGraphs.map((graph) => ({
       ...graph,
       blocks: graph.blocks.map((block) => ({
@@ -311,7 +311,7 @@ export async function profilePipeline(targetPath: string): Promise<ProfileReport
 
   timedRecord("data-flow-analysis", {
     projectId: discovery.projectId,
-    analysisRunId: "profile-run",
+    analysisRunId: "00000000-0000-4000-8000-000000000002",
     graphs: flow.dataFlowGraphs.map((graph) => ({
       ...graph,
       definitions: graph.definitions.map((definition) => ({ ...definition })),
@@ -336,7 +336,7 @@ export async function profilePipeline(targetPath: string): Promise<ProfileReport
 
   timedRecord("knowledge-graph", {
     projectId: discovery.projectId,
-    analysisRunId: "profile-run",
+    analysisRunId: "00000000-0000-4000-8000-000000000002",
     nodes: knowledgeGraph.nodes.map((n) => ({ ...n })),
     edges: knowledgeGraph.edges.map((e) => ({ ...e })),
   });

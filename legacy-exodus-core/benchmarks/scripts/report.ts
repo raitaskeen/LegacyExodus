@@ -7,7 +7,7 @@
 
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-
+import { BENCHMARKS_ROOT, RESULTS_DIR, resolveResultsDir } from "../paths";
 import type { BenchmarkResult } from "../types";
 
 export async function generateMarkdownReport(resultsDir: string): Promise<string> {
@@ -217,8 +217,8 @@ async function loadLatestResults(resultsDir: string): Promise<BenchmarkResult[]>
 
 if (import.meta.main) {
   const args = process.argv.slice(2);
-  const resultsDir = resolve(args[0] ?? resolve(import.meta.dir, "..", "results"));
-  const outputPath = resolve(args[1] ?? resolve(import.meta.dir, "..", "BENCHMARK_REPORT.md"));
+  const resultsDir = resolveResultsDir(args[0]);
+  const outputPath = resolve(args[1] ?? resolve(BENCHMARKS_ROOT, "BENCHMARK_REPORT.md"));
 
   generateMarkdownReport(resultsDir)
     .then((md) => writeFile(outputPath, md, "utf8"))

@@ -60,12 +60,12 @@ function findHttpCalls(root: ASTNode, filePath: string): { readonly routes: read
       const receiver = callee?.split(".")[0];
       const isExpressReceiver = receiver !== undefined && receivers.has(receiver);
       if (method === "use" && isExpressReceiver) {
-        const names = argumentsNodes.map(readName).filter((name): name is string => name !== undefined && !name.startsWith("/"));
+        const names = argumentsNodes.map(readName).filter((name): name is string => name !== undefined && name.trim().length > 0 && !name.startsWith("/"));
         middleware.push(...names);
       }
       if (isExpressReceiver && method !== undefined && ["get", "post", "put", "patch", "delete", "all"].includes(method)) {
         const path = argumentsNodes.map(readString).find((value): value is string => value !== undefined) ?? "/";
-        const handlerName = argumentsNodes.map(readName).find((name): name is string => name !== undefined && name !== path);
+        const handlerName = argumentsNodes.map(readName).find((name): name is string => name !== undefined && name.trim().length > 0 && name !== path);
         routes.push({ id: hash(`route:${filePath}:${method}:${path}:${node.location?.start.line ?? 0}`), filePath, method: method.toUpperCase(), path, ...(handlerName === undefined ? {} : { handlerName }), middleware: uniqueSorted(middleware), state: "CONFIRMED" });
       }
     }

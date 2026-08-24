@@ -19,12 +19,14 @@ interface ExtractionContext {
   readonly containerName?: string;
   readonly containerId?: string;
   readonly scopeId: string;
+  readonly functionScopeId?: string;
 }
 
 const initialContext: ExtractionContext = Object.freeze({
   exported: false,
   defaultExport: false,
   scopeId: "scope:module",
+  functionScopeId: "scope:module",
 });
 
 const supportedLanguages = new Set(["javascript", "typescript"]);
@@ -78,16 +80,20 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         this.visitChildren(node, ast, { ...context, scopeId: createLexicalScopeId(node.type, node.location) }, symbols);
         return;
       case "AssignmentExpression":
-        this.addCommonJsExport(node, ast, symbols);
-        break;
-      case "FunctionDeclaration":
+        this.processAssignment(node, ast, context, symbols);
+        return;
+      case "FunctionDeclaration": {
+        const fnScopeId = createLexicalScopeId(node.type, node.location);
         this.addFunctionSymbol(node, ast, context, symbols);
-        this.visitChildren(node, ast, { ...context, scopeId: createLexicalScopeId(node.type, node.location) }, symbols);
+        this.visitChildren(node, ast, { ...context, scopeId: fnScopeId, functionScopeId: fnScopeId }, symbols);
         return;
+      }
       case "FunctionExpression":
-      case "ArrowFunctionExpression":
-        this.visitChildren(node, ast, { ...context, scopeId: createLexicalScopeId(node.type, node.location) }, symbols);
+      case "ArrowFunctionExpression": {
+        const fnScopeId = createLexicalScopeId(node.type, node.location);
+        this.visitChildren(node, ast, { ...context, scopeId: fnScopeId, functionScopeId: fnScopeId }, symbols);
         return;
+      }
       case "ClassDeclaration": {
         const className = getName(node) ?? "anonymous-class";
         const classSymbol = this.createSymbol("class", className, node, ast, context);
@@ -96,14 +102,18 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         return;
       }
       case "ClassMethod":
-      case "ClassPrivateMethod":
+      case "ClassPrivateMethod": {
+        const methodScopeId = createLexicalScopeId(node.type, node.location);
         this.addMethodSymbol(node, ast, context, symbols);
-        this.visitChildren(node, ast, { ...context, scopeId: createLexicalScopeId(node.type, node.location) }, symbols);
+        this.visitChildren(node, ast, { ...context, scopeId: methodScopeId, functionScopeId: methodScopeId }, symbols);
         return;
-      case "ObjectMethod":
+      }
+      case "ObjectMethod": {
+        const methodScopeId = createLexicalScopeId(node.type, node.location);
         this.addMethodSymbol(node, ast, context, symbols);
-        this.visitChildren(node, ast, { ...context, scopeId: createLexicalScopeId(node.type, node.location) }, symbols);
+        this.visitChildren(node, ast, { ...context, scopeId: methodScopeId, functionScopeId: methodScopeId }, symbols);
         return;
+      }
       default:
         break;
     }
@@ -163,47 +173,46 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     symbols: CodeSymbol[],
   ): void {
     const declarationKind = readDeclarationKind(node);
+    const varContext = declarationKind === "var"
+      ? { ...context, scopeId: context.functionScopeId ?? "scope:module" }
+      : context;
 
     for (const declarator of node.children.filter(
       (child) => child.role === "declarations" && child.type === "VariableDeclarator",
     )) {
+      const binding = declarator.children.find((child) => child.role === "id");
       const name = getName(declarator);
       const initializer = declarator.children.find((child) => child.role === "init");
-      const binding = declarator.children.find((child) => child.role === "id");
-
-      if (name !== undefined) {
-        const value = readLiteralInitializer(declarator);
-        symbols.push(
-          this.createSymbol("variable", name, declarator, ast, context, {
-            declarationKind,
-            ...(value === undefined ? {} : { value }),
-          }),
-        );
-        if (initializer !== undefined && isAssignedFunction(initializer)) {
-          symbols.push(this.createSymbol("function", name, initializer, ast, context, {
-            parameters: getParameters(initializer),
-            anonymous: false,
-          }));
-        }
-      }
       const required = requireSpecifier(initializer);
-      if (required !== undefined) {
-        if (binding?.type === "ObjectPattern") {
-          const properties = binding.children.filter((child) => child.type === "ObjectProperty");
-          if (properties.length > 0) {
-            for (const prop of properties) {
-              const keyName = readIdentifierName(prop.children.find((child) => child.role === "key")) ?? identifierName(prop);
-              const valName = readIdentifierName(prop.children.find((child) => child.role === "value")) ?? keyName;
-              if (valName !== undefined) {
-                symbols.push(this.createSymbol("import", valName, declarator, ast, initialContext, {
+
+      if (binding?.type === "ObjectPattern" || binding?.type === "ArrayPattern") {
+        if (required !== undefined) {
+          if (binding.type === "ObjectPattern") {
+            const properties = binding.children.filter((child) => child.type === "ObjectProperty");
+            if (properties.length > 0) {
+              for (const prop of properties) {
+                const keyName = readIdentifierName(prop.children.find((child) => child.role === "key")) ?? identifierName(prop);
+                const valName = readIdentifierName(prop.children.find((child) => child.role === "value")) ?? keyName;
+                if (valName !== undefined) {
+                  symbols.push(this.createSymbol("import", valName, declarator, ast, initialContext, {
+                    moduleSpecifier: required,
+                    sourceSymbolName: keyName ?? valName,
+                    defaultExport: false,
+                  }));
+                }
+              }
+            } else {
+              const importedNames = extractBoundNames(binding);
+              for (const importedName of importedNames) {
+                symbols.push(this.createSymbol("import", importedName, declarator, ast, initialContext, {
                   moduleSpecifier: required,
-                  sourceSymbolName: keyName ?? valName,
+                  sourceSymbolName: importedName,
                   defaultExport: false,
                 }));
               }
             }
           } else {
-            const importedNames = bindingNames(binding);
+            const importedNames = extractBoundNames(binding);
             for (const importedName of importedNames) {
               symbols.push(this.createSymbol("import", importedName, declarator, ast, initialContext, {
                 moduleSpecifier: required,
@@ -213,15 +222,55 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
             }
           }
         } else {
-          const importedNames = bindingNames(binding);
-          for (const importedName of importedNames) {
-            const property = requireProperty(initializer);
-            symbols.push(this.createSymbol("import", importedName, declarator, ast, initialContext, {
-              moduleSpecifier: required,
-              sourceSymbolName: property,
-              defaultExport: property === undefined,
-            }));
+          const boundNames = extractBoundNames(binding);
+          for (const bName of boundNames) {
+            symbols.push(
+              this.createSymbol("variable", bName, declarator, ast, varContext, {
+                declarationKind,
+              }),
+            );
           }
+        }
+        continue;
+      }
+
+      if (name !== undefined) {
+        const value = readLiteralInitializer(declarator);
+        symbols.push(
+          this.createSymbol("variable", name, declarator, ast, varContext, {
+            declarationKind,
+            ...(value === undefined ? {} : { value }),
+          }),
+        );
+        if (initializer !== undefined && isAssignedFunction(initializer)) {
+          symbols.push(this.createSymbol("function", name, initializer, ast, varContext, {
+            parameters: getParameters(initializer),
+            anonymous: false,
+          }));
+        }
+        if (initializer !== undefined && initializer.type === "ObjectExpression") {
+          const properties = findObjectProperties(initializer);
+          for (const prop of properties) {
+            symbols.push(
+              this.createSymbol("variable", prop.key, prop.node, ast, {
+                ...varContext,
+                containerName: name,
+              }, {
+                declarationKind,
+              }),
+            );
+          }
+        }
+      }
+      if (required !== undefined) {
+        const importedNames = bindingNames(binding);
+        for (const importedName of importedNames) {
+          const property = requireProperty(initializer);
+          symbols.push(this.createSymbol("import", importedName, declarator, ast, initialContext, {
+            moduleSpecifier: required,
+            sourceSymbolName: property,
+            defaultExport: property === undefined,
+          }));
         }
       }
     }
@@ -295,14 +344,187 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     );
   }
 
-  private addCommonJsExport(node: ASTNode, ast: ASTResult, symbols: CodeSymbol[]): void {
-    const left = node.children.find((child) => child.role === "left");
-    const right = node.children.find((child) => child.role === "right");
-    const target = memberPath(left);
-    if (target !== "module.exports" && !target?.startsWith("module.exports.") && !target?.startsWith("exports.")) return;
-    const name = target === "module.exports" ? "default" : target.split(".").at(-1);
-    if (name === undefined || name.length === 0) return;
-    this.addExport(node, ast, name, name === "default", undefined, identifierName(right), symbols);
+  private processAssignment(
+    node: ASTNode,
+    ast: ASTResult,
+    context: ExtractionContext,
+    symbols: CodeSymbol[],
+  ): void {
+    const targets: ASTNode[] = [];
+    let current: ASTNode | undefined = node;
+    let innermostRight: ASTNode | undefined;
+
+    while (current && current.type === "AssignmentExpression") {
+      const left = current.children.find((child) => child.role === "left");
+      const rightChild: ASTNode | undefined = current.children.find((child) => child.role === "right");
+      if (left) targets.push(left);
+      innermostRight = rightChild;
+      current = rightChild;
+    }
+
+    if (innermostRight === undefined || targets.length === 0) return;
+
+    // Check for require(...) on RHS
+    const required = requireSpecifier(innermostRight);
+    if (required !== undefined) {
+      const property = requireProperty(innermostRight);
+      const isDefaultReq = property === undefined;
+      for (const target of targets) {
+        const tPath = memberPath(target);
+        const name = (tPath ? tPath.split(".").at(-1) : undefined) ?? property ?? required;
+        symbols.push(
+          this.createSymbol("import", name, node, ast, initialContext, {
+            moduleSpecifier: required,
+            sourceSymbolName: property ?? (isDefaultReq ? undefined : name),
+            defaultExport: isDefaultReq,
+          }),
+        );
+      }
+    }
+
+    // Process targets for exports and property assignments
+    for (const target of targets) {
+      const targetPath = memberPath(target);
+      if (!targetPath) continue;
+
+      if (targetPath === "module.exports") {
+        if (innermostRight.type === "ObjectExpression") {
+          const properties = findObjectProperties(innermostRight);
+          for (const prop of properties) {
+            this.addExport(prop.node, ast, prop.key, false, undefined, prop.localSymbolName, symbols);
+            const symbolToMark = prop.localSymbolName ?? prop.key;
+            this.markLocalSymbolAsExported(symbolToMark, symbols, context.scopeId);
+          }
+          this.addExport(node, ast, "default", true, undefined, undefined, symbols);
+        } else if (innermostRight.type === "Identifier") {
+          const varName = readIdentifierName(innermostRight);
+          if (varName !== undefined) {
+            const resolvedObj = findVariableObjectExpression(ast.root, varName);
+            if (resolvedObj !== undefined) {
+              const properties = findObjectProperties(resolvedObj);
+              for (const prop of properties) {
+                this.addExport(prop.node, ast, prop.key, false, undefined, prop.localSymbolName, symbols);
+                const symbolToMark = prop.localSymbolName ?? prop.key;
+                this.markLocalSymbolAsExported(symbolToMark, symbols, context.scopeId);
+              }
+            }
+            this.markLocalSymbolAsExported(varName, symbols, context.scopeId);
+            this.addExport(node, ast, "default", true, undefined, varName, symbols);
+          }
+        } else {
+          const rightName = identifierName(innermostRight);
+          this.addExport(node, ast, "default", true, undefined, rightName, symbols);
+          if (rightName) {
+            this.markLocalSymbolAsExported(rightName, symbols, context.scopeId);
+          }
+        }
+      } else if (targetPath.startsWith("module.exports.") || targetPath.startsWith("exports.")) {
+        const propName = targetPath.split(".").at(-1);
+        if (propName && propName.length > 0) {
+          const sourceSymbolName = identifierName(innermostRight);
+          this.addExport(node, ast, propName, false, undefined, sourceSymbolName, symbols);
+          const symbolToMark = sourceSymbolName ?? propName;
+          this.markLocalSymbolAsExported(symbolToMark, symbols, context.scopeId);
+          symbols.push(
+            this.createSymbol("variable", propName, target, ast, {
+              ...context,
+              containerName: targetPath.startsWith("module.exports") ? "module.exports" : "exports",
+              exported: true,
+            }, {
+              sourceSymbolName: sourceSymbolName ?? propName,
+            }),
+          );
+        }
+      } else if (targetPath.includes(".")) {
+        const parts = targetPath.split(".");
+        const propName = parts.at(-1)!;
+        const receiverName = parts.slice(0, -1).join(".");
+
+        if (innermostRight.type === "FunctionExpression" || innermostRight.type === "ArrowFunctionExpression") {
+          const funcParams = getParameters(innermostRight);
+          const funcName = getName(innermostRight) ?? propName;
+          symbols.push(
+            this.createSymbol("method", propName, innermostRight, ast, {
+              ...context,
+              containerName: receiverName,
+            }, {
+              parameters: funcParams,
+              sourceSymbolName: funcName !== propName ? funcName : undefined,
+            }),
+          );
+        } else {
+          const sourceSymbolName = identifierName(innermostRight);
+          symbols.push(
+            this.createSymbol("variable", propName, target, ast, {
+              ...context,
+              containerName: receiverName,
+            }, {
+              ...(sourceSymbolName === undefined ? {} : { sourceSymbolName }),
+            }),
+          );
+        }
+      } else if (innermostRight.type === "FunctionExpression" || innermostRight.type === "ArrowFunctionExpression") {
+        const funcParams = getParameters(innermostRight);
+        symbols.push(
+          this.createSymbol("function", targetPath, innermostRight, ast, context, {
+            parameters: funcParams,
+            anonymous: false,
+          }),
+        );
+      }
+    }
+
+    if (innermostRight) {
+      if (innermostRight.type === "FunctionExpression" || innermostRight.type === "ArrowFunctionExpression") {
+        const fnScopeId = createLexicalScopeId(innermostRight.type, innermostRight.location);
+        this.visitChildren(innermostRight, ast, {
+          ...context,
+          scopeId: fnScopeId,
+          functionScopeId: fnScopeId,
+        }, symbols);
+      } else {
+        this.visitChildren(innermostRight, ast, context, symbols);
+      }
+    }
+  }
+
+  private markLocalSymbolAsExported(name: string, symbols: CodeSymbol[], targetScopeId?: string): void {
+    const isExportable = (sym: CodeSymbol): boolean =>
+      sym.name === name &&
+      (sym.kind === "function" || sym.kind === "variable" || sym.kind === "class");
+
+    // 1. Direct match in target scope
+    if (targetScopeId !== undefined) {
+      let found = false;
+      for (let i = 0; i < symbols.length; i++) {
+        const sym = symbols[i]!;
+        if (sym.scopeId === targetScopeId && isExportable(sym)) {
+          symbols[i] = { ...sym, exported: true };
+          found = true;
+        }
+      }
+      if (found) return;
+    }
+
+    // 2. Match in module scope (top-level binding)
+    let foundModule = false;
+    for (let i = 0; i < symbols.length; i++) {
+      const sym = symbols[i]!;
+      if (sym.scopeId === "scope:module" && isExportable(sym)) {
+        symbols[i] = { ...sym, exported: true };
+        foundModule = true;
+      }
+    }
+    if (foundModule) return;
+
+    // 3. Fallback: match first unexported candidate
+    for (let i = 0; i < symbols.length; i++) {
+      const sym = symbols[i]!;
+      if (isExportable(sym) && !sym.exported) {
+        symbols[i] = { ...sym, exported: true };
+        return;
+      }
+    }
   }
 
   private createSymbol(
@@ -363,7 +585,7 @@ function getName(node: ASTNode): string | undefined {
 function getParameters(node: ASTNode): readonly string[] {
   return node.children
     .filter((child) => child.role === "params")
-    .flatMap((child) => findParameterNames(child));
+    .flatMap((child) => extractBoundNames(child));
 }
 
 function findDeclaredNames(node: ASTNode): readonly string[] {
@@ -375,11 +597,57 @@ function findDeclaredNames(node: ASTNode): readonly string[] {
   if (declaration.type === "VariableDeclaration") {
     return declaration.children
       .filter((child) => child.role === "declarations" && child.type === "VariableDeclarator")
-      .flatMap((child) => getName(child) === undefined ? [] : [getName(child) as string]);
+      .flatMap((child) => {
+        const binding = child.children.find((c) => c.role === "id");
+        if (binding?.type === "ObjectPattern" || binding?.type === "ArrayPattern") {
+          return extractBoundNames(binding);
+        }
+        const name = getName(child);
+        return name === undefined ? [] : [name];
+      });
   }
 
   const name = getName(declaration);
   return name === undefined ? [] : [name];
+}
+
+function extractBoundNames(node: ASTNode | undefined): readonly string[] {
+  if (!node) return [];
+  switch (node.type) {
+    case "Identifier": {
+      const name = readIdentifierName(node);
+      return name !== undefined ? [name] : [];
+    }
+    case "AssignmentPattern": {
+      const left = node.children.find((c) => c.role === "left");
+      return extractBoundNames(left);
+    }
+    case "RestElement": {
+      const argument = node.children.find((c) => c.role === "argument");
+      return extractBoundNames(argument);
+    }
+    case "ObjectPattern": {
+      return node.children.flatMap((child) => {
+        if (child.type === "ObjectProperty" || child.role === "properties") {
+          const valChild = child.children.find((c) => c.role === "value");
+          if (valChild !== undefined) {
+            return extractBoundNames(valChild);
+          }
+          const keyChild = child.children.find((c) => c.role === "key") ?? child.children.find((c) => c.type === "Identifier");
+          return extractBoundNames(keyChild);
+        }
+        if (child.type === "RestElement") {
+          return extractBoundNames(child);
+        }
+        return [];
+      });
+    }
+    case "ArrayPattern": {
+      return node.children.filter((c) => c.role === "elements").flatMap(extractBoundNames);
+    }
+    default:
+      return [];
+  }
 }
 
 function findStringLiteral(node: ASTNode): string | undefined {
@@ -411,15 +679,6 @@ function findModuleSpecifier(node: ASTNode): string | undefined {
   }
 
   return source === undefined ? findStringLiteral(node) : findStringLiteral(source);
-}
-
-function findParameterNames(node: ASTNode): readonly string[] {
-  if (node.type === "Identifier") {
-    const name = readIdentifierName(node);
-    return name === undefined ? [] : [name];
-  }
-
-  return node.children.flatMap(findParameterNames);
 }
 
 function readIdentifierName(node: ASTNode | undefined): string | undefined {
@@ -490,4 +749,59 @@ function memberPath(node: ASTNode | undefined): string | undefined {
   const object = memberPath(node.children.find((child) => child.role === "object"));
   const property = identifierName(node.children.find((child) => child.role === "property"));
   return object === undefined || property === undefined ? undefined : `${object}.${property}`;
+}
+
+interface ExtractedProperty {
+  readonly key: string;
+  readonly localSymbolName?: string;
+  readonly node: ASTNode;
+}
+
+function findObjectProperties(node: ASTNode): readonly ExtractedProperty[] {
+  if (node.type !== "ObjectExpression") return [];
+  const props: ExtractedProperty[] = [];
+  const seen = new Set<string>();
+
+  for (const child of node.children) {
+    if (child.type !== "ObjectProperty" && child.role !== "properties") continue;
+    const keyChild = child.children.find((c) => c.role === "key")
+      ?? child.children.find((c) => c.type === "Identifier" || c.type === "StringLiteral");
+    const valChild = child.children.find((c) => c.role === "value");
+
+    const keyName = readIdentifierOrLiteral(keyChild);
+    if (!keyName || seen.has(keyName)) continue;
+    seen.add(keyName);
+
+    const valName = readIdentifierOrLiteral(valChild);
+    props.push({
+      key: keyName,
+      localSymbolName: valName ?? (child.attributes.shorthand === true ? keyName : undefined),
+      node: child,
+    });
+  }
+  return props;
+}
+
+function readIdentifierOrLiteral(node: ASTNode | undefined): string | undefined {
+  if (!node) return undefined;
+  if (typeof node.attributes.name === "string" && node.attributes.name.length > 0) return node.attributes.name;
+  if (typeof node.attributes.value === "string" && node.attributes.value.length > 0) return String(node.attributes.value);
+  return undefined;
+}
+
+function findVariableObjectExpression(root: ASTNode, varName: string): ASTNode | undefined {
+  for (const child of root.children) {
+    if (child.type === "VariableDeclaration") {
+      for (const decl of child.children.filter((c) => c.type === "VariableDeclarator" || c.role === "declarations")) {
+        const idChild = decl.children.find((c) => c.role === "id") ?? decl.children.find((c) => c.type === "Identifier");
+        if (idChild?.attributes.name === varName) {
+          const initChild = decl.children.find((c) => c.role === "init");
+          if (initChild?.type === "ObjectExpression") {
+            return initChild;
+          }
+        }
+      }
+    }
+  }
+  return undefined;
 }

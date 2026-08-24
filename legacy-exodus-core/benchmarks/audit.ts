@@ -21,9 +21,10 @@ import { executeBenchmarkRun } from "./harness";
 import { verifyDeterminism } from "./determinism";
 import { computeFileAccounting, detectContamination, verifyCompleteness, resolveEngineIdentity } from "./governance";
 import { generateQualitySample } from "./sample";
+import { CACHE_DIR, CORPUS_DIR, PACKAGE_ROOT } from "./paths";
 import type { AuditFinding, BenchmarkAuditReport, BenchmarkManifest } from "./types";
 
-export async function runBenchmarkSelfAudit(baseDir = resolve(import.meta.dir, "..")): Promise<BenchmarkAuditReport> {
+export async function runBenchmarkSelfAudit(baseDir = PACKAGE_ROOT): Promise<BenchmarkAuditReport> {
   const findings: AuditFinding[] = [];
   let passedChecks = 0;
   let totalChecks = 0;

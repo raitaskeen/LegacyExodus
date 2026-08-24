@@ -24,6 +24,8 @@ import { compareBenchmarkRuns, formatComparisonMarkdown } from "./compare";
 import { runBenchmarkSelfAudit } from "./audit";
 import { executeBenchmarkRun } from "./harness";
 import { generateMarkdownReport } from "./scripts/report";
+import { runFidelityValidation } from "./fidelity/runner";
+import { BENCHMARKS_ROOT, CORPUS_DIR, RESULTS_DIR, resolveBenchmarkRepoPath, resolveResultsDir } from "./paths";
 import type { BenchmarkResult } from "./types";
 
 async function main(): Promise<void> {
@@ -39,10 +41,10 @@ async function main(): Promise<void> {
         process.exit(1);
       }
       const runs = getIntArg(args, "--runs", 3);
-      const resolvedTarget = resolve(target);
+      const resolvedTarget = resolveBenchmarkRepoPath(target);
 
       if (target === "all" || target === "corpus") {
-        await runAllCorpus(resolve(import.meta.dir, "corpus"), runs);
+        await runAllCorpus(CORPUS_DIR, runs);
       } else {
         const stats = await statSafe(resolvedTarget);
         if (stats?.isDirectory()) {
@@ -74,8 +76,8 @@ async function main(): Promise<void> {
     }
 
     case "report": {
-      const resultsDir = resolve(getArgValue(args, "--results-dir") ?? resolve(import.meta.dir, "results"));
-      const outputPath = resolve(getArgValue(args, "--output") ?? resolve(import.meta.dir, "BENCHMARK_REPORT.md"));
+      const resultsDir = resolveResultsDir(getArgValue(args, "--results-dir"));
+      const outputPath = resolve(getArgValue(args, "--output") ?? resolve(BENCHMARKS_ROOT, "BENCHMARK_REPORT.md"));
 
       const reportMd = await generateMarkdownReport(resultsDir);
       await writeFile(outputPath, reportMd, "utf8");
@@ -118,12 +120,24 @@ async function main(): Promise<void> {
         process.exit(1);
       }
       console.log(`Validating accounting & completeness for: ${target}`);
-      const runRes = await executeBenchmarkRun(resolve(target), 0);
+      const resolvedTarget = resolveBenchmarkRepoPath(target);
+      const runRes = await executeBenchmarkRun(resolvedTarget, 0);
       console.log(`  Discovered:   ${runRes.fileAccounting.filesDiscovered}`);
       console.log(`  Computed:     ${runRes.fileAccounting.computedTotal}`);
       console.log(`  Reconciles:   ${runRes.fileAccounting.reconciles ? "✓ YES" : "✗ NO (discrepancy: " + runRes.fileAccounting.discrepancy + ")"}`);
       console.log(`  Completeness: ${runRes.completeness.status}`);
       if (!runRes.fileAccounting.reconciles) process.exit(1);
+      break;
+    }
+
+    case "fidelity": {
+      const target = args[1] ?? resolve(BENCHMARKS_ROOT, ".cache/fastify");
+      const resolvedTarget = resolveBenchmarkRepoPath(target);
+      console.log(`Running migration fidelity validation for: ${resolvedTarget}`);
+      const report = await runFidelityValidation({ repoPath: resolvedTarget });
+      if (report.overallFalseNegatives > 0 || (report.overallPrecision !== null && report.overallPrecision < 0.9)) {
+        console.warn(`\n[FIDELITY WARNING] Found ${report.overallFalseNegatives} False Negatives and ${report.overallFalsePositives} False Positives.`);
+      }
       break;
     }
 
@@ -155,6 +169,7 @@ Commands:
   report [--results-dir D]           Generate consolidated Markdown benchmark report
   audit                              Execute 10-point benchmark system self-audit
   validate <target-path>             Validate mathematical file accounting on target
+  fidelity [target-path]             Validate migration discovery fidelity against ground truth
   help                               Show this help message
 `);
 }
