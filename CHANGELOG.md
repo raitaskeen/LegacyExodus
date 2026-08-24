@@ -9,11 +9,43 @@ and this project adheres to deterministic semantic contracts and verifiable engi
 
 ## [Unreleased]
 
-### Planned & Upcoming (Phase 3 — Real-Repository Validation)
-- Automated benchmarking harness for third-party open-source repositories.
-- Tiered repository validation suite (`express-session`, `cookie-parser`, `systemjs`, `fastify`, `Ghost`).
-- Real-repository metrics tracking (discovery funnel, resolution rates, extraction loss, determinism diffs).
-- Execution timing and memory profiler integration for whole-program repository scans.
+### Planned & Upcoming (Track 3 — Scalability & Multi-Language Validation)
+- Whole-repository multi-file ground-truth scaling.
+- Template and fixture classification enhancements.
+- TypeScript / multi-language fidelity expansion.
+
+---
+
+## [0.5.2] - Controlled Forensic Weakness Discovery & Remediation
+
+- **Destructuring Pattern Binding Extraction (FINDING-SYM-04):** Implemented recursive `extractBoundNames` traversal for non-require destructuring declarations (`const { a, b: aliasB = 10, ...rest } = obj;`, `const [first, , ...tail] = list;`, `export const { a: b } = obj;`). Corrected severe defect where RHS initializer identifier (e.g. `obj`, `list`) was fabricated as a declared variable and exported symbol while actual bound variables were omitted from the symbol table.
+- **Function Default Parameter Expression Filtering (FINDING-SYM-05):** Replaced unconditional recursive identifier extraction in `getParameters` with `extractBoundNames`, restricting traversal to the `left` binding pattern of `AssignmentPattern` nodes. Eliminated spurious parameter extraction for default-value expressions (e.g. `fallback` in `function test(x = fallback)`), preventing parameter scope pollution and variable shadowing in data-flow graphs.
+- **Assigned Function `var` Scope Hoisting (FINDING-SYM-06):** Propagated `functionScopeId: fnScopeId` in `processAssignment` child context for assigned `FunctionExpression` and `ArrowFunctionExpression` nodes (`let h; h = function() { var inner = 1; };`). Corrected scoping failure where `var` declarations in assigned functions were hoisted to `"scope:module"` rather than the function's lexical scope.
+- **Class Constructor Call Resolution (FINDING-SEM-02):** Expanded candidate matching in `nearestScoped` to include `(symbol.kind === "function" || symbol.kind === "class")`. Resolved semantic defect where constructor instantiations `new ClassName()` were marked as `UNRESOLVED` in the call graph and symbol references table.
+
+---
+
+## [0.5.1] - Pre-Claude Audit Evidence Integrity & Semantic Correctness Hardening
+
+- **Fidelity Metric Mathematical Integrity (FINDING-FID-02):** Fixed metric semantic distortion where unmatched predictions in open-world sample validations were misclassified as `FALSE_POSITIVE`, artificially dropping reported precision to 2.4%–3.4%. Added `UNVERIFIED_SCOPED` match status under `worldScope: OPEN_WORLD_SAMPLE`, reporting open-world precision strictly as `N/A (Sample-Based)` and reserving `FALSE_POSITIVE` for disproven known negatives and exhaustive closed-world universes.
+- **JavaScript `var` Hoisting & Scope Correctness (FINDING-SYM-01):** Hardened symbol extraction to assign `var` declarations in block statements, `if` statements, `for` loops, and `while` loops to the enclosing function scope (or `scope:module`) rather than the block's `scopeId`, while strictly preserving block scoping for `let` and `const`.
+- **Deferred Function Assignment Extraction (FINDING-SYM-02):** Added support for deferred function and arrow expression assignments to previously declared variable bindings (`let h; h = function() {}` or `h = (x) => x`), enriching symbol tables with function identity, parameters, and location without fabricating identities for dynamic runtime values.
+- **Scope-Aware Export Marking (FINDING-SYM-03):** Replaced linear name-only export marking with scope-aware lexical resolution, ensuring `module.exports = foo` and property exports match only the active or enclosing lexical binding and never mark shadowed child variables as exported.
+
+---
+
+## [0.5.0] - Phase 3 & Track 3 Milestones (Scalability & Migration Fidelity)
+
+- **Controlled Whole-Repository Fidelity Expansion (P1.7B):** Expanded independent multi-category ground truth across 25 production and core architectural files for both Tier-2 (Fastify v5.3.3) and Tier-3 (Express v4.21.2) repositories without copying engine predictions or synthetic guessing. Fastify validation surface was expanded from 15 to 25 files covering 95%+ of core `lib/` modules (154 positive GT facts, 6,330 scoped predictions, 100.0% sample recall, 100.0% actionable correctness, 0 known-negative violations). Express validation surface was expanded from 15 to 25 files covering 100% of core `lib/`, 7 production application examples, and router integration test suites (142 positive GT facts, 4,165 scoped predictions, 100.0% sample recall, 100.0% actionable correctness, 0 known-negative violations). All 10 semantic categories verified across both repositories under the Three-Universe model, with absolute migration-safety verdict strictly maintained as `MIGRATION_SAFETY_NOT_YET_ESTABLISHED`.
+- **Express Semantic Fidelity Hardening — Prototype Symbols & Dynamic Call Resolution (P1.7A):** Hardened prototype and property-assignment symbol granularity (`proto.method = ...`, `app.listen = ...`, `req.header = ...`, `exports.application = proto`, `exports.json = ...`), unwrapped chained CommonJS export assignments (`exports = module.exports = createApplication;`), extracted assignment-level `require(...)` imports, and enabled constructor instantiation (`NewExpression`) and `.apply`/`.call` unwrapping (`server.listen.apply`). Express v4.21.2 overall recall moved from 90.1% to 98.0% (99/101 TP), with Call Recall reaching 100.0% (10/10 TP), Export Recall reaching 100.0% (10/10 TP), Import Recall reaching 100.0% (10/10 TP), Dependency Edge Recall reaching 100.0% (12/12 TP), and Symbol Recall reaching 90.0% (18/20 TP), while maintaining 100.0% actionable correctness, 0 known-negative violations, and preserving Fastify regression recall at 99.0%.
+- **Repository Boundary & Execution-Context Hardening (P1.6):** Centralized benchmark and governance path resolution into `legacy-exodus-core/benchmarks/paths.ts`, anchoring all internal caches (`.cache`), results (`results`), corpus manifests (`corpus`), and fidelity outputs (`results/fidelity/fidelity-report.json`) to the canonical package root (`legacy-exodus-core/`). Eliminated working-directory (CWD) leakage to Git root (`LegacyExodus/`), ensured user-supplied repository paths preserve caller-CWD resolution semantics, cleaned up misplaced root artifacts, and established failure-first regression tests for both Git-root and package-root executions.
+- **Evidence Freshness Lock & Provenance Verification (P1.5 Hardening):** Implemented `DiscoveryArtifactProvenance` and automated `manifest.json` generation containing deterministic SHA-256 hashes of all projection artifacts, repository identity, git revision, engine commit SHA, and analysis run ID. Enforced strict freshness lock in fidelity validation rejecting missing manifests, missing required artifacts, corrupted artifacts (SHA-256 mismatch), repository mismatch, engine mismatch, or stale revisions with loud, deterministic errors.
+- **Tier-3 Migration Fidelity Validation (P1.5):** Established an independent 101-fact ground truth baseline across 15 stratified architectural files of Express v4.21.2, achieving 90.1% overall recall, 100% actionable correctness on verified true positives, and zero known-negative false positives.
+- **Stage-Bounded Storage Lifecycle (P1.4):** Implemented stage-bounded memory disposal, pruning ASTs after flow analysis and clearing in-memory storage records on runtime shutdown.
+- **Deterministic Streaming Serialization (P1.3):** Built `StreamingJsonWriter` with bounded 64KB chunk buffer, native backpressure handling, atomic writes, and canonical JSON indentation, reducing Fastify peak RSS from 1,693 MB to 1,074 MB (-36.6%).
+- **Migration Fidelity Deep Validation (P1.2):** Introduced the Three-Universe validation model (Positive Ground Truth, Known Negatives, Unvalidated Predictions), ensuring non-sampled predictions are never miscounted as false positives.
+- **CommonJS Export Granularity (P1.1):** Enhanced export extraction for `module.exports = { ... }` and `module.exports = identifier` object literal patterns.
+- **Automated Benchmarking Harness (Phase 3A/3B):** Whole-repository benchmarking suite across Tier-1 (`cookie-parser`, `debug`, `ms`, `express-session`), Tier-2 (`fastify`), and Tier-3 (`express`) repositories with 10-point governance self-audit and 3-run bit-for-bit determinism validation.
 
 ---
 

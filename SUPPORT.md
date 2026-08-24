@@ -1,149 +1,120 @@
-# Support
+# Support Policy & Guidelines
 
-Thank you for using LegacyExodus.
+LegacyExodus is an open-source, deterministic, knowledge-first modernization engine designed to analyze legacy software systems and construct evidence-backed structural, semantic, and flow intelligence.
 
-LegacyExodus is a deterministic, knowledge-first modernization engine designed to analyze legacy software systems and build an evidence-backed understanding of their structure, dependencies, semantics, control flow, data flow, and modernization risks.
+---
 
-## Before requesting support
+## 1. Repository Maintainers
 
-Please make sure you are using the latest version of LegacyExodus and have run the available test suite successfully.
+LegacyExodus is maintained by the following code owners:
 
-For analysis issues, please include:
+* **[@raitaskeen](https://github.com/raitaskeen)**
+* **[@pamexo](https://github.com/pamexo)**
+* **[@rsexo](https://github.com/rsexo)**
 
-* LegacyExodus version
-* Operating system
-* Bun version
-* Node.js version, if applicable
-* Repository language(s)
-* The exact command that was executed
-* The complete error message or output
-* Whether the issue is reproducible
-* A minimal reproducible repository or fixture, when possible
+Repository code ownership mappings across all packages and directories are codified in **[`.github/CODEOWNERS`](.github/CODEOWNERS)**.
 
-Please remove passwords, API keys, tokens, private source code, credentials, and other sensitive information before sharing logs or repositories.
+---
 
-## Reporting a bug
+## 2. Before Requesting Support
 
-Please use the GitHub issue tracker for reproducible defects.
+Before opening an issue or discussion, please consult the authoritative project documentation:
 
-A useful bug report should contain:
+1. **[README](README.md):** Project overview, verified capabilities, and quickstart.
+2. **[Documentation Map](docs/DOCUMENTATION_MAP.md):** Master navigation sitemap and role-based reading paths.
+3. **[Project Context](docs/PROJECT_CONTEXT.md):** Pipeline architecture, stage boundaries, and intelligence trace.
+4. **[Environment Setup](docs/development/environment-setup.md):** Bun toolchain requirements and local verification.
+5. **[CLI Troubleshooting](docs/development/cli/troubleshooting.md):** Common runtime errors, parse recovery, and memory scaling.
+6. **[Security Principles](docs/security/security-principles.md):** Boundary rules and trust boundaries.
 
-1. A clear description of the problem.
-2. Steps to reproduce it.
-3. Expected behavior.
-4. Actual behavior.
-5. Relevant command output.
-6. A minimal reproduction when possible.
+---
 
-Example:
+## 3. Reporting a Technical Issue
 
-```text
-Command:
-bun legacy-exodus analyze ../example-project --json
+Please submit reproducible defects via the **GitHub Issue Tracker**.
 
-Expected:
-The project is analyzed and the unresolved relationship is reported explicitly.
+### What to Include in a Bug Report:
+* **Host Environment:** Operating system (Windows, Linux, macOS) and architecture (`x64`, `arm64`).
+* **Runtime Version:** Output of `bun --version` (minimum required: `1.3.0`).
+* **LegacyExodus Commit/Version:** Exact Git commit SHA or release version.
+* **Exact Command Executed:** e.g. `bun run src/cli/index.ts analyze ../target-repo --json`.
+* **Observed Output:** Full error log, terminal trace, or unexpected behavior.
+* **Expected Output:** Concrete explanation of what should have occurred.
+* **Minimal Reproduction:** The smallest standalone code sample or repository reproducing the issue.
 
-Actual:
-The analysis terminates with SYMBOL_TABLE_INVALID.
+> [!CAUTION]
+> **Data Privacy & Secret Redaction:** Never include API keys, passwords, database credentials, private tokens, proprietary intellectual property, or confidential customer data in issue descriptions or logs.
 
-Environment:
-OS: Windows 11
-Bun: 1.x
-LegacyExodus: 0.1.0
+---
+
+## 4. Issue Reproduction Standard
+
+LegacyExodus prioritizes issues that are accompanied by a reproducible test case or minimal source fixture:
+
+```mermaid
+flowchart LR
+    A[Environment Context] --> B[Minimal Fixture / Input]
+    B --> C[Command Executed]
+    C --> D[Observed Result]
+    D --> E[Expected Result]
+    E --> F[Verified Evidence]
 ```
 
-## Analysis accuracy issues
+---
 
-LegacyExodus follows an evidence-first and conservative analysis model.
+## 5. Analysis Accuracy & Conservative Semantics
 
-The engine intentionally avoids fabricating relationships when the available source evidence is insufficient. A relationship may therefore be reported as unresolved rather than guessed.
+LegacyExodus operates under **fail-closed, conservative static analysis**:
 
-When reporting an analysis-accuracy issue, please provide:
+* The engine intentionally avoids guessing or fabricating relationships when AST or semantic evidence is ambiguous.
+* A call target or import resolving to `UNRESOLVED` or `null` (e.g. dynamic property access `app[fn]()` or external packages) is expected conservative behavior and not necessarily a defect.
+* When reporting an analysis-accuracy discrepancy, provide the exact source snippet and explain why the construct can be statically proven from AST evidence without dynamic runtime evaluation.
 
-* the smallest source example that demonstrates the issue;
-* the expected symbol, dependency, call, flow, or resolution;
-* the actual LegacyExodus result;
-* the relevant file path and source location, if available.
+---
 
-This makes it possible to determine whether the issue is a parser limitation, symbol-model limitation, resolution limitation, or another analysis-layer limitation.
+## 6. Security Vulnerability Reporting
 
-## Security issues
+Please **do not disclose security-sensitive vulnerabilities in public GitHub issues**.
 
-Please do not publicly disclose security vulnerabilities through the normal issue tracker.
+For security-sensitive vulnerabilities:
+* Utilize GitHub's **Private Vulnerability Reporting** feature if enabled on the repository.
+* If private reporting is unavailable, reach out privately to the repository maintainers listed in **[`.github/CODEOWNERS`](.github/CODEOWNERS)**.
+* Include sufficient reproduction steps to evaluate the vulnerability without exposing sensitive payloads publicly.
 
-For security-sensitive issues, contact the project maintainers privately and include enough information to reproduce and assess the vulnerability without exposing unnecessary sensitive data.
+---
 
-Do not include credentials, secrets, access tokens, private keys, or confidential customer data.
+## 7. Documentation Issues
 
-## Feature requests
+To report documentation issues (such as stale file paths, broken relative links, outdated commands, or unclear architectural descriptions):
+* Submit an issue or pull request referencing the specific file path and line number.
+* Cite the matching source code or test evidence in `legacy-exodus-core/`.
 
-Feature requests are welcome when they are supported by a concrete modernization use case.
+---
 
-Useful requests explain:
+## 8. Feature Requests
 
-* the problem that needs to be solved;
-* who needs the capability;
-* the expected behavior;
-* examples of source repositories or constructs involved;
-* why the capability cannot be achieved with the current analysis model.
+Feature requests are welcome when aligned with the project's static analysis and modernization mission. Useful requests include:
+* Concrete legacy modernization use case and rationale.
+* Concrete examples of source code constructs or architectural patterns.
+* Explanation of why the capability cannot be achieved with existing stages.
+* Distinction between **Current Implementation** enhancements and **Target Architecture** vision.
 
-For language support requests, include the language and the type of legacy systems you expect LegacyExodus to analyze.
+---
 
-## Language support
+## 9. Support Scope & SLA
 
-LegacyExodus is being developed around a language-frontend architecture.
+* **Best-Effort Support:** Support, issue triage, and code reviews are provided by maintainers on a best-effort, open-source basis.
+* **No Commercial SLA:** LegacyExodus does not provide formal commercial SLAs or guaranteed response turnaround times.
+* **Evidence-First Resolution:** Issues backed by minimal reproducers and failing tests receive highest priority.
 
-Current support and future language coverage should be determined by the capabilities exposed by the current release rather than assumed from the presence of files in a repository.
+---
 
-A repository may contain files that are intentionally inventoried but are not semantic-analysis inputs.
+## 10. Related Governance Documentation
 
-An analysis result may distinguish between:
-
-* analyzed source files;
-* parser failures;
-* symbol-extraction failures;
-* unsupported source languages or syntax;
-* non-source repository artifacts.
-
-This distinction is intentional and helps keep analysis results truthful and deterministic.
-
-## Pull requests
-
-Contributions are welcome.
-
-Before submitting a pull request:
-
-```bash
-bun test
-bun run typecheck
-git diff --check
-```
-
-Please keep pull requests focused and include tests for behavioral changes.
-
-Changes affecting analysis contracts should preserve the project's core principles:
-
-* deterministic results;
-* stable canonical identities;
-* evidence-backed relationships;
-* conservative unresolved behavior;
-* no fabricated dependency, call, or data-flow edges;
-* explicit failure handling;
-* immutable and validated analysis artifacts.
-
-## Community support
-
-For general questions, discussions about architecture, and ideas for improving LegacyExodus, use the project's GitHub discussion or community channels when available.
-
-Please avoid posting private customer repositories or proprietary source code in public channels.
-
-## Scope of support
-
-LegacyExodus is an actively developing project.
-
-Analysis behavior may evolve as additional languages, syntax constructs, semantic relationships, and modernization capabilities are added.
-
-A reported result being `UNRESOLVED` does not necessarily indicate a defect. In many cases it means that LegacyExodus intentionally refused to infer a relationship that could not be proven from the available evidence.
-
-Thank you for helping improve LegacyExodus.
+* **[CODEOWNERS](.github/CODEOWNERS):** Repository code ownership rules.
+* **[LICENSE](LICENSE):** Canonical MIT open-source license.
+* **[Contribution Guide](docs/development/contribution-guide.md):** Contributor rules and Definition of Done.
+* **[Code of Conduct](CODE_OF_CONDUCT.md):** Contributor Covenant v2.1 standards.
+* **[GOVERNANCE.md](GOVERNANCE.md):** Repository boundaries, Three-Universe evidence model, and determinism invariants.
+* **[ROADMAP.md](ROADMAP.md):** Track status and milestone delivery plans.
+* **[Documentation Map](docs/DOCUMENTATION_MAP.md):** Complete navigation sitemap.
