@@ -1,4 +1,5 @@
 export { MemoryStorageProvider } from "./adapters/memory-storage";
+export { SqliteStorageProvider, type SqliteStorageOptions } from "./adapters/sqlite-storage";
 export {
   StorageError,
   StorageRecordNotFoundError,
