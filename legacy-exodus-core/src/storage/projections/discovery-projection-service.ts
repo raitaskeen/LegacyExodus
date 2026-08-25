@@ -52,9 +52,15 @@ const knowledgeGraphStoragePayloadSchema = z.object({
 const semanticAnalysisStoragePayloadSchema = z.object({
   projectId: z.string().uuid(),
   analysisRunId: z.string().uuid().optional(),
-  calls: z.array(z.unknown()), references: z.array(z.unknown()), scopes: z.array(z.unknown()), deadCode: z.array(z.unknown()),
-  unusedImports: z.array(z.unknown()), unusedExports: z.array(z.unknown()), entryPoints: z.array(z.unknown()),
-  routes: z.array(z.unknown()), middlewareChains: z.array(z.unknown()),
+  calls: z.array(z.unknown()).optional(),
+  references: z.array(z.unknown()).optional(),
+  scopes: z.array(z.unknown()).optional(),
+  deadCode: z.array(z.unknown()).optional(),
+  unusedImports: z.array(z.unknown()).optional(),
+  unusedExports: z.array(z.unknown()).optional(),
+  entryPoints: z.array(z.unknown()).optional(),
+  routes: z.array(z.unknown()).optional(),
+  middlewareChains: z.array(z.unknown()).optional(),
 });
 const controlFlowStoragePayloadSchema = z.object({ projectId: z.string().uuid(), analysisRunId: z.string().uuid().optional(), graphs: z.array(z.unknown()) });
 const dataFlowStoragePayloadSchema = z.object({ projectId: z.string().uuid(), analysisRunId: z.string().uuid().optional(), graphs: z.array(z.unknown()) });
@@ -79,13 +85,17 @@ export class DiscoveryProjectionService {
     }
 
     const payload = discovery.data;
+    const runCriteria = {
+      projectId: payload.projectId,
+      ...(payload.analysisRunId !== undefined ? { analysisRunId: payload.analysisRunId } : {}),
+    };
     const [graphRecords, symbolRecords, knowledgeRecords, semanticRecords, controlFlowRecords, dataFlowRecords] = await Promise.all([
-      this.storage.findAll("dependency-graph"),
-      this.storage.findAll("symbol-table"),
-      this.storage.findAll("knowledge-graph"),
-      this.storage.findAll("semantic-analysis"),
-      this.storage.findAll("control-flow-analysis"),
-      this.storage.findAll("data-flow-analysis"),
+      this.storage.findScoped({ type: "dependency-graph", ...runCriteria }),
+      this.storage.findScoped({ type: "symbol-table", ...runCriteria }),
+      this.storage.findScoped({ type: "knowledge-graph", ...runCriteria }),
+      this.storage.findScoped({ type: "semantic-analysis", ...runCriteria }),
+      this.storage.findScoped({ type: "control-flow-analysis", ...runCriteria }),
+      this.storage.findScoped({ type: "data-flow-analysis", ...runCriteria }),
     ]);
     const graph = latestPayload(graphRecords, dependencyGraphStoragePayloadSchema, payload.projectId, payload.analysisRunId);
     const knowledge = latestPayload(knowledgeRecords, knowledgeGraphStoragePayloadSchema, payload.projectId, payload.analysisRunId);
@@ -95,7 +105,14 @@ export class DiscoveryProjectionService {
     const symbols = symbolRecords
       .flatMap((candidate) => {
         const parsed = symbolTableStoragePayloadSchema.safeParse(candidate.payload);
-        return parsed.success && matchesRun(parsed.data, payload.projectId, payload.analysisRunId) ? parsed.data.symbols : [];
+        if (!parsed.success) {
+          throw new LegacyExodusError({
+            code: "DISCOVERY_RECORD_INVALID",
+            message: "Stored symbol-table record is invalid.",
+            metadata: { issues: parsed.error.issues, recordId: candidate.id },
+          });
+        }
+        return matchesRun(parsed.data, payload.projectId, payload.analysisRunId) ? parsed.data.symbols : [];
       })
       .sort((left, right) => `${left.filePath}:${left.id}`.localeCompare(`${right.filePath}:${right.id}`));
 
@@ -155,12 +172,26 @@ function latestPayload<Payload extends RunScopedPayload>(
   projectId: string,
   analysisRunId: string | undefined,
 ): Payload | undefined {
-  const candidates = records.flatMap((record, index) => {
+  if (records.length === 0) {
+    return undefined;
+  }
+
+  const candidates: { payload: Payload; updatedAt: number; index: number }[] = [];
+  for (let index = 0; index < records.length; index++) {
+    const record = records[index]!;
     const parsed = schema.safeParse(record.payload);
-    return parsed.success && matchesRun(parsed.data, projectId, analysisRunId)
-      ? [{ payload: parsed.data, updatedAt: record.updatedAt.getTime(), index }]
-      : [];
-  });
+    if (!parsed.success) {
+      throw new LegacyExodusError({
+        code: "DISCOVERY_RECORD_INVALID",
+        message: `Stored ${record.type} record is invalid.`,
+        metadata: { issues: parsed.error.issues, recordId: record.id },
+      });
+    }
+    if (matchesRun(parsed.data, projectId, analysisRunId)) {
+      candidates.push({ payload: parsed.data, updatedAt: record.updatedAt.getTime(), index });
+    }
+  }
+
   candidates.sort((left, right) => left.updatedAt - right.updatedAt || left.index - right.index);
   return candidates.at(-1)?.payload;
 }

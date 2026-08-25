@@ -2,11 +2,12 @@ import { Database } from "bun:sqlite";
 
 import { StorageRecordNotFoundError, StorageValidationError } from "../storage-errors";
 import {
+  extractRecordMetadata,
   type SerializedPayload,
   type StorageRecord,
   validateStorageRecord,
 } from "../storage-record";
-import type { StorageProvider } from "../storage-provider";
+import type { StorageProvider, StorageQueryCriteria } from "../storage-provider";
 
 export interface SqliteStorageOptions {
   readonly databasePath?: string;
@@ -69,19 +70,7 @@ export class SqliteStorageProvider implements StorageProvider {
 
   public async save<Payload extends SerializedPayload>(record: StorageRecord<Payload>): Promise<void> {
     const validatedRecord = validateStorageRecord(record);
-
-    let projectId: string | null = null;
-    let analysisRunId: string | null = null;
-    let filePath: string | null = null;
-
-    if (typeof validatedRecord.payload === "object" && validatedRecord.payload !== null) {
-      const p = validatedRecord.payload as Record<string, unknown>;
-      if (typeof p.projectId === "string") projectId = p.projectId;
-      if (typeof p.analysisRunId === "string") analysisRunId = p.analysisRunId;
-      if (typeof p.path === "string") filePath = p.path;
-      else if (typeof p.filePath === "string") filePath = p.filePath;
-    }
-
+    const { projectId, analysisRunId, filePath } = extractRecordMetadata(validatedRecord.payload);
     const payloadJson = JSON.stringify(validatedRecord.payload);
 
     const stmt = this.db.prepare(`
@@ -126,14 +115,39 @@ export class SqliteStorageProvider implements StorageProvider {
   public async findAll<Payload extends SerializedPayload>(
     type: string,
   ): Promise<StorageRecord<Payload>[]> {
-    const stmt = this.db.prepare<RawSqliteRecord, [string]>(`
+    return this.findScoped<Payload>({ type });
+  }
+
+  public async findScoped<Payload extends SerializedPayload>(
+    criteria: StorageQueryCriteria,
+  ): Promise<StorageRecord<Payload>[]> {
+    const conditions: string[] = ["type = ?"];
+    const params: unknown[] = [criteria.type];
+
+    if (criteria.projectId !== undefined) {
+      conditions.push("project_id = ?");
+      params.push(criteria.projectId);
+    }
+
+    if (criteria.analysisRunId !== undefined) {
+      conditions.push("analysis_run_id = ?");
+      params.push(criteria.analysisRunId);
+    }
+
+    if (criteria.filePath !== undefined) {
+      conditions.push("file_path = ?");
+      params.push(criteria.filePath);
+    }
+
+    const sql = `
       SELECT id, type, project_id, analysis_run_id, file_path, payload, created_at, updated_at
       FROM storage_records
-      WHERE type = ?
-      ORDER BY created_at ASC
-    `);
+      WHERE ${conditions.join(" AND ")}
+      ORDER BY created_at ASC, rowid ASC
+    `;
 
-    const rows = stmt.all(type);
+    const stmt = this.db.prepare<RawSqliteRecord, any[]>(sql);
+    const rows = stmt.all(...params);
     return rows.map((row) => this.deserializeRecord<Payload>(row));
   }
 

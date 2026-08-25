@@ -133,3 +133,25 @@ function deepFreeze<Payload extends SerializedPayload>(payload: Payload): Payloa
 
   return Object.freeze(payload) as Payload;
 }
+
+export interface StorageRecordMetadata {
+  readonly projectId: string | null;
+  readonly analysisRunId: string | null;
+  readonly filePath: string | null;
+}
+
+export function extractRecordMetadata(payload: unknown): StorageRecordMetadata {
+  let projectId: string | null = null;
+  let analysisRunId: string | null = null;
+  let filePath: string | null = null;
+
+  if (typeof payload === "object" && payload !== null) {
+    const p = payload as Record<string, unknown>;
+    if (typeof p.projectId === "string") projectId = p.projectId;
+    if (typeof p.analysisRunId === "string") analysisRunId = p.analysisRunId;
+    if (typeof p.path === "string") filePath = p.path;
+    else if (typeof p.filePath === "string") filePath = p.filePath;
+  }
+
+  return { projectId, analysisRunId, filePath };
+}

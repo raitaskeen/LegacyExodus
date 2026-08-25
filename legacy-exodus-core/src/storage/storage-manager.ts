@@ -1,5 +1,5 @@
 import type { SerializedPayload, StorageRecord } from "./storage-record";
-import type { StorageProvider } from "./storage-provider";
+import type { StorageProvider, StorageQueryCriteria } from "./storage-provider";
 
 export class StorageManager {
   public constructor(private readonly provider: StorageProvider) {}
@@ -18,6 +18,12 @@ export class StorageManager {
     type: string,
   ): Promise<StorageRecord<Payload>[]> {
     return this.provider.findAll<Payload>(type);
+  }
+
+  public findScoped<Payload extends SerializedPayload>(
+    criteria: StorageQueryCriteria,
+  ): Promise<StorageRecord<Payload>[]> {
+    return this.provider.findScoped(criteria);
   }
 
   public delete(id: string): Promise<void> {

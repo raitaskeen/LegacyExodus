@@ -25,12 +25,15 @@ describe("Fastify Migration Fidelity Baseline", () => {
     expect(fileMetrics?.falseNegatives).toBe(0);
     expect(fileMetrics?.recall).toBe(1.0);
 
-    // Verify package dependencies: 14/14 matched (100% recall)
+    // Verify package dependencies: 53/53 matched (100% recall, 100% precision)
     const depMetrics = report.categories.find((c) => c.category === "dependency");
     expect(depMetrics).toBeDefined();
-    expect(depMetrics?.groundTruthCount).toBe(14);
-    expect(depMetrics?.truePositives).toBe(14);
+    expect(depMetrics?.groundTruthCount).toBe(53);
+    expect(depMetrics?.truePositives).toBe(53);
+    expect(depMetrics?.falsePositives).toBe(0);
+    expect(depMetrics?.falseNegatives).toBe(0);
     expect(depMetrics?.recall).toBe(1.0);
+    expect(depMetrics?.precision).toBe(1.0);
 
     // Verify symbols: 32/32 matched (100% recall)
     const symMetrics = report.categories.find((c) => c.category === "symbol");

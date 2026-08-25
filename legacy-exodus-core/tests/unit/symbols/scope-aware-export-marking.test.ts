@@ -1,14 +1,15 @@
 import { describe, expect, it } from "bun:test";
 import { JavaScriptParser } from "../../../src/parser/adapters/javascript/javascript-parser";
 import { JavaScriptSymbolExtractor } from "../../../src/symbols/javascript-symbol-extractor";
+import { DeterministicDependencyGraphBuilder } from "@graph/index";
 
-async function extractSymbols(code: string) {
+async function extractSymbols(code: string, filePath = "test.js") {
   const parser = new JavaScriptParser();
   const extractor = new JavaScriptSymbolExtractor();
   const response = await parser.parse({
     file: {
       id: "f1",
-      path: "test.js",
+      path: filePath,
       language: "javascript",
       size: code.length,
     },
@@ -18,7 +19,47 @@ async function extractSymbols(code: string) {
 }
 
 describe("FINDING-SYM-03 — Scope-Aware Export Marking", () => {
-  it("1. exports module-level binding and leaves shadowed inner binding as exported: false", async () => {
+  it("Test A: same-name symbols in sibling scopes — exports only the targeted scope binding", async () => {
+    const code = `
+      function scopeA() {
+        const foo = "foo_in_A";
+        return foo;
+      }
+      function scopeB() {
+        const foo = "foo_in_B";
+        module.exports = foo;
+      }
+    `;
+    const table = await extractSymbols(code);
+    const fooSymbols = table.symbols.filter((s) => s.name === "foo" && s.kind === "variable");
+    expect(fooSymbols).toHaveLength(2);
+
+    const fooA = fooSymbols.find((s) => s.value === "foo_in_A");
+    const fooB = fooSymbols.find((s) => s.value === "foo_in_B");
+
+    expect(fooA?.exported).toBe(false);
+    expect(fooB?.exported).toBe(true);
+  });
+
+  it("Test B: inner shadowing — exports inner binding and leaves module-level binding as exported: false", async () => {
+    const code = `
+      const foo = 1;
+      function build() {
+        const foo = 2;
+        module.exports = foo;
+      }
+    `;
+    const table = await extractSymbols(code);
+    const outerFoo = table.symbols.find((s) => s.name === "foo" && s.scopeId === "scope:module");
+    const innerFoo = table.symbols.find((s) => s.name === "foo" && s.scopeId !== "scope:module");
+
+    expect(outerFoo).toBeDefined();
+    expect(innerFoo).toBeDefined();
+    expect(innerFoo?.exported).toBe(true);
+    expect(outerFoo?.exported).toBe(false);
+  });
+
+  it("Test C: outer fallback — exports module-level binding and leaves shadowed inner binding as exported: false", async () => {
     const code = `
       const foo = 1;
       function helper() {
@@ -37,46 +78,64 @@ describe("FINDING-SYM-03 — Scope-Aware Export Marking", () => {
     expect(innerFoo?.exported).toBe(false);
   });
 
-  it("2. exports inner binding when module.exports is assigned inside a nested function", async () => {
+  it("Test C2: nested outer resolution — resolves enclosing function variable without picking sibling", async () => {
     const code = `
-      const foo = 1;
-      function build() {
-        const foo = 2;
-        module.exports = foo;
+      function sibling() {
+        const handler = "sibling_handler";
+        return handler;
+      }
+
+      function outer() {
+        const handler = "outer_handler";
+        function inner() {
+          module.exports = handler;
+        }
       }
     `;
     const table = await extractSymbols(code);
-    const outerFoo = table.symbols.find((s) => s.name === "foo" && s.scopeId === "scope:module");
-    const innerFoo = table.symbols.find((s) => s.name === "foo" && s.scopeId !== "scope:module");
+    const handlers = table.symbols.filter((s) => s.name === "handler" && s.kind === "variable");
+    expect(handlers).toHaveLength(2);
 
-    expect(outerFoo).toBeDefined();
-    expect(innerFoo).toBeDefined();
-    expect(innerFoo?.exported).toBe(true);
-    expect(outerFoo?.exported).toBe(false);
+    const siblingHandler = handlers.find((s) => s.value === "sibling_handler");
+    const outerHandler = handlers.find((s) => s.value === "outer_handler");
+
+    expect(outerHandler?.exported).toBe(true);
+    expect(siblingHandler?.exported).toBe(false);
   });
 
-  it("3. isolates sibling scopes so only the enclosing scope binding is exported", async () => {
+  it("Test D: sibling scope isolation — does not falsely mark unrelated sibling symbol when exporting undeclared variable", async () => {
     const code = `
-      function a() {
-        const item = "a";
+      function siblingA() {
+        const secret = "private_a";
+        return secret;
       }
-      function b() {
-        const item = "b";
-        module.exports = item;
+      function siblingB() {
+        // secret is undeclared in siblingB and undeclared in module
+        module.exports = secret;
       }
     `;
     const table = await extractSymbols(code);
-    const items = table.symbols.filter((s) => s.name === "item" && s.kind === "variable");
-    expect(items.length).toBe(2);
+    const secretSym = table.symbols.find((s) => s.name === "secret" && s.kind === "variable");
 
-    const exportedItem = items.find((s) => s.exported === true);
-    const unexportedItem = items.find((s) => s.exported === false);
-
-    expect(exportedItem).toBeDefined();
-    expect(unexportedItem).toBeDefined();
+    expect(secretSym).toBeDefined();
+    expect(secretSym?.exported).toBe(false);
   });
 
-  it("4. exports local symbol referenced in object shorthand export at module level", async () => {
+  it("Test E: ambiguous / non-existent case — does not guess or mark arbitrary unexported symbols", async () => {
+    const code = `
+      const a = 1;
+      const b = 2;
+      module.exports = nonExistentVariable;
+    `;
+    const table = await extractSymbols(code);
+    const aSym = table.symbols.find((s) => s.name === "a");
+    const bSym = table.symbols.find((s) => s.name === "b");
+
+    expect(aSym?.exported).toBe(false);
+    expect(bSym?.exported).toBe(false);
+  });
+
+  it("Test F1: object shorthand export at module level", async () => {
     const code = `
       const api = 1;
       function shadow() {
@@ -92,7 +151,7 @@ describe("FINDING-SYM-03 — Scope-Aware Export Marking", () => {
     expect(innerApi?.exported).toBe(false);
   });
 
-  it("5. exports local symbol in exports.handler assignment without touching shadowed helper", async () => {
+  it("Test F2: exports.handler assignment without touching shadowed helper", async () => {
     const code = `
       function handler(req, res) {}
       function wrapper() {
@@ -108,7 +167,7 @@ describe("FINDING-SYM-03 — Scope-Aware Export Marking", () => {
     expect(innerHandler?.exported).toBe(false);
   });
 
-  it("6. resolves outer variable when exported from inner scope without shadowing", async () => {
+  it("Test F3: resolves outer variable when exported from inner scope without shadowing", async () => {
     const code = `
       const server = { port: 3000 };
       function setup() {
@@ -122,18 +181,7 @@ describe("FINDING-SYM-03 — Scope-Aware Export Marking", () => {
     expect(serverSym?.exported).toBe(true);
   });
 
-  it("7. does not crash or mark symbols when exporting an unknown dynamic expression", async () => {
-    const code = `
-      const a = 1;
-      module.exports = nonExistentVariable;
-    `;
-    const table = await extractSymbols(code);
-    const aSym = table.symbols.find((s) => s.name === "a");
-
-    expect(aSym?.exported).toBe(false);
-  });
-
-  it("8. produces deterministic symbol ordering across repeated runs", async () => {
+  it("Test F4: produces deterministic symbol ordering across repeated runs", async () => {
     const code = `
       const foo = 1;
       function build() { const foo = 2; module.exports = foo; }
@@ -144,7 +192,7 @@ describe("FINDING-SYM-03 — Scope-Aware Export Marking", () => {
     expect(JSON.stringify(table1)).toBe(JSON.stringify(table2));
   });
 
-  it("9. preserves Express createApplication export pattern", async () => {
+  it("Test F5: preserves Express createApplication export pattern", async () => {
     const code = `
       function createApplication() {
         var app = function(req, res, next) {
@@ -162,7 +210,7 @@ describe("FINDING-SYM-03 — Scope-Aware Export Marking", () => {
     expect(appVar?.exported).toBe(false);
   });
 
-  it("10. preserves Fastify main export function pattern", async () => {
+  it("Test F6: preserves Fastify main export function pattern", async () => {
     const code = `
       function fastify(options) {
         return {};
@@ -175,5 +223,36 @@ describe("FINDING-SYM-03 — Scope-Aware Export Marking", () => {
     const fnSym = table.symbols.find((s) => s.name === "fastify" && s.kind === "function");
 
     expect(fnSym?.exported).toBe(true);
+  });
+
+  it("Test G: Downstream dependency graph safety — exports link to genuine lexical symbol", async () => {
+    const code = `
+      function sibling() {
+        const target = "sibling_target";
+        return target;
+      }
+      function main() {
+        const target = "main_target";
+        module.exports = target;
+      }
+    `;
+    const table = await extractSymbols(code, "service.js");
+    const graphBuilder = new DeterministicDependencyGraphBuilder();
+    const file = { id: "f1", path: "service.js", language: "javascript", size: code.length };
+    const graph = graphBuilder.build([table], [file]);
+
+    const targetSymbols = table.symbols.filter((s) => s.name === "target" && s.kind === "variable");
+    const mainTarget = targetSymbols.find((s) => s.value === "main_target")!;
+    const siblingTarget = targetSymbols.find((s) => s.value === "sibling_target")!;
+
+    expect(mainTarget.exported).toBe(true);
+    expect(siblingTarget.exported).toBe(false);
+
+    // Verify dependency graph nodes reflect the exact exported status
+    const mainNode = graph.nodes.find((n) => n.symbolId === mainTarget.id);
+    const siblingNode = graph.nodes.find((n) => n.symbolId === siblingTarget.id);
+
+    expect(mainNode).toBeDefined();
+    expect(siblingNode).toBeDefined();
   });
 });

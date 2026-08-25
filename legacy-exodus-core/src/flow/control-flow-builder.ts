@@ -34,6 +34,7 @@ class FlowState {
   private readonly blocks: MutableBlock[] = [];
   private readonly edges: ControlFlowEdge[] = [];
   private sequence = 0;
+  private unlocatedStatementSequence = 0;
   public constructor(private readonly filePath: string, private readonly scopeName: string) {}
   public createBlock(): string { const id = hash(`${this.filePath}:${this.scopeName}:block:${this.sequence++}`); this.blocks.push({ id, statements: [] }); return id; }
   public addEdge(fromBlockId: string, toBlockId: string, kind: ControlFlowEdgeKind): void { this.edges.push({ id: hash(`${fromBlockId}:${toBlockId}:${kind}`), fromBlockId, toBlockId, kind }); }
@@ -162,7 +163,16 @@ class FlowState {
     }
     return after;
   }
-  private addNode(blockId: string, node: ASTNode): void { this.block(blockId).statements.push({ id: hash(`${this.filePath}:${node.type}:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`), type: node.type, ...(node.location === undefined ? {} : { location: node.location.start }) }); }
+  private addNode(blockId: string, node: ASTNode): void {
+    const position = node.location === undefined
+      ? `anon-${this.unlocatedStatementSequence++}`
+      : `${node.location.start.line}:${node.location.start.column}`;
+    this.block(blockId).statements.push({
+      id: hash(`${this.filePath}:${node.type}:${position}`),
+      type: node.type,
+      ...(node.location === undefined ? {} : { location: node.location.start }),
+    });
+  }
   private block(id: string): MutableBlock { const block = this.blocks.find((candidate) => candidate.id === id); if (block === undefined) throw new ControlFlowInvariantError(id); return block; }
   private retagCompletionEdge(fromBlockId: string, toBlockId: string, sourceKind: ControlFlowEdgeKind, targetKind: ControlFlowEdgeKind): void { const edge = this.edges.find((candidate) => candidate.fromBlockId === fromBlockId && candidate.toBlockId === toBlockId && candidate.kind === sourceKind); if (edge === undefined) return; const index = this.edges.indexOf(edge); this.edges[index] = { ...edge, id: hash(`${fromBlockId}:${toBlockId}:${targetKind}`), kind: targetKind }; }
   private retagIncomingEdges(toBlockId: string | undefined, sourceKind: ControlFlowEdgeKind, targetKind: ControlFlowEdgeKind): void { if (toBlockId === undefined) return; for (const [index, edge] of this.edges.entries()) { if (edge.toBlockId === toBlockId && edge.kind === sourceKind) this.edges[index] = { ...edge, id: hash(`${edge.fromBlockId}:${toBlockId}:${targetKind}`), kind: targetKind }; } }
@@ -189,7 +199,15 @@ class FlowState {
     const dominators = calculateDominators(entry, blocks, this.edges);
     const loops = this.edges
       .filter((edge) => edge.kind === "loop-back")
-      .map((edge) => ({ headerBlockId: edge.toBlockId, blockIds: [edge.toBlockId, edge.fromBlockId].sort() }));
+      .map((edge) => ({
+        headerBlockId: edge.toBlockId,
+        blockIds: computeNaturalLoopBlocks(edge.toBlockId, edge.fromBlockId, predecessorsByBlock),
+      }))
+      .sort((left, right) =>
+        left.headerBlockId === right.headerBlockId
+          ? left.blockIds.join(",").localeCompare(right.blockIds.join(","))
+          : left.headerBlockId.localeCompare(right.headerBlockId),
+      );
     const unreachableBlockIds = blocks.filter((block) => !reachable.has(block.id)).map((block) => block.id).sort();
     return createControlFlowGraph({
       id: hash(`cfg:${this.filePath}:${this.scopeName}`),
@@ -210,7 +228,22 @@ class FlowState {
     });
   }
 }
-function collectFunctions(root: ASTNode): readonly { readonly name: string; readonly node: ASTNode }[] { const functions: { name: string; node: ASTNode }[] = []; const visit = (node: ASTNode): void => { if (isFunction(node)) { const name = functionName(node); functions.push({ name: `${name}@${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`, node }); } for (const child of node.children) visit(child); }; for (const child of root.children) visit(child); return functions.sort((left, right) => left.name.localeCompare(right.name)); }
+function collectFunctions(root: ASTNode): readonly { readonly name: string; readonly node: ASTNode }[] {
+  const functions: { name: string; node: ASTNode }[] = [];
+  let unlocatedSequence = 0;
+  const visit = (node: ASTNode): void => {
+    if (isFunction(node)) {
+      const name = functionName(node);
+      const position = node.location === undefined
+        ? `anon-${unlocatedSequence++}`
+        : `${node.location.start.line}:${node.location.start.column}`;
+      functions.push({ name: `${name}@${position}`, node });
+    }
+    for (const child of node.children) visit(child);
+  };
+  for (const child of root.children) visit(child);
+  return functions.sort((left, right) => left.name.localeCompare(right.name));
+}
 function functionName(node: ASTNode): string { const name = node.children.find((child) => child.role === "id" || child.role === "key")?.attributes.name; return typeof name === "string" ? name : node.type === "ClassMethod" ? "method" : "anonymous"; }
 function statementChildren(node: ASTNode): readonly ASTNode[] { return node.type === "BlockStatement" || node.type === "Program" ? node.children : [node]; }
 function switchCaseStatements(node: ASTNode): readonly ASTNode[] { return node.children.filter((child) => child.role === "consequent"); }
@@ -368,4 +401,33 @@ function calculateDominators(entry: string, blocks: readonly BasicBlock[], _edge
 
   return result.sort((left, right) => left.blockId.localeCompare(right.blockId));
 }
+function computeNaturalLoopBlocks(
+  headerId: string,
+  tailId: string,
+  predecessorsByBlock: ReadonlyMap<string, readonly string[]>,
+): readonly string[] {
+  const loopBlocks = new Set<string>([headerId]);
+  if (headerId === tailId) {
+    return [headerId];
+  }
+
+  loopBlocks.add(tailId);
+  const worklist: string[] = [tailId];
+
+  while (worklist.length > 0) {
+    const current = worklist.pop()!;
+    const preds = predecessorsByBlock.get(current);
+    if (preds !== undefined) {
+      for (const pred of preds) {
+        if (!loopBlocks.has(pred)) {
+          loopBlocks.add(pred);
+          worklist.push(pred);
+        }
+      }
+    }
+  }
+
+  return Array.from(loopBlocks).sort();
+}
+
 function hash(value: string): string { return createHash("sha256").update(value).digest("hex"); }

@@ -11,8 +11,10 @@ export { FileDiscoveryProjectionAdapter } from "./projections/file-discovery-pro
 export {
   cloneStorageRecord,
   createStorageRecord,
+  extractRecordMetadata,
   validateStorageRecord,
   type SerializedPayload,
   type StorageRecord,
+  type StorageRecordMetadata,
 } from "./storage-record";
-export type { StorageProvider } from "./storage-provider";
+export type { StorageProvider, StorageQueryCriteria } from "./storage-provider";

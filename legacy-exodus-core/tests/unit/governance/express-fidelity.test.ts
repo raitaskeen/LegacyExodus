@@ -21,6 +21,14 @@ describe("Express v4.21.2 Migration Fidelity Baseline", () => {
     const callCategory = report.categories.find((c) => c.category === "call");
     expect(callCategory?.recall).toBeGreaterThanOrEqual(0.9);
 
+    const depCategory = report.categories.find((c) => c.category === "dependency");
+    expect(depCategory?.groundTruthCount).toBe(47);
+    expect(depCategory?.truePositives).toBe(47);
+    expect(depCategory?.falsePositives).toBe(0);
+    expect(depCategory?.falseNegatives).toBe(0);
+    expect(depCategory?.recall).toBe(1.0);
+    expect(depCategory?.precision).toBe(1.0);
+
     const symbolCategory = report.categories.find((c) => c.category === "symbol");
     expect(symbolCategory?.recall).toBeGreaterThanOrEqual(0.85);
 

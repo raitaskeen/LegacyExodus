@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LegacyExodusError } from "@shared/errors";
 import type { StorageManager } from "@storage/storage-manager";
 import type { StorageRecord } from "@storage/storage-record";
 
@@ -79,6 +80,32 @@ const knowledgeGraphPayloadSchema = z.object({
   edges: z.array(z.object({ id: z.string(), from: z.string(), to: z.string(), relationship: z.string() })),
 });
 
+const semanticAnalysisPayloadSchema = z.object({
+  projectId: z.string().uuid(),
+  analysisRunId: z.string().uuid().optional(),
+  calls: z.array(z.unknown()).optional(),
+  references: z.array(z.unknown()).optional(),
+  scopes: z.array(z.unknown()).optional(),
+  deadCode: z.array(z.unknown()).optional(),
+  unusedImports: z.array(z.unknown()).optional(),
+  unusedExports: z.array(z.unknown()).optional(),
+  entryPoints: z.array(z.unknown()).optional(),
+  routes: z.array(z.unknown()).optional(),
+  middlewareChains: z.array(z.unknown()).optional(),
+});
+
+const controlFlowPayloadSchema = z.object({
+  projectId: z.string().uuid(),
+  analysisRunId: z.string().uuid().optional(),
+  graphs: z.array(z.unknown()),
+});
+
+const dataFlowPayloadSchema = z.object({
+  projectId: z.string().uuid(),
+  analysisRunId: z.string().uuid().optional(),
+  graphs: z.array(z.unknown()),
+});
+
 export type ProjectDiscoveryPayload = z.infer<typeof discoveryPayloadSchema>;
 export type SymbolTablePayload = z.infer<typeof symbolTablePayloadSchema>;
 export type DependencyGraphPayload = z.infer<typeof dependencyGraphPayloadSchema>;
@@ -91,7 +118,11 @@ export class DiscoveryQueryService {
     projectId: string,
     analysisRunId?: string,
   ): Promise<ProjectDiscoveryPayload | null> {
-    const records = await this.storage.findAll("project-discovery");
+    const records = await this.storage.findScoped({
+      type: "project-discovery",
+      projectId,
+      ...(analysisRunId !== undefined ? { analysisRunId } : {}),
+    });
     return this.findLatestRecord(records, discoveryPayloadSchema, projectId, analysisRunId);
   }
 
@@ -108,11 +139,25 @@ export class DiscoveryQueryService {
     filePath: string,
     analysisRunId?: string,
   ): Promise<SymbolTablePayload["symbols"]> {
-    const records = await this.storage.findAll("symbol-table");
+    const records = await this.storage.findScoped({
+      type: "symbol-table",
+      projectId,
+      filePath,
+      ...(analysisRunId !== undefined ? { analysisRunId } : {}),
+    });
+    if (records.length === 0) {
+      return [];
+    }
     const matching = records.flatMap((record) => {
       const parsed = symbolTablePayloadSchema.safeParse(record.payload);
+      if (!parsed.success) {
+        throw new LegacyExodusError({
+          code: "DISCOVERY_RECORD_INVALID",
+          message: `Stored symbol-table record for '${filePath}' is invalid.`,
+          metadata: { recordId: record.id, issues: parsed.error.issues, filePath },
+        });
+      }
       if (
-        parsed.success &&
         parsed.data.projectId === projectId &&
         (analysisRunId === undefined || parsed.data.analysisRunId === analysisRunId) &&
         parsed.data.path === filePath
@@ -129,7 +174,11 @@ export class DiscoveryQueryService {
     projectId: string,
     analysisRunId?: string,
   ): Promise<DependencyGraphPayload | null> {
-    const records = await this.storage.findAll("dependency-graph");
+    const records = await this.storage.findScoped({
+      type: "dependency-graph",
+      projectId,
+      ...(analysisRunId !== undefined ? { analysisRunId } : {}),
+    });
     return this.findLatestRecord(records, dependencyGraphPayloadSchema, projectId, analysisRunId);
   }
 
@@ -137,7 +186,11 @@ export class DiscoveryQueryService {
     projectId: string,
     analysisRunId?: string,
   ): Promise<KnowledgeGraphPayload | null> {
-    const records = await this.storage.findAll("knowledge-graph");
+    const records = await this.storage.findScoped({
+      type: "knowledge-graph",
+      projectId,
+      ...(analysisRunId !== undefined ? { analysisRunId } : {}),
+    });
     return this.findLatestRecord(records, knowledgeGraphPayloadSchema, projectId, analysisRunId);
   }
 
@@ -145,48 +198,36 @@ export class DiscoveryQueryService {
     projectId: string,
     analysisRunId?: string,
   ): Promise<unknown | null> {
-    const records = await this.storage.findAll("semantic-analysis");
-    const matched = records.find((r) => {
-      if (typeof r.payload === "object" && r.payload !== null) {
-        const p = r.payload as Record<string, unknown>;
-        return p.projectId === projectId && (analysisRunId === undefined || p.analysisRunId === analysisRunId);
-      }
-      return false;
+    const records = await this.storage.findScoped({
+      type: "semantic-analysis",
+      projectId,
+      ...(analysisRunId !== undefined ? { analysisRunId } : {}),
     });
-
-    return matched?.payload ?? null;
+    return this.findLatestRecord(records, semanticAnalysisPayloadSchema, projectId, analysisRunId);
   }
 
   public async getControlFlowAnalysis(
     projectId: string,
     analysisRunId?: string,
   ): Promise<unknown | null> {
-    const records = await this.storage.findAll("control-flow-analysis");
-    const matched = records.find((r) => {
-      if (typeof r.payload === "object" && r.payload !== null) {
-        const p = r.payload as Record<string, unknown>;
-        return p.projectId === projectId && (analysisRunId === undefined || p.analysisRunId === analysisRunId);
-      }
-      return false;
+    const records = await this.storage.findScoped({
+      type: "control-flow-analysis",
+      projectId,
+      ...(analysisRunId !== undefined ? { analysisRunId } : {}),
     });
-
-    return matched?.payload ?? null;
+    return this.findLatestRecord(records, controlFlowPayloadSchema, projectId, analysisRunId);
   }
 
   public async getDataFlowAnalysis(
     projectId: string,
     analysisRunId?: string,
   ): Promise<unknown | null> {
-    const records = await this.storage.findAll("data-flow-analysis");
-    const matched = records.find((r) => {
-      if (typeof r.payload === "object" && r.payload !== null) {
-        const p = r.payload as Record<string, unknown>;
-        return p.projectId === projectId && (analysisRunId === undefined || p.analysisRunId === analysisRunId);
-      }
-      return false;
+    const records = await this.storage.findScoped({
+      type: "data-flow-analysis",
+      projectId,
+      ...(analysisRunId !== undefined ? { analysisRunId } : {}),
     });
-
-    return matched?.payload ?? null;
+    return this.findLatestRecord(records, dataFlowPayloadSchema, projectId, analysisRunId);
   }
 
   private findLatestRecord<T extends { readonly projectId: string; readonly analysisRunId?: string }>(
@@ -195,17 +236,28 @@ export class DiscoveryQueryService {
     projectId: string,
     analysisRunId: string | undefined,
   ): T | null {
-    const candidates = records.flatMap((record, index) => {
+    if (records.length === 0) {
+      return null;
+    }
+
+    const candidates: { payload: T; updatedAt: number; index: number }[] = [];
+    for (let index = 0; index < records.length; index++) {
+      const record = records[index]!;
       const parsed = schema.safeParse(record.payload);
+      if (!parsed.success) {
+        throw new LegacyExodusError({
+          code: "DISCOVERY_RECORD_INVALID",
+          message: `Stored ${record.type} record is invalid.`,
+          metadata: { recordId: record.id, issues: parsed.error.issues },
+        });
+      }
       if (
-        parsed.success &&
         parsed.data.projectId === projectId &&
         (analysisRunId === undefined || parsed.data.analysisRunId === analysisRunId)
       ) {
-        return [{ payload: parsed.data, updatedAt: record.updatedAt.getTime(), index }];
+        candidates.push({ payload: parsed.data, updatedAt: record.updatedAt.getTime(), index });
       }
-      return [];
-    });
+    }
 
     candidates.sort((left, right) => left.updatedAt - right.updatedAt || left.index - right.index);
     return candidates.at(-1)?.payload ?? null;

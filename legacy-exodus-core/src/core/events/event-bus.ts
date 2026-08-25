@@ -27,9 +27,15 @@ export class EventBus {
   }
 
   public publish(event: DomainEvent): void {
-    const handlers = this.handlersByType.get(event.type) ?? [];
+    const handlers = this.handlersByType.get(event.type);
 
-    for (const handler of handlers) {
+    if (handlers === undefined || handlers.length === 0) {
+      return;
+    }
+
+    const snapshot = [...handlers];
+
+    for (const handler of snapshot) {
       handler(event);
     }
   }

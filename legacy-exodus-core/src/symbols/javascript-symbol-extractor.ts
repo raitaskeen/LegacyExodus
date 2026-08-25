@@ -20,6 +20,7 @@ interface ExtractionContext {
   readonly containerId?: string;
   readonly scopeId: string;
   readonly functionScopeId?: string;
+  readonly scopeChain: readonly string[];
 }
 
 const initialContext: ExtractionContext = Object.freeze({
@@ -27,11 +28,14 @@ const initialContext: ExtractionContext = Object.freeze({
   defaultExport: false,
   scopeId: "scope:module",
   functionScopeId: "scope:module",
+  scopeChain: Object.freeze(["scope:module"]),
 });
 
 const supportedLanguages = new Set(["javascript", "typescript"]);
 
 export class JavaScriptSymbolExtractor implements SymbolExtractor {
+  private unlocatedSequence = 0;
+
   public extract(ast: ASTResult): SymbolTable {
     const validatedAst = validateASTResult(ast);
 
@@ -39,6 +43,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       throw new UnsupportedSymbolLanguageError(validatedAst.metadata.language);
     }
 
+    this.unlocatedSequence = 0;
     const symbols: CodeSymbol[] = [];
     this.visit(validatedAst.root, validatedAst, initialContext, symbols);
 
@@ -76,22 +81,38 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       case "VariableDeclaration":
         this.addVariableSymbols(node, ast, context, symbols);
         break;
-      case "BlockStatement":
-        this.visitChildren(node, ast, { ...context, scopeId: createLexicalScopeId(node.type, node.location) }, symbols);
+      case "BlockStatement": {
+        const blockScopeId = createLexicalScopeId(node.type, node.location);
+        this.visitChildren(node, ast, {
+          ...context,
+          scopeId: blockScopeId,
+          scopeChain: [blockScopeId, ...context.scopeChain],
+        }, symbols);
         return;
+      }
       case "AssignmentExpression":
         this.processAssignment(node, ast, context, symbols);
         return;
       case "FunctionDeclaration": {
         const fnScopeId = createLexicalScopeId(node.type, node.location);
         this.addFunctionSymbol(node, ast, context, symbols);
-        this.visitChildren(node, ast, { ...context, scopeId: fnScopeId, functionScopeId: fnScopeId }, symbols);
+        this.visitChildren(node, ast, {
+          ...context,
+          scopeId: fnScopeId,
+          functionScopeId: fnScopeId,
+          scopeChain: [fnScopeId, ...context.scopeChain],
+        }, symbols);
         return;
       }
       case "FunctionExpression":
       case "ArrowFunctionExpression": {
         const fnScopeId = createLexicalScopeId(node.type, node.location);
-        this.visitChildren(node, ast, { ...context, scopeId: fnScopeId, functionScopeId: fnScopeId }, symbols);
+        this.visitChildren(node, ast, {
+          ...context,
+          scopeId: fnScopeId,
+          functionScopeId: fnScopeId,
+          scopeChain: [fnScopeId, ...context.scopeChain],
+        }, symbols);
         return;
       }
       case "ClassDeclaration": {
@@ -105,13 +126,23 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       case "ClassPrivateMethod": {
         const methodScopeId = createLexicalScopeId(node.type, node.location);
         this.addMethodSymbol(node, ast, context, symbols);
-        this.visitChildren(node, ast, { ...context, scopeId: methodScopeId, functionScopeId: methodScopeId }, symbols);
+        this.visitChildren(node, ast, {
+          ...context,
+          scopeId: methodScopeId,
+          functionScopeId: methodScopeId,
+          scopeChain: [methodScopeId, ...context.scopeChain],
+        }, symbols);
         return;
       }
       case "ObjectMethod": {
         const methodScopeId = createLexicalScopeId(node.type, node.location);
         this.addMethodSymbol(node, ast, context, symbols);
-        this.visitChildren(node, ast, { ...context, scopeId: methodScopeId, functionScopeId: methodScopeId }, symbols);
+        this.visitChildren(node, ast, {
+          ...context,
+          scopeId: methodScopeId,
+          functionScopeId: methodScopeId,
+          scopeChain: [methodScopeId, ...context.scopeChain],
+        }, symbols);
         return;
       }
       default:
@@ -393,7 +424,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
           for (const prop of properties) {
             this.addExport(prop.node, ast, prop.key, false, undefined, prop.localSymbolName, symbols);
             const symbolToMark = prop.localSymbolName ?? prop.key;
-            this.markLocalSymbolAsExported(symbolToMark, symbols, context.scopeId);
+            this.markLocalSymbolAsExported(symbolToMark, symbols, context.scopeChain);
           }
           this.addExport(node, ast, "default", true, undefined, undefined, symbols);
         } else if (innermostRight.type === "Identifier") {
@@ -405,17 +436,17 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
               for (const prop of properties) {
                 this.addExport(prop.node, ast, prop.key, false, undefined, prop.localSymbolName, symbols);
                 const symbolToMark = prop.localSymbolName ?? prop.key;
-                this.markLocalSymbolAsExported(symbolToMark, symbols, context.scopeId);
+                this.markLocalSymbolAsExported(symbolToMark, symbols, context.scopeChain);
               }
             }
-            this.markLocalSymbolAsExported(varName, symbols, context.scopeId);
+            this.markLocalSymbolAsExported(varName, symbols, context.scopeChain);
             this.addExport(node, ast, "default", true, undefined, varName, symbols);
           }
         } else {
           const rightName = identifierName(innermostRight);
           this.addExport(node, ast, "default", true, undefined, rightName, symbols);
           if (rightName) {
-            this.markLocalSymbolAsExported(rightName, symbols, context.scopeId);
+            this.markLocalSymbolAsExported(rightName, symbols, context.scopeChain);
           }
         }
       } else if (targetPath.startsWith("module.exports.") || targetPath.startsWith("exports.")) {
@@ -424,7 +455,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
           const sourceSymbolName = identifierName(innermostRight);
           this.addExport(node, ast, propName, false, undefined, sourceSymbolName, symbols);
           const symbolToMark = sourceSymbolName ?? propName;
-          this.markLocalSymbolAsExported(symbolToMark, symbols, context.scopeId);
+          this.markLocalSymbolAsExported(symbolToMark, symbols, context.scopeChain);
           symbols.push(
             this.createSymbol("variable", propName, target, ast, {
               ...context,
@@ -481,6 +512,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
           ...context,
           scopeId: fnScopeId,
           functionScopeId: fnScopeId,
+          scopeChain: [fnScopeId, ...context.scopeChain],
         }, symbols);
       } else {
         this.visitChildren(innermostRight, ast, context, symbols);
@@ -488,40 +520,34 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     }
   }
 
-  private markLocalSymbolAsExported(name: string, symbols: CodeSymbol[], targetScopeId?: string): void {
+  private markLocalSymbolAsExported(
+    name: string,
+    symbols: CodeSymbol[],
+    scopeChain?: readonly string[] | string,
+  ): void {
     const isExportable = (sym: CodeSymbol): boolean =>
       sym.name === name &&
       (sym.kind === "function" || sym.kind === "variable" || sym.kind === "class");
 
-    // 1. Direct match in target scope
-    if (targetScopeId !== undefined) {
+    const chain: readonly string[] =
+      scopeChain === undefined
+        ? ["scope:module"]
+        : typeof scopeChain === "string"
+          ? scopeChain === "scope:module"
+            ? ["scope:module"]
+            : [scopeChain, "scope:module"]
+          : scopeChain;
+
+    for (const scopeId of chain) {
       let found = false;
       for (let i = 0; i < symbols.length; i++) {
         const sym = symbols[i]!;
-        if (sym.scopeId === targetScopeId && isExportable(sym)) {
+        if (sym.scopeId === scopeId && isExportable(sym)) {
           symbols[i] = { ...sym, exported: true };
           found = true;
         }
       }
-      if (found) return;
-    }
-
-    // 2. Match in module scope (top-level binding)
-    let foundModule = false;
-    for (let i = 0; i < symbols.length; i++) {
-      const sym = symbols[i]!;
-      if (sym.scopeId === "scope:module" && isExportable(sym)) {
-        symbols[i] = { ...sym, exported: true };
-        foundModule = true;
-      }
-    }
-    if (foundModule) return;
-
-    // 3. Fallback: match first unexported candidate
-    for (let i = 0; i < symbols.length; i++) {
-      const sym = symbols[i]!;
-      if (isExportable(sym) && !sym.exported) {
-        symbols[i] = { ...sym, exported: true };
+      if (found) {
         return;
       }
     }
@@ -536,7 +562,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     overrides: Partial<CodeSymbol> = {},
   ): CodeSymbol {
     const location = node.location;
-    const position = location === undefined ? "unknown" : `${location.start.line}:${location.start.column}`;
+    const position = location === undefined ? `anon-${this.unlocatedSequence++}` : `${location.start.line}:${location.start.column}`;
 
     return {
       id: createHash("sha256")
