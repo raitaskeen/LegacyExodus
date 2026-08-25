@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import type { GroundTruthFact, GroundTruthDependency } from "@contracts/fidelity";
 import { expressGroundTruth } from "../../../benchmarks/fidelity/express-ground-truth";
 import { fastifyGroundTruth } from "../../../benchmarks/fidelity/fastify-ground-truth";
+import { ensureDiscoveryProjections } from "./test-fidelity-helpers";
 
 export interface DependencyManifestEntry {
   readonly name: string;
@@ -128,7 +129,9 @@ export function reconcileDependencyInventory(
 
 describe("CLOSED-World Dependency Ground Truth Governance", () => {
   it("enforces exact 1:1 bijection for Express v4.21.2 dependency inventory", async () => {
-    const pkgPath = resolve(import.meta.dir, "../../../benchmarks/.cache/express/package.json");
+    const repoPath = resolve(import.meta.dir, "../../../benchmarks/.cache/express");
+    await ensureDiscoveryProjections(repoPath);
+    const pkgPath = resolve(repoPath, "package.json");
     const rawPkg = await readFile(pkgPath, "utf8");
 
     const result = reconcileDependencyInventory(rawPkg, expressGroundTruth);
@@ -147,10 +150,12 @@ describe("CLOSED-World Dependency Ground Truth Governance", () => {
     const devCount = depFacts.filter((f) => (f.attributes as any).kind === "development").length;
     expect(prodCount).toBe(31);
     expect(devCount).toBe(16);
-  });
+  }, 180000);
 
   it("enforces exact 1:1 bijection for Fastify v5.3.3 dependency inventory", async () => {
-    const pkgPath = resolve(import.meta.dir, "../../../benchmarks/.cache/fastify/package.json");
+    const repoPath = resolve(import.meta.dir, "../../../benchmarks/.cache/fastify");
+    await ensureDiscoveryProjections(repoPath);
+    const pkgPath = resolve(repoPath, "package.json");
     const rawPkg = await readFile(pkgPath, "utf8");
 
     const result = reconcileDependencyInventory(rawPkg, fastifyGroundTruth);
@@ -169,7 +174,7 @@ describe("CLOSED-World Dependency Ground Truth Governance", () => {
     const devCount = depFacts.filter((f) => (f.attributes as any).kind === "development").length;
     expect(prodCount).toBe(15);
     expect(devCount).toBe(38);
-  });
+  }, 180000);
 
   describe("Governance Self-Defense (Negative Mutation Verification)", () => {
     const sampleManifest = JSON.stringify({
