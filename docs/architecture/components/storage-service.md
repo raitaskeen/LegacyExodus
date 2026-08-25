@@ -84,6 +84,12 @@ Storage API
 - Version conflict => reject and require explicit new version.
 - Corrupt artifact => quarantine and block downstream consumption.
 
+## Lifecycle & Resource Management
+
+- **Persistent Storage (SQLite):** Calls `close()` during application shutdown to flush WAL logs, checkpoint open transactions, and release file handles.
+- **In-Memory Storage:** Calls `clear()` during shutdown to free in-memory record maps and prevent memory leakage across consecutive runtime sessions.
+- **Idempotent Disposal:** Repeated `shutdown()` calls are safe no-ops and never throw.
+
 ## Observability
 
 - write/read latency
