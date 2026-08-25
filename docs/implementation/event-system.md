@@ -23,7 +23,9 @@ flowchart LR
 
 ## 2. Invariants
 
-* **Deterministic Delivery:** Event handlers execute in registration order.
+* **Deterministic Delivery:** Event handlers execute synchronously in registration order.
+* **Snapshot Dispatch Safety:** `EventBus.publish` iterates over an immutable snapshot of registered handlers, ensuring handler unsubscriptions or subscriptions during an active dispatch cannot offset or skip sibling handlers.
+* **Replay Determinism:** `reduceProjectState(initialState, events)` is pure and deterministic, producing deeply frozen `ProjectState` aggregates across repeated passes.
 * **Audit-Grade Traceability:** Every state mutation traces back to an immutable event with an ISO timestamp and aggregate ID.
 
 ---
@@ -31,5 +33,5 @@ flowchart LR
 ## 3. Implementation Evidence
 
 * **Source Location:** [`src/core/events/`](../../legacy-exodus-core/src/core/events).
-* **Tests:** `event-bus.test.ts`, `event-reducer.test.ts`, `event-store.test.ts`.
+* **Tests:** `event-bus.test.ts`, `event-reducer.test.ts`, `event-store.test.ts`, `event-behavioral-integrity.test.ts`.
 * **Related ADR:** **[ADR-002: Event System Governance](../adr/ADR-002-event-system-governance.md)**.
