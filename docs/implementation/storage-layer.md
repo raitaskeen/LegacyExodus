@@ -51,6 +51,12 @@ To guarantee that corrupted, incompatible, or drifted persisted records never ma
 * **Corrupt Serialization:** Malformed JSON strings stored in persistent storage immediately throw `StorageValidationError`.
 * **Auxiliary Integrity:** Projection pipelines strictly validate all auxiliary records (`symbol-table`, `dependency-graph`, `knowledge-graph`, `semantic-analysis`, `control-flow-analysis`, `data-flow-analysis`), preventing the generation of deceptively incomplete projection artifacts.
 
+### 4.1 Canonical Storage Payload Schemas & Ownership
+
+To prevent schema drift and definition duplication between storage producers, queries, and projection adapters:
+* **Canonical Location:** `src/contracts/discovery-storage.ts` owns the single source of truth for all storage record payload schemas (`discoveryPayloadSchema`, `symbolTablePayloadSchema`, `dependencyGraphPayloadSchema`, `knowledgeGraphPayloadSchema`, `semanticAnalysisPayloadSchema`, `controlFlowPayloadSchema`, `dataFlowPayloadSchema`).
+* **Zero Duplication:** `DiscoveryQueryService` and `DiscoveryProjectionService` import and reuse the same canonical schemas and inferred types, guaranteeing identical validation semantics across persistence and retrieval boundaries.
+
 ---
 
 ## 5. Implementation Evidence

@@ -45,6 +45,20 @@ Ensure output is directed to a file path using `--output <dir>` rather than capt
 
 ---
 
+## 4. CLI Error Handling & Taxonomy
+
+The CLI provides deterministic error response mapping via `toCliErrorResponse`:
+
+| Error Class | Output Code | Behavior |
+| :--- | :--- | :--- |
+| `CliError` | Specific CLI code (e.g. `WORKSPACE_NOT_FOUND`, `WORKSPACE_INVALID`, `WORKSPACE_ALREADY_INITIALIZED`) | User-facing message formatted directly to stderr. |
+| `ConfigurationError` | `CONFIG_INVALID` | Surfaces invalid runtime configuration without leaking stack traces. |
+| `UnexpectedEngineResultError` | `CLI_ENGINE_RESULT_INVALID` | Surfaces engine command type mismatch with structured metadata. |
+| `LegacyExodusError` | Specific domain code | Formats standard user-facing error message with stable domain error code. |
+| Generic `Error` | `CLI_UNEXPECTED_ERROR` | Sanitized fallback preventing secret or internal path leakage. |
+
+---
+
 ## Related Documentation
 
 * **[CLI Commands](commands.md):** Command-line reference.
