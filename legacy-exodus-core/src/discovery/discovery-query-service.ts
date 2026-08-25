@@ -91,7 +91,11 @@ export class DiscoveryQueryService {
     projectId: string,
     analysisRunId?: string,
   ): Promise<ProjectDiscoveryPayload | null> {
-    const records = await this.storage.findAll("project-discovery");
+    const records = await this.storage.findScoped({
+      type: "project-discovery",
+      projectId,
+      ...(analysisRunId !== undefined ? { analysisRunId } : {}),
+    });
     return this.findLatestRecord(records, discoveryPayloadSchema, projectId, analysisRunId);
   }
 
@@ -108,7 +112,12 @@ export class DiscoveryQueryService {
     filePath: string,
     analysisRunId?: string,
   ): Promise<SymbolTablePayload["symbols"]> {
-    const records = await this.storage.findAll("symbol-table");
+    const records = await this.storage.findScoped({
+      type: "symbol-table",
+      projectId,
+      filePath,
+      ...(analysisRunId !== undefined ? { analysisRunId } : {}),
+    });
     const matching = records.flatMap((record) => {
       const parsed = symbolTablePayloadSchema.safeParse(record.payload);
       if (
@@ -129,7 +138,11 @@ export class DiscoveryQueryService {
     projectId: string,
     analysisRunId?: string,
   ): Promise<DependencyGraphPayload | null> {
-    const records = await this.storage.findAll("dependency-graph");
+    const records = await this.storage.findScoped({
+      type: "dependency-graph",
+      projectId,
+      ...(analysisRunId !== undefined ? { analysisRunId } : {}),
+    });
     return this.findLatestRecord(records, dependencyGraphPayloadSchema, projectId, analysisRunId);
   }
 
@@ -137,7 +150,11 @@ export class DiscoveryQueryService {
     projectId: string,
     analysisRunId?: string,
   ): Promise<KnowledgeGraphPayload | null> {
-    const records = await this.storage.findAll("knowledge-graph");
+    const records = await this.storage.findScoped({
+      type: "knowledge-graph",
+      projectId,
+      ...(analysisRunId !== undefined ? { analysisRunId } : {}),
+    });
     return this.findLatestRecord(records, knowledgeGraphPayloadSchema, projectId, analysisRunId);
   }
 
@@ -145,7 +162,11 @@ export class DiscoveryQueryService {
     projectId: string,
     analysisRunId?: string,
   ): Promise<unknown | null> {
-    const records = await this.storage.findAll("semantic-analysis");
+    const records = await this.storage.findScoped({
+      type: "semantic-analysis",
+      projectId,
+      ...(analysisRunId !== undefined ? { analysisRunId } : {}),
+    });
     const matched = records.find((r) => {
       if (typeof r.payload === "object" && r.payload !== null) {
         const p = r.payload as Record<string, unknown>;
@@ -161,7 +182,11 @@ export class DiscoveryQueryService {
     projectId: string,
     analysisRunId?: string,
   ): Promise<unknown | null> {
-    const records = await this.storage.findAll("control-flow-analysis");
+    const records = await this.storage.findScoped({
+      type: "control-flow-analysis",
+      projectId,
+      ...(analysisRunId !== undefined ? { analysisRunId } : {}),
+    });
     const matched = records.find((r) => {
       if (typeof r.payload === "object" && r.payload !== null) {
         const p = r.payload as Record<string, unknown>;
@@ -177,7 +202,11 @@ export class DiscoveryQueryService {
     projectId: string,
     analysisRunId?: string,
   ): Promise<unknown | null> {
-    const records = await this.storage.findAll("data-flow-analysis");
+    const records = await this.storage.findScoped({
+      type: "data-flow-analysis",
+      projectId,
+      ...(analysisRunId !== undefined ? { analysisRunId } : {}),
+    });
     const matched = records.find((r) => {
       if (typeof r.payload === "object" && r.payload !== null) {
         const p = r.payload as Record<string, unknown>;

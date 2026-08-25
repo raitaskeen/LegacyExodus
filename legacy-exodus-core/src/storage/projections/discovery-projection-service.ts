@@ -79,13 +79,17 @@ export class DiscoveryProjectionService {
     }
 
     const payload = discovery.data;
+    const runCriteria = {
+      projectId: payload.projectId,
+      ...(payload.analysisRunId !== undefined ? { analysisRunId: payload.analysisRunId } : {}),
+    };
     const [graphRecords, symbolRecords, knowledgeRecords, semanticRecords, controlFlowRecords, dataFlowRecords] = await Promise.all([
-      this.storage.findAll("dependency-graph"),
-      this.storage.findAll("symbol-table"),
-      this.storage.findAll("knowledge-graph"),
-      this.storage.findAll("semantic-analysis"),
-      this.storage.findAll("control-flow-analysis"),
-      this.storage.findAll("data-flow-analysis"),
+      this.storage.findScoped({ type: "dependency-graph", ...runCriteria }),
+      this.storage.findScoped({ type: "symbol-table", ...runCriteria }),
+      this.storage.findScoped({ type: "knowledge-graph", ...runCriteria }),
+      this.storage.findScoped({ type: "semantic-analysis", ...runCriteria }),
+      this.storage.findScoped({ type: "control-flow-analysis", ...runCriteria }),
+      this.storage.findScoped({ type: "data-flow-analysis", ...runCriteria }),
     ]);
     const graph = latestPayload(graphRecords, dependencyGraphStoragePayloadSchema, payload.projectId, payload.analysisRunId);
     const knowledge = latestPayload(knowledgeRecords, knowledgeGraphStoragePayloadSchema, payload.projectId, payload.analysisRunId);
