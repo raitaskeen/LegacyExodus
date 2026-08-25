@@ -1,69 +1,20 @@
 import { z } from "zod";
 
 import { createDiscoveryProjection, type DiscoveryProjection } from "@contracts/discovery-projection";
+import {
+  discoveryPayloadSchema as discoveryStoragePayloadSchema,
+  dependencyGraphPayloadSchema as dependencyGraphStoragePayloadSchema,
+  symbolTablePayloadSchema as symbolTableStoragePayloadSchema,
+  knowledgeGraphPayloadSchema as knowledgeGraphStoragePayloadSchema,
+  semanticAnalysisPayloadSchema as semanticAnalysisStoragePayloadSchema,
+  controlFlowPayloadSchema as controlFlowStoragePayloadSchema,
+  dataFlowPayloadSchema as dataFlowStoragePayloadSchema,
+} from "@contracts/discovery-storage";
 import { LegacyExodusError } from "@shared/errors";
 import type { StorageRecord } from "@storage/storage-record";
 import type { StorageManager } from "@storage/storage-manager";
 
 import { FileDiscoveryProjectionAdapter } from "./file-discovery-projection";
-
-const discoveryStoragePayloadSchema = z.object({
-  projectId: z.string().uuid(),
-  analysisRunId: z.string().uuid().optional(),
-  projectName: z.string().min(1),
-  projectPath: z.string().min(1),
-  files: z.array(z.object({ id: z.string().min(1), path: z.string().min(1), language: z.string().min(1), fileKind: z.string().min(1).optional(), size: z.number().nonnegative() })),
-  dependencies: z.array(z.object({ name: z.string().min(1), version: z.string().min(1), kind: z.enum(["production", "development"]) })),
-  frameworks: z.array(z.object({ name: z.string().min(1), evidence: z.string().min(1) })),
-  languages: z.array(z.string().min(1)),
-  enumerationFailures: z.array(z.object({
-    path: z.string().min(1),
-    kind: z.enum(["directory-read", "entry-stat"]),
-    code: z.string().min(1),
-  })).optional(),
-  discoveredAt: z.string().datetime(),
-});
-
-const dependencyGraphStoragePayloadSchema = z.object({
-  projectId: z.string().uuid(),
-  analysisRunId: z.string().uuid().optional(),
-  nodes: z.array(z.object({ id: z.string(), filePath: z.string(), symbolId: z.string() })),
-  edges: z.array(z.object({ id: z.string(), sourceFilePath: z.string(), targetFilePath: z.string(), importSymbolId: z.string(), targetExportSymbolId: z.string(), moduleSpecifier: z.string() })),
-  cycles: z.array(z.array(z.string())),
-});
-
-const symbolTableStoragePayloadSchema = z.object({
-  projectId: z.string().uuid(),
-  analysisRunId: z.string().uuid().optional(),
-  path: z.string(),
-  symbols: z.array(z.object({
-    id: z.string(), kind: z.string(), name: z.string(), filePath: z.string(), exported: z.boolean(), defaultExport: z.boolean(),
-    moduleSpecifier: z.string().nullable(), sourceSymbolName: z.string().nullable(),
-  })),
-});
-
-const knowledgeGraphStoragePayloadSchema = z.object({
-  projectId: z.string().uuid(),
-  analysisRunId: z.string().uuid().optional(),
-  nodes: z.array(z.object({ id: z.string(), kind: z.string(), name: z.string(), filePath: z.string() })),
-  edges: z.array(z.object({ id: z.string(), from: z.string(), to: z.string(), relationship: z.string() })),
-});
-
-const semanticAnalysisStoragePayloadSchema = z.object({
-  projectId: z.string().uuid(),
-  analysisRunId: z.string().uuid().optional(),
-  calls: z.array(z.unknown()).optional(),
-  references: z.array(z.unknown()).optional(),
-  scopes: z.array(z.unknown()).optional(),
-  deadCode: z.array(z.unknown()).optional(),
-  unusedImports: z.array(z.unknown()).optional(),
-  unusedExports: z.array(z.unknown()).optional(),
-  entryPoints: z.array(z.unknown()).optional(),
-  routes: z.array(z.unknown()).optional(),
-  middlewareChains: z.array(z.unknown()).optional(),
-});
-const controlFlowStoragePayloadSchema = z.object({ projectId: z.string().uuid(), analysisRunId: z.string().uuid().optional(), graphs: z.array(z.unknown()) });
-const dataFlowStoragePayloadSchema = z.object({ projectId: z.string().uuid(), analysisRunId: z.string().uuid().optional(), graphs: z.array(z.unknown()) });
 
 type RunScopedPayload = { readonly projectId: string; readonly analysisRunId?: string };
 
