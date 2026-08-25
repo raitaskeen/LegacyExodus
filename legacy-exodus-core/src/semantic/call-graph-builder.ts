@@ -158,12 +158,22 @@ function resolveLocalCall(table: SymbolTable | undefined, name: string, context:
     if (candidates.length === 1) return candidates[0]?.id;
   }
 
-  // 2. Prototype / object method receiver (e.g. this.defaultConfiguration, this.set, this.send, app.init)
-  if (receiver === "this" || receiver === "app" || receiver === "proto" || receiver === "req" || receiver === "res") {
+  // 2. Exact receiver-matched method / property on object (e.g. app.init when app.init is declared, proto.handle when proto.handle is declared)
+  if (receiver !== "this") {
     const candidates = table.symbols.filter(
       (symbol) => (symbol.kind === "method" || symbol.kind === "function") &&
         symbol.name === methodName &&
-        (symbol.containerName === receiver || symbol.containerName === "app" || symbol.containerName === "proto" || symbol.containerName === "req" || symbol.containerName === "res" || receiver === "this"),
+        symbol.containerName === receiver,
+    );
+    if (candidates.length === 1) return candidates[0]?.id;
+  }
+
+  // 3. Prototypal / contextual this receiver (e.g. this.defaultConfiguration inside application.js, this.set inside response.js)
+  if (receiver === "this") {
+    const candidates = table.symbols.filter(
+      (symbol) => (symbol.kind === "method" || symbol.kind === "function") &&
+        symbol.name === methodName &&
+        symbol.containerName !== undefined,
     );
     if (candidates.length === 1) return candidates[0]?.id;
   }
