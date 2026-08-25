@@ -199,7 +199,15 @@ class FlowState {
     const dominators = calculateDominators(entry, blocks, this.edges);
     const loops = this.edges
       .filter((edge) => edge.kind === "loop-back")
-      .map((edge) => ({ headerBlockId: edge.toBlockId, blockIds: [edge.toBlockId, edge.fromBlockId].sort() }));
+      .map((edge) => ({
+        headerBlockId: edge.toBlockId,
+        blockIds: computeNaturalLoopBlocks(edge.toBlockId, edge.fromBlockId, predecessorsByBlock),
+      }))
+      .sort((left, right) =>
+        left.headerBlockId === right.headerBlockId
+          ? left.blockIds.join(",").localeCompare(right.blockIds.join(","))
+          : left.headerBlockId.localeCompare(right.headerBlockId),
+      );
     const unreachableBlockIds = blocks.filter((block) => !reachable.has(block.id)).map((block) => block.id).sort();
     return createControlFlowGraph({
       id: hash(`cfg:${this.filePath}:${this.scopeName}`),
@@ -393,4 +401,33 @@ function calculateDominators(entry: string, blocks: readonly BasicBlock[], _edge
 
   return result.sort((left, right) => left.blockId.localeCompare(right.blockId));
 }
+function computeNaturalLoopBlocks(
+  headerId: string,
+  tailId: string,
+  predecessorsByBlock: ReadonlyMap<string, readonly string[]>,
+): readonly string[] {
+  const loopBlocks = new Set<string>([headerId]);
+  if (headerId === tailId) {
+    return [headerId];
+  }
+
+  loopBlocks.add(tailId);
+  const worklist: string[] = [tailId];
+
+  while (worklist.length > 0) {
+    const current = worklist.pop()!;
+    const preds = predecessorsByBlock.get(current);
+    if (preds !== undefined) {
+      for (const pred of preds) {
+        if (!loopBlocks.has(pred)) {
+          loopBlocks.add(pred);
+          worklist.push(pred);
+        }
+      }
+    }
+  }
+
+  return Array.from(loopBlocks).sort();
+}
+
 function hash(value: string): string { return createHash("sha256").update(value).digest("hex"); }
