@@ -32,6 +32,8 @@ const initialContext: ExtractionContext = Object.freeze({
 const supportedLanguages = new Set(["javascript", "typescript"]);
 
 export class JavaScriptSymbolExtractor implements SymbolExtractor {
+  private unlocatedSequence = 0;
+
   public extract(ast: ASTResult): SymbolTable {
     const validatedAst = validateASTResult(ast);
 
@@ -39,6 +41,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       throw new UnsupportedSymbolLanguageError(validatedAst.metadata.language);
     }
 
+    this.unlocatedSequence = 0;
     const symbols: CodeSymbol[] = [];
     this.visit(validatedAst.root, validatedAst, initialContext, symbols);
 
@@ -536,7 +539,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     overrides: Partial<CodeSymbol> = {},
   ): CodeSymbol {
     const location = node.location;
-    const position = location === undefined ? "unknown" : `${location.start.line}:${location.start.column}`;
+    const position = location === undefined ? `anon-${this.unlocatedSequence++}` : `${location.start.line}:${location.start.column}`;
 
     return {
       id: createHash("sha256")
