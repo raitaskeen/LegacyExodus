@@ -209,7 +209,7 @@ describe("P1 Task 8: Schema Drift & Discovery Record Integrity", () => {
   describe("DiscoveryProjectionService Integrity Protection", () => {
     it("throws DISCOVERY_RECORD_INVALID when auxiliary symbol record fails schema validation", async () => {
       const storage = new StorageManager(new MemoryStorageProvider());
-      const adapter = new FileDiscoveryProjectionAdapter({ rootDirectory: join(tempDir, ".discovery") });
+      const adapter = new FileDiscoveryProjectionAdapter();
       const projectionService = new DiscoveryProjectionService(storage, adapter);
 
       const discoveryRecord = createStorageRecord("project-discovery", {
@@ -245,7 +245,7 @@ describe("P1 Task 8: Schema Drift & Discovery Record Integrity", () => {
 
     it("throws DISCOVERY_RECORD_INVALID when auxiliary dependency-graph record fails schema validation", async () => {
       const storage = new StorageManager(new MemoryStorageProvider());
-      const adapter = new FileDiscoveryProjectionAdapter({ rootDirectory: join(tempDir, ".discovery") });
+      const adapter = new FileDiscoveryProjectionAdapter();
       const projectionService = new DiscoveryProjectionService(storage, adapter);
 
       const discoveryRecord = createStorageRecord("project-discovery", {
