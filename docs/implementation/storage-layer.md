@@ -42,9 +42,20 @@ flowchart TD
 
 ---
 
-## 4. Implementation Evidence
+## 4. Schema Drift & Record Integrity Invariants
 
-* **Source Location:** [`src/storage/`](../../legacy-exodus-core/src/storage).
-* **Tests:** `memory-storage.test.ts`, `storage-manager.test.ts`, `storage-scoped-query.test.ts`, `streaming-json-writer.test.ts`.
+To guarantee that corrupted, incompatible, or drifted persisted records never masquerade as "no data exists", the retrieval boundary distinguishes between genuine data absence and schema invalidity:
+
+* **Absent Data:** When no records match the scoped criteria, queries return `null` or empty collections (`[]`).
+* **Corrupt/Drifted Data:** When matching records exist but fail schema validation during deserialization, `DiscoveryQueryService` and `DiscoveryProjectionService` throw an explicit `LegacyExodusError` with code `DISCOVERY_RECORD_INVALID` containing the affected record identifier and schema issue details.
+* **Corrupt Serialization:** Malformed JSON strings stored in persistent storage immediately throw `StorageValidationError`.
+* **Auxiliary Integrity:** Projection pipelines strictly validate all auxiliary records (`symbol-table`, `dependency-graph`, `knowledge-graph`, `semantic-analysis`, `control-flow-analysis`, `data-flow-analysis`), preventing the generation of deceptively incomplete projection artifacts.
+
+---
+
+## 5. Implementation Evidence
+
+* **Source Location:** [`src/storage/`](../../legacy-exodus-core/src/storage), [`src/discovery/discovery-query-service.ts`](../../legacy-exodus-core/src/discovery/discovery-query-service.ts).
+* **Tests:** `memory-storage.test.ts`, `storage-manager.test.ts`, `storage-scoped-query.test.ts`, `schema-drift-integrity.test.ts`, `streaming-json-writer.test.ts`.
 * **Related ADR:** **[ADR-005: Storage Strategy](../adr/ADR-005-storage-strategy.md)**.
 * **Architecture Spec:** **[Storage Service Architecture](../architecture/components/storage-service.md)**.
