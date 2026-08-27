@@ -1,6 +1,10 @@
 import { Database } from "bun:sqlite";
 
-import { StorageRecordNotFoundError, StorageValidationError } from "../storage-errors";
+import {
+  StorageRecordNotFoundError,
+  StorageSchemaVersionMismatchError,
+  StorageValidationError,
+} from "../storage-errors";
 import {
   extractRecordMetadata,
   type SerializedPayload,
@@ -8,6 +12,8 @@ import {
   validateStorageRecord,
 } from "../storage-record";
 import type { StorageProvider, StorageQueryCriteria } from "../storage-provider";
+
+export const SQLITE_SCHEMA_VERSION = 1;
 
 export interface SqliteStorageOptions {
   readonly databasePath?: string;
@@ -28,6 +34,7 @@ interface RawSqliteRecord {
 
 export class SqliteStorageProvider implements StorageProvider {
   public readonly isPersistent: boolean;
+  public readonly schemaVersion: number = SQLITE_SCHEMA_VERSION;
   private readonly db: Database;
   private readonly isInMemory: boolean;
 
@@ -41,31 +48,50 @@ export class SqliteStorageProvider implements StorageProvider {
       create: true,
     });
 
-    // Configure SQLite performance and integrity pragmas
-    this.db.run("PRAGMA journal_mode = WAL;");
-    this.db.run("PRAGMA synchronous = NORMAL;");
-    this.db.run("PRAGMA foreign_keys = ON;");
+    try {
+      // Configure SQLite performance and integrity pragmas
+      this.db.run("PRAGMA journal_mode = WAL;");
+      this.db.run("PRAGMA synchronous = NORMAL;");
+      this.db.run("PRAGMA foreign_keys = ON;");
 
-    this.initializeSchema();
+      this.initializeSchema();
+    } catch (error: unknown) {
+      this.db.close();
+      throw error;
+    }
   }
 
   private initializeSchema(): void {
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS storage_records (
-        id TEXT PRIMARY KEY,
-        type TEXT NOT NULL,
-        project_id TEXT,
-        analysis_run_id TEXT,
-        file_path TEXT,
-        payload TEXT NOT NULL,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
-      );
-    `);
+    const versionRow = this.db.query("PRAGMA user_version;").get() as
+      | { user_version: number }
+      | [number]
+      | null;
+    const currentVersion = Array.isArray(versionRow)
+      ? versionRow[0]
+      : (versionRow?.user_version ?? 0);
 
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_records_type ON storage_records(type);`);
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_records_run ON storage_records(project_id, analysis_run_id);`);
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_records_file ON storage_records(type, file_path);`);
+    if (currentVersion === 0) {
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS storage_records (
+          id TEXT PRIMARY KEY,
+          type TEXT NOT NULL,
+          project_id TEXT,
+          analysis_run_id TEXT,
+          file_path TEXT,
+          payload TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+      `);
+
+      this.db.run(`CREATE INDEX IF NOT EXISTS idx_records_type ON storage_records(type);`);
+      this.db.run(`CREATE INDEX IF NOT EXISTS idx_records_run ON storage_records(project_id, analysis_run_id);`);
+      this.db.run(`CREATE INDEX IF NOT EXISTS idx_records_file ON storage_records(type, file_path);`);
+
+      this.db.run(`PRAGMA user_version = ${SQLITE_SCHEMA_VERSION};`);
+    } else if (currentVersion !== SQLITE_SCHEMA_VERSION) {
+      throw new StorageSchemaVersionMismatchError(SQLITE_SCHEMA_VERSION, currentVersion);
+    }
   }
 
   public async save<Payload extends SerializedPayload>(record: StorageRecord<Payload>): Promise<void> {

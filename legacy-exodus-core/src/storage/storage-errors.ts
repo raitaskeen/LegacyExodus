@@ -23,3 +23,15 @@ export class StorageValidationError extends StorageError {
     this.name = "StorageValidationError";
   }
 }
+
+export class StorageSchemaVersionMismatchError extends StorageError {
+  public constructor(expectedVersion: number, actualVersion: number) {
+    super(
+      "STORAGE_SCHEMA_VERSION_MISMATCH",
+      `Storage schema version mismatch: expected schema version ${expectedVersion}, found version ${actualVersion}.`,
+      { expectedVersion, actualVersion },
+    );
+
+    this.name = "StorageSchemaVersionMismatchError";
+  }
+}

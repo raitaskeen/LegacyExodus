@@ -1,8 +1,15 @@
-export { MemoryStorageProvider } from "./adapters/memory-storage";
-export { SqliteStorageProvider, type SqliteStorageOptions } from "./adapters/sqlite-storage";
+export {
+  MemoryStorageProvider,
+} from "./adapters/memory-storage";
+export {
+  SqliteStorageProvider,
+  SQLITE_SCHEMA_VERSION,
+  type SqliteStorageOptions,
+} from "./adapters/sqlite-storage";
 export {
   StorageError,
   StorageRecordNotFoundError,
+  StorageSchemaVersionMismatchError,
   StorageValidationError,
 } from "./storage-errors";
 export { StorageManager } from "./storage-manager";
