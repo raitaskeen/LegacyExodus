@@ -287,6 +287,30 @@ Every critical decision point is reconstructable:
 
 ---
 
+## 7) Runtime Lifecycle & Guaranteed Resource Disposal `[IMPLEMENTED]`
+
+The in-process core runtime (`ApplicationRuntime`) implements an explicit finite-state machine guaranteeing that all acquired resources are deterministically released upon shutdown or startup rollback:
+
+### 7.1 Lifecycle State Transitions
+```text
+  created ───> starting ───> running ───> stopping ───> stopped
+                 │                          │
+                 └─── (startup failure) ────┘
+```
+* **State Invariants:** `registerService()` is only valid in the `created` state. Starting from `stopped` throws `RUNTIME_START_INVALID_STATE`.
+* **Idempotency:** Calling `shutdown()` repeatedly from `stopped` safely returns without error or duplicate cleanup.
+
+### 7.2 Defense-in-Depth Resource Disposal Order
+When `shutdown()` or a failed `start()` rollback executes:
+1. **Registered Runtime Services:** Stopped in exact reverse registration order (`[...startedServices].reverse()`).
+2. **Loaded Plugins:** All plugins in `PluginRegistry` have `plugin.shutdown()` invoked in reverse order and are cleanly unregistered.
+3. **Storage Subsystems:** `StorageManager.close()` is invoked unconditionally:
+   * **SQLite:** Closes the SQLite database handle (`db.close()`). All internal prepared statements are finalized in `try ... finally` blocks to prevent dangling OS file descriptor locks on Windows and Linux.
+   * **In-Memory:** Clears all retained in-memory storage maps.
+4. **Guaranteed Execution & Status Transition:** Cleanup executes within a `try ... finally` block, ensuring `status` always transitions to `stopped` and all disposal phases execute even if an individual service, plugin, or storage throws. If failures occurred, `RUNTIME_SHUTDOWN_FAILED` is thrown after all cleanup phases have executed.
+
+---
+
 ## Summary
 
 LegacyExodus “actually runs” as a staged, event-orchestrated execution system:
@@ -295,6 +319,7 @@ LegacyExodus “actually runs” as a staged, event-orchestrated execution syste
 - orchestrator controls lifecycle and policy,
 - workers perform isolated stage tasks concurrently,
 - events coordinate transitions and persistence,
+- runtime state machine guarantees total resource disposal upon shutdown,
 - validation gates determine final modernization readiness.
 
 This architecture enables safe, auditable modernization at enterprise scale without sacrificing control, determinism, or traceability.
