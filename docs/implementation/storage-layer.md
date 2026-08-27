@@ -88,11 +88,23 @@ To guarantee that concurrent projection operations targeting the same repository
    * Individual artifact writes stream to uniquely identified temporary files (`${destinationPath}.${randomUUID()}.tmp`) and atomically replace the destination path via filesystem `rename` (with fallback to `copyFile` + `unlink` on Windows).
    * Unique temporary paths prevent concurrent file-level write collisions, ensuring no temporary files are overwritten or unlinked mid-stream.
 
+### 4.5 SQLite Storage Schema Versioning & Compatibility Guards
+
+To prevent silent data corruption or ambiguous query failures across evolving versions:
+
+1. **Deterministic Schema Stamping (`PRAGMA user_version`):**
+   * The SQLite storage adapter defines an explicit canonical version constant (`SQLITE_SCHEMA_VERSION = 1`).
+   * When initializing a new database, `SqliteStorageProvider` creates the required table and indexes and stamps `PRAGMA user_version = 1`.
+2. **Explicit Compatibility Guard:**
+   * Upon opening an existing database, `SqliteStorageProvider` reads `PRAGMA user_version`. If a version mismatch is detected (e.g., future or foreign schema `user_version != 1`), it throws an explicit `StorageSchemaVersionMismatchError` (code: `STORAGE_SCHEMA_VERSION_MISMATCH`) containing `{ expectedVersion: 1, actualVersion }` metadata.
+3. **Handle Protection:**
+   * If schema validation fails during construction, the database connection is cleanly closed in `try ... catch` to prevent dangling file locks on persistent disk databases.
+
 ---
 
 ## 5. Implementation Evidence
 
 * **Source Location:** [`src/storage/`](../../legacy-exodus-core/src/storage), [`src/discovery/discovery-query-service.ts`](../../legacy-exodus-core/src/discovery/discovery-query-service.ts), [`src/core/orchestration/command-handler.ts`](../../legacy-exodus-core/src/core/orchestration/command-handler.ts), [`src/storage/projections/`](../../legacy-exodus-core/src/storage/projections).
-* **Tests:** `memory-storage.test.ts`, `storage-manager.test.ts`, `storage-scoped-query.test.ts`, `schema-drift-integrity.test.ts`, `streaming-json-writer.test.ts`, `projection-manifest-integrity.test.ts`, `analysis-run-atomicity.test.ts`, `concurrent-projection-safety.test.ts`.
+* **Tests:** `memory-storage.test.ts`, `storage-manager.test.ts`, `storage-scoped-query.test.ts`, `schema-drift-integrity.test.ts`, `streaming-json-writer.test.ts`, `projection-manifest-integrity.test.ts`, `analysis-run-atomicity.test.ts`, `concurrent-projection-safety.test.ts`, `storage-schema-versioning.test.ts`.
 * **Related ADR:** **[ADR-005: Storage Strategy](../adr/ADR-005-storage-strategy.md)**.
 * **Architecture Spec:** **[Storage Service Architecture](../architecture/components/storage-service.md)**.
