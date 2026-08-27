@@ -74,14 +74,25 @@ To guarantee that incomplete, in-progress, or failed discovery runs are never ex
 2. **Logical Completion Gating (`DiscoveryQueryService`):**
    * Each analysis run is explicitly tracked as an `analysis-run` storage record (`analysisRunPayloadSchema`) with deterministic lifecycle statuses (`created`, `running`, `completed`, `failed`).
    * When `DiscoveryQueryService` queries project discovery, dependency graphs, knowledge graphs, semantic analysis, or flow graphs without an explicit `analysisRunId`, it automatically coordinates on `getLatestCompletedRunId(projectId)`, ensuring all returned artifacts originate from the exact same completed run.
-   * **Symbol Table Isolation:** Queries for symbol tables (`getSymbolsForFile`) strictly scope results to the active completed `analysisRunId`, preventing cross-run symbol concatenation when multiple runs exist in persistent storage.
-   * **Failure Isolation:** Incomplete or failed runs never transition to `completed` and are completely ignored by downstream consumers, preserving repository integrity across repeated executions.
+### 4.4 Concurrent Projection Safety & Multi-Artifact Integrity
+
+To guarantee that concurrent projection operations targeting the same repository never produce interleaved files, race conditions, or corrupted manifest checksums:
+
+1. **Per-Directory Projection Serialization (`FileDiscoveryProjectionAdapter`):**
+   * Multi-artifact projection writes to the `.discovery/` directory are coordinated via an asynchronous per-directory promise queue (`directoryQueues: Map<string, Promise<void>>`).
+   * When concurrent projection requests target the same repository output directory, they are executed sequentially in queue order. Each projection completes writing all its artifacts (`project.json`, `files.json`, `symbols.json`, etc.) and its terminal `manifest.json` before the next projection begins.
+   * Projections targeting distinct repositories execute concurrently in parallel with zero contention.
+   * **Bounded Lifecycle:** When all in-flight projection operations for a target directory complete, the corresponding map entry is immediately cleaned up, preventing memory retention.
+   * **Error Resilience:** Failed or aborted projection tasks do not deadlock subsequent queued projections.
+2. **Atomic File Replacement with Unique Temporary Paths (`StreamingJsonWriter`):**
+   * Individual artifact writes stream to uniquely identified temporary files (`${destinationPath}.${randomUUID()}.tmp`) and atomically replace the destination path via filesystem `rename` (with fallback to `copyFile` + `unlink` on Windows).
+   * Unique temporary paths prevent concurrent file-level write collisions, ensuring no temporary files are overwritten or unlinked mid-stream.
 
 ---
 
 ## 5. Implementation Evidence
 
-* **Source Location:** [`src/storage/`](../../legacy-exodus-core/src/storage), [`src/discovery/discovery-query-service.ts`](../../legacy-exodus-core/src/discovery/discovery-query-service.ts), [`src/core/orchestration/command-handler.ts`](../../legacy-exodus-core/src/core/orchestration/command-handler.ts).
-* **Tests:** `memory-storage.test.ts`, `storage-manager.test.ts`, `storage-scoped-query.test.ts`, `schema-drift-integrity.test.ts`, `streaming-json-writer.test.ts`, `projection-manifest-integrity.test.ts`, `analysis-run-atomicity.test.ts`.
+* **Source Location:** [`src/storage/`](../../legacy-exodus-core/src/storage), [`src/discovery/discovery-query-service.ts`](../../legacy-exodus-core/src/discovery/discovery-query-service.ts), [`src/core/orchestration/command-handler.ts`](../../legacy-exodus-core/src/core/orchestration/command-handler.ts), [`src/storage/projections/`](../../legacy-exodus-core/src/storage/projections).
+* **Tests:** `memory-storage.test.ts`, `storage-manager.test.ts`, `storage-scoped-query.test.ts`, `schema-drift-integrity.test.ts`, `streaming-json-writer.test.ts`, `projection-manifest-integrity.test.ts`, `analysis-run-atomicity.test.ts`, `concurrent-projection-safety.test.ts`.
 * **Related ADR:** **[ADR-005: Storage Strategy](../adr/ADR-005-storage-strategy.md)**.
 * **Architecture Spec:** **[Storage Service Architecture](../architecture/components/storage-service.md)**.
