@@ -63,6 +63,23 @@ export interface SymbolsExtractionFailurePayload {
   readonly code: string;
 }
 
+export interface AnalysisRunStartedPayload {
+  readonly projectId: string;
+  readonly analysisRunId: string;
+}
+
+export interface AnalysisRunCompletedPayload {
+  readonly projectId: string;
+  readonly analysisRunId: string;
+  readonly durationMs: number;
+}
+
+export interface AnalysisRunFailedPayload {
+  readonly projectId: string;
+  readonly analysisRunId: string;
+  readonly error: string;
+}
+
 export type ProjectInitialized = DomainEvent<ProjectInitializedPayload, "ProjectInitialized">;
 
 export type FileDiscovered = DomainEvent<FileDiscoveredPayload, "FileDiscovered">;
@@ -79,3 +96,6 @@ export type FileParsed = DomainEvent<FileParsedPayload, "FileParsed">;
 export type SymbolsExtracted = DomainEvent<SymbolsExtractedPayload, "SymbolsExtracted">;
 export type ParserFailure = DomainEvent<ParserFailurePayload, "ParserFailure">;
 export type SymbolsExtractionFailure = DomainEvent<SymbolsExtractionFailurePayload, "SymbolsExtractionFailure">;
+export type AnalysisRunStarted = DomainEvent<AnalysisRunStartedPayload, "AnalysisRunStarted">;
+export type AnalysisRunCompleted = DomainEvent<AnalysisRunCompletedPayload, "AnalysisRunCompleted">;
+export type AnalysisRunFailed = DomainEvent<AnalysisRunFailedPayload, "AnalysisRunFailed">;

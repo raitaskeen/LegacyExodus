@@ -264,22 +264,59 @@ export class AnalyzeProjectHandler {
       }),
     );
 
+    const durationMs = performance.now() - startedAt;
+    const analysisSummary = createAnalysisSummary({
+      filesDiscovered: discovery.files.length,
+      filesAnalyzed: symbolTables.length,
+      parserFailures: events.filter((event) => event.type === "ParserFailure").length,
+      symbolExtractionFailures: events.filter((event) => event.type === "SymbolsExtractionFailure").length,
+      unsupportedFiles: discovery.files.filter((file) => file.fileKind === "source" && file.language !== "javascript" && file.language !== "typescript").length,
+      nonSourceArtifacts: discovery.files.filter((file) => file.fileKind !== "source" && file.fileKind !== "unknown" && file.fileKind !== undefined).length,
+      unclassifiedArtifacts: discovery.files.filter((file) => file.fileKind === "unknown" || file.fileKind === undefined).length,
+      enumerationFailures: enumerationFailures.length,
+      discoveryComplete: enumerationFailures.length === 0,
+      durationMs,
+    });
+
+    records.push(
+      createStorageRecord("analysis-run", {
+        projectId: discovery.projectId,
+        analysisRunId: command.id,
+        status: "completed",
+        startedAt: discovery.discoveredAt.toISOString(),
+        completedAt: new Date().toISOString(),
+        summary: {
+          filesDiscovered: analysisSummary.filesDiscovered,
+          filesAnalyzed: analysisSummary.filesAnalyzed,
+          parserFailures: analysisSummary.parserFailures,
+          symbolExtractionFailures: analysisSummary.symbolExtractionFailures,
+          unsupportedFiles: analysisSummary.unsupportedFiles,
+          nonSourceArtifacts: analysisSummary.nonSourceArtifacts,
+          unclassifiedArtifacts: analysisSummary.unclassifiedArtifacts,
+          enumerationFailures: analysisSummary.enumerationFailures,
+          discoveryComplete: analysisSummary.discoveryComplete,
+          durationMs: analysisSummary.durationMs,
+        },
+      }),
+    );
+
+    events.push(
+      createDomainEvent({
+        type: "AnalysisRunCompleted",
+        aggregateId: discovery.projectId,
+        payload: {
+          projectId: discovery.projectId,
+          analysisRunId: command.id,
+          durationMs,
+        },
+      }),
+    );
+
     return {
       events: Object.freeze(events),
       records: Object.freeze(records),
       discovery,
-      analysis: createAnalysisSummary({
-        filesDiscovered: discovery.files.length,
-        filesAnalyzed: symbolTables.length,
-        parserFailures: events.filter((event) => event.type === "ParserFailure").length,
-        symbolExtractionFailures: events.filter((event) => event.type === "SymbolsExtractionFailure").length,
-        unsupportedFiles: discovery.files.filter((file) => file.fileKind === "source" && file.language !== "javascript" && file.language !== "typescript").length,
-        nonSourceArtifacts: discovery.files.filter((file) => file.fileKind !== "source" && file.fileKind !== "unknown" && file.fileKind !== undefined).length,
-        unclassifiedArtifacts: discovery.files.filter((file) => file.fileKind === "unknown" || file.fileKind === undefined).length,
-        enumerationFailures: enumerationFailures.length,
-        discoveryComplete: enumerationFailures.length === 0,
-        durationMs: performance.now() - startedAt,
-      }),
+      analysis: analysisSummary,
     };
   }
 }

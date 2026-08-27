@@ -8,6 +8,16 @@ export class StorageManager {
     return this.provider.save(record);
   }
 
+  public async saveBatch(records: readonly StorageRecord[]): Promise<void> {
+    if (this.provider.saveBatch) {
+      await this.provider.saveBatch(records);
+    } else {
+      for (const record of records) {
+        await this.provider.save(record);
+      }
+    }
+  }
+
   public findById<Payload extends SerializedPayload>(
     id: string,
   ): Promise<StorageRecord<Payload> | null> {

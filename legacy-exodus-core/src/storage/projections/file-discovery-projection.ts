@@ -8,10 +8,30 @@ import { StreamingJsonWriter } from "./streaming-json-writer";
 
 export class FileDiscoveryProjectionAdapter {
   private readonly writer = new StreamingJsonWriter();
+  private readonly directoryQueues = new Map<string, Promise<void>>();
 
   public async write(projection: DiscoveryProjection): Promise<void> {
     const discoveryDirectory = join(resolve(projection.projectPath), ".discovery");
 
+    const previous = this.directoryQueues.get(discoveryDirectory) ?? Promise.resolve();
+
+    const currentTask = (async () => {
+      await previous.catch(() => {});
+      await this.writeArtifacts(discoveryDirectory, projection);
+    })();
+
+    this.directoryQueues.set(discoveryDirectory, currentTask);
+
+    try {
+      await currentTask;
+    } finally {
+      if (this.directoryQueues.get(discoveryDirectory) === currentTask) {
+        this.directoryQueues.delete(discoveryDirectory);
+      }
+    }
+  }
+
+  private async writeArtifacts(discoveryDirectory: string, projection: DiscoveryProjection): Promise<void> {
     await mkdir(discoveryDirectory, { recursive: true });
 
     const artifactHashes: Record<string, { sha256: string; bytes: number }> = {};

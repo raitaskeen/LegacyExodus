@@ -58,9 +58,7 @@ export class Orchestrator {
       const validatedCommand = validateCommand(command);
       const execution = await this.executeValidatedCommand(validatedCommand);
 
-      for (const record of execution.records) {
-        await this.storage.save(record);
-      }
+      await this.storage.saveBatch(execution.records);
 
       for (const event of execution.events) {
         this.eventStore.append(event);

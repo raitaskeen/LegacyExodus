@@ -103,6 +103,31 @@ export const dataFlowPayloadSchema = z.object({
   graphs: z.array(z.unknown()),
 });
 
+export const analysisRunStatusSchema = z.enum(["created", "running", "completed", "failed"]);
+
+export const analysisRunPayloadSchema = z.object({
+  projectId: z.string().uuid(),
+  analysisRunId: z.string().uuid(),
+  status: analysisRunStatusSchema,
+  startedAt: z.string().datetime(),
+  completedAt: z.string().datetime().optional(),
+  error: z.string().optional(),
+  summary: z
+    .object({
+      filesDiscovered: z.number().int().nonnegative(),
+      filesAnalyzed: z.number().int().nonnegative(),
+      parserFailures: z.number().int().nonnegative(),
+      symbolExtractionFailures: z.number().int().nonnegative(),
+      unsupportedFiles: z.number().int().nonnegative(),
+      nonSourceArtifacts: z.number().int().nonnegative(),
+      unclassifiedArtifacts: z.number().int().nonnegative(),
+      enumerationFailures: z.number().int().nonnegative().optional(),
+      discoveryComplete: z.boolean().optional(),
+      durationMs: z.number().nonnegative(),
+    })
+    .optional(),
+});
+
 export type ProjectDiscoveryPayload = z.infer<typeof discoveryPayloadSchema>;
 export type SymbolTablePayload = z.infer<typeof symbolTablePayloadSchema>;
 export type DependencyGraphPayload = z.infer<typeof dependencyGraphPayloadSchema>;
@@ -110,3 +135,5 @@ export type KnowledgeGraphPayload = z.infer<typeof knowledgeGraphPayloadSchema>;
 export type SemanticAnalysisPayload = z.infer<typeof semanticAnalysisPayloadSchema>;
 export type ControlFlowPayload = z.infer<typeof controlFlowPayloadSchema>;
 export type DataFlowPayload = z.infer<typeof dataFlowPayloadSchema>;
+export type AnalysisRunStatus = z.infer<typeof analysisRunStatusSchema>;
+export type AnalysisRunPayload = z.infer<typeof analysisRunPayloadSchema>;
