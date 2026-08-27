@@ -505,4 +505,174 @@ describe("Analysis-Run Atomicity & Completion Semantics (F-004)", () => {
       // Ignore lock delay
     }
   });
+
+  it("8. uncompleted or crashed run partial state is never exposed by DiscoveryQueryService", async () => {
+    cleanupSqlite();
+
+    // 1. Initial setup: Run 1 completes fully
+    {
+      const provider = new SqliteStorageProvider({ databasePath: dbPath });
+      const persistentStorage = new StorageManager(provider);
+
+      await persistentStorage.saveBatch([
+        createStorageRecord("project-discovery", {
+          projectId,
+          analysisRunId: run1Id,
+          projectName: "app",
+          projectPath: "/repo/app",
+          files: [{ id: "f1", path: "src/index.ts", language: "typescript", size: 100 }],
+          dependencies: [],
+          frameworks: [],
+          languages: ["typescript"],
+          discoveredAt: new Date(Date.now() - 10000).toISOString(),
+        }),
+        createStorageRecord("symbol-table", {
+          projectId,
+          analysisRunId: run1Id,
+          fileId: "f1",
+          path: "src/index.ts",
+          symbols: [{ id: "s1", kind: "function", name: "v1Func", filePath: "src/index.ts", exported: true, defaultExport: false, moduleSpecifier: null, sourceSymbolName: null }],
+        }),
+        createStorageRecord("analysis-run", {
+          projectId,
+          analysisRunId: run1Id,
+          status: "completed",
+          startedAt: new Date(Date.now() - 10000).toISOString(),
+          completedAt: new Date(Date.now() - 9000).toISOString(),
+        }),
+      ]);
+
+      provider.close();
+    }
+
+    // 2. Simulate crashed run: Run 2 wrote partial discovery & symbol records but crashed before completion record
+    {
+      const provider = new SqliteStorageProvider({ databasePath: dbPath });
+      const persistentStorage = new StorageManager(provider);
+
+      // Writes uncompleted run records (e.g. from interrupted stage or partial crash)
+      await persistentStorage.save(
+        createStorageRecord("project-discovery", {
+          projectId,
+          analysisRunId: run2Id,
+          projectName: "crashed-app",
+          projectPath: "/repo/crashed",
+          files: [
+            { id: "f1", path: "src/index.ts", language: "typescript", size: 100 },
+            { id: "f2", path: "src/new.ts", language: "typescript", size: 200 },
+          ],
+          dependencies: [],
+          frameworks: [],
+          languages: ["typescript"],
+          discoveredAt: new Date().toISOString(),
+        }),
+      );
+
+      await persistentStorage.save(
+        createStorageRecord("symbol-table", {
+          projectId,
+          analysisRunId: run2Id,
+          fileId: "f1",
+          path: "src/index.ts",
+          symbols: [
+            {
+              id: "s2",
+              kind: "function",
+              name: "crashedSymbol",
+              filePath: "src/index.ts",
+              exported: true,
+              defaultExport: false,
+              moduleSpecifier: null,
+              sourceSymbolName: null,
+            },
+          ],
+        }),
+      );
+
+      provider.close();
+    }
+
+    // 3. Application reopens and verifies that DiscoveryQueryService isolates reads to Run 1
+    {
+      const provider = new SqliteStorageProvider({ databasePath: dbPath });
+      const persistentStorage = new StorageManager(provider);
+      const persistentQueryService = new DiscoveryQueryService(persistentStorage);
+
+      // Logical query service verification: Run 1 remains the active completed run
+      const latestCompletedRun = await persistentQueryService.getLatestCompletedRunId(projectId);
+      expect(latestCompletedRun).toBe(run1Id);
+
+      const activeDiscovery = await persistentQueryService.getProjectDiscovery(projectId);
+      expect(activeDiscovery?.analysisRunId).toBe(run1Id);
+      expect(activeDiscovery?.projectName).toBe("app");
+      expect(activeDiscovery?.files).toHaveLength(1);
+
+      const activeSymbols = await persistentQueryService.getSymbolsForFile(projectId, "src/index.ts");
+      expect(activeSymbols).toHaveLength(1);
+      expect(activeSymbols[0]?.name).toBe("v1Func");
+
+      // 4. Consecutive new successful Run 3 executes and becomes the new latest completed run
+      const run3Id = "33333333-3333-4333-8333-333333333333";
+      await persistentStorage.saveBatch([
+        createStorageRecord("project-discovery", {
+          projectId,
+          analysisRunId: run3Id,
+          projectName: "app-v3",
+          projectPath: "/repo/app",
+          files: [
+            { id: "f1", path: "src/index.ts", language: "typescript", size: 100 },
+            { id: "f2", path: "src/v3.ts", language: "typescript", size: 300 },
+          ],
+          dependencies: [],
+          frameworks: [],
+          languages: ["typescript"],
+          discoveredAt: new Date().toISOString(),
+        }),
+        createStorageRecord("symbol-table", {
+          projectId,
+          analysisRunId: run3Id,
+          fileId: "f1",
+          path: "src/index.ts",
+          symbols: [
+            {
+              id: "s3",
+              kind: "function",
+              name: "v3Func",
+              filePath: "src/index.ts",
+              exported: true,
+              defaultExport: false,
+              moduleSpecifier: null,
+              sourceSymbolName: null,
+            },
+          ],
+        }),
+        createStorageRecord("analysis-run", {
+          projectId,
+          analysisRunId: run3Id,
+          status: "completed",
+          startedAt: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+        }),
+      ]);
+
+      const run3Active = await persistentQueryService.getLatestCompletedRunId(projectId);
+      expect(run3Active).toBe(run3Id);
+
+      const run3Discovery = await persistentQueryService.getProjectDiscovery(projectId);
+      expect(run3Discovery?.analysisRunId).toBe(run3Id);
+      expect(run3Discovery?.projectName).toBe("app-v3");
+
+      const run3Symbols = await persistentQueryService.getSymbolsForFile(projectId, "src/index.ts");
+      expect(run3Symbols).toHaveLength(1);
+      expect(run3Symbols[0]?.name).toBe("v3Func");
+
+      provider.close();
+    }
+
+    try {
+      cleanupSqlite();
+    } catch {
+      // Ignore lock delay
+    }
+  });
 });
