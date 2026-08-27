@@ -8,9 +8,7 @@ export class StorageManager {
     return this.provider.save(record);
   }
 
-  public async saveBatch<Payload extends SerializedPayload>(
-    records: readonly StorageRecord<Payload>[],
-  ): Promise<void> {
+  public async saveBatch(records: readonly StorageRecord[]): Promise<void> {
     if (this.provider.saveBatch) {
       await this.provider.saveBatch(records);
     } else {

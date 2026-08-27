@@ -97,9 +97,7 @@ export class SqliteStorageProvider implements StorageProvider {
     );
   }
 
-  public async saveBatch<Payload extends SerializedPayload>(
-    records: readonly StorageRecord<Payload>[],
-  ): Promise<void> {
+  public async saveBatch(records: readonly StorageRecord[]): Promise<void> {
     if (records.length === 0) return;
 
     const stmt = this.db.prepare(`
@@ -114,7 +112,7 @@ export class SqliteStorageProvider implements StorageProvider {
         updated_at = excluded.updated_at
     `);
 
-    const insertBatch = this.db.transaction((batchRecords: readonly StorageRecord<Payload>[]) => {
+    const insertBatch = this.db.transaction((batchRecords: readonly StorageRecord[]) => {
       for (const record of batchRecords) {
         const validatedRecord = validateStorageRecord(record);
         const { projectId, analysisRunId, filePath } = extractRecordMetadata(validatedRecord.payload);
