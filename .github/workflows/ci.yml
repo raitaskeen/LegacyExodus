@@ -39,5 +39,8 @@ jobs:
       - name: Test
         run: bun test
 
+      - name: Benchmark Governance Audit
+        run: bun run benchmark audit
+
       - name: Git diff check
         run: git diff --check

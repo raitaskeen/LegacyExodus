@@ -1,0 +1,29 @@
+name: Documentation
+
+on:
+  push:
+    branches:
+      - main
+      - docs-foundation
+    paths:
+      - 'docs/**'
+      - '*.md'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - '*.md'
+
+permissions:
+  contents: read
+
+jobs:
+  lint-docs:
+    name: Documentation Hygiene & Integrity
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify Git Diff Cleanliness
+        run: git diff --check
