@@ -14,16 +14,16 @@ LegacyExodus is **not** a one-shot AI converter. It is a staged modernization sy
 
 LegacyExodus is built on four architectural beliefs:
 
-1. **Understanding before change**  
+1. **Understanding before change**
    No transformation occurs until the system is deeply mapped and semantically understood.
 
-2. **Knowledge as a first-class asset**  
+2. **Knowledge as a first-class asset**
    Discoveries, inferred structure, and transformation decisions are persisted as reusable knowledge.
 
-3. **Safety over speed**  
+3. **Safety over speed**
    Proposed changes must satisfy policy, memory-safety goals, and validation gates before acceptance.
 
-4. **Human-governed automation**  
+4. **Human-governed automation**
    Automation accelerates modernization, but governance and trust boundaries keep control with engineering and security teams.
 
 ---
@@ -69,7 +69,7 @@ Expanded stage-to-layer view:
 
 ## 4. Four Pipeline Stages
 
-### Stage 1 — VyrixScout (Discovery)
+### Stage 1 — VyrixScout (Discovery) `[IMPLEMENTED]`
 
 **Goal:** Discover and inventory the legacy system and its operational context.
 
@@ -79,7 +79,7 @@ Key outputs:
 - runtime/environment signals
 - risk hotspots and unknowns
 
-### Stage 2 — NolaraStruct (Intelligence)
+### Stage 2 — NolaraStruct (Intelligence) `[IMPLEMENTED]`
 
 **Goal:** Convert raw discovery signals into structured system understanding.
 
@@ -89,7 +89,7 @@ Key outputs:
 - data contracts and interaction patterns
 - modernization plan candidates with rationale
 
-### Stage 3 — ZelvoxForge (Transformation)
+### Stage 3 — ZelvoxForge (Transformation) `[PLANNED / TARGET ARCHITECTURE]`
 
 **Goal:** Produce controlled transformations from legacy constructs to target secure/memory-safe equivalents.
 
@@ -99,9 +99,9 @@ Key outputs:
 - compatibility shims where required
 - transformation traceability links back to intelligence artifacts
 
-### Stage 4 — VymosGate (Governance)
+### Stage 4 — VymosGate (Governance) `[PLANNED / TARGET ARCHITECTURE]`
 
-**Goal:** Validate, enforce, and certify modernization outcomes before adoption.
+**Goal:** Validate, enforce, and certify modernization outcomes before adoption. (Note: Baseline benchmark governance and fidelity verification are currently implemented in core).
 
 Key outputs:
 - policy and compliance evaluation
@@ -113,25 +113,25 @@ Key outputs:
 
 ## 5. Major Components
 
-### A. Discovery Layer Components
+### A. Discovery Layer Components `[IMPLEMENTED]`
 - **Codebase Scanner**: parses repositories, languages, build systems, and project topology
 - **Dependency Mapper**: maps internal/external dependencies and call relationships
 - **Runtime Signal Collector**: ingests logs/metrics/config/runtime assumptions
 - **Risk Surface Detector**: identifies unsafe patterns, obsolete libraries, and fragile zones
 
-### B. Intelligence Layer Components
+### B. Intelligence Layer Components `[IMPLEMENTED]`
 - **Knowledge Graph Builder**: unifies entities (modules, APIs, data stores, processes) and relationships
 - **Semantic Analyzer**: infers intent, behavior clusters, and architectural patterns
 - **Boundary Modeler**: proposes service/module boundaries and ownership domains
 - **Modernization Planner**: creates ordered modernization strategy with constraints
 
-### C. Transformation Layer Components
+### C. Transformation Layer Components `[PLANNED / TARGET ARCHITECTURE]`
 - **Refactor Orchestrator**: sequences transformation operations by dependency order
 - **Pattern Rewriter**: applies deterministic modernization and memory-safety rewrites
 - **Compatibility Bridge Generator**: generates adapters/shims for incremental migration
 - **Artifact Producer**: emits patches, target code, manifests, and migration metadata
 
-### D. Governance Layer Components
+### D. Governance Layer Components `[CORE IMPLEMENTED / EXTENSIONS PLANNED]`
 - **Policy Engine**: enforces security, architecture, and compliance rules
 - **Validation Orchestrator**: runs tests, checks, and environment validation suites
 - **Evidence Ledger**: stores decision evidence, provenance, and approval records
@@ -141,12 +141,12 @@ Key outputs:
 
 ## 6. Data Movement (End-to-End)
 
-1. **Ingest**: Discovery layer captures code, dependency, and runtime facts.  
-2. **Normalize**: Raw facts are normalized into canonical entities and relations.  
-3. **Model**: Intelligence layer builds architecture understanding and planning artifacts.  
-4. **Transform**: Transformation layer generates staged modernization artifacts.  
-5. **Validate**: Governance layer evaluates artifacts against policy and quality gates.  
-6. **Decide**: Gate emits approval/hold/remediation with complete evidence chain.  
+1. **Ingest**: Discovery layer captures code, dependency, and runtime facts.
+2. **Normalize**: Raw facts are normalized into canonical entities and relations.
+3. **Model**: Intelligence layer builds architecture understanding and planning artifacts.
+4. **Transform**: Transformation layer generates staged modernization artifacts.
+5. **Validate**: Governance layer evaluates artifacts against policy and quality gates.
+6. **Decide**: Gate emits approval/hold/remediation with complete evidence chain.
 7. **Feedback**: Validation outcomes feed back into the knowledge model for continuous improvement.
 
 Data classes moving through the system:
@@ -159,22 +159,22 @@ Data classes moving through the system:
 
 ## 7. Design Principles
 
-1. **Traceability by default**  
+1. **Traceability by default**
    Every output must be linked to source evidence and decision rationale.
 
-2. **Deterministic critical path**  
+2. **Deterministic critical path**
    Safety-critical modernization steps should be reproducible and explainable.
 
-3. **Incremental modernization**  
+3. **Incremental modernization**
    Prefer staged migration and interoperability over risky big-bang rewrites.
 
-4. **Policy-embedded delivery**  
+4. **Policy-embedded delivery**
    Security and compliance controls are integrated into execution, not bolted on later.
 
-5. **Memory-safe target orientation**  
+5. **Memory-safe target orientation**
    Transformations prioritize architectures and implementations that reduce memory risk classes.
 
-6. **Closed-loop learning**  
+6. **Closed-loop learning**
    Validation and production feedback continuously improve future discovery and transformation quality.
 
 ---
@@ -183,19 +183,19 @@ Data classes moving through the system:
 
 LegacyExodus defines explicit trust boundaries to control risk:
 
-1. **Input Boundary (External System → Discovery)**  
+1. **Input Boundary (External System → Discovery)**
    Legacy repositories, runtime telemetry, and external dependency metadata are treated as untrusted until validated.
 
-2. **Knowledge Boundary (Discovery/Intelligence Stores)**  
+2. **Knowledge Boundary (Discovery/Intelligence Stores)**
    Structured knowledge artifacts require integrity controls, provenance tracking, and versioning.
 
-3. **Transformation Boundary (Intelligence → Forge)**  
+3. **Transformation Boundary (Intelligence → Forge)**
    Only approved, policy-compatible plans can drive transformation actions.
 
-4. **Execution Boundary (Generated Artifacts → Target Environments)**  
+4. **Execution Boundary (Generated Artifacts → Target Environments)**
    Produced artifacts are quarantined and tested before integration into protected branches/environments.
 
-5. **Decision Boundary (Governance Gate)**  
+5. **Decision Boundary (Governance Gate)**
    Final modernization acceptance requires governance approval with auditable evidence and human override capability.
 
 ---

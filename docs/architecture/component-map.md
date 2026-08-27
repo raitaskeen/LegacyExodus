@@ -31,7 +31,7 @@ Storage Service
 
 ---
 
-## 1) CLI
+## 1) CLI `[IMPLEMENTED]`
 
 ### Responsibility
 - Primary user interface for local and CI workflows.
@@ -42,7 +42,7 @@ Storage Service
 - **Platform DX / Developer Tooling**
 
 ### Inputs
-- User commands (`analyze`, `migrate`, `graph`, `explain`, `govern`).
+- User commands (`analyze`, `init`, `status`, `plugins`).
 - Config files, environment variables, command-line flags.
 
 ### Outputs
@@ -56,7 +56,7 @@ Storage Service
 
 ---
 
-## 2) Orchestrator
+## 2) Orchestrator `[IMPLEMENTED / CORE RUNTIME]`
 
 ### Responsibility
 - Central workflow coordinator and deterministic execution controller.
@@ -81,13 +81,13 @@ Storage Service
 - Discovery Service
 - Graph Service
 - Knowledge Service
-- AI Gateway (guarded path only)
+- AI Gateway (planned)
 - Governance Engine
 - Storage Service
 
 ---
 
-## 3) Parser Service
+## 3) Parser Service `[IMPLEMENTED]`
 
 ### Responsibility
 - Produces language-aware AST/IR from source files.
@@ -111,7 +111,7 @@ Storage Service
 
 ---
 
-## 4) Discovery Service
+## 4) Discovery Service `[IMPLEMENTED]`
 
 ### Responsibility
 - Detects project structure, modules, packages, entry points, and boundaries.
@@ -137,7 +137,7 @@ Storage Service
 
 ---
 
-## 5) Graph Service
+## 5) Graph Service `[IMPLEMENTED]`
 
 ### Responsibility
 - Maintains canonical architecture graph (entities, edges, provenance).
@@ -163,7 +163,7 @@ Storage Service
 
 ---
 
-## 6) Knowledge Service
+## 6) Knowledge Service `[IMPLEMENTED]`
 
 ### Responsibility
 - Aggregates deterministic facts, rules, migration patterns, and historical decisions.
@@ -190,7 +190,7 @@ Storage Service
 
 ---
 
-## 7) AI Gateway
+## 7) AI Gateway `[PLANNED / TARGET ARCHITECTURE]`
 
 ### Responsibility
 - Zero-trust boundary for all model interactions.
@@ -215,7 +215,7 @@ Storage Service
 
 ---
 
-## 8) Compiler Service
+## 8) Compiler Service `[PLANNED / TARGET ARCHITECTURE]`
 
 ### Responsibility
 - Language/compiler adapters for semantic enrichment and type resolution.
@@ -239,7 +239,7 @@ Storage Service
 
 ---
 
-## 9) Governance Engine
+## 9) Governance Engine `[IMPLEMENTED / CORE FIDELITY & BENCHMARKS]`
 
 ### Responsibility
 - Enforces architecture, security, and migration policies.

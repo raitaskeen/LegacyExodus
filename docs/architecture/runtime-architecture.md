@@ -2,14 +2,18 @@
 
 ## How the system actually runs
 
-LegacyExodus runs as a deterministic, event-driven modernization engine.  
-A user-triggered command enters through a CLI boundary, is validated and planned by the orchestrator, and then progresses through staged workers connected by an internal event bus.
+LegacyExodus runs as a deterministic, event-driven modernization engine.
+A user-triggered command enters through a CLI boundary, is validated and planned by the orchestrator, and executes through structured pipeline services connected by an event bus.
+
+> **Implementation Reality:**
+> * **Current Runtime (Implemented):** In-process, single-runtime execution on Bun. The CLI (`src/cli/`) delegates to `Orchestrator` (`src/core/orchestration/`), executing `DiscoveryEngine`, `JavaScriptParser`, `JavaScriptSymbolExtractor`, `DeterministicDependencyGraphBuilder`, `DeterministicSemanticAnalysisEngine`, and `DeterministicFlowAnalysisEngine` directly in-memory, writing bounded projections via `StreamingJsonWriter` and persisting records via `MemoryStorageAdapter` or `SqliteStorageAdapter`.
+> * **Target Architecture (Planned):** Distributed worker pools, isolated container sandboxing (`VymosGate`), multi-agent generation swarms (`ZelvoxForge`), and multi-tenant operational metadata databases.
 
 The runtime is designed around five core principles:
 
 1. **Deterministic execution** (same input + same policies => same run plan)
 2. **Event-sourced state transitions** (append-only audit trail)
-3. **Isolated stage workers** (clear capability boundaries)
+3. **Isolated stage boundaries** (clear capability boundaries)
 4. **Human-in-the-loop control points** for risky modernization actions
 5. **Replayability and resumability** for reliability and compliance
 
@@ -24,62 +28,60 @@ CLI Command / API Trigger
   |
 Orchestrator (validate, plan, enforce policy)
   |
-Event Bus (durable, ordered per run)
+Event Bus (in-process / durable per run)
   |
 Pipeline Stage Executor
   |-----------------------------------------------|
-  | VyrixScout -> NolaraStruct -> ZelvoxForge -> VymosGate |
+  | VyrixScout -> NolaraStruct -> [ZelvoxForge] -> [VymosGate] |
   |-----------------------------------------------|
   |
-Domain Services (parsers, graph, generation, validation)
+Domain Services (parsers, symbols, graph, flow, storage)
   |
-Storage (events, projections, artifacts, reports)
+Storage (events, projections, SQLite records, reports)
 ```
 
 ---
 
-## 1) Processes
+## 1) Processes & Runtime Topology
 
-At runtime, the system is composed of cooperating processes/services:
+At runtime, the system is composed of cooperating services:
 
-### 1.1 Entry process (CLI/API)
+### 1.1 Entry process (CLI/API) `[IMPLEMENTED]`
 - Accepts user commands (e.g., workspace path, profile, target language/runtime).
 - Performs boundary validation (schema, auth context, required flags).
 - Submits a normalized command envelope to the orchestrator.
 
-### 1.2 Orchestrator process
+### 1.2 Orchestrator process `[IMPLEMENTED / CORE RUNTIME]`
 - Central control-plane for execution lifecycle.
 - Validates command against policy and project constraints.
-- Creates and advances a **run** through the four pipeline stages.
+- Advances a **run** through discovery and intelligence stages.
 - Appends authoritative events to the event store.
 - Handles retries, compensations, and manual approval gates.
 
-### 1.3 Event bus
+### 1.3 Event bus `[IMPLEMENTED / IN-PROCESS]`
 - Internal transport for command/result/status events.
 - Guarantees per-run ordering semantics.
-- Decouples orchestrator from stage workers and projections.
+- Decouples orchestrator from stage services and projections.
 
-### 1.4 Stage workers
-- Worker pools grouped by stage:
+### 1.4 Stage workers `[PLANNED / TARGET ARCHITECTURE]`
+- Worker pools grouped by stage for distributed execution:
   - **VyrixScout workers**: discovery and inventory
   - **NolaraStruct workers**: semantic extraction and graphing
   - **ZelvoxForge workers**: transformation planning/generation
   - **VymosGate workers**: verification and compliance checks
-- Workers execute scoped tasks and emit results/intents back to orchestrator.
+- In current core runtime, Stages 1 and 2 execute directly via in-process service pipelines.
 
-### 1.5 Projection/read-model updaters
+### 1.5 Projection/read-model updaters `[IMPLEMENTED]`
 - Consume domain events and build query-optimized views:
   - run status and progress
   - stage metrics
-  - risk/approval queue
-  - artifact index
+  - artifact index and discovery manifest
 
-### 1.6 Storage services
-- Event store (append-only)
-- Snapshot/checkpoint store
-- Artifact/object store (generated code, reports, manifests)
-- Knowledge graph persistence
-- Operational metadata DB (runs, locks, queues, users, approvals)
+### 1.6 Storage services `[IMPLEMENTED]`
+- Event store (in-memory)
+- Storage adapters (`MemoryStorageAdapter`, `SqliteStorageAdapter`)
+- Streaming JSON disk projections (`.discovery/*.json`, `manifest.json`)
+- Knowledge graph builder and query services
 
 ---
 
@@ -107,26 +109,26 @@ The run advances through four ordered stages:
 1. **VyrixScout (Discover)**
    - inventory files, binaries, frameworks, dependencies
    - detect language/runtime boundaries
-   - output: discovery manifest  
+   - output: discovery manifest
    - emits: `DiscoveryStarted`, `DiscoveryCompleted`
 
 2. **NolaraStruct (Understand)**
    - parse source/assets
    - build semantic model + dependency graph
-   - output: unified intermediate representation (UIR)  
+   - output: unified intermediate representation (UIR)
    - emits: `StructuringStarted`, `GraphBuilt`, `StructuringCompleted`
 
 3. **ZelvoxForge (Transform)**
    - generate transformation plans and modernization candidates
    - apply safe transformations in controlled batches
    - request HITL approval for high-risk deltas
-   - output: transformed artifacts + rationale  
+   - output: transformed artifacts + rationale
    - emits: `TransformationProposed`, `TransformationApplied`, `ApprovalRequired`, `ApprovalGranted`
 
 4. **VymosGate (Validate)**
    - run policy, security, consistency, and quality checks
    - execute equivalence/regression gates
-   - output: validation report + release readiness decision  
+   - output: validation report + release readiness decision
    - emits: `ValidationStarted`, `ValidationPassed|ValidationFailed`
 
 ### 2.4 Completion semantics

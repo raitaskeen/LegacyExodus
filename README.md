@@ -15,9 +15,9 @@
   <p>
     <img src="https://img.shields.io/badge/Runtime-Bun_v1.0+-f9f8f6?style=for-the-badge&logo=bun" alt="Bun">
     <img src="https://img.shields.io/badge/TypeScript-Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript Strict">
-    <img src="https://img.shields.io/badge/Tests-329_Passing_|_0_Regressions-success?style=for-the-badge" alt="329 Tests Passing">
+    <img src="https://img.shields.io/badge/Tests-465_Passing_|_0_Regressions-success?style=for-the-badge" alt="465 Tests Passing">
     <img src="https://img.shields.io/badge/Governance-10_/_10_Audits_Passed-success?style=for-the-badge" alt="10/10 Governance Passed">
-    <img src="https://img.shields.io/badge/Status-Track_3_Verified_(P1.7D)-success?style=for-the-badge" alt="Track 3 Verified">
+    <img src="https://img.shields.io/badge/Status-Phase_3A_/_P2_Hardened-success?style=for-the-badge" alt="Phase 3A / P2 Hardened">
   </p>
 
   <p>
@@ -28,7 +28,7 @@
 ---
 
 > **Current Implementation Reality (August 2026):**
-> * **Implemented & Verified:** Deterministic JavaScript/TypeScript multi-stage repository intelligence pipeline running natively on Bun (Discovery, Babel AST Parsing & Normalization, Scope & Symbol Extraction with `var` hoisting, Destructuring pattern extraction, Default parameter filtering, CommonJS exports & prototype methods, Module resolution & Dependency graphs, Semantic Call graphs with constructor instantiation resolution, Basic-Block CFG, Def-Use DFG with interprocedural taint flow, Streaming JSON serialization with 64KB backpressure, Three-Universe fidelity validator, 10-point governance self-audit, and 3-run bit-for-bit determinism across Tier 1, 2, and 3 targets).
+> * **Implemented & Verified:** Deterministic JavaScript/TypeScript multi-stage repository intelligence pipeline running natively on Bun (Discovery, Babel AST Parsing & Normalization, Scope & Symbol Extraction with `var` hoisting, Destructuring pattern extraction, Default parameter filtering, CommonJS exports & prototype methods, Module resolution & Dependency graphs, Semantic Call graphs with constructor instantiation resolution, Basic-Block CFG, Def-Use DFG with interprocedural taint flow, Streaming JSON serialization with 64KB backpressure, In-Memory and SQLite indexed storage providers, Three-Universe fidelity validator, 10-point governance self-audit, and 3-run bit-for-bit determinism across Tier 1, 2, and 3 targets).
 > * **Target Architecture (Future Vision):** Unified IR/SSA intermediate representation, AI Gateway proxying, ZelvoxForge multi-agent code generation swarms, VymosGate isolated compiler sandboxes, and Rust/Axum/SQLx synthesis are planned target architecture and are not present in current core implementation.
 > * **Migration Safety Verdict:** Sample-based validation across 25 representative files per target establishes 100% sample recall, but whole-repository migration safety is strictly maintained as `MIGRATION_SAFETY_NOT_YET_ESTABLISHED`.
 
@@ -50,26 +50,26 @@ Millions of mission-critical enterprise applications run on fragile, tightly cou
 
 This approach fatally ignores the realities of enterprise software. It results in **topological hallucinations**, missed dependency graphs, and complete architectural failure because LLMs lack the global deterministic context of the application state. LegacyExodus completely decouples *comprehension* from *generation* via four heavily isolated architectural stages.
 
-### The Autonomous Architecture Flow
+### The Pipeline Architecture Flow
 
 ```mermaid
 flowchart TD
-    subgraph Stage1 [Stage 1: VyrixScout — Discovery]
+    subgraph Stage1 [Stage 1: VyrixScout — Discovery (Implemented)]
         A[Untrusted Legacy Source Code] -->|Sandboxed Traversal| B(File Inventory & Manifests)
         B -->|Static Dependency Mapping| C(Runtime Signals & Risk Seeds)
     end
 
-    subgraph Stage2 [Stage 2: NolaraStruct — Understanding]
+    subgraph Stage2 [Stage 2: NolaraStruct — Understanding (Implemented)]
         C -->|AST Extraction & Token Diet| D(Unified Intermediate Representation)
-        D -->|Symbol Resolution & CFG/DFG| E[(SQLite / Parquet Knowledge Graph)]
+        D -->|Symbol Resolution & CFG/DFG| E[(SQLite Storage & Knowledge Graph)]
     end
 
-    subgraph Stage3 [Stage 3: ZelvoxForge — Transformation]
+    subgraph Stage3 [Stage 3: ZelvoxForge — Transformation (Target Architecture)]
         E -->|Sanitized Context Slices| F(AI Gateway & Prompt Engine)
         F -->|Multi-Agent Swarm| G[Draft Rust / Axum / SQLx Artifacts]
     end
 
-    subgraph Stage4 [Stage 4: VymosGate — Verification & Governance]
+    subgraph Stage4 [Stage 4: VymosGate — Verification & Governance (Target Architecture)]
         G --> H(Isolated Compiler Sandbox)
         H -->|cargo check / cargo test| I{Compilation & Tests Pass?}
         I -->|Diagnostic Errors| J[Self-Healing Loop ──► RepairAgent]
@@ -91,7 +91,7 @@ LegacyExodus executes its migration via four distinct, strictly governed archite
       <th align="left" width="15%">Pipeline Stage</th>
       <th align="left" width="15%">Codename</th>
       <th align="left" width="50%">Primary Responsibility</th>
-      <th align="left" width="20%">Paradigm</th>
+      <th align="left" width="20%">Status</th>
     </tr>
   </thead>
   <tbody>
@@ -99,25 +99,25 @@ LegacyExodus executes its migration via four distinct, strictly governed archite
       <td align="left"><b>Stage 1</b></td>
       <td align="left"><code>VyrixScout</code></td>
       <td align="left"><b>Legacy Intelligence Discovery.</b> Maps physical boundaries, detects languages, maps static dependencies, and surfaces framework signals. It builds the initial immutable <code>ProjectState</code> without modifying source files.</td>
-      <td align="left"><img src="https://img.shields.io/badge/100%25-Deterministic-blue?style=flat-square" alt="100% Deterministic"></td>
+      <td align="left"><img src="https://img.shields.io/badge/Status-IMPLEMENTED-brightgreen?style=flat-square" alt="Implemented"></td>
     </tr>
     <tr>
       <td align="left"><b>Stage 2</b></td>
       <td align="left"><code>NolaraStruct</code></td>
-      <td align="left"><b>Knowledge Reconstruction.</b> Parses ASTs, extracts cross-file symbols, resolves import/export graphs, and discovers abstract business rules. Transforms raw syntax into a vendor-agnostic Knowledge Graph.</td>
-      <td align="left"><img src="https://img.shields.io/badge/100%25-Deterministic-blue?style=flat-square" alt="100% Deterministic"></td>
+      <td align="left"><b>Knowledge Reconstruction.</b> Parses ASTs, extracts cross-file symbols, resolves import/export graphs, builds CFG/DFG models, and derives semantic facts into indexed Storage records.</td>
+      <td align="left"><img src="https://img.shields.io/badge/Status-IMPLEMENTED-brightgreen?style=flat-square" alt="Implemented"></td>
     </tr>
     <tr>
       <td align="left"><b>Stage 3</b></td>
       <td align="left"><code>ZelvoxForge</code></td>
       <td align="left"><b>Modern Architecture Generation.</b> AI agents systematically plan architectures and generate modern code (Rust/Axum/SQLx) based <i>strictly</i> on the Knowledge Graph, never the raw source files.</td>
-      <td align="left"><img src="https://img.shields.io/badge/Governed-Probabilistic_(AI)-purple?style=flat-square" alt="Governed Probabilistic"></td>
+      <td align="left"><img src="https://img.shields.io/badge/Status-TARGET_ARCHITECTURE-blueviolet?style=flat-square" alt="Target Architecture"></td>
     </tr>
     <tr>
       <td align="left"><b>Stage 4</b></td>
       <td align="left"><code>VymosGate</code></td>
       <td align="left"><b>Verification & Governance.</b> Enforces Zero-Trust security, executes native compilation checks, runs automated testing, and acts as the Human-in-the-Loop (HITL) approval gate.</td>
-      <td align="left"><img src="https://img.shields.io/badge/100%25-Deterministic-blue?style=flat-square" alt="100% Deterministic"></td>
+      <td align="left"><img src="https://img.shields.io/badge/Status-TARGET_ARCHITECTURE-blueviolet?style=flat-square" alt="Target Architecture"></td>
     </tr>
   </tbody>
 </table>
@@ -146,9 +146,9 @@ Source Code ──► Lexer/Parser ──► Token Diet ──► AST ──► 
 
 ---
 
-## 5. Deep Dive: Generation & The Autonomous Self-Healing Loop
+## 5. Deep Dive: Generation & Self-Healing Loop [Target Architecture]
 
-Once the system has been mapped deterministically, LegacyExodus engages its probabilistic AI swarms inside a strictly governed sandbox.
+Once the system has been mapped deterministically, LegacyExodus engages its probabilistic AI swarms inside a strictly governed sandbox (planned target architecture).
 
 ```mermaid
 sequenceDiagram
