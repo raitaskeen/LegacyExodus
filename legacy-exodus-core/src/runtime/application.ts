@@ -76,8 +76,13 @@ export class ApplicationRuntime {
       this.logger.info("Application started");
     } catch (error: unknown) {
       this.logger.error({ error }, "Application startup failed");
-      await this.stopStartedServices();
-      this.status = "stopped";
+      try {
+        await this.performCleanup();
+      } catch {
+        // Suppress secondary cleanup errors to rethrow original startup error
+      } finally {
+        this.status = "stopped";
+      }
       throw error;
     }
   }
@@ -88,14 +93,12 @@ export class ApplicationRuntime {
     }
 
     this.status = "stopping";
-    await this.stopStartedServices();
-    if (this.storageManager.isPersistent()) {
-      await this.storageManager.close();
-    } else {
-      await this.storageManager.clear();
+    try {
+      await this.performCleanup();
+    } finally {
+      this.status = "stopped";
+      this.logger.info("Application stopped");
     }
-    this.status = "stopped";
-    this.logger.info("Application stopped");
   }
 
   public getStatus(): RuntimeStatus {
@@ -118,9 +121,10 @@ export class ApplicationRuntime {
     return this.pluginLoader;
   }
 
-  private async stopStartedServices(): Promise<void> {
+  private async performCleanup(): Promise<void> {
     const shutdownFailures: unknown[] = [];
 
+    // 1. Stop all started services in reverse order
     for (const service of [...this.startedServices].reverse()) {
       try {
         await service.stop?.();
@@ -129,8 +133,28 @@ export class ApplicationRuntime {
         this.logger.error({ error, service: service.name }, "Service shutdown failed");
       }
     }
-
     this.startedServices.length = 0;
+
+    // 2. Shut down all loaded plugins in reverse order and unregister
+    const loadedPlugins = [...this.pluginRegistry.list()].reverse();
+    for (const plugin of loadedPlugins) {
+      try {
+        await plugin.shutdown();
+      } catch (error: unknown) {
+        shutdownFailures.push(error);
+        this.logger.error({ error, plugin: plugin.id }, "Plugin shutdown failed");
+      } finally {
+        this.pluginRegistry.unregister(plugin.id);
+      }
+    }
+
+    // 3. Close storage manager (closes SQLite connections / clears in-memory storage)
+    try {
+      await this.storageManager.close();
+    } catch (error: unknown) {
+      shutdownFailures.push(error);
+      this.logger.error({ error }, "Storage shutdown failed");
+    }
 
     if (shutdownFailures.length > 0) {
       throw new LegacyExodusError({

@@ -85,16 +85,20 @@ export class SqliteStorageProvider implements StorageProvider {
         updated_at = excluded.updated_at
     `);
 
-    stmt.run(
-      validatedRecord.id,
-      validatedRecord.type,
-      projectId,
-      analysisRunId,
-      filePath,
-      payloadJson,
-      validatedRecord.createdAt.getTime(),
-      validatedRecord.updatedAt.getTime(),
-    );
+    try {
+      stmt.run(
+        validatedRecord.id,
+        validatedRecord.type,
+        projectId,
+        analysisRunId,
+        filePath,
+        payloadJson,
+        validatedRecord.createdAt.getTime(),
+        validatedRecord.updatedAt.getTime(),
+      );
+    } finally {
+      stmt.finalize();
+    }
   }
 
   public async saveBatch(records: readonly StorageRecord[]): Promise<void> {
@@ -112,26 +116,30 @@ export class SqliteStorageProvider implements StorageProvider {
         updated_at = excluded.updated_at
     `);
 
-    const insertBatch = this.db.transaction((batchRecords: readonly StorageRecord[]) => {
-      for (const record of batchRecords) {
-        const validatedRecord = validateStorageRecord(record);
-        const { projectId, analysisRunId, filePath } = extractRecordMetadata(validatedRecord.payload);
-        const payloadJson = JSON.stringify(validatedRecord.payload);
+    try {
+      const insertBatch = this.db.transaction((batchRecords: readonly StorageRecord[]) => {
+        for (const record of batchRecords) {
+          const validatedRecord = validateStorageRecord(record);
+          const { projectId, analysisRunId, filePath } = extractRecordMetadata(validatedRecord.payload);
+          const payloadJson = JSON.stringify(validatedRecord.payload);
 
-        stmt.run(
-          validatedRecord.id,
-          validatedRecord.type,
-          projectId,
-          analysisRunId,
-          filePath,
-          payloadJson,
-          validatedRecord.createdAt.getTime(),
-          validatedRecord.updatedAt.getTime(),
-        );
-      }
-    });
+          stmt.run(
+            validatedRecord.id,
+            validatedRecord.type,
+            projectId,
+            analysisRunId,
+            filePath,
+            payloadJson,
+            validatedRecord.createdAt.getTime(),
+            validatedRecord.updatedAt.getTime(),
+          );
+        }
+      });
 
-    insertBatch(records);
+      insertBatch(records);
+    } finally {
+      stmt.finalize();
+    }
   }
 
   public async findById<Payload extends SerializedPayload>(
@@ -143,10 +151,14 @@ export class SqliteStorageProvider implements StorageProvider {
       WHERE id = ?
     `);
 
-    const row = stmt.get(id);
-    if (!row) return null;
+    try {
+      const row = stmt.get(id);
+      if (!row) return null;
 
-    return this.deserializeRecord<Payload>(row);
+      return this.deserializeRecord<Payload>(row);
+    } finally {
+      stmt.finalize();
+    }
   }
 
   public async findAll<Payload extends SerializedPayload>(
@@ -184,16 +196,24 @@ export class SqliteStorageProvider implements StorageProvider {
     `;
 
     const stmt = this.db.prepare<RawSqliteRecord, any[]>(sql);
-    const rows = stmt.all(...params);
-    return rows.map((row) => this.deserializeRecord<Payload>(row));
+    try {
+      const rows = stmt.all(...params);
+      return rows.map((row) => this.deserializeRecord<Payload>(row));
+    } finally {
+      stmt.finalize();
+    }
   }
 
   public async delete(id: string): Promise<void> {
     const stmt = this.db.prepare(`DELETE FROM storage_records WHERE id = ?`);
-    const result = stmt.run(id);
+    try {
+      const result = stmt.run(id);
 
-    if (result.changes === 0) {
-      throw new StorageRecordNotFoundError(id);
+      if (result.changes === 0) {
+        throw new StorageRecordNotFoundError(id);
+      }
+    } finally {
+      stmt.finalize();
     }
   }
 
