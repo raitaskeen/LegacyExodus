@@ -16,6 +16,15 @@ export class MemoryStorageProvider implements StorageProvider {
     this.records.set(validatedRecord.id, validatedRecord);
   }
 
+  public async saveBatch<Payload extends SerializedPayload>(
+    records: readonly StorageRecord<Payload>[],
+  ): Promise<void> {
+    const validated = records.map((record) => validateStorageRecord(record));
+    for (const record of validated) {
+      this.records.set(record.id, record);
+    }
+  }
+
   public async findById<Payload extends SerializedPayload>(
     id: string,
   ): Promise<StorageRecord<Payload> | null> {

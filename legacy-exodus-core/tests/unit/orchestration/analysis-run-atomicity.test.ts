@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { DiscoveryQueryService } from "@discovery/discovery-query-service";
 import { MemoryStorageProvider } from "@storage/adapters/memory-storage";
+import { SqliteStorageProvider } from "@storage/adapters/sqlite-storage";
 import { StorageManager } from "@storage/storage-manager";
 import { createStorageRecord } from "@storage/storage-record";
 import { Orchestrator } from "@core/orchestration/orchestrator";
@@ -12,6 +13,7 @@ import { JavaScriptParser, ParserManager, ParserRegistry } from "@parser/index";
 import { JavaScriptSymbolExtractor } from "@symbols/index";
 import { join } from "node:path";
 import { mkdir, writeFile, rm } from "node:fs/promises";
+import { unlinkSync, existsSync } from "node:fs";
 
 describe("Analysis-Run Atomicity & Completion Semantics (F-004)", () => {
   let storage: StorageManager;
@@ -20,6 +22,17 @@ describe("Analysis-Run Atomicity & Completion Semantics (F-004)", () => {
   const projectId = "a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c8d";
   const run1Id = "11111111-1111-4111-8111-111111111111";
   const run2Id = "22222222-2222-4222-8222-222222222222";
+  const dbPath = join(import.meta.dir, "../../fixtures/scratch-atomicity-eval.sqlite");
+
+  function cleanupSqlite() {
+    try {
+      if (existsSync(dbPath)) unlinkSync(dbPath);
+      if (existsSync(`${dbPath}-wal`)) unlinkSync(`${dbPath}-wal`);
+      if (existsSync(`${dbPath}-shm`)) unlinkSync(`${dbPath}-shm`);
+    } catch {
+      // Ignore Windows file lock delay
+    }
+  }
 
   beforeEach(() => {
     storage = new StorageManager(new MemoryStorageProvider());
@@ -284,7 +297,7 @@ describe("Analysis-Run Atomicity & Completion Semantics (F-004)", () => {
     expect(run2Symbols[0]?.name).toBe("bar");
   });
 
-  it("5. orchestrator executes full analysis and emits completed analysis-run record and events", async () => {
+  it("5. orchestrator executes full analysis and emits completed analysis-run record and events via saveBatch", async () => {
     const testDir = join(import.meta.dir, "../../fixtures/scratch-atomicity-test");
     await mkdir(testDir, { recursive: true });
     await writeFile(
@@ -343,6 +356,153 @@ describe("Analysis-Run Atomicity & Completion Semantics (F-004)", () => {
       expect(run?.status).toBe("completed");
     } finally {
       await rm(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it("6. SQLite saveBatch rolls back completely when an error occurs during transaction", async () => {
+    cleanupSqlite();
+    const provider = new SqliteStorageProvider({ databasePath: dbPath });
+    const sqliteStorage = new StorageManager(provider);
+
+    const validRecord = createStorageRecord("project-discovery", {
+      projectId,
+      analysisRunId: run1Id,
+      projectName: "app",
+      projectPath: "/repo/app",
+      files: [{ id: "f1", path: "src/index.ts", language: "typescript", size: 100 }],
+      dependencies: [],
+      frameworks: [],
+      languages: ["typescript"],
+      discoveredAt: new Date().toISOString(),
+    });
+
+    const brokenRecord = {
+      id: "broken-rec",
+      type: "invalid-payload-rec",
+      payload: { [Symbol("cannotSerialize")]: "oops" }, // Circular/unserializable payload that throws in JSON.stringify
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as any;
+
+    try {
+      expect(async () => {
+        await sqliteStorage.saveBatch([validRecord, brokenRecord]);
+      }).toThrow();
+
+      // Ensure that validRecord was rolled back and NOT saved to SQLite
+      const found = await sqliteStorage.findScoped({ type: "project-discovery", projectId, analysisRunId: run1Id });
+      expect(found).toHaveLength(0);
+    } finally {
+      provider.close();
+      try {
+        cleanupSqlite();
+      } catch {
+        // Ignore lock delay
+      }
+    }
+  });
+
+  it("7. SQLite restart after failed run guarantees completion gating and run isolation", async () => {
+    cleanupSqlite();
+
+    // 1. Initial process: Run 1 completes fully
+    {
+      const provider = new SqliteStorageProvider({ databasePath: dbPath });
+      const persistentStorage = new StorageManager(provider);
+
+      await persistentStorage.saveBatch([
+        createStorageRecord("project-discovery", {
+          projectId,
+          analysisRunId: run1Id,
+          projectName: "app",
+          projectPath: "/repo/app",
+          files: [{ id: "f1", path: "src/index.ts", language: "typescript", size: 100 }],
+          dependencies: [],
+          frameworks: [],
+          languages: ["typescript"],
+          discoveredAt: new Date(Date.now() - 10000).toISOString(),
+        }),
+        createStorageRecord("symbol-table", {
+          projectId,
+          analysisRunId: run1Id,
+          fileId: "f1",
+          path: "src/index.ts",
+          symbols: [{ id: "s1", kind: "function", name: "v1Func", filePath: "src/index.ts", exported: true, defaultExport: false, moduleSpecifier: null, sourceSymbolName: null }],
+        }),
+        createStorageRecord("analysis-run", {
+          projectId,
+          analysisRunId: run1Id,
+          status: "completed",
+          startedAt: new Date(Date.now() - 10000).toISOString(),
+          completedAt: new Date(Date.now() - 9000).toISOString(),
+        }),
+      ]);
+
+      provider.close();
+    }
+
+    // 2. Second process: Run 2 starts, writes partial records individually, then crashes before analysis-run record
+    {
+      const provider = new SqliteStorageProvider({ databasePath: dbPath });
+      const persistentStorage = new StorageManager(provider);
+
+      await persistentStorage.save(createStorageRecord("project-discovery", {
+        projectId,
+        analysisRunId: run2Id,
+        projectName: "app-v2",
+        projectPath: "/repo/app",
+        files: [
+          { id: "f1", path: "src/index.ts", language: "typescript", size: 100 },
+          { id: "f2", path: "src/new.ts", language: "typescript", size: 200 },
+        ],
+        dependencies: [],
+        frameworks: [],
+        languages: ["typescript"],
+        discoveredAt: new Date().toISOString(),
+      }));
+
+      await persistentStorage.save(createStorageRecord("symbol-table", {
+        projectId,
+        analysisRunId: run2Id,
+        fileId: "f1",
+        path: "src/index.ts",
+        symbols: [{ id: "s2", kind: "function", name: "v2Func", filePath: "src/index.ts", exported: true, defaultExport: false, moduleSpecifier: null, sourceSymbolName: null }],
+      }));
+
+      // Crash / exit before writing analysis-run record
+      provider.close();
+    }
+
+    // 3. Third process: Application reopens and queries state
+    {
+      const provider = new SqliteStorageProvider({ databasePath: dbPath });
+      const persistentStorage = new StorageManager(provider);
+      const persistentQueryService = new DiscoveryQueryService(persistentStorage);
+
+      // Raw un-gated check: partial records physically exist on disk
+      const rawRun2Discovery = await persistentStorage.findScoped({ type: "project-discovery", projectId, analysisRunId: run2Id });
+      expect(rawRun2Discovery).toHaveLength(1);
+
+      // Domain query service check: completion gating isolates reads to completed Run 1
+      const latestCompletedRun = await persistentQueryService.getLatestCompletedRunId(projectId);
+      expect(latestCompletedRun).toBe(run1Id);
+
+      const activeDiscovery = await persistentQueryService.getProjectDiscovery(projectId);
+      expect(activeDiscovery?.analysisRunId).toBe(run1Id);
+      expect(activeDiscovery?.projectName).toBe("app");
+      expect(activeDiscovery?.files).toHaveLength(1);
+
+      const activeSymbols = await persistentQueryService.getSymbolsForFile(projectId, "src/index.ts");
+      expect(activeSymbols).toHaveLength(1);
+      expect(activeSymbols[0]?.name).toBe("v1Func");
+
+      provider.close();
+    }
+
+    try {
+      cleanupSqlite();
+    } catch {
+      // Ignore lock delay
     }
   });
 });

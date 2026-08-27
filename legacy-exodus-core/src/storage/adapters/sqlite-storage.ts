@@ -97,6 +97,45 @@ export class SqliteStorageProvider implements StorageProvider {
     );
   }
 
+  public async saveBatch<Payload extends SerializedPayload>(
+    records: readonly StorageRecord<Payload>[],
+  ): Promise<void> {
+    if (records.length === 0) return;
+
+    const stmt = this.db.prepare(`
+      INSERT INTO storage_records (id, type, project_id, analysis_run_id, file_path, payload, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        type = excluded.type,
+        project_id = excluded.project_id,
+        analysis_run_id = excluded.analysis_run_id,
+        file_path = excluded.file_path,
+        payload = excluded.payload,
+        updated_at = excluded.updated_at
+    `);
+
+    const insertBatch = this.db.transaction((batchRecords: readonly StorageRecord<Payload>[]) => {
+      for (const record of batchRecords) {
+        const validatedRecord = validateStorageRecord(record);
+        const { projectId, analysisRunId, filePath } = extractRecordMetadata(validatedRecord.payload);
+        const payloadJson = JSON.stringify(validatedRecord.payload);
+
+        stmt.run(
+          validatedRecord.id,
+          validatedRecord.type,
+          projectId,
+          analysisRunId,
+          filePath,
+          payloadJson,
+          validatedRecord.createdAt.getTime(),
+          validatedRecord.updatedAt.getTime(),
+        );
+      }
+    });
+
+    insertBatch(records);
+  }
+
   public async findById<Payload extends SerializedPayload>(
     id: string,
   ): Promise<StorageRecord<Payload> | null> {
