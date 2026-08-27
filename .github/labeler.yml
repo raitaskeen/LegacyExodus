@@ -1,0 +1,33 @@
+area:runtime:
+  - changed-files:
+      - any-glob-to-any-file: 'legacy-exodus-core/src/runtime/**'
+
+area:storage:
+  - changed-files:
+      - any-glob-to-any-file: 'legacy-exodus-core/src/storage/**'
+
+area:discovery:
+  - changed-files:
+      - any-glob-to-any-file: 'legacy-exodus-core/src/discovery/**'
+
+area:semantic:
+  - changed-files:
+      - any-glob-to-any-file: 'legacy-exodus-core/src/semantic/**'
+
+area:flow:
+  - changed-files:
+      - any-glob-to-any-file: 'legacy-exodus-core/src/flow/**'
+
+area:governance:
+  - changed-files:
+      - any-glob-to-any-file: 'legacy-exodus-core/src/governance/**'
+      - any-glob-to-any-file: 'legacy-exodus-core/benchmarks/**'
+
+type:docs:
+  - changed-files:
+      - any-glob-to-any-file: 'docs/**'
+      - any-glob-to-any-file: '*.md'
+
+type:test:
+  - changed-files:
+      - any-glob-to-any-file: 'legacy-exodus-core/tests/**'
