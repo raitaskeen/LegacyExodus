@@ -79,15 +79,7 @@ export class FileDiscoveryProjectionAdapter {
         ...(projection.metadata?.analysisRunId ? { analysisRunId: projection.metadata.analysisRunId } : {}),
         generatedAt: new Date().toISOString(),
       },
-      requiredArtifacts: [
-        "files.json",
-        "dependencies.json",
-        "symbols.json",
-        "dependency-graph.json",
-        "semantic.json",
-        "control-flow.json",
-        "data-flow.json",
-      ],
+      requiredArtifacts: Object.keys(artifactHashes).sort(),
       artifacts: artifactHashes,
     };
 
