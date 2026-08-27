@@ -117,8 +117,8 @@ function memberName(node: ASTNode): string | undefined {
   const propertyName = property === undefined ? undefined : memberName(property);
   if (objectName === undefined || propertyName === undefined) return undefined;
 
-  // Unwrap .apply / .call / .bind invocations: e.g. server.listen.apply -> server.listen
-  if ((propertyName === "apply" || propertyName === "call" || propertyName === "bind") && objectName !== "this") {
+  // Unwrap .apply / .call invocations: e.g. server.listen.apply -> server.listen
+  if ((propertyName === "apply" || propertyName === "call") && objectName !== "this") {
     return objectName;
   }
 
