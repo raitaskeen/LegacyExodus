@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { copyFile, rename, unlink } from "node:fs/promises";
 import { finished } from "node:stream/promises";
@@ -135,7 +136,7 @@ export class StreamingJsonWriter {
    * On failure, cleans up the temporary file and ensures the final file is not corrupted.
    */
   public async writeAtomic(destinationPath: string, payload: unknown): Promise<void> {
-    const temporaryPath = `${destinationPath}.tmp`;
+    const temporaryPath = `${destinationPath}.${randomUUID()}.tmp`;
     const stream = createWriteStream(temporaryPath, { encoding: "utf8" });
 
     try {
