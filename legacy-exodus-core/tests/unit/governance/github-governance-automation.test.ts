@@ -43,28 +43,55 @@ describe("Repository Governance & GitHub Automation Hardening", () => {
     }
   });
 
-  it("2. all GitHub Actions workflows define explicit least-privilege permissions", () => {
+  it("2. all GitHub Actions workflows define explicit least-privilege permissions and quality gates", () => {
     const workflowsDir = join(REPO_ROOT, ".github/workflows");
     expect(existsSync(workflowsDir)).toBe(true);
 
     const workflowFiles = readdirSync(workflowsDir).filter((f) => f.endsWith(".yml") || f.endsWith(".yaml"));
-    expect(workflowFiles.length).toBeGreaterThanOrEqual(3);
+    expect(workflowFiles.length).toBeGreaterThanOrEqual(4);
 
-    for (const file of workflowFiles) {
-      const filePath = join(workflowsDir, file);
-      const rawContent = readFileSync(filePath, "utf-8");
-      expect(rawContent.length).toBeGreaterThan(0);
+    const expectedWorkflows = [
+      "ci.yml",
+      "documentation.yml",
+      "security-scan.yml",
+      "labeler.yml",
+    ];
+
+    for (const expected of expectedWorkflows) {
+      expect(workflowFiles).toContain(expected);
+      const filePath = join(workflowsDir, expected);
+      const content = readFileSync(filePath, "utf-8");
+      expect(content.length).toBeGreaterThan(0);
 
       // Verify top-level permissions block exists for least privilege
-      expect(rawContent).toMatch(/^permissions:\s*$/m);
+      expect(content).toMatch(/^permissions:\s*$/m);
     }
 
-    // Explicit check for CI workflow quality gates
+    // 1. CI Workflow permission & quality gates
     const ciContent = readFileSync(join(workflowsDir, "ci.yml"), "utf-8");
+    expect(ciContent).toContain("contents: read");
+    expect(ciContent).not.toContain("contents: write");
     expect(ciContent).toContain("bun run typecheck");
     expect(ciContent).toContain("bun test");
     expect(ciContent).toContain("bun run benchmark audit");
     expect(ciContent).toContain("git diff --check");
+
+    // 2. Security Scan Workflow permissions
+    const secContent = readFileSync(join(workflowsDir, "security-scan.yml"), "utf-8");
+    expect(secContent).toContain("contents: read");
+    expect(secContent).toContain("security-events: write");
+    expect(secContent).not.toContain("contents: write");
+
+    // 3. Documentation Workflow permissions
+    const docContent = readFileSync(join(workflowsDir, "documentation.yml"), "utf-8");
+    expect(docContent).toContain("contents: read");
+    expect(docContent).not.toContain("contents: write");
+
+    // 4. Labeler Workflow permissions
+    const labelerContent = readFileSync(join(workflowsDir, "labeler.yml"), "utf-8");
+    expect(labelerContent).toContain("contents: read");
+    expect(labelerContent).toContain("pull-requests: write");
+    expect(labelerContent).not.toContain("contents: write");
   });
 
   it("3. issue templates have valid YAML frontmatter and required fields", () => {
