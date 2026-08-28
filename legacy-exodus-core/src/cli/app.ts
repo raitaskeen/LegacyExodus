@@ -16,7 +16,7 @@ export function createCLI(): Command {
 
   registerCommands(program, {
     version: CLI_VERSION,
-    createEngine: createLegacyExodusEngine,
+    createEngine: () => createLegacyExodusEngine({ ...process.env, LOG_LEVEL: process.env.LOG_LEVEL ?? "silent" }),
   });
 
   return program;

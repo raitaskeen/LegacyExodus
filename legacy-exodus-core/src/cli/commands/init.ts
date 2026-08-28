@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import type { Command } from "commander";
 
 import { CliError } from "../errors";
+import { formatInitOutput } from "../output/formatter";
 import { formatJsonOutput } from "../output/json-output";
 
 export interface InitializationMetadata {
@@ -52,13 +53,9 @@ export function registerInitCommand(program: Command, version: string): void {
     .option("--json", "Emit machine-readable JSON")
     .action(async (path: string, options: { readonly json?: boolean }): Promise<void> => {
       const report = await initializeWorkspace(path, version);
+      const output = options.json ? formatJsonOutput(report) : formatInitOutput(report);
 
-      if (options.json) {
-        process.stdout.write(`${formatJsonOutput(report)}\n`);
-        return;
-      }
-
-      process.stdout.write(`LegacyExodus workspace initialized\n${report.metadataPath}\n`);
+      process.stdout.write(`${output}\n`);
     });
 }
 

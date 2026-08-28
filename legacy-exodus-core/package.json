@@ -18,7 +18,8 @@
     "test:watch": "bun test --watch",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "benchmark": "bun run benchmarks/cli.ts"
+    "benchmark": "bun run benchmarks/cli.ts",
+    "verify": "bun run src/cli/index.ts verify"
   },
   "dependencies": {
     "@babel/parser": "8.0.4",

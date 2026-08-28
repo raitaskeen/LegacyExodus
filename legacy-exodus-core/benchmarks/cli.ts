@@ -27,6 +27,8 @@ import { generateMarkdownReport } from "./scripts/report";
 import { runFidelityValidation } from "./fidelity/runner";
 import { BENCHMARKS_ROOT, CORPUS_DIR, RESULTS_DIR, resolveBenchmarkRepoPath, resolveResultsDir } from "./paths";
 import type { BenchmarkResult } from "./types";
+import { detectTerminalCapabilities } from "../src/cli/presentation/capabilities";
+import { VerificationPresenter } from "../src/cli/presentation/verification";
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -86,27 +88,19 @@ async function main(): Promise<void> {
     }
 
     case "audit": {
-      console.log(`\n╔══════════════════════════════════════════════════════════╗`);
-      console.log(`║  LegacyExodus Phase 3A — Benchmark System Self-Audit     ║`);
-      console.log(`╚══════════════════════════════════════════════════════════╝\n`);
-
       const auditReport = await runBenchmarkSelfAudit();
-      console.log(`Audit Timestamp: ${auditReport.auditedAt}`);
-      console.log(`Engine SHA:      ${auditReport.engineSha}`);
-      console.log(`Total Checks:    ${auditReport.totalChecks}`);
-      console.log(`Passed:          ${auditReport.passedChecks}`);
-      console.log(`Failed:          ${auditReport.failedChecks}`);
-      console.log(`Verdict:         ${auditReport.verdict}\n`);
+      const capabilities = detectTerminalCapabilities();
+      const presenter = new VerificationPresenter(capabilities);
+
+      console.log(presenter.renderBenchmarkAudit(auditReport));
 
       if (auditReport.findings.length > 0) {
-        console.log(`Findings:`);
+        console.log(`\nFindings:`);
         for (const f of auditReport.findings) {
           console.log(`  [${f.severity}] ${f.category}: ${f.description}`);
           console.log(`    Evidence: ${f.evidence}`);
           if (f.remediation) console.log(`    Remediation: ${f.remediation}`);
         }
-      } else {
-        console.log(`✓ All 10 benchmark governance checks passed with zero findings!`);
       }
 
       if (auditReport.verdict === "NO_GO") process.exit(1);
