@@ -100,11 +100,22 @@ To prevent silent data corruption or ambiguous query failures across evolving ve
 3. **Handle Protection:**
    * If schema validation fails during construction, the database connection is cleanly closed in `try ... catch` to prevent dangling file locks on persistent disk databases.
 
+### 4.6 SQLite Configuration & Lock Contention Hardening (F-008)
+
+To ensure resilient execution across concurrent access and high-throughput pipeline runs on Windows and POSIX environments:
+
+1. **Busy Timeout Configuration (`PRAGMA busy_timeout = 5000;`):**
+   * Configures SQLite's busy handler with a 5,000ms retry window with exponential backoff, preventing transient file contention from raising immediate `SQLITE_BUSY: database is locked` exceptions.
+2. **In-Memory Temporary Store (`PRAGMA temp_store = MEMORY;`):**
+   * Directs temporary tables, subquery results, and transient sort structures to RAM instead of disk, eliminating disk I/O thrashing during query execution while maintaining bounded memory usage.
+3. **Integrity & Concurrency Baseline:**
+   * Retains `PRAGMA journal_mode = WAL;` for concurrent reads during writes, `PRAGMA synchronous = NORMAL;` for crash-safe performance, and `PRAGMA foreign_keys = ON;` for relational integrity.
+
 ---
 
 ## 5. Implementation Evidence
 
 * **Source Location:** [`src/storage/`](../../legacy-exodus-core/src/storage), [`src/discovery/discovery-query-service.ts`](../../legacy-exodus-core/src/discovery/discovery-query-service.ts), [`src/core/orchestration/command-handler.ts`](../../legacy-exodus-core/src/core/orchestration/command-handler.ts), [`src/storage/projections/`](../../legacy-exodus-core/src/storage/projections).
-* **Tests:** `memory-storage.test.ts`, `storage-manager.test.ts`, `storage-scoped-query.test.ts`, `schema-drift-integrity.test.ts`, `streaming-json-writer.test.ts`, `projection-manifest-integrity.test.ts`, `analysis-run-atomicity.test.ts`, `concurrent-projection-safety.test.ts`, `storage-schema-versioning.test.ts`.
+* **Tests:** `memory-storage.test.ts`, `storage-manager.test.ts`, `storage-scoped-query.test.ts`, `schema-drift-integrity.test.ts`, `streaming-json-writer.test.ts`, `projection-manifest-integrity.test.ts`, `analysis-run-atomicity.test.ts`, `concurrent-projection-safety.test.ts`, `storage-schema-versioning.test.ts`, `sqlite-storage.test.ts`.
 * **Related ADR:** **[ADR-005: Storage Strategy](../adr/ADR-005-storage-strategy.md)**.
 * **Architecture Spec:** **[Storage Service Architecture](../architecture/components/storage-service.md)**.
