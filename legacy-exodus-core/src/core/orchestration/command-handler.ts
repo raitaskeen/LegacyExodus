@@ -197,127 +197,162 @@ export class AnalyzeProjectHandler {
       );
     }
 
-    const dependencyGraph = new DeterministicDependencyGraphBuilder(
-      new ModuleResolver(await readPathAliases(discovery.projectPath)),
-    ).build(symbolTables, discovery.files);
-    records.push(
-      createStorageRecord("dependency-graph", {
-        projectId: discovery.projectId,
-        analysisRunId: command.id,
-        nodes: dependencyGraph.nodes,
-        edges: dependencyGraph.edges,
-        cycles: dependencyGraph.cycles,
-      }),
-    );
-    const semantic = new DeterministicSemanticAnalysisEngine().analyze({
-      astResults,
-      dependencyGraph,
-      symbolTables,
-    });
-    records.push(
-      createStorageRecord("semantic-analysis", {
-        projectId: discovery.projectId,
-        analysisRunId: command.id,
-        calls: semantic.calls,
-        references: semantic.references,
-        scopes: semantic.scopes,
-        deadCode: semantic.deadCode,
-        unusedImports: semantic.unusedImports,
-        unusedExports: semantic.unusedExports,
-        entryPoints: semantic.entryPoints,
-        routes: semantic.routes,
-        middlewareChains: semantic.middlewareChains,
-      }),
-    );
-    const flow = new DeterministicFlowAnalysisEngine().analyze(astResults, semantic.calls, symbolTables);
-    astResults.length = 0;
-
-    records.push(
-      createStorageRecord("control-flow-analysis", {
-        projectId: discovery.projectId,
-        analysisRunId: command.id,
-        graphs: flow.controlFlowGraphs,
-      }),
-    );
-    records.push(
-      createStorageRecord("data-flow-analysis", {
-        projectId: discovery.projectId,
-        analysisRunId: command.id,
-        graphs: flow.dataFlowGraphs.map((graph) => ({
-          ...graph,
-          callBindings: graph.callBindings.map((binding) => ({
-            callId: binding.callId,
-            targetSymbolId: binding.targetSymbolId,
-            argumentDefinitionIds: binding.argumentDefinitionIds.map((definitionId) => definitionId ?? null),
-            ...(binding.receiverDefinitionId === undefined ? {} : { receiverDefinitionId: binding.receiverDefinitionId }),
-          })),
-        })),
-      }),
-    );
-    const knowledgeGraph = new DeterministicKnowledgeGraphBuilder().build(symbolTables, dependencyGraph);
-    records.push(
-      createStorageRecord("knowledge-graph", {
-        projectId: discovery.projectId,
-        analysisRunId: command.id,
-        nodes: knowledgeGraph.nodes,
-        edges: knowledgeGraph.edges,
-      }),
-    );
-
-    const durationMs = performance.now() - startedAt;
-    const analysisSummary = createAnalysisSummary({
-      filesDiscovered: discovery.files.length,
-      filesAnalyzed: symbolTables.length,
-      parserFailures: events.filter((event) => event.type === "ParserFailure").length,
-      symbolExtractionFailures: events.filter((event) => event.type === "SymbolsExtractionFailure").length,
-      unsupportedFiles: discovery.files.filter((file) => file.fileKind === "source" && file.language !== "javascript" && file.language !== "typescript").length,
-      nonSourceArtifacts: discovery.files.filter((file) => file.fileKind !== "source" && file.fileKind !== "unknown" && file.fileKind !== undefined).length,
-      unclassifiedArtifacts: discovery.files.filter((file) => file.fileKind === "unknown" || file.fileKind === undefined).length,
-      enumerationFailures: enumerationFailures.length,
-      discoveryComplete: enumerationFailures.length === 0,
-      durationMs,
-    });
-
-    records.push(
-      createStorageRecord("analysis-run", {
-        projectId: discovery.projectId,
-        analysisRunId: command.id,
-        status: "completed",
-        startedAt: discovery.discoveredAt.toISOString(),
-        completedAt: new Date().toISOString(),
-        summary: {
-          filesDiscovered: analysisSummary.filesDiscovered,
-          filesAnalyzed: analysisSummary.filesAnalyzed,
-          parserFailures: analysisSummary.parserFailures,
-          symbolExtractionFailures: analysisSummary.symbolExtractionFailures,
-          unsupportedFiles: analysisSummary.unsupportedFiles,
-          nonSourceArtifacts: analysisSummary.nonSourceArtifacts,
-          unclassifiedArtifacts: analysisSummary.unclassifiedArtifacts,
-          enumerationFailures: analysisSummary.enumerationFailures,
-          discoveryComplete: analysisSummary.discoveryComplete,
-          durationMs: analysisSummary.durationMs,
-        },
-      }),
-    );
-
-    events.push(
-      createDomainEvent({
-        type: "AnalysisRunCompleted",
-        aggregateId: discovery.projectId,
-        payload: {
+    try {
+      const dependencyGraph = new DeterministicDependencyGraphBuilder(
+        new ModuleResolver(await readPathAliases(discovery.projectPath)),
+      ).build(symbolTables, discovery.files);
+      records.push(
+        createStorageRecord("dependency-graph", {
           projectId: discovery.projectId,
           analysisRunId: command.id,
-          durationMs,
-        },
-      }),
-    );
+          nodes: dependencyGraph.nodes,
+          edges: dependencyGraph.edges,
+          cycles: dependencyGraph.cycles,
+        }),
+      );
+      const semantic = new DeterministicSemanticAnalysisEngine().analyze({
+        astResults,
+        dependencyGraph,
+        symbolTables,
+      });
+      records.push(
+        createStorageRecord("semantic-analysis", {
+          projectId: discovery.projectId,
+          analysisRunId: command.id,
+          calls: semantic.calls,
+          references: semantic.references,
+          scopes: semantic.scopes,
+          deadCode: semantic.deadCode,
+          unusedImports: semantic.unusedImports,
+          unusedExports: semantic.unusedExports,
+          entryPoints: semantic.entryPoints,
+          routes: semantic.routes,
+          middlewareChains: semantic.middlewareChains,
+        }),
+      );
+      const flow = new DeterministicFlowAnalysisEngine().analyze(astResults, semantic.calls, symbolTables);
+      astResults.length = 0;
 
-    return {
-      events: Object.freeze(events),
-      records: Object.freeze(records),
-      discovery,
-      analysis: analysisSummary,
-    };
+      records.push(
+        createStorageRecord("control-flow-analysis", {
+          projectId: discovery.projectId,
+          analysisRunId: command.id,
+          graphs: flow.controlFlowGraphs,
+        }),
+      );
+      records.push(
+        createStorageRecord("data-flow-analysis", {
+          projectId: discovery.projectId,
+          analysisRunId: command.id,
+          graphs: flow.dataFlowGraphs.map((graph) => ({
+            ...graph,
+            callBindings: graph.callBindings.map((binding) => ({
+              callId: binding.callId,
+              targetSymbolId: binding.targetSymbolId,
+              argumentDefinitionIds: binding.argumentDefinitionIds.map((definitionId) => definitionId ?? null),
+              ...(binding.receiverDefinitionId === undefined ? {} : { receiverDefinitionId: binding.receiverDefinitionId }),
+            })),
+          })),
+        }),
+      );
+      const knowledgeGraph = new DeterministicKnowledgeGraphBuilder().build(symbolTables, dependencyGraph);
+      records.push(
+        createStorageRecord("knowledge-graph", {
+          projectId: discovery.projectId,
+          analysisRunId: command.id,
+          nodes: knowledgeGraph.nodes,
+          edges: knowledgeGraph.edges,
+        }),
+      );
+
+      const durationMs = performance.now() - startedAt;
+      const analysisSummary = createAnalysisSummary({
+        filesDiscovered: discovery.files.length,
+        filesAnalyzed: symbolTables.length,
+        parserFailures: events.filter((event) => event.type === "ParserFailure").length,
+        symbolExtractionFailures: events.filter((event) => event.type === "SymbolsExtractionFailure").length,
+        unsupportedFiles: discovery.files.filter((file) => file.fileKind === "source" && file.language !== "javascript" && file.language !== "typescript").length,
+        nonSourceArtifacts: discovery.files.filter((file) => file.fileKind !== "source" && file.fileKind !== "unknown" && file.fileKind !== undefined).length,
+        unclassifiedArtifacts: discovery.files.filter((file) => file.fileKind === "unknown" || file.fileKind === undefined).length,
+        enumerationFailures: enumerationFailures.length,
+        discoveryComplete: enumerationFailures.length === 0,
+        durationMs,
+      });
+
+      records.push(
+        createStorageRecord("analysis-run", {
+          projectId: discovery.projectId,
+          analysisRunId: command.id,
+          status: "completed",
+          startedAt: discovery.discoveredAt.toISOString(),
+          completedAt: new Date().toISOString(),
+          summary: {
+            filesDiscovered: analysisSummary.filesDiscovered,
+            filesAnalyzed: analysisSummary.filesAnalyzed,
+            parserFailures: analysisSummary.parserFailures,
+            symbolExtractionFailures: analysisSummary.symbolExtractionFailures,
+            unsupportedFiles: analysisSummary.unsupportedFiles,
+            nonSourceArtifacts: analysisSummary.nonSourceArtifacts,
+            unclassifiedArtifacts: analysisSummary.unclassifiedArtifacts,
+            enumerationFailures: analysisSummary.enumerationFailures,
+            discoveryComplete: analysisSummary.discoveryComplete,
+            durationMs: analysisSummary.durationMs,
+          },
+        }),
+      );
+
+      events.push(
+        createDomainEvent({
+          type: "AnalysisRunCompleted",
+          aggregateId: discovery.projectId,
+          payload: {
+            projectId: discovery.projectId,
+            analysisRunId: command.id,
+            durationMs,
+          },
+        }),
+      );
+
+      return {
+        events: Object.freeze(events),
+        records: Object.freeze(records),
+        discovery,
+        analysis: analysisSummary,
+      };
+    } catch (error: unknown) {
+      astResults.length = 0;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      const failedRecords: StorageRecord[] = [
+        createStorageRecord("analysis-run", {
+          projectId: discovery.projectId,
+          analysisRunId: command.id,
+          status: "failed",
+          startedAt: discovery.discoveredAt.toISOString(),
+          completedAt: new Date().toISOString(),
+          error: errorMessage,
+        }),
+      ];
+
+      const failedEvents: DomainEvent[] = [
+        ...events,
+        createDomainEvent({
+          type: "AnalysisRunFailed",
+          aggregateId: discovery.projectId,
+          payload: {
+            projectId: discovery.projectId,
+            analysisRunId: command.id,
+            error: errorMessage,
+          },
+        }),
+      ];
+
+      return {
+        events: Object.freeze(failedEvents),
+        records: Object.freeze(failedRecords),
+        discovery,
+      };
+    }
   }
 }
 

@@ -62,6 +62,20 @@ export class LegacyExodusEngine {
       case "AnalyzeProject": {
         const execution = await this.context.orchestrator.execute(command);
 
+        const failedEvent = execution.events.find((event) => event.type === "AnalysisRunFailed");
+        if (failedEvent !== undefined) {
+          const payload = failedEvent.payload as { readonly error: string };
+          throw new LegacyExodusError({
+            code: "ANALYSIS_RUN_FAILED",
+            message: `Analysis run failed: ${payload.error}`,
+            metadata: {
+              projectId: command.payload.projectId,
+              analysisRunId: command.id,
+              error: payload.error,
+            },
+          });
+        }
+
         if (execution.discovery === undefined) {
           throw new LegacyExodusError({
             code: "DISCOVERY_RESULT_MISSING",
