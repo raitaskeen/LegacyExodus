@@ -1,12 +1,15 @@
 version: 2
 updates:
-  - package-ecosystem: "npm"
+  - package-ecosystem: "bun"
     directory: "/legacy-exodus-core"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"

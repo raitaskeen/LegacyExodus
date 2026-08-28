@@ -71,6 +71,8 @@ describe("Repository Governance & GitHub Automation Hardening", () => {
     const ciContent = readFileSync(join(workflowsDir, "ci.yml"), "utf-8");
     expect(ciContent).toContain("contents: read");
     expect(ciContent).not.toContain("contents: write");
+    expect(ciContent).toContain("bun-version: 1.3.14");
+    expect(ciContent).toContain("bun install --frozen-lockfile");
     expect(ciContent).toContain("bun run typecheck");
     expect(ciContent).toContain("bun test");
     expect(ciContent).toContain("bun run benchmark audit");
@@ -128,15 +130,17 @@ describe("Repository Governance & GitHub Automation Hardening", () => {
     }
   });
 
-  it("4. dependabot.yml exists and configures npm and actions ecosystems", () => {
+  it("4. dependabot.yml exists, configures native bun and actions ecosystems, and protects against breaking compiler upgrades", () => {
     const dependabotPath = join(REPO_ROOT, ".github/dependabot.yml");
     expect(existsSync(dependabotPath)).toBe(true);
 
     const content = readFileSync(dependabotPath, "utf-8");
     expect(content).toContain("version: 2");
-    expect(content).toContain('package-ecosystem: "npm"');
+    expect(content).toContain('package-ecosystem: "bun"');
     expect(content).toContain('package-ecosystem: "github-actions"');
     expect(content).toContain('directory: "/legacy-exodus-core"');
+    expect(content).toContain('dependency-name: "typescript"');
+    expect(content).toContain('version-update:semver-major');
   });
 
   it("5. root governance and security documents exist and are populated", () => {
