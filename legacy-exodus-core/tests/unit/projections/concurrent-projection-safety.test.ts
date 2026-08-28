@@ -91,7 +91,7 @@ describe("Concurrent Projection Safety (F-005)", () => {
     } finally {
       await rm(projectPath, { force: true, recursive: true });
     }
-  }, 15000);
+  });
 
   it("2. concurrent projections across distinct repositories run independently without interference", async () => {
     const projectPathA = await mkdtemp(join(tmpdir(), "legacy-exodus-proj-a-"));

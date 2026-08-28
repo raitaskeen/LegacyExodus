@@ -55,7 +55,6 @@ describe("Repository Governance & GitHub Automation Hardening", () => {
       "documentation.yml",
       "security-scan.yml",
       "labeler.yml",
-      "dependabot-lockfile.yml",
     ];
 
     for (const expected of expectedWorkflows) {
@@ -73,6 +72,7 @@ describe("Repository Governance & GitHub Automation Hardening", () => {
     expect(ciContent).toContain("contents: read");
     expect(ciContent).not.toContain("contents: write");
     expect(ciContent).toContain("bun-version: 1.3.14");
+    expect(ciContent).toContain("bun install --frozen-lockfile");
     expect(ciContent).toContain("bun run typecheck");
     expect(ciContent).toContain("bun test");
     expect(ciContent).toContain("bun run benchmark audit");
@@ -94,13 +94,6 @@ describe("Repository Governance & GitHub Automation Hardening", () => {
     expect(labelerContent).toContain("contents: read");
     expect(labelerContent).toContain("pull-requests: write");
     expect(labelerContent).not.toContain("contents: write");
-
-    // 5. Dependabot Lockfile Workflow permissions
-    const depLockContent = readFileSync(join(workflowsDir, "dependabot-lockfile.yml"), "utf-8");
-    expect(depLockContent).toContain("contents: write");
-    expect(depLockContent).toContain("pull-requests: write");
-    expect(depLockContent).toContain("bun-version: 1.3.14");
-    expect(depLockContent).toContain("bun install");
   });
 
   it("3. issue templates have valid YAML frontmatter and required fields", () => {
@@ -137,13 +130,13 @@ describe("Repository Governance & GitHub Automation Hardening", () => {
     }
   });
 
-  it("4. dependabot.yml exists, configures ecosystems, and protects against breaking compiler upgrades", () => {
+  it("4. dependabot.yml exists, configures native bun and actions ecosystems, and protects against breaking compiler upgrades", () => {
     const dependabotPath = join(REPO_ROOT, ".github/dependabot.yml");
     expect(existsSync(dependabotPath)).toBe(true);
 
     const content = readFileSync(dependabotPath, "utf-8");
     expect(content).toContain("version: 2");
-    expect(content).toContain('package-ecosystem: "npm"');
+    expect(content).toContain('package-ecosystem: "bun"');
     expect(content).toContain('package-ecosystem: "github-actions"');
     expect(content).toContain('directory: "/legacy-exodus-core"');
     expect(content).toContain('dependency-name: "typescript"');
