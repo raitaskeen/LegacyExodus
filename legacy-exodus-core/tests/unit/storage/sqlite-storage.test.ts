@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { Database } from "bun:sqlite";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -188,5 +189,86 @@ describe("SqliteStorageProvider", () => {
 
     const r2 = await inMemoryProvider.findById(run2Record.id);
     expect(r2?.payload).toEqual(run2Record.payload);
+  });
+
+  it("initializes hardened SQLite configuration pragmas (F-008)", async () => {
+    const testDbPath = join(tmpdir(), `test-pragmas-${Date.now()}-${Math.random().toString(36).slice(2)}.sqlite`);
+
+    try {
+      const provider = new SqliteStorageProvider({ databasePath: testDbPath });
+      const internalDb = (provider as unknown as { db: Database }).db;
+
+      const activeBusyTimeout = internalDb.query("PRAGMA busy_timeout;").get() as { timeout: number };
+      const activeTempStore = internalDb.query("PRAGMA temp_store;").get() as { temp_store: number };
+      const activeSync = internalDb.query("PRAGMA synchronous;").get() as { synchronous: number };
+      const activeFk = internalDb.query("PRAGMA foreign_keys;").get() as { foreign_keys: number };
+      const activeJournal = internalDb.query("PRAGMA journal_mode;").get() as { journal_mode: string };
+
+      expect(activeBusyTimeout.timeout).toBe(5000);
+      expect(activeTempStore.temp_store).toBe(2); // 2 = MEMORY
+      expect(activeSync.synchronous).toBe(1); // 1 = NORMAL
+      expect(activeFk.foreign_keys).toBe(1); // 1 = ON
+      expect(activeJournal.journal_mode.toLowerCase()).toBe("wal");
+
+      provider.close();
+    } finally {
+      try {
+        await rm(testDbPath, { force: true });
+        await rm(`${testDbPath}-wal`, { force: true });
+        await rm(`${testDbPath}-shm`, { force: true });
+      } catch {}
+    }
+  });
+
+  it("enforces busy timeout and prevents immediate SQLITE_BUSY failure (F-008)", async () => {
+    const testDbPath = join(tmpdir(), `test-busy-${Date.now()}-${Math.random().toString(36).slice(2)}.sqlite`);
+
+    try {
+      const provider1 = new SqliteStorageProvider({ databasePath: testDbPath });
+      const db1 = (provider1 as unknown as { db: Database }).db;
+
+      // Lock provider1 with an exclusive transaction
+      db1.run("BEGIN EXCLUSIVE;");
+      await provider1.save(createStorageRecord("locked-item", { key: "locked" }));
+
+      // Create a temporary connection with a bounded 100ms busy_timeout to verify timeout behavior
+      const tempConn = new Database(testDbPath);
+      tempConn.run("PRAGMA busy_timeout = 100;");
+
+      const tStart = performance.now();
+      let threwError = false;
+      try {
+        tempConn.run("INSERT INTO storage_records (id, type, payload, created_at, updated_at) VALUES ('c1', 'test', '{}', 0, 0);");
+      } catch (err: unknown) {
+        threwError = true;
+        expect((err as Error).message).toContain("database is locked");
+      }
+      const elapsed = performance.now() - tStart;
+
+      expect(threwError).toBe(true);
+      // Verify that it waited for the configured busy timeout rather than failing instantaneously at 0ms
+      expect(elapsed).toBeGreaterThanOrEqual(80);
+
+      tempConn.close();
+
+      // Release lock on provider1
+      db1.run("COMMIT;");
+
+      // Provider 2 with standard 5000ms timeout now writes successfully
+      const provider2 = new SqliteStorageProvider({ databasePath: testDbPath });
+      await provider2.save(createStorageRecord("after-lock-item", { key: "succeeded" }));
+
+      const all = await provider2.findAll("after-lock-item");
+      expect(all).toHaveLength(1);
+
+      provider1.close();
+      provider2.close();
+    } finally {
+      try {
+        await rm(testDbPath, { force: true });
+        await rm(`${testDbPath}-wal`, { force: true });
+        await rm(`${testDbPath}-shm`, { force: true });
+      } catch {}
+    }
   });
 });
