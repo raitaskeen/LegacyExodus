@@ -289,5 +289,68 @@ describe("F-02: Symbol Extraction Error Classification & Accounting Invariant", 
       expect(execution.analysis!.filesAnalyzed).toBe(0);
       expect(execution.analysis!.symbolExtractionFailures).toBe(1);
     });
+
+    it("normalizes error codes by trimming whitespace and falls back when code is whitespace-only", async () => {
+      const projectPath = await createWorkspace();
+      await writeFile(join(projectPath, "padded.js"), "export const p = 1;", "utf8");
+      await writeFile(join(projectPath, "blank.js"), "export const b = 2;", "utf8");
+
+      class WhitespaceCodeExtractor extends JavaScriptSymbolExtractor {
+        public override extract(ast: Parameters<JavaScriptSymbolExtractor["extract"]>[0]): ReturnType<JavaScriptSymbolExtractor["extract"]> {
+          if (ast.metadata.sourcePath === "padded.js") {
+            const err = new Error("Padded error code");
+            (err as any).code = "  SYMBOL_PADDED_CODE  ";
+            throw err;
+          }
+          if (ast.metadata.sourcePath === "blank.js") {
+            const err = new Error("Blank error code");
+            (err as any).code = "   ";
+            throw err;
+          }
+          return super.extract(ast);
+        }
+      }
+
+      const eventStore = new InMemoryEventStore();
+      const eventBus = new EventBus();
+      const storageManager = new StorageManager(new MemoryStorageProvider());
+      const orchestrator = new Orchestrator(
+        eventStore,
+        eventBus,
+        storageManager,
+        new DiscoveryEngine(),
+        undefined,
+        undefined,
+        new WhitespaceCodeExtractor(),
+      );
+
+      const execution = await orchestrator.execute({
+        id: runId,
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: {
+          projectId,
+          path: projectPath,
+        },
+      });
+
+      const failureEvents = eventStore.getByType("SymbolsExtractionFailure");
+      expect(failureEvents).toHaveLength(2);
+
+      const paddedEvent = failureEvents.find((e) => (e.payload as { readonly path?: unknown })?.path === "padded.js");
+      expect(paddedEvent?.payload).toMatchObject({
+        path: "padded.js",
+        code: "SYMBOL_PADDED_CODE",
+      });
+
+      const blankEvent = failureEvents.find((e) => (e.payload as { readonly path?: unknown })?.path === "blank.js");
+      expect(blankEvent?.payload).toMatchObject({
+        path: "blank.js",
+        code: "SYMBOL_EXTRACTION_FAILED",
+      });
+
+      expect(execution.analysis!.filesDiscovered).toBe(2);
+      expect(execution.analysis!.symbolExtractionFailures).toBe(2);
+    });
   });
 });

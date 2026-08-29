@@ -82,17 +82,28 @@ export function freezeNode(node: ASTNode): ASTNode {
   return Object.freeze({
     ...node,
     role: node.role,
-    location:
-      node.location === undefined
-        ? undefined
-        : Object.isFrozen(node.location)
-          ? node.location
-          : Object.freeze({
-              start: Object.isFrozen(node.location.start) ? node.location.start : Object.freeze({ ...node.location.start }),
-              end: Object.isFrozen(node.location.end) ? node.location.end : Object.freeze({ ...node.location.end }),
-            }),
+    location: freezeLocation(node.location),
     attributes: Object.isFrozen(node.attributes) ? node.attributes : Object.freeze({ ...node.attributes }),
     children: Object.freeze(node.children.map(freezeNode)),
+  });
+}
+
+function freezeLocation(location: SourceLocation | undefined): SourceLocation | undefined {
+  if (location === undefined) {
+    return undefined;
+  }
+
+  if (
+    Object.isFrozen(location) &&
+    Object.isFrozen(location.start) &&
+    Object.isFrozen(location.end)
+  ) {
+    return location;
+  }
+
+  return Object.freeze({
+    start: Object.isFrozen(location.start) ? location.start : Object.freeze({ ...location.start }),
+    end: Object.isFrozen(location.end) ? location.end : Object.freeze({ ...location.end }),
   });
 }
 
@@ -104,16 +115,30 @@ function markTreeValidated(node: ASTNode): void {
 }
 
 function isDeeplyFrozenASTNode(value: unknown): boolean {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    Object.isFrozen(value) &&
-    "type" in value &&
-    typeof (value as { readonly type: unknown }).type === "string" &&
-    "attributes" in value &&
-    Object.isFrozen((value as ASTNode).attributes) &&
-    "children" in value &&
-    Array.isArray((value as ASTNode).children) &&
-    Object.isFrozen((value as ASTNode).children)
-  );
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !Object.isFrozen(value) ||
+    !("type" in value) ||
+    typeof (value as { readonly type: unknown }).type !== "string" ||
+    !("attributes" in value) ||
+    !Object.isFrozen((value as ASTNode).attributes) ||
+    !("children" in value) ||
+    !Array.isArray((value as ASTNode).children) ||
+    !Object.isFrozen((value as ASTNode).children)
+  ) {
+    return false;
+  }
+
+  const location = (value as ASTNode).location;
+  if (
+    location !== undefined &&
+    (!Object.isFrozen(location) ||
+      !Object.isFrozen(location.start) ||
+      !Object.isFrozen(location.end))
+  ) {
+    return false;
+  }
+
+  return true;
 }

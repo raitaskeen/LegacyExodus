@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 
 import {
   freezeNode,
@@ -245,6 +245,105 @@ describe("F-03 / CodeRabbit Remediation: AST Validation Provenance & Trust Bound
       expect(() => validateParseResponse(null)).toThrow(LegacyExodusError);
       expect(() => validateParseResponse({})).toThrow(LegacyExodusError);
       expect(() => validateParseResponse({ result: "not-an-ast" })).toThrow(LegacyExodusError);
+    });
+  });
+
+  describe("E. Location Deep-Freeze Integrity & Identity Reuse", () => {
+    it("reuses fully frozen location by reference", () => {
+      const start = Object.freeze({ line: 1, column: 0 });
+      const end = Object.freeze({ line: 1, column: 10 });
+      const location = Object.freeze({ start, end });
+
+      const rawNode = {
+        type: "Identifier",
+        location,
+        attributes: Object.freeze({ name: "test" }),
+        children: Object.freeze([]),
+      };
+
+      const frozen = freezeNode(rawNode);
+      expect(frozen.location).toBe(location);
+      expect(frozen.location?.start).toBe(start);
+      expect(frozen.location?.end).toBe(end);
+    });
+
+    it("deeply freezes location with mutable start and preserves already-frozen end identity", () => {
+      const start = { line: 2, column: 4 }; // mutable
+      const end = Object.freeze({ line: 2, column: 15 }); // frozen
+      const location = Object.freeze({ start, end }); // frozen outer
+
+      const rawNode = {
+        type: "Identifier",
+        location,
+        attributes: Object.freeze({ name: "test" }),
+        children: Object.freeze([]),
+      };
+
+      const frozen = freezeNode(rawNode);
+      expect(Object.isFrozen(frozen.location)).toBe(true);
+      expect(Object.isFrozen(frozen.location?.start)).toBe(true);
+      expect(frozen.location?.start).toEqual({ line: 2, column: 4 });
+      expect(frozen.location?.end).toBe(end); // preserved identity
+    });
+
+    it("deeply freezes location with mutable end and preserves already-frozen start identity", () => {
+      const start = Object.freeze({ line: 3, column: 0 }); // frozen
+      const end = { line: 3, column: 8 }; // mutable
+      const location = Object.freeze({ start, end }); // frozen outer
+
+      const rawNode = {
+        type: "Identifier",
+        location,
+        attributes: Object.freeze({ name: "test" }),
+        children: Object.freeze([]),
+      };
+
+      const frozen = freezeNode(rawNode);
+      expect(Object.isFrozen(frozen.location)).toBe(true);
+      expect(Object.isFrozen(frozen.location?.end)).toBe(true);
+      expect(frozen.location?.end).toEqual({ line: 3, column: 8 });
+      expect(frozen.location?.start).toBe(start); // preserved identity
+    });
+
+    it("deeply freezes location when both start and end are mutable inside frozen outer", () => {
+      const start = { line: 5, column: 1 }; // mutable
+      const end = { line: 5, column: 20 }; // mutable
+      const location = Object.freeze({ start, end }); // frozen outer
+
+      const rawNode = {
+        type: "Identifier",
+        location,
+        attributes: Object.freeze({ name: "test" }),
+        children: Object.freeze([]),
+      };
+
+      const frozen = freezeNode(rawNode);
+      expect(Object.isFrozen(frozen.location)).toBe(true);
+      expect(Object.isFrozen(frozen.location?.start)).toBe(true);
+      expect(Object.isFrozen(frozen.location?.end)).toBe(true);
+      expect(frozen.location?.start).toEqual({ line: 5, column: 1 });
+      expect(frozen.location?.end).toEqual({ line: 5, column: 20 });
+    });
+
+    it("ensures node with partially mutable location is fully deep-frozen upon validateASTNode", () => {
+      const rawNode = {
+        type: "Identifier",
+        location: Object.freeze({
+          start: { line: 10, column: 2 }, // mutable
+          end: { line: 10, column: 12 },   // mutable
+        }),
+        attributes: { name: "x" },
+        children: [],
+      };
+
+      const validated = validateASTNode(rawNode);
+      expect(Object.isFrozen(validated)).toBe(true);
+      expect(Object.isFrozen(validated.location)).toBe(true);
+      expect(Object.isFrozen(validated.location?.start)).toBe(true);
+      expect(Object.isFrozen(validated.location?.end)).toBe(true);
+
+      // Identity reuse on subsequent call
+      expect(validateASTNode(validated)).toBe(validated);
     });
   });
 });

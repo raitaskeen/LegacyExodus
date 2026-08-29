@@ -375,8 +375,11 @@ async function readPathAliases(projectPath: string): Promise<ModuleResolutionOpt
 function getErrorCode(error: unknown, fallback = "UNKNOWN_ERROR"): string {
   if (typeof error === "object" && error !== null && "code" in error) {
     const code = (error as { readonly code: unknown }).code;
-    if (typeof code === "string" && code.length > 0) {
-      return code;
+    if (typeof code === "string") {
+      const trimmed = code.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
     }
   }
 
