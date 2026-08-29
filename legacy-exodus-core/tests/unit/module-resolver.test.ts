@@ -356,5 +356,58 @@ describe("ModuleResolver", () => {
       expect(graph.edges[0]?.sourceFilePath).toBe("src/app.js");
       expect(graph.edges[0]?.targetFilePath).toBe("src/c.js");
     });
+
+    test("resolves ReadonlySet known paths with Windows backslashes and dot segments", (): void => {
+      const resolver = new ModuleResolver();
+
+      // Finding #2A: ReadonlySet with Windows backslashes
+      expect(resolver.resolve("src/api.js", "./billing", new Set(["src\\billing.js"])).resolvedPath).toBe("src/billing.js");
+
+      // Finding #2B: ReadonlySet with dot segments
+      expect(resolver.resolve("src/api.js", "./billing", new Set(["src/sub/../billing.js"])).resolvedPath).toBe("src/billing.js");
+
+      // Finding #2D: Mixed separator and dot segments
+      expect(resolver.resolve("src/api.js", "./billing", new Set(["src\\sub\\..\\billing.js"])).resolvedPath).toBe("src/billing.js");
+
+      // Finding #2E: Canonical identity consistency across all equivalent representations
+      const equivalentForms = [
+        "src/billing.js",
+        "src/./billing.js",
+        "src/sub/../billing.js",
+        "src\\billing.js",
+        "src\\sub\\..\\billing.js",
+      ];
+      for (const form of equivalentForms) {
+        expect(resolver.resolve("src/api.js", "./billing", new Set([form])).resolvedPath).toBe("src/billing.js");
+      }
+    });
+
+    test("constructs graph edges when SymbolTable filePath contains dot segments or Windows backslashes", async (): Promise<void> => {
+      const parser = new JavaScriptParser();
+      const extractor = new JavaScriptSymbolExtractor();
+      const files = [
+        { id: "api", path: "src/api.js", language: "javascript", size: 1 },
+        { id: "billing", path: "src/billing.js", language: "javascript", size: 1 },
+      ] as const;
+
+      const apiAst = (await parser.parse({ file: files[0], source: 'import billing from "./billing"; export default billing;' })).result;
+      const billingAst = (await parser.parse({ file: files[1], source: "export default 42;" })).result;
+
+      const apiTable = extractor.extract(apiAst);
+      const billingTable = extractor.extract(billingAst);
+
+      // Finding #1: SymbolTable.filePath containing unnormalized dot segments or backslashes
+      const unnormalizedBillingTable = {
+        ...billingTable,
+        filePath: "src\\sub\\..\\billing.js",
+      };
+
+      const graph = new DeterministicDependencyGraphBuilder().build([apiTable, unnormalizedBillingTable], files);
+
+      expect(graph.edges).toHaveLength(1);
+      expect(graph.edges[0]?.sourceFilePath).toBe("src/api.js");
+      expect(graph.edges[0]?.targetFilePath).toBe("src/billing.js");
+      expect(graph.nodes.some((node) => node.filePath === "src/billing.js")).toBeTrue();
+    });
   });
 });

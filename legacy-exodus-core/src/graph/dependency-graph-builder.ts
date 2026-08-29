@@ -3,22 +3,29 @@ import { createHash } from "node:crypto";
 import type { CodeSymbol, SymbolTable } from "@symbols/index";
 
 import { validateDependencyGraph, type DependencyGraph } from "./dependency-graph-contracts";
-import { type KnownPathLookup, ModuleResolver } from "./module-resolver";
+import { canonicalizePath, type KnownPathLookup, ModuleResolver } from "./module-resolver";
 
 export class DeterministicDependencyGraphBuilder {
   public constructor(private readonly resolver: ModuleResolver = new ModuleResolver()) {}
 
   public build(symbolTables: readonly SymbolTable[], files: KnownPathLookup): DependencyGraph {
-    const orderedTables = [...symbolTables].sort((left, right) => left.filePath.localeCompare(right.filePath));
-    const tablesByPath = new Map(orderedTables.map((table) => [table.filePath.replaceAll("\\", "/"), table]));
+    const orderedTables = [...symbolTables].sort((left, right) =>
+      canonicalizePath(left.filePath).localeCompare(canonicalizePath(right.filePath)),
+    );
+    const tablesByPath = new Map(orderedTables.map((table) => [canonicalizePath(table.filePath), table]));
     const nodes = orderedTables.flatMap((table) =>
-      table.symbols.map((symbol) => ({ id: `symbol:${symbol.id}`, filePath: table.filePath, symbolId: symbol.id })),
+      table.symbols.map((symbol) => ({
+        id: `symbol:${symbol.id}`,
+        filePath: canonicalizePath(table.filePath),
+        symbolId: symbol.id,
+      })),
     );
     const edges = orderedTables.flatMap((table) =>
       table.symbols
         .filter((symbol) => symbol.kind === "import" && symbol.moduleSpecifier !== undefined)
         .flatMap((symbol) => {
-          const resolved = this.resolver.resolve(table.filePath, symbol.moduleSpecifier ?? "", files);
+          const canonicalTablePath = canonicalizePath(table.filePath);
+          const resolved = this.resolver.resolve(canonicalTablePath, symbol.moduleSpecifier ?? "", files);
           const target = resolved.resolvedPath === null ? undefined : tablesByPath.get(resolved.resolvedPath);
           const exported = target === undefined
             ? undefined
@@ -30,8 +37,8 @@ export class DeterministicDependencyGraphBuilder {
 
           return [{
             id: createHash("sha256").update(`${symbol.id}:${exported.id}`).digest("hex"),
-            sourceFilePath: table.filePath,
-            targetFilePath: exported.filePath,
+            sourceFilePath: canonicalTablePath,
+            targetFilePath: canonicalizePath(exported.filePath),
             importSymbolId: symbol.id,
             targetExportSymbolId: exported.id,
             moduleSpecifier: symbol.moduleSpecifier ?? "",
@@ -53,13 +60,14 @@ export class DeterministicDependencyGraphBuilder {
     tables: ReadonlyMap<string, SymbolTable>,
     visited: ReadonlySet<string>,
   ): CodeSymbol | undefined {
-    if (visited.has(table.filePath)) {
+    const tableCanonicalPath = canonicalizePath(table.filePath);
+    if (visited.has(tableCanonicalPath)) {
       const direct = this.findDirectExport(table, name);
       return direct?.moduleSpecifier === undefined ? direct : undefined;
     }
 
     const nextVisited = new Set(visited);
-    nextVisited.add(table.filePath);
+    nextVisited.add(tableCanonicalPath);
 
     const direct = this.findDirectExport(table, name);
     if (direct !== undefined) {
@@ -67,7 +75,7 @@ export class DeterministicDependencyGraphBuilder {
         return direct;
       }
 
-      const resolved = this.resolver.resolve(table.filePath, direct.moduleSpecifier, files).resolvedPath;
+      const resolved = this.resolver.resolve(tableCanonicalPath, direct.moduleSpecifier, files).resolvedPath;
       const target = resolved === null ? undefined : tables.get(resolved);
       const forwardedName = direct.sourceSymbolName ?? name;
       return target === undefined ? direct : this.resolveExport(target, forwardedName, files, tables, nextVisited);
@@ -84,10 +92,10 @@ export class DeterministicDependencyGraphBuilder {
     const matches: CodeSymbol[] = [];
     for (const wildcard of wildcardExports) {
       if (wildcard.moduleSpecifier === undefined) continue;
-      const resolved = this.resolver.resolve(table.filePath, wildcard.moduleSpecifier, files).resolvedPath;
+      const resolved = this.resolver.resolve(tableCanonicalPath, wildcard.moduleSpecifier, files).resolvedPath;
       if (resolved === null) continue;
       const target = tables.get(resolved);
-      if (target === undefined || nextVisited.has(target.filePath)) continue;
+      if (target === undefined || nextVisited.has(canonicalizePath(target.filePath))) continue;
 
       const found = this.resolveExport(target, name, files, tables, nextVisited);
       if (found !== undefined && !matches.some((m) => m.id === found.id)) {
