@@ -33,19 +33,20 @@ flowchart LR
 
 ---
 
-## 4. AST Immutability, Deep-Freeze Idempotency & Validation Fast-Path
+## 4. AST Immutability, Validation Provenance & Fast-Path Trust Boundary
 
-To eliminate redundant $O(N)$ Zod schema traversals and deep object allocations across downstream pipeline consumers (e.g. `JavaScriptSymbolExtractor`), the parser contracts enforce **deep-freeze idempotency**:
+To eliminate redundant $O(N)$ Zod schema traversals and deep object allocations across downstream pipeline consumers (such as `JavaScriptSymbolExtractor`), the parser contracts enforce **validation provenance alongside deep-freeze immutability**:
 
-* **Immutable Root Invariant:** Once an `ASTResult` is validated by `ParserManager`, its root node, children, metadata, diagnostics, and statistics are deeply frozen (`Object.freeze`).
-* **Validation Fast-Path ($O(1)$):** `validateASTResult`, `validateASTNode`, and `validateParseResponse` perform constant-time verification of pre-frozen inputs. If an object is already validated and deeply frozen, it is returned directly by reference without re-allocating nodes or executing recursive Zod schema passes.
-* **Security & Contract Boundary:** Unvalidated or mutated structures entering the subsystem boundary continue to undergo full Zod schema validation and structural freezing, maintaining 100% boundary safety.
+* **Immutability Signal vs. Validation Trust Boundary:** `Object.isFrozen()` is an immutability optimization signal, **not** proof of schema validity (`Frozen ≠ Validated`). A caller cannot bypass validation by manually freezing a malformed object.
+* **Module-Private Validation Provenance:** `validateASTResult`, `validateASTNode`, and `validateParseResponse` maintain module-private `WeakSet<object>` registries. Object identities are recorded in these sets **exclusively after** successful Zod schema parsing and deep freezing.
+* **Validation Fast-Path ($O(1)$):** The constant-time fast-path is granted **only** when an object is both deeply frozen (`Object.isFrozen`) and present in the corresponding module-private validation `WeakSet`. Pre-validated immutable ASTs are returned directly by reference without recursive schema re-parsing or object re-allocation.
+* **Defensive Boundary:** Any unknown, unfrozen, or manually frozen input outside the provenance registry undergoes full structural Zod schema validation. Malformed frozen objects are immediately rejected with deterministic `LegacyExodusError` diagnostics.
 
 ---
 
 ## 5. Implementation Evidence
 
 * **Source Location:** [`src/parser/adapters/javascript/`](../../legacy-exodus-core/src/parser/adapters/javascript).
-* **Validation & Fast-Path Contracts:** [`src/parser/contracts/ast-node.ts`](../../legacy-exodus-core/src/parser/contracts/ast-node.ts), [`src/parser/contracts/ast-result.ts`](../../legacy-exodus-core/src/parser/contracts/ast-result.ts), [`src/parser/models/parse-response.ts`](../../legacy-exodus-core/src/parser/models/parse-response.ts).
+* **Validation & Provenance Contracts:** [`src/parser/contracts/ast-node.ts`](../../legacy-exodus-core/src/parser/contracts/ast-node.ts), [`src/parser/contracts/ast-result.ts`](../../legacy-exodus-core/src/parser/contracts/ast-result.ts), [`src/parser/models/parse-response.ts`](../../legacy-exodus-core/src/parser/models/parse-response.ts).
 * **Tests:** `javascript-parser.test.ts`, `ast-validation-performance.test.ts`.
 * **Architecture Docs:** **[Parser Service Architecture](../architecture/components/parser-service.md)**.
