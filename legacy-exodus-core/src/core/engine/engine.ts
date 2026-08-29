@@ -6,6 +6,8 @@ import type { EngineState, EngineStatus } from "./engine-status";
 
 export class LegacyExodusEngine {
   private state: EngineState = "created";
+  private readonly activeExecutions = new Set<Promise<unknown>>();
+  private shutdownPromise: Promise<void> | null = null;
 
   public constructor(private readonly context: EngineContext) {}
 
@@ -14,7 +16,7 @@ export class LegacyExodusEngine {
       return;
     }
 
-    if (this.state === "stopped") {
+    if (this.state === "stopping" || this.state === "stopped") {
       throw new LegacyExodusError({
         code: "ENGINE_RESTART_NOT_SUPPORTED",
         message: "A stopped engine instance cannot be restarted.",
@@ -25,13 +27,30 @@ export class LegacyExodusEngine {
     this.state = "running";
   }
 
-  public async shutdown(): Promise<void> {
+  public shutdown(): Promise<void> {
     if (this.state === "stopped") {
-      return;
+      return Promise.resolve();
     }
 
-    await this.context.runtime.shutdown();
-    this.state = "stopped";
+    if (this.shutdownPromise !== null) {
+      return this.shutdownPromise;
+    }
+
+    this.state = "stopping";
+
+    this.shutdownPromise = (async () => {
+      try {
+        if (this.activeExecutions.size > 0) {
+          await Promise.allSettled([...this.activeExecutions]);
+        }
+
+        await this.context.runtime.shutdown();
+      } finally {
+        this.state = "stopped";
+      }
+    })();
+
+    return this.shutdownPromise;
   }
 
   public status(): EngineStatus {
@@ -56,53 +75,62 @@ export class LegacyExodusEngine {
       });
     }
 
-    switch (command.type) {
-      case "SystemStatus":
-        return { type: "SystemStatus", status: this.status() };
-      case "AnalyzeProject": {
-        const execution = await this.context.orchestrator.execute(command);
+    const executionPromise = (async () => {
+      switch (command.type) {
+        case "SystemStatus":
+          return { type: "SystemStatus" as const, status: this.status() };
+        case "AnalyzeProject": {
+          const execution = await this.context.orchestrator.execute(command);
 
-        const failedEvent = execution.events.find((event) => event.type === "AnalysisRunFailed");
-        if (failedEvent !== undefined) {
-          const payload = failedEvent.payload as { readonly error: string };
-          throw new LegacyExodusError({
-            code: "ANALYSIS_RUN_FAILED",
-            message: `Analysis run failed: ${payload.error}`,
-            metadata: {
-              projectId: command.payload.projectId,
-              analysisRunId: command.id,
-              error: payload.error,
-            },
-          });
+          const failedEvent = execution.events.find((event) => event.type === "AnalysisRunFailed");
+          if (failedEvent !== undefined) {
+            const payload = failedEvent.payload as { readonly error: string };
+            throw new LegacyExodusError({
+              code: "ANALYSIS_RUN_FAILED",
+              message: `Analysis run failed: ${payload.error}`,
+              metadata: {
+                projectId: command.payload.projectId,
+                analysisRunId: command.id,
+                error: payload.error,
+              },
+            });
+          }
+
+          if (execution.discovery === undefined) {
+            throw new LegacyExodusError({
+              code: "DISCOVERY_RESULT_MISSING",
+              message: "AnalyzeProject completed without a discovery result.",
+            });
+          }
+
+          const discoveryRecord = execution.records.find((record) => record.type === "project-discovery");
+
+          if (discoveryRecord === undefined) {
+            throw new LegacyExodusError({
+              code: "DISCOVERY_RECORD_MISSING",
+              message: "AnalyzeProject completed without a discovery record.",
+            });
+          }
+
+          await this.context.discoveryProjection.project(discoveryRecord.id);
+
+          if (execution.analysis === undefined) {
+            throw new LegacyExodusError({
+              code: "ANALYSIS_SUMMARY_MISSING",
+              message: "AnalyzeProject completed without an analysis summary.",
+            });
+          }
+
+          return { type: "AnalyzeProject" as const, discovery: execution.discovery, analysis: execution.analysis };
         }
-
-        if (execution.discovery === undefined) {
-          throw new LegacyExodusError({
-            code: "DISCOVERY_RESULT_MISSING",
-            message: "AnalyzeProject completed without a discovery result.",
-          });
-        }
-
-        const discoveryRecord = execution.records.find((record) => record.type === "project-discovery");
-
-        if (discoveryRecord === undefined) {
-          throw new LegacyExodusError({
-            code: "DISCOVERY_RECORD_MISSING",
-            message: "AnalyzeProject completed without a discovery record.",
-          });
-        }
-
-        await this.context.discoveryProjection.project(discoveryRecord.id);
-
-        if (execution.analysis === undefined) {
-          throw new LegacyExodusError({
-            code: "ANALYSIS_SUMMARY_MISSING",
-            message: "AnalyzeProject completed without an analysis summary.",
-          });
-        }
-
-        return { type: "AnalyzeProject", discovery: execution.discovery, analysis: execution.analysis };
       }
+    })();
+
+    this.activeExecutions.add(executionPromise);
+    try {
+      return await executionPromise;
+    } finally {
+      this.activeExecutions.delete(executionPromise);
     }
   }
 

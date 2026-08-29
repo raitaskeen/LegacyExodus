@@ -1,6 +1,6 @@
 import type { RuntimeStatus } from "@runtime/application";
 
-export type EngineState = "created" | "running" | "stopped";
+export type EngineState = "created" | "running" | "stopping" | "stopped";
 export type EngineComponentStatus = "ready" | "not-ready";
 
 export interface EngineStatus {

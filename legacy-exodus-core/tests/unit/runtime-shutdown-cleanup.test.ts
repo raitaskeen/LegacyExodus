@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -105,7 +105,9 @@ describe("Runtime Shutdown Cleanup & Resource Disposal (F-006)", () => {
     const dbPath = join(tempDir, "shutdown-test.sqlite");
 
     try {
-      const sqliteStorage = new StorageManager(new SqliteStorageProvider({ databasePath: dbPath }));
+      const sqliteProvider = new SqliteStorageProvider({ databasePath: dbPath });
+      const closeSpy = spyOn(sqliteProvider, "close");
+      const sqliteStorage = new StorageManager(sqliteProvider);
       const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
 
       const runtime = new ApplicationRuntime(
@@ -173,6 +175,9 @@ describe("Runtime Shutdown Cleanup & Resource Disposal (F-006)", () => {
       // Plugin was unregistered
       expect(runtime.getPluginRegistry().has("plugin-p1")).toBe(false);
 
+      // Explicitly prove original sqliteProvider.close() was invoked exactly once before reopen
+      expect(closeSpy).toHaveBeenCalledTimes(1);
+
       // Verify SQLite connection was closed: a new provider can open the file without lock error
       const freshProvider = new SqliteStorageProvider({ databasePath: dbPath });
       const freshStorage = new StorageManager(freshProvider);
@@ -220,5 +225,100 @@ describe("Runtime Shutdown Cleanup & Resource Disposal (F-006)", () => {
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
+  });
+
+  it("6. plugin shutdown failure does not prevent storage closure and runtime reaches stopped status", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "legacy-exodus-f006-plugin-fail-"));
+    const dbPath = join(tempDir, "plugin-fail.sqlite");
+
+    try {
+      const sqliteProvider = new SqliteStorageProvider({ databasePath: dbPath });
+      const closeSpy = spyOn(sqliteProvider, "close");
+      const sqliteStorage = new StorageManager(sqliteProvider);
+      const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+
+      const runtime = new ApplicationRuntime(
+        context.runtime.getConfig(),
+        (context.runtime as any).logger,
+        sqliteStorage,
+        context.runtime.getPluginRegistry(),
+        context.runtime.getPluginLoader(),
+      );
+
+      const faultyPlugin: LegacyExodusPlugin = {
+        id: "failing-plugin",
+        name: "Failing Plugin",
+        version: "1.0.0",
+        type: "parser",
+        initialize: async () => {},
+        shutdown: async () => {
+          throw new Error("Plugin shutdown crashed");
+        },
+      };
+
+      await runtime.getPluginLoader().load(faultyPlugin);
+      await runtime.start();
+      expect(runtime.getStatus()).toBe("running");
+
+      await sqliteStorage.save(createStorageRecord("test-type", { key: "value" }));
+
+      await expect(runtime.shutdown()).rejects.toThrow(
+        expect.objectContaining({
+          code: "RUNTIME_SHUTDOWN_FAILED",
+          metadata: { failureCount: 1 },
+        }),
+      );
+
+      expect(runtime.getStatus()).toBe("stopped");
+      expect(runtime.getPluginRegistry().has("failing-plugin")).toBe(false);
+
+      // Verify original sqliteProvider was closed exactly once
+      expect(closeSpy).toHaveBeenCalledTimes(1);
+
+      // Verify storage was closed cleanly despite plugin failure
+      const reopenProvider = new SqliteStorageProvider({ databasePath: dbPath });
+      const reopenStorage = new StorageManager(reopenProvider);
+      expect(await reopenStorage.findAll("test-type")).toHaveLength(1);
+      reopenProvider.close();
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("7. storage close failure still transitions runtime to stopped status and reports error", async () => {
+    const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+
+    const faultyStorageProvider = {
+      save: async () => {},
+      findById: async () => null,
+      findAll: async () => [],
+      findScoped: async () => [],
+      delete: async () => {},
+      clear: async () => {},
+      close: () => {
+        throw new Error("Storage disk write lock failed during close");
+      },
+    };
+    const faultyStorageManager = new StorageManager(faultyStorageProvider as any);
+
+    const runtime = new ApplicationRuntime(
+      context.runtime.getConfig(),
+      (context.runtime as any).logger,
+      faultyStorageManager,
+      context.runtime.getPluginRegistry(),
+      context.runtime.getPluginLoader(),
+    );
+
+    await runtime.start();
+    expect(runtime.getStatus()).toBe("running");
+
+    await expect(runtime.shutdown()).rejects.toThrow(
+      expect.objectContaining({
+        code: "RUNTIME_SHUTDOWN_FAILED",
+        metadata: { failureCount: 1 },
+      }),
+    );
+
+    expect(runtime.getStatus()).toBe("stopped");
   });
 });
