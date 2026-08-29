@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { JavaScriptParser, type ParseRequest } from "@parser/index";
 import {
   JavaScriptSymbolExtractor,
+  SymbolExtractionError,
   UnsupportedSymbolLanguageError,
   validateSymbolTable,
 } from "@symbols/index";
@@ -53,6 +54,32 @@ describe("F-02: Symbol Extraction Error Classification & Accounting Invariant", 
   });
 
   describe("A. Direct Symbol Extractor Error Semantics", () => {
+    it("instantiates SymbolExtractionError with default code and empty metadata", () => {
+      const error = new SymbolExtractionError("Extraction failed unexpectedly");
+
+      expect(error).toBeInstanceOf(LegacyExodusError);
+      expect(error).toBeInstanceOf(SymbolExtractionError);
+      expect(error.name).toBe("SymbolExtractionError");
+      expect(error.code).toBe("SYMBOL_EXTRACTION_FAILED");
+      expect(error.message).toBe("Extraction failed unexpectedly");
+      expect(error.metadata).toEqual({});
+    });
+
+    it("instantiates SymbolExtractionError with custom code and metadata", () => {
+      const error = new SymbolExtractionError(
+        "Custom symbol failure",
+        "SYMBOL_CUSTOM_CODE",
+        { path: "a.js" },
+      );
+
+      expect(error).toBeInstanceOf(LegacyExodusError);
+      expect(error).toBeInstanceOf(SymbolExtractionError);
+      expect(error.name).toBe("SymbolExtractionError");
+      expect(error.code).toBe("SYMBOL_CUSTOM_CODE");
+      expect(error.message).toBe("Custom symbol failure");
+      expect(error.metadata).toEqual({ path: "a.js" });
+    });
+
     it("successfully extracts symbols from valid JavaScript and TypeScript ASTs", async () => {
       const parser = new JavaScriptParser();
       const extractor = new JavaScriptSymbolExtractor();
