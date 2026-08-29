@@ -86,8 +86,13 @@ export async function runFidelityValidation(options: RunFidelityOptions): Promis
     }
 
     // Verify Engine Identity & Evaluate Dynamic Freshness
+    const rawProvSha = provenance.engine.commitSha;
+    const provEngineSha =
+      typeof rawProvSha === "string" ? rawProvSha.trim() : "";
+
     if (options.expectedEngineCommitSha) {
-      if (provenance.engine.commitSha !== options.expectedEngineCommitSha) {
+      const expectedSha = options.expectedEngineCommitSha.trim();
+      if (provEngineSha !== expectedSha) {
         throw new Error(
           `Engine identity mismatch: expected '${options.expectedEngineCommitSha}', found '${provenance.engine.commitSha}'.`,
         );
@@ -96,14 +101,17 @@ export async function runFidelityValidation(options: RunFidelityOptions): Promis
     } else {
       let currentEngineCommitSha: string | undefined;
       try {
-        currentEngineCommitSha = execSync("git rev-parse HEAD", {
+        const resolvedSha = execSync("git rev-parse HEAD", {
           cwd: resolve(import.meta.dir, "../.."),
           encoding: "utf8",
           stdio: ["ignore", "pipe", "ignore"],
         }).trim();
+        if (resolvedSha.length > 0) {
+          currentEngineCommitSha = resolvedSha;
+        }
       } catch {}
 
-      if (currentEngineCommitSha && provenance.engine.commitSha !== currentEngineCommitSha) {
+      if (currentEngineCommitSha && provEngineSha !== currentEngineCommitSha) {
         freshnessStatus = "STALE";
       } else {
         freshnessStatus = "FRESH";

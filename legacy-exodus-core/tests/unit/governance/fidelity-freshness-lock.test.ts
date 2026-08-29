@@ -1,10 +1,12 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
+import * as cp from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DiscoveryArtifactProvenance, GroundTruthFact } from "@contracts/fidelity";
 import { runFidelityValidation } from "../../../benchmarks/fidelity/runner";
+import { ensureDiscoveryProjections } from "./test-fidelity-helpers";
 
 describe("Migration Fidelity — Verification Hardening & Evidence Freshness Lock", () => {
   const sampleGT: readonly GroundTruthFact[] = [
@@ -340,6 +342,139 @@ describe("Migration Fidelity — Verification Hardening & Evidence Freshness Loc
 
       expect(report.freshnessStatus).toBe("FRESH");
       expect(report.provenanceEvidence?.engine.commitSha).toBe(currentHead);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("ensureDiscoveryProjections Helper Provenance Hardening", () => {
+  async function createHelperFixture(tempDir: string, manifestSha: unknown): Promise<void> {
+    const discoveryDir = join(tempDir, ".discovery");
+    await mkdir(join(tempDir, "src"), { recursive: true });
+    await mkdir(discoveryDir, { recursive: true });
+    await writeFile(join(tempDir, "src", "index.js"), "export const val = 42;", "utf8");
+    await writeFile(
+      join(tempDir, "package.json"),
+      JSON.stringify({ name: "test-helper-repo", version: "1.0.0" }),
+      "utf8",
+    );
+
+    // Initial files.json includes a canary property to verify reuse vs regeneration
+    await writeFile(
+      join(discoveryDir, "files.json"),
+      JSON.stringify([{ path: "src/index.js", canary: "untouched" }]),
+      "utf8",
+    );
+
+    const manifest = {
+      schemaVersion: 1,
+      repository: { name: "test-helper-repo", path: tempDir },
+      engine: { packageVersion: "0.1.0", commitSha: manifestSha },
+      analysis: {
+        projectId: "00000000-0000-4000-8000-000000000098",
+        analysisRunId: "00000000-0000-4000-8000-000000000099",
+        generatedAt: new Date().toISOString(),
+      },
+    };
+    await writeFile(join(discoveryDir, "manifest.json"), JSON.stringify(manifest), "utf8");
+  }
+
+  async function isProjectionReused(tempDir: string): Promise<boolean> {
+    const raw = await readFile(join(tempDir, ".discovery", "files.json"), "utf8");
+    return raw.includes("untouched");
+  }
+
+  it("1. Matching SHA + Git available -> reuses existing projection", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "helper-fresh-1-"));
+    try {
+      const currentHead = cp.execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+      await createHelperFixture(tempDir, currentHead);
+      await ensureDiscoveryProjections(tempDir);
+      expect(await isProjectionReused(tempDir)).toBe(true);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("2. Mismatched SHA + Git available -> regenerates projection", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "helper-stale-2-"));
+    try {
+      await createHelperFixture(tempDir, "stale-sha-999999");
+      await ensureDiscoveryProjections(tempDir);
+      expect(await isProjectionReused(tempDir)).toBe(false);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("3. Valid manifest SHA + Git unavailable -> reuses existing projection", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "helper-nogit-valid-3-"));
+    const spy = spyOn(cp, "execSync").mockImplementation(() => {
+      throw new Error("git binary not found");
+    });
+    try {
+      await createHelperFixture(tempDir, "valid-cached-sha-123");
+      await ensureDiscoveryProjections(tempDir);
+      expect(await isProjectionReused(tempDir)).toBe(true);
+    } finally {
+      spy.mockRestore();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("4. Missing manifest SHA + Git unavailable -> regenerates projection", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "helper-nogit-missing-4-"));
+    const spy = spyOn(cp, "execSync").mockImplementation(() => {
+      throw new Error("git binary not found");
+    });
+    try {
+      await createHelperFixture(tempDir, undefined);
+      await ensureDiscoveryProjections(tempDir);
+      expect(await isProjectionReused(tempDir)).toBe(false);
+    } finally {
+      spy.mockRestore();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("5. Non-string manifest SHA + Git unavailable -> regenerates projection", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "helper-nogit-nonstring-5-"));
+    const spy = spyOn(cp, "execSync").mockImplementation(() => {
+      throw new Error("git binary not found");
+    });
+    try {
+      await createHelperFixture(tempDir, 123456);
+      await ensureDiscoveryProjections(tempDir);
+      expect(await isProjectionReused(tempDir)).toBe(false);
+    } finally {
+      spy.mockRestore();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("6. Whitespace-only manifest SHA + Git unavailable -> regenerates projection", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "helper-nogit-whitespace-6-"));
+    const spy = spyOn(cp, "execSync").mockImplementation(() => {
+      throw new Error("git binary not found");
+    });
+    try {
+      await createHelperFixture(tempDir, "    ");
+      await ensureDiscoveryProjections(tempDir);
+      expect(await isProjectionReused(tempDir)).toBe(false);
+    } finally {
+      spy.mockRestore();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("7. Padded manifest SHA -> trims and reuses projection when matching", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "helper-padded-7-"));
+    try {
+      const currentHead = cp.execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+      await createHelperFixture(tempDir, `  ${currentHead}  \n`);
+      await ensureDiscoveryProjections(tempDir);
+      expect(await isProjectionReused(tempDir)).toBe(true);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

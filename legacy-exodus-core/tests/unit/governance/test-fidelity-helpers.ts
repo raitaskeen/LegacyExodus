@@ -99,15 +99,26 @@ export async function ensureDiscoveryProjections(
       let currentSha: string | undefined;
       try {
         const { execSync } = await import("node:child_process");
-        currentSha = execSync("git rev-parse HEAD", {
+        const resolvedSha = execSync("git rev-parse HEAD", {
           cwd: resolve(import.meta.dir, "../../.."),
           encoding: "utf8",
           stdio: ["ignore", "pipe", "ignore"],
         }).trim();
+        if (resolvedSha.length > 0) {
+          currentSha = resolvedSha;
+        }
       } catch {}
 
-      if (!currentSha || manifest?.engine?.commitSha === currentSha) {
-        isCurrent = true;
+      const rawManifestSha = manifest?.engine?.commitSha;
+      const manifestEngineSha =
+        typeof rawManifestSha === "string" && rawManifestSha.trim().length > 0
+          ? rawManifestSha.trim()
+          : undefined;
+
+      if (manifestEngineSha !== undefined) {
+        if (!currentSha || manifestEngineSha === currentSha) {
+          isCurrent = true;
+        }
       }
     } catch {}
   }
