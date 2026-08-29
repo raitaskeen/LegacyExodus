@@ -1,7 +1,8 @@
+import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { DiscoveryArtifactProvenance, FidelityValidationReport, GroundTruthFact } from "@contracts/fidelity";
 import { MigrationFidelityValidator, type PredictionPayload } from "@governance/fidelity/fidelity-validator";
 import { resolveBenchmarkRepoPath, resolveFidelityResultsDir } from "../paths";
@@ -61,6 +62,28 @@ export async function runFidelityValidation(options: RunFidelityOptions): Promis
       throw new Error(`Malformed discovery manifest at ${manifestPath}: Missing required provenance sections.`);
     }
 
+    // Verify and Normalize Engine Identity
+    const rawProvSha = provenance.engine.commitSha;
+    const provEngineSha =
+      typeof rawProvSha === "string" && rawProvSha.trim().length > 0
+        ? rawProvSha.trim()
+        : undefined;
+
+    if (!provEngineSha) {
+      throw new Error(
+        `Malformed discovery manifest at ${manifestPath}: Missing or invalid engine.commitSha in provenance.`,
+      );
+    }
+
+    // Ensure normalized provenance is stored for downstream reporting
+    provenance = {
+      ...provenance,
+      engine: {
+        ...provenance.engine,
+        commitSha: provEngineSha,
+      },
+    };
+
     // Verify Repository Identity
     const expectedRepo = options.expectedRepositoryName ?? (isExpress ? "express" : "fastify");
     const actualRepoName = provenance.repository.name;
@@ -84,12 +107,32 @@ export async function runFidelityValidation(options: RunFidelityOptions): Promis
       }
     }
 
-    // Verify Engine Identity (if requested)
+    // Verify Engine Identity & Evaluate Dynamic Freshness
     if (options.expectedEngineCommitSha) {
-      if (provenance.engine.commitSha !== options.expectedEngineCommitSha) {
+      const expectedSha = options.expectedEngineCommitSha.trim();
+      if (provEngineSha !== expectedSha) {
         throw new Error(
           `Engine identity mismatch: expected '${options.expectedEngineCommitSha}', found '${provenance.engine.commitSha}'.`,
         );
+      }
+      freshnessStatus = "FRESH";
+    } else {
+      let currentEngineCommitSha: string | undefined;
+      try {
+        const resolvedSha = execSync("git rev-parse HEAD", {
+          cwd: resolve(import.meta.dir, "../.."),
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+        }).trim();
+        if (resolvedSha.length > 0) {
+          currentEngineCommitSha = resolvedSha;
+        }
+      } catch {}
+
+      if (currentEngineCommitSha && provEngineSha !== currentEngineCommitSha) {
+        freshnessStatus = "STALE";
+      } else {
+        freshnessStatus = "FRESH";
       }
     }
 

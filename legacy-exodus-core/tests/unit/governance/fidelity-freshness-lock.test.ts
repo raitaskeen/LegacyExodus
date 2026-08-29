@@ -1,10 +1,12 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
+import * as cp from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DiscoveryArtifactProvenance, GroundTruthFact } from "@contracts/fidelity";
 import { runFidelityValidation } from "../../../benchmarks/fidelity/runner";
+import { ensureDiscoveryProjections } from "./test-fidelity-helpers";
 
 describe("Migration Fidelity — Verification Hardening & Evidence Freshness Lock", () => {
   const sampleGT: readonly GroundTruthFact[] = [
@@ -283,6 +285,371 @@ describe("Migration Fidelity — Verification Hardening & Evidence Freshness Loc
         expect(err.message).toContain("Missing required discovery manifest");
       }
       expect(threw).toBe(true);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  // Case K: Dynamic STALE classification when manifest engine SHA is older than current HEAD
+  it("Case K: dynamically classifies freshnessStatus as STALE when manifest engine SHA differs from current HEAD and expectedEngineCommitSha is omitted", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "freshness-k-"));
+    try {
+      await createValidDiscoveryFixture(tempDir);
+      // createValidDiscoveryFixture sets engine.commitSha = "engine-sha-123456"
+      const report = await runFidelityValidation({
+        repoPath: tempDir,
+        groundTruth: sampleGT,
+        closedScopeFilePaths: ["src/index.js"],
+        expectedRepositoryName: "test-repo",
+      });
+
+      expect(report.freshnessStatus).toBe("STALE");
+      expect(report.provenanceEvidence?.engine.commitSha).toBe("engine-sha-123456");
+      expect(report.overallTruePositives).toBe(2);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  // Case L: Dynamic FRESH classification when manifest engine SHA matches current HEAD
+  it("Case L: dynamically classifies freshnessStatus as FRESH when manifest engine SHA matches current repository HEAD", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "freshness-l-"));
+    try {
+      const prov = await createValidDiscoveryFixture(tempDir);
+      const { execSync } = await import("node:child_process");
+      const currentHead = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+
+      const updatedProv: DiscoveryArtifactProvenance = {
+        ...prov,
+        engine: {
+          ...prov.engine,
+          commitSha: currentHead,
+        },
+      };
+
+      await writeFile(
+        join(tempDir, ".discovery", "manifest.json"),
+        JSON.stringify(updatedProv, null, 2),
+        "utf8",
+      );
+
+      const report = await runFidelityValidation({
+        repoPath: tempDir,
+        groundTruth: sampleGT,
+        closedScopeFilePaths: ["src/index.js"],
+        expectedRepositoryName: "test-repo",
+      });
+
+      expect(report.freshnessStatus).toBe("FRESH");
+      expect(report.provenanceEvidence?.engine.commitSha).toBe(currentHead);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  // Case M: Missing engine.commitSha in manifest throws deterministic validation error
+  it("Case M: throws hard error when manifest engine.commitSha is missing", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "freshness-m-"));
+    try {
+      const prov = await createValidDiscoveryFixture(tempDir);
+      const invalidProv: any = {
+        ...prov,
+        engine: {
+          packageVersion: "0.1.0",
+        },
+      };
+      await writeFile(
+        join(tempDir, ".discovery", "manifest.json"),
+        JSON.stringify(invalidProv, null, 2),
+        "utf8",
+      );
+
+      await expect(
+        runFidelityValidation({
+          repoPath: tempDir,
+          groundTruth: sampleGT,
+          expectedRepositoryName: "test-repo",
+        }),
+      ).rejects.toThrow(/Malformed discovery manifest.*Missing or invalid engine\.commitSha in provenance/);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  // Case N: Non-string engine.commitSha in manifest throws deterministic validation error
+  it("Case N: throws hard error when manifest engine.commitSha is non-string", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "freshness-n-"));
+    try {
+      const prov = await createValidDiscoveryFixture(tempDir);
+      const invalidProv: any = {
+        ...prov,
+        engine: {
+          ...prov.engine,
+          commitSha: 123456,
+        },
+      };
+      await writeFile(
+        join(tempDir, ".discovery", "manifest.json"),
+        JSON.stringify(invalidProv, null, 2),
+        "utf8",
+      );
+
+      await expect(
+        runFidelityValidation({
+          repoPath: tempDir,
+          groundTruth: sampleGT,
+          expectedRepositoryName: "test-repo",
+        }),
+      ).rejects.toThrow(/Malformed discovery manifest.*Missing or invalid engine\.commitSha in provenance/);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  // Case P: Empty string engine.commitSha in manifest throws deterministic validation error
+  it("Case P: throws hard error when manifest engine.commitSha is empty string", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "freshness-p-"));
+    try {
+      const prov = await createValidDiscoveryFixture(tempDir);
+      const invalidProv: any = {
+        ...prov,
+        engine: {
+          ...prov.engine,
+          commitSha: "",
+        },
+      };
+      await writeFile(
+        join(tempDir, ".discovery", "manifest.json"),
+        JSON.stringify(invalidProv, null, 2),
+        "utf8",
+      );
+
+      await expect(
+        runFidelityValidation({
+          repoPath: tempDir,
+          groundTruth: sampleGT,
+          expectedRepositoryName: "test-repo",
+        }),
+      ).rejects.toThrow(/Malformed discovery manifest.*Missing or invalid engine\.commitSha in provenance/);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  // Case Q: Whitespace-only engine.commitSha in manifest throws deterministic validation error
+  it("Case Q: throws hard error when manifest engine.commitSha is whitespace-only", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "freshness-q-"));
+    try {
+      const prov = await createValidDiscoveryFixture(tempDir);
+      const invalidProv: any = {
+        ...prov,
+        engine: {
+          ...prov.engine,
+          commitSha: "   \t\n  ",
+        },
+      };
+      await writeFile(
+        join(tempDir, ".discovery", "manifest.json"),
+        JSON.stringify(invalidProv, null, 2),
+        "utf8",
+      );
+
+      await expect(
+        runFidelityValidation({
+          repoPath: tempDir,
+          groundTruth: sampleGT,
+          expectedRepositoryName: "test-repo",
+        }),
+      ).rejects.toThrow(/Malformed discovery manifest.*Missing or invalid engine\.commitSha in provenance/);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  // Case R: Valid padded engine.commitSha is normalized and validated correctly
+  it("Case R: normalizes padded manifest engine.commitSha and validates successfully", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "freshness-r-"));
+    try {
+      const prov = await createValidDiscoveryFixture(tempDir);
+      const currentHead = cp.execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+      const updatedProv: any = {
+        ...prov,
+        engine: {
+          ...prov.engine,
+          commitSha: `  ${currentHead}  \n`,
+        },
+      };
+      await writeFile(
+        join(tempDir, ".discovery", "manifest.json"),
+        JSON.stringify(updatedProv, null, 2),
+        "utf8",
+      );
+
+      const report = await runFidelityValidation({
+        repoPath: tempDir,
+        groundTruth: sampleGT,
+        closedScopeFilePaths: ["src/index.js"],
+        expectedRepositoryName: "test-repo",
+      });
+
+      expect(report.freshnessStatus).toBe("FRESH");
+      expect(report.provenanceEvidence?.engine.commitSha).toBe(currentHead);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  // Case S: Valid engine.commitSha + Git unavailable preserves valid offline behavior
+  it("Case S: preserves valid offline validation when Git is unavailable and manifest SHA is valid", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "freshness-s-"));
+    const spy = spyOn(cp, "execSync").mockImplementation(() => {
+      throw new Error("git binary not available in offline environment");
+    });
+    try {
+      const prov = await createValidDiscoveryFixture(tempDir);
+      const report = await runFidelityValidation({
+        repoPath: tempDir,
+        groundTruth: sampleGT,
+        closedScopeFilePaths: ["src/index.js"],
+        expectedRepositoryName: "test-repo",
+      });
+
+      expect(report.freshnessStatus).toBe("FRESH");
+      expect(report.provenanceEvidence?.engine.commitSha).toBe(prov.engine.commitSha);
+    } finally {
+      spy.mockRestore();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("ensureDiscoveryProjections Helper Provenance Hardening", () => {
+  async function createHelperFixture(tempDir: string, manifestSha: unknown): Promise<void> {
+    const discoveryDir = join(tempDir, ".discovery");
+    await mkdir(join(tempDir, "src"), { recursive: true });
+    await mkdir(discoveryDir, { recursive: true });
+    await writeFile(join(tempDir, "src", "index.js"), "export const val = 42;", "utf8");
+    await writeFile(
+      join(tempDir, "package.json"),
+      JSON.stringify({ name: "test-helper-repo", version: "1.0.0" }),
+      "utf8",
+    );
+
+    // Initial files.json includes a canary property to verify reuse vs regeneration
+    await writeFile(
+      join(discoveryDir, "files.json"),
+      JSON.stringify([{ path: "src/index.js", canary: "untouched" }]),
+      "utf8",
+    );
+
+    const manifest = {
+      schemaVersion: 1,
+      repository: { name: "test-helper-repo", path: tempDir },
+      engine: { packageVersion: "0.1.0", commitSha: manifestSha },
+      analysis: {
+        projectId: "00000000-0000-4000-8000-000000000098",
+        analysisRunId: "00000000-0000-4000-8000-000000000099",
+        generatedAt: new Date().toISOString(),
+      },
+    };
+    await writeFile(join(discoveryDir, "manifest.json"), JSON.stringify(manifest), "utf8");
+  }
+
+  async function isProjectionReused(tempDir: string): Promise<boolean> {
+    const raw = await readFile(join(tempDir, ".discovery", "files.json"), "utf8");
+    return raw.includes("untouched");
+  }
+
+  it("1. Matching SHA + Git available -> reuses existing projection", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "helper-fresh-1-"));
+    try {
+      const currentHead = cp.execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+      await createHelperFixture(tempDir, currentHead);
+      await ensureDiscoveryProjections(tempDir);
+      expect(await isProjectionReused(tempDir)).toBe(true);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("2. Mismatched SHA + Git available -> regenerates projection", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "helper-stale-2-"));
+    try {
+      await createHelperFixture(tempDir, "stale-sha-999999");
+      await ensureDiscoveryProjections(tempDir);
+      expect(await isProjectionReused(tempDir)).toBe(false);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("3. Valid manifest SHA + Git unavailable -> reuses existing projection", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "helper-nogit-valid-3-"));
+    const spy = spyOn(cp, "execSync").mockImplementation(() => {
+      throw new Error("git binary not found");
+    });
+    try {
+      await createHelperFixture(tempDir, "valid-cached-sha-123");
+      await ensureDiscoveryProjections(tempDir);
+      expect(await isProjectionReused(tempDir)).toBe(true);
+    } finally {
+      spy.mockRestore();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("4. Missing manifest SHA + Git unavailable -> regenerates projection", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "helper-nogit-missing-4-"));
+    const spy = spyOn(cp, "execSync").mockImplementation(() => {
+      throw new Error("git binary not found");
+    });
+    try {
+      await createHelperFixture(tempDir, undefined);
+      await ensureDiscoveryProjections(tempDir);
+      expect(await isProjectionReused(tempDir)).toBe(false);
+    } finally {
+      spy.mockRestore();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("5. Non-string manifest SHA + Git unavailable -> regenerates projection", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "helper-nogit-nonstring-5-"));
+    const spy = spyOn(cp, "execSync").mockImplementation(() => {
+      throw new Error("git binary not found");
+    });
+    try {
+      await createHelperFixture(tempDir, 123456);
+      await ensureDiscoveryProjections(tempDir);
+      expect(await isProjectionReused(tempDir)).toBe(false);
+    } finally {
+      spy.mockRestore();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("6. Whitespace-only manifest SHA + Git unavailable -> regenerates projection", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "helper-nogit-whitespace-6-"));
+    const spy = spyOn(cp, "execSync").mockImplementation(() => {
+      throw new Error("git binary not found");
+    });
+    try {
+      await createHelperFixture(tempDir, "    ");
+      await ensureDiscoveryProjections(tempDir);
+      expect(await isProjectionReused(tempDir)).toBe(false);
+    } finally {
+      spy.mockRestore();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("7. Padded manifest SHA -> trims and reuses projection when matching", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "helper-padded-7-"));
+    try {
+      const currentHead = cp.execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+      await createHelperFixture(tempDir, `  ${currentHead}  \n`);
+      await ensureDiscoveryProjections(tempDir);
+      expect(await isProjectionReused(tempDir)).toBe(true);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
