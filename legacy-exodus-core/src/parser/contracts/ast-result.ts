@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { LegacyExodusError } from "@shared/errors";
 
-import { astNodeSchema, validateASTNode, type ASTNode } from "./ast-node";
+import { astNodeSchema, freezeNode, type ASTNode } from "./ast-node";
 import type { ParserError, ParserWarning } from "./parser-errors";
 import { validateParserStatistics, type ParserStatistics } from "@parser/models/parser-statistics";
 
@@ -47,6 +47,10 @@ const astResultSchema = z.object({
 });
 
 export function validateASTResult(result: unknown): ASTResult {
+  if (isDeeplyFrozenASTResult(result)) {
+    return result;
+  }
+
   const parsedResult = astResultSchema.safeParse(result);
 
   if (!parsedResult.success) {
@@ -59,7 +63,7 @@ export function validateASTResult(result: unknown): ASTResult {
 
   return Object.freeze({
     metadata: Object.freeze({ ...parsedResult.data.metadata }),
-    root: validateASTNode(parsedResult.data.root),
+    root: freezeNode(parsedResult.data.root),
     statistics: validateParserStatistics(parsedResult.data.statistics),
     warnings: Object.freeze(
       parsedResult.data.warnings.map((warning) =>
@@ -79,4 +83,22 @@ export function validateASTResult(result: unknown): ASTResult {
       ),
     ),
   });
+}
+
+function isDeeplyFrozenASTResult(value: unknown): value is ASTResult {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Object.isFrozen(value) &&
+    "metadata" in value &&
+    Object.isFrozen((value as ASTResult).metadata) &&
+    "root" in value &&
+    Object.isFrozen((value as ASTResult).root) &&
+    "statistics" in value &&
+    Object.isFrozen((value as ASTResult).statistics) &&
+    "warnings" in value &&
+    Object.isFrozen((value as ASTResult).warnings) &&
+    "errors" in value &&
+    Object.isFrozen((value as ASTResult).errors)
+  );
 }

@@ -43,6 +43,10 @@ export const astNodeSchema: z.ZodType<ASTNode> = z.lazy(() =>
 );
 
 export function validateASTNode(node: unknown): ASTNode {
+  if (isDeeplyFrozenASTNode(node)) {
+    return node as ASTNode;
+  }
+
   const parsedNode = astNodeSchema.safeParse(node);
 
   if (!parsedNode.success) {
@@ -56,18 +60,39 @@ export function validateASTNode(node: unknown): ASTNode {
   return freezeNode(parsedNode.data);
 }
 
-function freezeNode(node: ASTNode): ASTNode {
+export function freezeNode(node: ASTNode): ASTNode {
+  if (isDeeplyFrozenASTNode(node)) {
+    return node;
+  }
+
   return Object.freeze({
     ...node,
     role: node.role,
     location:
       node.location === undefined
         ? undefined
-        : Object.freeze({
-            start: Object.freeze({ ...node.location.start }),
-            end: Object.freeze({ ...node.location.end }),
-          }),
-    attributes: Object.freeze({ ...node.attributes }),
+        : Object.isFrozen(node.location)
+          ? node.location
+          : Object.freeze({
+              start: Object.isFrozen(node.location.start) ? node.location.start : Object.freeze({ ...node.location.start }),
+              end: Object.isFrozen(node.location.end) ? node.location.end : Object.freeze({ ...node.location.end }),
+            }),
+    attributes: Object.isFrozen(node.attributes) ? node.attributes : Object.freeze({ ...node.attributes }),
     children: Object.freeze(node.children.map(freezeNode)),
   });
+}
+
+function isDeeplyFrozenASTNode(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Object.isFrozen(value) &&
+    "type" in value &&
+    typeof (value as { readonly type: unknown }).type === "string" &&
+    "attributes" in value &&
+    Object.isFrozen((value as ASTNode).attributes) &&
+    "children" in value &&
+    Array.isArray((value as ASTNode).children) &&
+    Object.isFrozen((value as ASTNode).children)
+  );
 }

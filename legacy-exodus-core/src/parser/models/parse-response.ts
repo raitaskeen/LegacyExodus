@@ -11,6 +11,18 @@ export interface ParseResponse {
 const parseResponseSchema = z.object({ result: z.unknown() });
 
 export function validateParseResponse(response: unknown): ParseResponse {
+  if (
+    typeof response === "object" &&
+    response !== null &&
+    Object.isFrozen(response) &&
+    "result" in response &&
+    typeof (response as ParseResponse).result === "object" &&
+    (response as ParseResponse).result !== null &&
+    Object.isFrozen((response as ParseResponse).result)
+  ) {
+    return response as ParseResponse;
+  }
+
   const parsedResponse = parseResponseSchema.safeParse(response);
 
   if (!parsedResponse.success) {
