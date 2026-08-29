@@ -10,7 +10,7 @@ export class DeterministicDependencyGraphBuilder {
 
   public build(symbolTables: readonly SymbolTable[], files: KnownPathLookup): DependencyGraph {
     const orderedTables = [...symbolTables].sort((left, right) => left.filePath.localeCompare(right.filePath));
-    const tablesByPath = new Map(orderedTables.map((table) => [table.filePath, table]));
+    const tablesByPath = new Map(orderedTables.map((table) => [table.filePath.replaceAll("\\", "/"), table]));
     const nodes = orderedTables.flatMap((table) =>
       table.symbols.map((symbol) => ({ id: `symbol:${symbol.id}`, filePath: table.filePath, symbolId: symbol.id })),
     );
@@ -54,7 +54,8 @@ export class DeterministicDependencyGraphBuilder {
     visited: ReadonlySet<string>,
   ): CodeSymbol | undefined {
     if (visited.has(table.filePath)) {
-      return this.findDirectExport(table, name);
+      const direct = this.findDirectExport(table, name);
+      return direct?.moduleSpecifier === undefined ? direct : undefined;
     }
 
     const nextVisited = new Set(visited);
@@ -120,7 +121,7 @@ function findCycles(edges: readonly { readonly sourceFilePath: string; readonly 
   const adjacency = new Map<string, readonly string[]>();
   for (const edge of edges) {
     const targets = adjacency.get(edge.sourceFilePath) ?? [];
-    adjacency.set(edge.sourceFilePath, [...targets, edge.targetFilePath].sort());
+    adjacency.set(edge.sourceFilePath, Array.from(new Set([...targets, edge.targetFilePath])).sort());
     if (!adjacency.has(edge.targetFilePath)) {
       adjacency.set(edge.targetFilePath, []);
     }

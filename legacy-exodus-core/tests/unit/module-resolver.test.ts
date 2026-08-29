@@ -233,4 +233,128 @@ describe("ModuleResolver", () => {
       expect(resUnresolved.resolvedPath).toBeNull();
     }
   });
+
+  describe("F-008: Cyclic / Path-based Dependency Resolution Integrity", () => {
+    test("resolves specifiers with backslashes and redundant relative segments to canonical POSIX paths", (): void => {
+      const resolver = new ModuleResolver();
+      const lookupFiles: readonly FileArtifact[] = [
+        { id: "billing", path: "src/billing.js", language: "javascript", size: 1 },
+        { id: "barrel", path: "src/utils/index.js", language: "javascript", size: 1 },
+      ];
+
+      expect(resolver.resolve("src/api.js", ".\\billing", lookupFiles).resolvedPath).toBe("src/billing.js");
+      expect(resolver.resolve("src/api.js", "./sub/../billing", lookupFiles).resolvedPath).toBe("src/billing.js");
+      expect(resolver.resolve("src/services/api.js", "../billing", lookupFiles).resolvedPath).toBe("src/billing.js");
+      expect(resolver.resolve("src/api.js", "./utils/", lookupFiles).resolvedPath).toBe("src/utils/index.js");
+    });
+
+    test("resolves self-import cycles deterministically", async (): Promise<void> => {
+      const parser = new JavaScriptParser();
+      const extractor = new JavaScriptSymbolExtractor();
+      const selfFiles = [{ id: "self", path: "src/self.js", language: "javascript", size: 1 }] as const;
+      const selfAst = (await parser.parse({ file: selfFiles[0], source: 'import self from "./self"; export default self;' })).result;
+      const graph = new DeterministicDependencyGraphBuilder().build([extractor.extract(selfAst)], selfFiles);
+
+      expect(graph.edges).toHaveLength(1);
+      expect(graph.edges[0]?.sourceFilePath).toBe("src/self.js");
+      expect(graph.edges[0]?.targetFilePath).toBe("src/self.js");
+      expect(graph.cycles).toEqual([["src/self.js", "src/self.js"]]);
+    });
+
+    test("resolves multi-node 3-file and 4-file cycles with canonical rotation order", async (): Promise<void> => {
+      const parser = new JavaScriptParser();
+      const extractor = new JavaScriptSymbolExtractor();
+      const cycleFiles = [
+        { id: "a", path: "src/a.js", language: "javascript", size: 1 },
+        { id: "b", path: "src/b.js", language: "javascript", size: 1 },
+        { id: "c", path: "src/c.js", language: "javascript", size: 1 },
+      ] as const;
+
+      const aAst = (await parser.parse({ file: cycleFiles[0], source: 'import b from "./b"; export default 1;' })).result;
+      const bAst = (await parser.parse({ file: cycleFiles[1], source: 'import c from "./c"; export default 2;' })).result;
+      const cAst = (await parser.parse({ file: cycleFiles[2], source: 'import a from "./a"; export default 3;' })).result;
+
+      const graph = new DeterministicDependencyGraphBuilder().build(
+        [extractor.extract(aAst), extractor.extract(bAst), extractor.extract(cAst)],
+        cycleFiles,
+      );
+
+      expect(graph.edges).toHaveLength(3);
+      expect(graph.cycles).toEqual([["src/a.js", "src/b.js", "src/c.js", "src/a.js"]]);
+    });
+
+    test("detects disconnected multiple cycles independently", async (): Promise<void> => {
+      const parser = new JavaScriptParser();
+      const extractor = new JavaScriptSymbolExtractor();
+      const quadFiles = [
+        { id: "a", path: "src/a.js", language: "javascript", size: 1 },
+        { id: "b", path: "src/b.js", language: "javascript", size: 1 },
+        { id: "c", path: "src/c.js", language: "javascript", size: 1 },
+        { id: "d", path: "src/d.js", language: "javascript", size: 1 },
+      ] as const;
+
+      const aAst = (await parser.parse({ file: quadFiles[0], source: 'import b from "./b"; export default 1;' })).result;
+      const bAst = (await parser.parse({ file: quadFiles[1], source: 'import a from "./a"; export default 2;' })).result;
+      const cAst = (await parser.parse({ file: quadFiles[2], source: 'import d from "./d"; export default 3;' })).result;
+      const dAst = (await parser.parse({ file: quadFiles[3], source: 'import c from "./c"; export default 4;' })).result;
+
+      const graph = new DeterministicDependencyGraphBuilder().build(
+        [extractor.extract(aAst), extractor.extract(bAst), extractor.extract(cAst), extractor.extract(dAst)],
+        quadFiles,
+      );
+
+      expect(graph.edges).toHaveLength(4);
+      expect(graph.cycles).toEqual([
+        ["src/a.js", "src/b.js", "src/a.js"],
+        ["src/c.js", "src/d.js", "src/c.js"],
+      ]);
+    });
+
+    test("does not fabricate edges for circular re-export chains without a base definition", async (): Promise<void> => {
+      const parser = new JavaScriptParser();
+      const extractor = new JavaScriptSymbolExtractor();
+      const chainFiles = [
+        { id: "a", path: "src/a.js", language: "javascript", size: 1 },
+        { id: "b", path: "src/b.js", language: "javascript", size: 1 },
+        { id: "c", path: "src/c.js", language: "javascript", size: 1 },
+      ] as const;
+
+      const aAst = (await parser.parse({ file: chainFiles[0], source: 'export { missingSymbol } from "./b";' })).result;
+      const bAst = (await parser.parse({ file: chainFiles[1], source: 'export { missingSymbol } from "./a";' })).result;
+      const cAst = (await parser.parse({ file: chainFiles[2], source: 'import { missingSymbol } from "./a";' })).result;
+
+      const graph = new DeterministicDependencyGraphBuilder().build(
+        [extractor.extract(aAst), extractor.extract(bAst), extractor.extract(cAst)],
+        chainFiles,
+      );
+
+      // Unresolvable circular re-export loop without base definition must produce no edge from c
+      expect(graph.edges.filter((e) => e.sourceFilePath === "src/c.js")).toHaveLength(0);
+    });
+
+    test("resolves re-export chain to concrete definition across multiple hops", async (): Promise<void> => {
+      const parser = new JavaScriptParser();
+      const extractor = new JavaScriptSymbolExtractor();
+      const chainFiles = [
+        { id: "a", path: "src/a.js", language: "javascript", size: 1 },
+        { id: "b", path: "src/b.js", language: "javascript", size: 1 },
+        { id: "c", path: "src/c.js", language: "javascript", size: 1 },
+        { id: "app", path: "src/app.js", language: "javascript", size: 1 },
+      ] as const;
+
+      const aAst = (await parser.parse({ file: chainFiles[0], source: 'export { foo } from "./b";' })).result;
+      const bAst = (await parser.parse({ file: chainFiles[1], source: 'export { foo } from "./c";' })).result;
+      const cAst = (await parser.parse({ file: chainFiles[2], source: "export function foo() {}" })).result;
+      const appAst = (await parser.parse({ file: chainFiles[3], source: 'import { foo } from "./a";' })).result;
+
+      const graph = new DeterministicDependencyGraphBuilder().build(
+        [extractor.extract(aAst), extractor.extract(bAst), extractor.extract(cAst), extractor.extract(appAst)],
+        chainFiles,
+      );
+
+      expect(graph.edges).toHaveLength(1);
+      expect(graph.edges[0]?.sourceFilePath).toBe("src/app.js");
+      expect(graph.edges[0]?.targetFilePath).toBe("src/c.js");
+    });
+  });
 });
