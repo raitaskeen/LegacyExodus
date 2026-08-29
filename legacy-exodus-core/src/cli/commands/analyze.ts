@@ -4,9 +4,10 @@ import type { Command } from "commander";
 
 import { createLegacyExodusEngine, type LegacyExodusEngine } from "@core/engine";
 
-import { formatAnalyzeOutput } from "../output/formatter";
 import { formatJsonOutput } from "../output/json-output";
 import { UnexpectedEngineResultError } from "../errors";
+import { detectTerminalCapabilities } from "../presentation/capabilities";
+import { SummaryPresenter } from "../presentation/summaries";
 
 export interface AnalyzeProjectReport {
   readonly projectName: string;
@@ -80,8 +81,13 @@ export function registerAnalyzeCommand(
     .option("--json", "Emit machine-readable JSON")
     .action(async (path: string, options: { readonly json?: boolean }): Promise<void> => {
       const report = await analyzeProject(path, createEngine);
-      const output = options.json ? formatJsonOutput(report) : formatAnalyzeOutput(report);
+      if (options.json) {
+        process.stdout.write(`${formatJsonOutput(report)}\n`);
+        return;
+      }
 
-      process.stdout.write(`${output}\n`);
+      const capabilities = detectTerminalCapabilities();
+      const presenter = new SummaryPresenter(capabilities);
+      process.stdout.write(`${presenter.formatAnalyze(report)}\n`);
     });
 }

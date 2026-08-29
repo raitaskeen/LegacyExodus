@@ -42,14 +42,15 @@ export class LayoutRenderer {
 
     const prefix = subtitle ? `${brandPart}${subPart}${titlePart} ` : `${brandPart}${titlePart} `;
     const rawLen = stripAnsi(prefix).length;
-    const remaining = Math.max(0, Math.min(this.capabilities.width, 80) - rawLen);
+    const maxTargetWidth = Math.min(Math.max(this.capabilities.width, 60), 120);
+    const remaining = Math.max(0, maxTargetWidth - rawLen);
     const rule = this.theme.border(this.symbols.horizontalRule.repeat(remaining));
 
     return `${prefix}${rule}`;
   }
 
   public renderDivider(): string {
-    const len = Math.min(this.capabilities.width, 80);
+    const len = Math.min(Math.max(this.capabilities.width, 60), 120);
     return this.theme.border(this.symbols.horizontalRule.repeat(len));
   }
 

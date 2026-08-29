@@ -1,29 +1,53 @@
 import type { PluginListReport } from "../commands/plugins";
 import type { StatusReport } from "../commands/status";
 import type { AnalyzeProjectReport } from "../commands/analyze";
-import { detectTerminalCapabilities } from "../presentation/capabilities";
-import { SummaryPresenter } from "../presentation/summaries";
+import type { InitReport } from "../commands/init";
 
-export function formatStatusOutput(report: StatusReport, options: { readonly plain?: boolean } = {}): string {
-  const capabilities = detectTerminalCapabilities(options);
-  const presenter = new SummaryPresenter(capabilities);
-  return presenter.formatStatus(report);
+export function formatStatusOutput(report: StatusReport): string {
+  return [
+    "LegacyExodus Status",
+    "",
+    `Runtime: ${report.runtime}`,
+    `Storage: ${report.storage}`,
+    `Plugins: ${report.plugins} loaded`,
+    `Version: ${report.version}`,
+  ].join("\n");
 }
 
-export function formatPluginListOutput(report: PluginListReport, options: { readonly plain?: boolean } = {}): string {
-  const capabilities = detectTerminalCapabilities(options);
-  const presenter = new SummaryPresenter(capabilities);
-  return presenter.formatPlugins(report);
+export function formatPluginListOutput(report: PluginListReport): string {
+  if (report.plugins.length === 0) {
+    return ["Installed Plugins", "", "No plugins registered"].join("\n");
+  }
+
+  return ["Installed Plugins", "", ...report.plugins.map((plugin) => plugin.name)].join("\n");
 }
 
-export function formatAnalyzeOutput(report: AnalyzeProjectReport, options: { readonly plain?: boolean } = {}): string {
-  const capabilities = detectTerminalCapabilities(options);
-  const presenter = new SummaryPresenter(capabilities);
-  return presenter.formatAnalyze(report);
+export function formatAnalyzeOutput(report: AnalyzeProjectReport): string {
+  const enumerationFailures = report.enumerationFailures ?? 0;
+  const discoveryComplete = report.discoveryComplete ?? (enumerationFailures === 0);
+  return [
+    "Discovery completed",
+    "",
+    `Project: ${report.projectName}`,
+    `Files discovered: ${report.filesDiscovered}`,
+    `Files analyzed: ${report.filesAnalyzed}`,
+    `Parser failures: ${report.parserFailures}`,
+    `Symbol extraction failures: ${report.symbolExtractionFailures}`,
+    `Unsupported source files: ${report.unsupportedFiles}`,
+    `Non-source artifacts: ${report.nonSourceArtifacts}`,
+    `Unclassified files: ${report.unclassifiedArtifacts}`,
+    `Enumeration failures: ${enumerationFailures}`,
+    `Discovery complete: ${discoveryComplete ? "yes" : "no"}`,
+    `Analysis duration: ${report.durationMs.toFixed(2)}ms`,
+    `Languages: ${report.languages.join(", ") || "none"}`,
+    `Frameworks: ${report.frameworks.join(", ") || "none"}`,
+    `Dependencies: ${report.dependencies}`,
+  ].join("\n");
 }
 
-export function formatInitOutput(report: import("../commands/init").InitReport, options: { readonly plain?: boolean } = {}): string {
-  const capabilities = detectTerminalCapabilities(options);
-  const presenter = new SummaryPresenter(capabilities);
-  return presenter.formatInit(report);
+export function formatInitOutput(report: InitReport): string {
+  return [
+    "LegacyExodus workspace initialized",
+    `${report.metadataPath}`,
+  ].join("\n");
 }

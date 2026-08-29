@@ -6,8 +6,10 @@ import {
   type LegacyExodusEngine,
 } from "@core/engine";
 
-import { formatStatusOutput } from "../output/formatter";
 import { formatJsonOutput } from "../output/json-output";
+
+import { detectTerminalCapabilities } from "../presentation/capabilities";
+import { SummaryPresenter } from "../presentation/summaries";
 
 export interface StatusReport {
   readonly runtime: EngineStatus["runtime"];
@@ -51,8 +53,13 @@ export function registerStatusCommand(
     .option("--json", "Emit machine-readable JSON")
     .action(async (options: { readonly json?: boolean }): Promise<void> => {
       const report = await getStatusReport(version, createEngine);
-      const output = options.json ? formatJsonOutput(report) : formatStatusOutput(report);
+      if (options.json) {
+        process.stdout.write(`${formatJsonOutput(report)}\n`);
+        return;
+      }
 
-      process.stdout.write(`${output}\n`);
+      const capabilities = detectTerminalCapabilities();
+      const presenter = new SummaryPresenter(capabilities);
+      process.stdout.write(`${presenter.formatStatus(report)}\n`);
     });
 }

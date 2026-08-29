@@ -207,7 +207,7 @@ describe("CLI Presentation Subsystem", () => {
       const plainOut = presenterPlain.renderError(err);
 
       expect(interactiveOut).toContain("TEST_CODE");
-      expect(plainOut).toContain("[FAIL]");
+      expect(plainOut).toContain("Error: Sample error message");
       expect(plainOut).toContain("TEST_CODE");
     });
   });
@@ -330,6 +330,24 @@ describe("CLI Presentation Subsystem", () => {
       expect(out).toContain("Test Suite");
       expect(out).toContain("Benchmark Audit");
       expect(out).toContain("ALL GATES PASSED");
+    });
+
+    it("renders composite verification dashboard with failure diagnostics when a gate fails", () => {
+      const presenter = new VerificationPresenter(interactiveCaps);
+      const out = presenter.renderVerificationDashboard(
+        [
+          { name: "Typecheck", status: "pass", details: "0 errors", durationMs: 800 },
+          { name: "Test Suite", status: "fail", details: "1 failed", durationMs: 1200, diagnostics: "tests/unit/foo.test.ts\nExpected: 3\nReceived: 2" },
+          { name: "Benchmark Audit", status: "pass", details: "10/10 checks", durationMs: 200 },
+        ],
+        2200,
+      );
+
+      expect(out).toContain("Repository Verification Dashboard");
+      expect(out).toContain("1 OF 3 GATES FAILED");
+      expect(out).toContain("Failure Diagnostics");
+      expect(out).toContain("Test Suite");
+      expect(out).toContain("tests/unit/foo.test.ts");
     });
   });
 

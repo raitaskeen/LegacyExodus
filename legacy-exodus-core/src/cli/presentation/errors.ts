@@ -96,40 +96,46 @@ export class ErrorPresenter {
 
     if (this.capabilities.mode === "plain" || this.capabilities.mode === "ci") {
       const parts = [
-        `[FAIL] Error: ${details.message}`,
-        `  Code: ${details.code}`,
+        `Error: ${details.message}`,
+        `Code: ${details.code}`,
       ];
-      if (details.path) parts.push(`  Path: ${details.path}`);
-      if (details.runId) parts.push(`  Run ID: ${details.runId}`);
-      if (details.cause) parts.push(`  Cause: ${details.cause}`);
-      if (details.remediation) parts.push(`  Remediation: ${details.remediation}`);
+      if (details.path) parts.push(`Path: ${details.path}`);
+      if (details.runId) parts.push(`Run ID: ${details.runId}`);
+      if (details.cause) parts.push(`Cause: ${details.cause}`);
+      if (details.remediation) parts.push(`Remediation: ${details.remediation}`);
       return parts.join("\n");
     }
 
-    const header = `  ${this.theme.error(this.symbols.failure)} ${this.theme.error("Error:")} ${this.theme.heading(details.code)} ────────────────────────────`;
-    const lines: string[] = [header, ""];
+    const dividerWidth = Math.min(Math.max(this.capabilities.width - 4, 40), 80);
+    const header = `  ${this.theme.brand(this.symbols.brand)} ${this.theme.heading("LegacyExodus")} ${this.theme.muted(this.symbols.arrow)} ${this.theme.error("Error")}`;
+    const divider = `  ${this.theme.border(this.symbols.horizontalRule.repeat(dividerWidth))}`;
+    const lines: string[] = [header, divider, ""];
 
-    if (details.message) {
-      lines.push(`    ${this.theme.muted("Message")}          ${this.theme.text(details.message)}`);
-    }
+    lines.push(`    ${this.theme.muted("Code".padEnd(14, " "))}${this.theme.heading(details.code)}`);
+    lines.push(`    ${this.theme.muted("Message".padEnd(14, " "))}${this.theme.text(details.message)}`);
+
     if (details.context) {
-      lines.push(`    ${this.theme.muted("Context")}          ${this.theme.text(details.context)}`);
+      lines.push(`    ${this.theme.muted("Context".padEnd(14, " "))}${this.theme.text(details.context)}`);
     }
     if (details.path) {
-      lines.push(`    ${this.theme.muted("Target Path")}      ${this.theme.text(details.path)}`);
+      lines.push(`    ${this.theme.muted("Target Path".padEnd(14, " "))}${this.theme.text(details.path)}`);
     }
     if (details.runId) {
-      lines.push(`    ${this.theme.muted("Run ID")}           ${this.theme.text(details.runId)}`);
+      lines.push(`    ${this.theme.muted("Run ID".padEnd(14, " "))}${this.theme.text(details.runId)}`);
     }
     if (details.cause) {
-      lines.push(`    ${this.theme.muted("Cause")}            ${this.theme.warning(details.cause)}`);
+      lines.push(`    ${this.theme.muted("Cause".padEnd(14, " "))}${this.theme.warning(details.cause)}`);
     }
     if (details.remediation) {
       lines.push("");
-      lines.push(`    ${this.theme.muted("Remediation")}      ${this.theme.info(details.remediation)}`);
+      lines.push(`    ${this.theme.muted("Hint")}`);
+      lines.push(`    ${this.theme.info(details.remediation)}`);
     }
 
-    lines.push(`  ${this.theme.border("─".repeat(60))}`);
+    lines.push("");
+    lines.push(divider);
+    lines.push(`  ${this.theme.error(this.symbols.failure)} ${this.theme.error("Operation failed")}`);
+
     return lines.join("\n");
   }
 

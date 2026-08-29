@@ -2,8 +2,9 @@ import type { Command } from "commander";
 
 import { createLegacyExodusEngine, type LegacyExodusEngine } from "@core/engine";
 
-import { formatPluginListOutput } from "../output/formatter";
 import { formatJsonOutput } from "../output/json-output";
+import { detectTerminalCapabilities } from "../presentation/capabilities";
+import { SummaryPresenter } from "../presentation/summaries";
 
 export interface PluginListItem {
   readonly id: string;
@@ -44,8 +45,13 @@ export function registerPluginsCommand(
     .option("--json", "Emit machine-readable JSON")
     .action(async (options: { readonly json?: boolean }): Promise<void> => {
       const report = await getPluginListReport(createEngine);
-      const output = options.json ? formatJsonOutput(report) : formatPluginListOutput(report);
+      if (options.json) {
+        process.stdout.write(`${formatJsonOutput(report)}\n`);
+        return;
+      }
 
-      process.stdout.write(`${output}\n`);
+      const capabilities = detectTerminalCapabilities();
+      const presenter = new SummaryPresenter(capabilities);
+      process.stdout.write(`${presenter.formatPlugins(report)}\n`);
     });
 }

@@ -16,6 +16,7 @@ export interface VerificationGateResult {
   readonly status: "pass" | "fail" | "skip";
   readonly details: string;
   readonly durationMs?: number;
+  readonly diagnostics?: string;
 }
 
 export class VerificationPresenter {
@@ -147,15 +148,27 @@ export class VerificationPresenter {
   }
 
   public renderVerificationDashboard(gates: readonly VerificationGateResult[], totalDurationMs: number): string {
-    if (this.capabilities.mode === "plain") {
+    const failedGates = gates.filter((g) => g.status === "fail");
+    const allPassed = failedGates.length === 0;
+
+    if (this.capabilities.mode === "plain" || this.capabilities.mode === "ci") {
       const gateLines = gates.map(
         (g) => `  [${g.status.toUpperCase()}] ${g.name}: ${g.details}${g.durationMs ? ` (${g.durationMs.toFixed(0)}ms)` : ""}`,
       );
-      return ["Repository Verification Dashboard", ...gateLines, `Total Time: ${totalDurationMs.toFixed(0)}ms`].join("\n");
+      const lines = ["Repository Verification Dashboard", ...gateLines, `Total Time: ${totalDurationMs.toFixed(0)}ms`];
+
+      if (!allPassed) {
+        lines.push("", "--- Verification Failure Diagnostics ---");
+        for (const failed of failedGates) {
+          lines.push(`\n[${failed.name}]`);
+          lines.push(failed.diagnostics || failed.details);
+        }
+      }
+
+      return lines.join("\n");
     }
 
     const header = this.layout.renderHeader("Repository Verification Dashboard");
-    const allPassed = gates.every((g) => g.status === "pass");
 
     const gateLines = gates.map((gate, i) => {
       let icon = this.layout.theme.success(this.layout.symbols.success);
@@ -175,10 +188,27 @@ export class VerificationPresenter {
 
     const banner = allPassed
       ? `  ${this.layout.theme.success(this.layout.symbols.success)} ${this.layout.theme.heading("REPOSITORY VERIFICATION: ALL GATES PASSED")} ${this.layout.theme.muted(`[${totalDurationMs.toFixed(0)} ms total]`)}`
-      : `  ${this.layout.theme.error(this.layout.symbols.failure)} ${this.layout.theme.error("REPOSITORY VERIFICATION: ONE OR MORE GATES FAILED")}`;
+      : `  ${this.layout.theme.error(this.layout.symbols.failure)} ${this.layout.theme.error(`REPOSITORY VERIFICATION: ${failedGates.length} OF ${gates.length} GATES FAILED`)}`;
 
     const divider = this.layout.renderDivider();
 
-    return [header, "", ...gateLines, "", banner, "", divider].join("\n");
+    const outputParts = [header, "", ...gateLines, "", banner];
+
+    if (!allPassed) {
+      outputParts.push("", divider, `  ${this.layout.theme.heading("Failure Diagnostics")}`, "");
+      for (const failed of failedGates) {
+        outputParts.push(`  ${this.layout.theme.error(this.layout.symbols.failure)} ${this.layout.theme.heading(failed.name)}`);
+        const diagText = failed.diagnostics || failed.details;
+        const formattedDiag = diagText
+          .split("\n")
+          .map((line) => `    ${this.layout.theme.muted(line)}`)
+          .join("\n");
+        outputParts.push(formattedDiag, "");
+      }
+    }
+
+    outputParts.push(divider);
+
+    return outputParts.join("\n");
   }
 }

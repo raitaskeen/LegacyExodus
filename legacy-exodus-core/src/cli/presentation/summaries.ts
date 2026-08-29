@@ -2,6 +2,12 @@ import type { AnalyzeProjectReport } from "../commands/analyze";
 import type { InitReport } from "../commands/init";
 import type { PluginListReport } from "../commands/plugins";
 import type { StatusReport } from "../commands/status";
+import {
+  formatAnalyzeOutput,
+  formatInitOutput,
+  formatPluginListOutput,
+  formatStatusOutput,
+} from "../output/formatter";
 import type { TerminalCapabilities } from "./capabilities";
 import { LayoutRenderer } from "./layout";
 import { TableRenderer } from "./tables";
@@ -16,15 +22,8 @@ export class SummaryPresenter {
   }
 
   public formatStatus(report: StatusReport): string {
-    if (this.capabilities.mode === "plain") {
-      return [
-        "LegacyExodus Status",
-        "",
-        `Runtime: ${report.runtime}`,
-        `Storage: ${report.storage}`,
-        `Plugins: ${report.plugins} loaded`,
-        `Version: ${report.version}`,
-      ].join("\n");
+    if (this.capabilities.mode === "plain" || this.capabilities.mode === "ci") {
+      return formatStatusOutput(report);
     }
 
     const header = this.layout.renderHeader("Runtime Status");
@@ -56,11 +55,8 @@ export class SummaryPresenter {
   }
 
   public formatInit(report: InitReport): string {
-    if (this.capabilities.mode === "plain") {
-      return [
-        "LegacyExodus workspace initialized",
-        `${report.metadataPath}`,
-      ].join("\n");
+    if (this.capabilities.mode === "plain" || this.capabilities.mode === "ci") {
+      return formatInitOutput(report);
     }
 
     const header = this.layout.renderHeader("Workspace Initialization");
@@ -77,11 +73,8 @@ export class SummaryPresenter {
   }
 
   public formatPlugins(report: PluginListReport): string {
-    if (this.capabilities.mode === "plain") {
-      if (report.plugins.length === 0) {
-        return ["Installed Plugins", "", "No plugins registered"].join("\n");
-      }
-      return ["Installed Plugins", "", ...report.plugins.map((p) => p.name)].join("\n");
+    if (this.capabilities.mode === "plain" || this.capabilities.mode === "ci") {
+      return formatPluginListOutput(report);
     }
 
     const header = this.layout.renderHeader("Plugin Registry");
@@ -110,25 +103,8 @@ export class SummaryPresenter {
     const enumFailures = report.enumerationFailures ?? 0;
     const isComplete = report.discoveryComplete ?? (enumFailures === 0);
 
-    if (this.capabilities.mode === "plain") {
-      return [
-        "Discovery completed",
-        "",
-        `Project: ${report.projectName}`,
-        `Files discovered: ${report.filesDiscovered}`,
-        `Files analyzed: ${report.filesAnalyzed}`,
-        `Parser failures: ${report.parserFailures}`,
-        `Symbol extraction failures: ${report.symbolExtractionFailures}`,
-        `Unsupported source files: ${report.unsupportedFiles}`,
-        `Non-source artifacts: ${report.nonSourceArtifacts}`,
-        `Unclassified files: ${report.unclassifiedArtifacts}`,
-        `Enumeration failures: ${enumFailures}`,
-        `Discovery complete: ${isComplete ? "yes" : "no"}`,
-        `Analysis duration: ${report.durationMs.toFixed(2)}ms`,
-        `Languages: ${report.languages.join(", ") || "none"}`,
-        `Frameworks: ${report.frameworks.join(", ") || "none"}`,
-        `Dependencies: ${report.dependencies}`,
-      ].join("\n");
+    if (this.capabilities.mode === "plain" || this.capabilities.mode === "ci") {
+      return formatAnalyzeOutput(report);
     }
 
     const header = this.layout.renderHeader("Analysis Summary", report.projectName);
@@ -137,8 +113,8 @@ export class SummaryPresenter {
       { label: "Project Name", value: report.projectName },
       { label: "Analysis Run ID", value: "Verified Active Run" },
       {
-        label: "Disposition",
-        value: isComplete ? "Completed" : "Completed with Warnings",
+        label: "Discovery Complete",
+        value: isComplete ? "yes" : "no",
         badge: isComplete ? "COMPLETED" : "NEEDS_REVIEW",
         badgeType: isComplete ? "success" : "warning",
       },
@@ -146,11 +122,11 @@ export class SummaryPresenter {
 
     const artifactsTree = [
       `  ${this.layout.theme.heading("Artifact Breakdown")}`,
-      `  ${this.layout.theme.muted("Files Discovered")}  ${this.layout.theme.text(String(report.filesDiscovered))} total`,
-      `  ${this.layout.symbols.treeBranch}${this.layout.theme.muted("Analyzed (JS/TS)")}    ${this.layout.theme.text(String(report.filesAnalyzed))}`,
-      `  ${this.layout.symbols.treeBranch}${this.layout.theme.muted("Non-Source")}          ${this.layout.theme.text(String(report.nonSourceArtifacts))}`,
-      `  ${this.layout.symbols.treeBranch}${this.layout.theme.muted("Unsupported")}         ${this.layout.theme.text(String(report.unsupportedFiles))}`,
-      `  ${this.layout.symbols.treeCorner}${this.layout.theme.muted("Unclassified")}        ${this.layout.theme.text(String(report.unclassifiedArtifacts))}`,
+      `  ${this.layout.theme.muted("Files Discovered".padEnd(26, " "))}${this.layout.theme.text(String(report.filesDiscovered))} total`,
+      `  ${this.layout.symbols.treeBranch}${this.layout.theme.muted("Files Analyzed".padEnd(24, " "))}${this.layout.theme.text(String(report.filesAnalyzed))}`,
+      `  ${this.layout.symbols.treeBranch}${this.layout.theme.muted("Non-Source Artifacts".padEnd(24, " "))}${this.layout.theme.text(String(report.nonSourceArtifacts))}`,
+      `  ${this.layout.symbols.treeBranch}${this.layout.theme.muted("Unsupported Source Files".padEnd(24, " "))}${this.layout.theme.text(String(report.unsupportedFiles))}`,
+      `  ${this.layout.symbols.treeCorner}${this.layout.theme.muted("Unclassified Files".padEnd(24, " "))}${this.layout.theme.text(String(report.unclassifiedArtifacts))}`,
     ].join("\n");
 
     const qualityCard = this.layout.renderCard([
@@ -161,13 +137,13 @@ export class SummaryPresenter {
         badgeType: report.parserFailures === 0 ? "success" : "warning",
       },
       {
-        label: "Symbol Faults",
+        label: "Symbol Extraction Failures",
         value: report.symbolExtractionFailures,
         badge: report.symbolExtractionFailures === 0 ? "ZERO" : `${report.symbolExtractionFailures} ISOLATED`,
         badgeType: report.symbolExtractionFailures === 0 ? "success" : "warning",
       },
       {
-        label: "Enum Failures",
+        label: "Enumeration Failures",
         value: enumFailures,
         badge: enumFailures === 0 ? "ZERO" : `${enumFailures} FAULTS`,
         badgeType: enumFailures === 0 ? "success" : "error",
