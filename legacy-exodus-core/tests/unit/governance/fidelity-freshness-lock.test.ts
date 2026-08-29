@@ -287,4 +287,61 @@ describe("Migration Fidelity — Verification Hardening & Evidence Freshness Loc
       await rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  // Case K: Dynamic STALE classification when manifest engine SHA is older than current HEAD
+  it("Case K: dynamically classifies freshnessStatus as STALE when manifest engine SHA differs from current HEAD and expectedEngineCommitSha is omitted", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "freshness-k-"));
+    try {
+      await createValidDiscoveryFixture(tempDir);
+      // createValidDiscoveryFixture sets engine.commitSha = "engine-sha-123456"
+      const report = await runFidelityValidation({
+        repoPath: tempDir,
+        groundTruth: sampleGT,
+        closedScopeFilePaths: ["src/index.js"],
+        expectedRepositoryName: "test-repo",
+      });
+
+      expect(report.freshnessStatus).toBe("STALE");
+      expect(report.provenanceEvidence?.engine.commitSha).toBe("engine-sha-123456");
+      expect(report.overallTruePositives).toBe(2);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  // Case L: Dynamic FRESH classification when manifest engine SHA matches current HEAD
+  it("Case L: dynamically classifies freshnessStatus as FRESH when manifest engine SHA matches current repository HEAD", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "freshness-l-"));
+    try {
+      const prov = await createValidDiscoveryFixture(tempDir);
+      const { execSync } = await import("node:child_process");
+      const currentHead = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+
+      const updatedProv: DiscoveryArtifactProvenance = {
+        ...prov,
+        engine: {
+          ...prov.engine,
+          commitSha: currentHead,
+        },
+      };
+
+      await writeFile(
+        join(tempDir, ".discovery", "manifest.json"),
+        JSON.stringify(updatedProv, null, 2),
+        "utf8",
+      );
+
+      const report = await runFidelityValidation({
+        repoPath: tempDir,
+        groundTruth: sampleGT,
+        closedScopeFilePaths: ["src/index.js"],
+        expectedRepositoryName: "test-repo",
+      });
+
+      expect(report.freshnessStatus).toBe("FRESH");
+      expect(report.provenanceEvidence?.engine.commitSha).toBe(currentHead);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
 });

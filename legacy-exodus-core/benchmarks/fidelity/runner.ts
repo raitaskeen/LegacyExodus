@@ -1,7 +1,8 @@
+import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { DiscoveryArtifactProvenance, FidelityValidationReport, GroundTruthFact } from "@contracts/fidelity";
 import { MigrationFidelityValidator, type PredictionPayload } from "@governance/fidelity/fidelity-validator";
 import { resolveBenchmarkRepoPath, resolveFidelityResultsDir } from "../paths";
@@ -84,12 +85,28 @@ export async function runFidelityValidation(options: RunFidelityOptions): Promis
       }
     }
 
-    // Verify Engine Identity (if requested)
+    // Verify Engine Identity & Evaluate Dynamic Freshness
     if (options.expectedEngineCommitSha) {
       if (provenance.engine.commitSha !== options.expectedEngineCommitSha) {
         throw new Error(
           `Engine identity mismatch: expected '${options.expectedEngineCommitSha}', found '${provenance.engine.commitSha}'.`,
         );
+      }
+      freshnessStatus = "FRESH";
+    } else {
+      let currentEngineCommitSha: string | undefined;
+      try {
+        currentEngineCommitSha = execSync("git rev-parse HEAD", {
+          cwd: resolve(import.meta.dir, "../.."),
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+        }).trim();
+      } catch {}
+
+      if (currentEngineCommitSha && provenance.engine.commitSha !== currentEngineCommitSha) {
+        freshnessStatus = "STALE";
+      } else {
+        freshnessStatus = "FRESH";
       }
     }
 
