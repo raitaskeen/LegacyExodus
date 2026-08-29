@@ -1,5 +1,10 @@
 import type { TerminalCapabilities } from "./capabilities";
 import { LayoutRenderer } from "./layout";
+import {
+  type FocusedTestSummary,
+  type ParsedBunTestResult,
+  TestPresenter,
+} from "./test-runner";
 
 export interface TestExecutionSummary {
   readonly suitesPassed: number;
@@ -21,9 +26,19 @@ export interface VerificationGateResult {
 
 export class VerificationPresenter {
   private readonly layout: LayoutRenderer;
+  private readonly testPresenter: TestPresenter;
 
   public constructor(public readonly capabilities: TerminalCapabilities) {
     this.layout = new LayoutRenderer(capabilities);
+    this.testPresenter = new TestPresenter(capabilities);
+  }
+
+  public renderFullTestSuite(result: ParsedBunTestResult): string {
+    return this.testPresenter.renderFullTestVerification(result);
+  }
+
+  public renderFocusedTestSuite(summary: FocusedTestSummary): string {
+    return this.testPresenter.renderFocusedTest(summary);
   }
 
   public renderTestSummary(summary: TestExecutionSummary): string {

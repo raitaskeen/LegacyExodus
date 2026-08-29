@@ -26,6 +26,7 @@ export class SummaryPresenter {
       return formatStatusOutput(report);
     }
 
+    const logo = this.layout.renderLogo(true);
     const header = this.layout.renderHeader("Runtime Status");
     const card = this.layout.renderCard([
       {
@@ -50,8 +51,12 @@ export class SummaryPresenter {
       },
     ]);
     const divider = this.layout.renderDivider();
+    const isHealthy = report.runtime === "running" && report.storage === "ready";
+    const statusMsg = isHealthy
+      ? `  ${this.layout.theme.success(this.layout.symbols.success)} ${this.layout.theme.text("Runtime healthy")}`
+      : `  ${this.layout.theme.warning(this.layout.symbols.warning)} ${this.layout.theme.text("Runtime degraded")}`;
 
-    return [header, "", card, "", divider].join("\n");
+    return [logo, "", header, "", card, "", divider, "", statusMsg].join("\n");
   }
 
   public formatInit(report: InitReport): string {

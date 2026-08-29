@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import type { Command } from "commander";
 
 import { detectTerminalCapabilities } from "../presentation/capabilities";
+import { parseBunTestOutput } from "../presentation/test-runner";
 import { VerificationPresenter, type VerificationGateResult } from "../presentation/verification";
 
 export interface CommandResult {
@@ -87,10 +88,17 @@ export async function executeVerification(): Promise<boolean> {
 
   // Gate 2: Unit & Integration Test Suite
   const tests = await runCommand("bun", ["run", "test"]);
+  const parsedTests = parseBunTestOutput(tests.stdout || tests.stderr);
+  const testDetails = tests.code === 0
+    ? (parsedTests.testsPassed > 0
+      ? `All ${parsedTests.testsPassed} tests passing across ${parsedTests.suitesTotal} files`
+      : "All tests passing")
+    : `${parsedTests.testsFailed} test(s) failed in suite`;
+
   gates.push({
     name: "Test Suite",
     status: tests.code === 0 ? "pass" : "fail",
-    details: tests.code === 0 ? "All tests passing" : "Test failure(s) detected",
+    details: testDetails,
     durationMs: tests.durationMs,
     diagnostics: tests.code !== 0 ? extractDiagnosticSnippet(tests.stdout || tests.stderr) : undefined,
   });

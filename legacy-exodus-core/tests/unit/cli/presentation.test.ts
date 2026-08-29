@@ -110,7 +110,29 @@ describe("CLI Presentation Subsystem", () => {
       expect(compact).toContain("LegacyExodus");
 
       const full = layout.renderLogo(true);
-      expect(full).toContain("EXODUS");
+      expect(full).toContain("██╗");
+      expect(full).toContain("v0.1.0");
+      expect(full.split("\n").length).toBe(13);
+    });
+
+    it("falls back to compact logo in narrow terminals or plain mode", () => {
+      const narrowCaps: TerminalCapabilities = {
+        mode: "interactive",
+        isTTY: true,
+        isCI: false,
+        noColor: false,
+        isUnicodeSupported: true,
+        width: 60,
+      };
+      const narrowLayout = new LayoutRenderer(narrowCaps);
+      const outNarrow = narrowLayout.renderLogo(true);
+      expect(outNarrow).toContain("LegacyExodus");
+      expect(outNarrow).not.toContain("██╗");
+
+      const plainLayout = new LayoutRenderer(plainCaps);
+      const outPlain = plainLayout.renderLogo(true);
+      expect(outPlain).toContain("LegacyExodus");
+      expect(outPlain).not.toContain("██╗");
     });
 
     it("renders section header with divider rule", () => {
@@ -222,9 +244,22 @@ describe("CLI Presentation Subsystem", () => {
         plugins: 0,
         version: "0.1.0",
       });
+      expect(out).toContain("██╗");
       expect(out).toContain("Runtime Status");
       expect(out).toContain("RUNNING");
       expect(out).toContain("Ready");
+      expect(out).toContain("Runtime healthy");
+
+      const presenterPlain = new SummaryPresenter(plainCaps);
+      const outPlain = presenterPlain.formatStatus({
+        runtime: "running",
+        storage: "ready",
+        plugins: 0,
+        version: "0.1.0",
+      });
+      expect(outPlain).not.toContain("██╗");
+      expect(outPlain).toContain("LegacyExodus Status");
+      expect(outPlain).toContain("Runtime: running");
     });
 
     it("formats init summary with metadata path", () => {
@@ -285,6 +320,60 @@ describe("CLI Presentation Subsystem", () => {
       expect(out).toContain("73 passed of 73");
       expect(out).toContain("3,586 expect() checks");
       expect(out).toContain("100% contract compliance");
+    });
+
+    it("renders full test suite with category breakdown and coverage", () => {
+      const presenter = new VerificationPresenter(interactiveCaps);
+      const out = presenter.renderFullTestSuite({
+        isFocused: false,
+        suitesPassed: 74,
+        suitesTotal: 74,
+        testsPassed: 521,
+        testsFailed: 0,
+        testsSkipped: 0,
+        assertionsTotal: 3653,
+        durationMs: 14460,
+        categories: [
+          { name: "Core Contracts", passed: 18, failed: 0 },
+          { name: "Discovery", passed: 42, failed: 0 },
+          { name: "Parser", passed: 31, failed: 0 },
+          { name: "Symbols", passed: 54, failed: 0 },
+        ],
+        coverage: {
+          statementsPct: 92.4,
+          functionsPct: 91.4,
+          linesPct: 92.4,
+          isHealthy: true,
+        },
+        failures: [],
+      });
+
+      expect(out).toContain("Test Verification");
+      expect(out).toContain("Core Contracts");
+      expect(out).toContain("18 passed");
+      expect(out).toContain("521 passed");
+      expect(out).toContain("3,653 expect() checks");
+      expect(out).toContain("Coverage");
+      expect(out).toContain("92.4%");
+      expect(out).toContain("ALL TESTS PASSED");
+    });
+
+    it("renders focused test suite with target path and assertion counts", () => {
+      const presenter = new VerificationPresenter(interactiveCaps);
+      const out = presenter.renderFocusedTestSuite({
+        target: "tests/unit/storage/sqlite-storage.test.ts",
+        testsPassed: 11,
+        testsFailed: 0,
+        assertionsTotal: 34,
+        durationMs: 412,
+      });
+
+      expect(out).toContain("Focused Test");
+      expect(out).toContain("tests/unit/storage/sqlite-storage.test.ts");
+      expect(out).toContain("11 passed");
+      expect(out).toContain("34 expect() checks");
+      expect(out).toContain("412 ms");
+      expect(out).toContain("FOCUSED TEST PASSED");
     });
 
     it("renders typecheck summary", () => {
