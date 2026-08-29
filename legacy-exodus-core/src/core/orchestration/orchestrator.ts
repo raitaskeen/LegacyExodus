@@ -13,6 +13,8 @@ import { LegacyExodusError } from "@shared/errors";
 import type { StorageManager } from "@storage/index";
 import { JavaScriptSymbolExtractor } from "@symbols/index";
 
+import type { RuntimeService } from "@runtime/application";
+
 import {
   DiscoverProjectHandler,
   type CommandExecution,
@@ -21,10 +23,12 @@ import {
   UpdateKnowledgeHandler,
 } from "./command-handler";
 
-export type OrchestratorStatus = "idle" | "executing";
+export type OrchestratorStatus = "idle" | "executing" | "stopped";
 
-export class Orchestrator {
+export class Orchestrator implements RuntimeService {
+  public readonly name = "orchestrator";
   private status: OrchestratorStatus = "idle";
+  private activeExecution: Promise<CommandExecution> | null = null;
   private readonly initializeProjectHandler = new InitializeProjectHandler();
   private readonly discoverProjectHandler = new DiscoverProjectHandler();
   private readonly updateKnowledgeHandler = new UpdateKnowledgeHandler();
@@ -54,7 +58,7 @@ export class Orchestrator {
 
     this.status = "executing";
 
-    try {
+    const executionTask = (async () => {
       const validatedCommand = validateCommand(command);
       const execution = await this.executeValidatedCommand(validatedCommand);
 
@@ -66,9 +70,27 @@ export class Orchestrator {
       }
 
       return execution;
+    })();
+
+    this.activeExecution = executionTask;
+
+    try {
+      return await executionTask;
     } finally {
-      this.status = "idle";
+      if ((this.status as OrchestratorStatus) !== "stopped") {
+        this.status = "idle";
+      }
+      if (this.activeExecution === executionTask) {
+        this.activeExecution = null;
+      }
     }
+  }
+
+  public async stop(): Promise<void> {
+    if (this.activeExecution !== null) {
+      await this.activeExecution.catch(() => {});
+    }
+    this.status = "stopped";
   }
 
   public replay(): ProjectState {

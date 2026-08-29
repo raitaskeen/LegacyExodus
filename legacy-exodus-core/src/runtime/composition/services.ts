@@ -41,6 +41,7 @@ export function createEngineContext(
   const parserManager = new ParserManager(parserRegistry);
   const pluginLoader = new PluginLoader(plugins, { logger, eventBus, storage });
   const runtime = new ApplicationRuntime(config, logger, storage, plugins, pluginLoader);
+  runtime.registerService(discoveryProjection);
   const orchestrator = new Orchestrator(
     eventStore,
     eventBus,
@@ -50,6 +51,7 @@ export function createEngineContext(
     parserManager,
     new JavaScriptSymbolExtractor(),
   );
+  runtime.registerService(orchestrator);
 
   return {
     runtime,

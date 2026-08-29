@@ -31,6 +31,13 @@ export class FileDiscoveryProjectionAdapter {
     }
   }
 
+  public async drain(): Promise<void> {
+    const active = [...this.directoryQueues.values()];
+    if (active.length > 0) {
+      await Promise.allSettled(active);
+    }
+  }
+
   private async writeArtifacts(discoveryDirectory: string, projection: DiscoveryProjection): Promise<void> {
     await mkdir(discoveryDirectory, { recursive: true });
 

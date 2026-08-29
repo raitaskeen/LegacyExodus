@@ -11,6 +11,7 @@ import {
   dataFlowPayloadSchema as dataFlowStoragePayloadSchema,
 } from "@contracts/discovery-storage";
 import { LegacyExodusError } from "@shared/errors";
+import type { RuntimeService } from "@runtime/application";
 import type { StorageRecord } from "@storage/storage-record";
 import type { StorageManager } from "@storage/storage-manager";
 
@@ -18,22 +19,34 @@ import { FileDiscoveryProjectionAdapter } from "./file-discovery-projection";
 
 type RunScopedPayload = { readonly projectId: string; readonly analysisRunId?: string };
 
-export class DiscoveryProjectionService {
+export class DiscoveryProjectionService implements RuntimeService {
+  public readonly name = "discovery-projection";
+  private readonly activeProjections = new Set<Promise<unknown>>();
+  private status: "ready" | "stopped" = "ready";
+
   public constructor(
     private readonly storage: StorageManager,
     private readonly adapter: FileDiscoveryProjectionAdapter,
   ) {}
 
   public async project(recordId: string): Promise<DiscoveryProjection> {
-    const record = await this.storage.findById(recordId);
-    if (record === null || record.type !== "project-discovery") {
-      throw new LegacyExodusError({ code: "DISCOVERY_RECORD_NOT_FOUND", message: "Stored discovery record was not found.", metadata: { recordId } });
+    if (this.status === "stopped") {
+      throw new LegacyExodusError({
+        code: "PROJECTION_SERVICE_STOPPED",
+        message: "Discovery projection service has been stopped.",
+      });
     }
 
-    const discovery = discoveryStoragePayloadSchema.safeParse(record.payload);
-    if (!discovery.success) {
-      throw new LegacyExodusError({ code: "DISCOVERY_RECORD_INVALID", message: "Stored discovery record is invalid.", metadata: { issues: discovery.error.issues, recordId } });
-    }
+    const task = (async () => {
+      const record = await this.storage.findById(recordId);
+      if (record === null || record.type !== "project-discovery") {
+        throw new LegacyExodusError({ code: "DISCOVERY_RECORD_NOT_FOUND", message: "Stored discovery record was not found.", metadata: { recordId } });
+      }
+
+      const discovery = discoveryStoragePayloadSchema.safeParse(record.payload);
+      if (!discovery.success) {
+        throw new LegacyExodusError({ code: "DISCOVERY_RECORD_INVALID", message: "Stored discovery record is invalid.", metadata: { issues: discovery.error.issues, recordId } });
+      }
 
     const payload = discovery.data;
     const runCriteria = {
@@ -108,8 +121,24 @@ export class DiscoveryProjectionService {
       },
     });
 
-    await this.adapter.write(projection);
-    return projection;
+      await this.adapter.write(projection);
+      return projection;
+    })();
+
+    this.activeProjections.add(task);
+    try {
+      return await task;
+    } finally {
+      this.activeProjections.delete(task);
+    }
+  }
+
+  public async stop(): Promise<void> {
+    this.status = "stopped";
+    if (this.activeProjections.size > 0) {
+      await Promise.allSettled([...this.activeProjections]);
+    }
+    await this.adapter.drain();
   }
 }
 
