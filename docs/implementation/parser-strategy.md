@@ -33,8 +33,20 @@ flowchart LR
 
 ---
 
-## 4. Implementation Evidence
+## 4. AST Immutability, Validation Provenance & Fast-Path Trust Boundary
+
+To eliminate redundant $O(N)$ Zod schema traversals and deep object allocations across downstream pipeline consumers (such as `JavaScriptSymbolExtractor`), the parser contracts enforce **validation provenance alongside deep-freeze immutability**:
+
+* **Immutability Signal vs. Validation Trust Boundary:** `Object.isFrozen()` is an immutability optimization signal, **not** proof of schema validity (`Frozen ≠ Validated`). A caller cannot bypass validation by manually freezing a malformed object.
+* **Module-Private Validation Provenance:** `validateASTResult`, `validateASTNode`, and `validateParseResponse` maintain module-private `WeakSet<object>` registries. Object identities are recorded in these sets **exclusively after** successful Zod schema parsing and deep freezing.
+* **Validation Fast-Path ($O(1)$):** The constant-time fast-path is granted **only** when an object is both deeply frozen (`Object.isFrozen`) and present in the corresponding module-private validation `WeakSet`. Pre-validated immutable ASTs are returned directly by reference without recursive schema re-parsing or object re-allocation.
+* **Defensive Boundary:** Any unknown, unfrozen, or manually frozen input outside the provenance registry undergoes full structural Zod schema validation. Malformed frozen objects are immediately rejected with deterministic `LegacyExodusError` diagnostics.
+
+---
+
+## 5. Implementation Evidence
 
 * **Source Location:** [`src/parser/adapters/javascript/`](../../legacy-exodus-core/src/parser/adapters/javascript).
-* **Tests:** `javascript-parser.test.ts` (14 passing tests).
+* **Validation & Provenance Contracts:** [`src/parser/contracts/ast-node.ts`](../../legacy-exodus-core/src/parser/contracts/ast-node.ts), [`src/parser/contracts/ast-result.ts`](../../legacy-exodus-core/src/parser/contracts/ast-result.ts), [`src/parser/models/parse-response.ts`](../../legacy-exodus-core/src/parser/models/parse-response.ts).
+* **Tests:** `javascript-parser.test.ts`, `ast-validation-performance.test.ts`.
 * **Architecture Docs:** **[Parser Service Architecture](../architecture/components/parser-service.md)**.
