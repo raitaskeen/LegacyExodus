@@ -1,4 +1,4 @@
-import { validateASTResult, type ASTResult } from "@parser/contracts/ast-result";
+import type { ASTResult } from "@parser/contracts/ast-result";
 import type { ParseRequest } from "@parser/models/parse-request";
 import { validateParseRequest } from "@parser/models/parse-request";
 import { validateParseResponse } from "@parser/models/parse-response";
@@ -24,7 +24,7 @@ export class ParserManager {
     try {
       const response = await parser.parse(validatedRequest);
 
-      return validateASTResult(validateParseResponse(response).result);
+      return validateParseResponse(response).result;
     } catch (error: unknown) {
       if (error instanceof InvalidParserResultError) {
         throw error;

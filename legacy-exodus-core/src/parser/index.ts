@@ -1,7 +1,7 @@
 export type { ASTResult, ASTMetadata } from "./contracts/ast-result";
 export { validateASTResult } from "./contracts/ast-result";
 export type { ASTNode, ASTAttribute, SourceLocation, SourcePosition } from "./contracts/ast-node";
-export { validateASTNode } from "./contracts/ast-node";
+export { freezeNode, validateASTNode } from "./contracts/ast-node";
 export { JavaScriptParser } from "./adapters/javascript";
 export type { Parser } from "./contracts/parser";
 export type { ParserCapability } from "./contracts/parser-capability";

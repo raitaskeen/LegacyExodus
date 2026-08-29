@@ -46,7 +46,18 @@ const astResultSchema = z.object({
   errors: z.array(parserDiagnosticSchema),
 });
 
+const validatedASTResults = new WeakSet<object>();
+
 export function validateASTResult(result: unknown): ASTResult {
+  if (
+    typeof result === "object" &&
+    result !== null &&
+    isDeeplyFrozenASTResult(result) &&
+    validatedASTResults.has(result)
+  ) {
+    return result as ASTResult;
+  }
+
   const parsedResult = astResultSchema.safeParse(result);
 
   if (!parsedResult.success) {
@@ -57,7 +68,7 @@ export function validateASTResult(result: unknown): ASTResult {
     });
   }
 
-  return Object.freeze({
+  const frozenResult: ASTResult = Object.freeze({
     metadata: Object.freeze({ ...parsedResult.data.metadata }),
     root: validateASTNode(parsedResult.data.root),
     statistics: validateParserStatistics(parsedResult.data.statistics),
@@ -79,4 +90,25 @@ export function validateASTResult(result: unknown): ASTResult {
       ),
     ),
   });
+
+  validatedASTResults.add(frozenResult);
+  return frozenResult;
+}
+
+function isDeeplyFrozenASTResult(value: unknown): value is ASTResult {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Object.isFrozen(value) &&
+    "metadata" in value &&
+    Object.isFrozen((value as ASTResult).metadata) &&
+    "root" in value &&
+    Object.isFrozen((value as ASTResult).root) &&
+    "statistics" in value &&
+    Object.isFrozen((value as ASTResult).statistics) &&
+    "warnings" in value &&
+    Object.isFrozen((value as ASTResult).warnings) &&
+    "errors" in value &&
+    Object.isFrozen((value as ASTResult).errors)
+  );
 }

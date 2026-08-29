@@ -42,7 +42,18 @@ export const astNodeSchema: z.ZodType<ASTNode> = z.lazy(() =>
   }),
 );
 
+const validatedASTNodes = new WeakSet<object>();
+
 export function validateASTNode(node: unknown): ASTNode {
+  if (
+    typeof node === "object" &&
+    node !== null &&
+    isDeeplyFrozenASTNode(node) &&
+    validatedASTNodes.has(node)
+  ) {
+    return node as ASTNode;
+  }
+
   const parsedNode = astNodeSchema.safeParse(node);
 
   if (!parsedNode.success) {
@@ -53,21 +64,81 @@ export function validateASTNode(node: unknown): ASTNode {
     });
   }
 
-  return freezeNode(parsedNode.data);
+  const frozen = freezeNode(parsedNode.data);
+  markTreeValidated(frozen);
+  return frozen;
 }
 
-function freezeNode(node: ASTNode): ASTNode {
+export function freezeNode(node: ASTNode): ASTNode {
+  if (
+    typeof node === "object" &&
+    node !== null &&
+    isDeeplyFrozenASTNode(node) &&
+    validatedASTNodes.has(node)
+  ) {
+    return node;
+  }
+
   return Object.freeze({
     ...node,
     role: node.role,
-    location:
-      node.location === undefined
-        ? undefined
-        : Object.freeze({
-            start: Object.freeze({ ...node.location.start }),
-            end: Object.freeze({ ...node.location.end }),
-          }),
-    attributes: Object.freeze({ ...node.attributes }),
+    location: freezeLocation(node.location),
+    attributes: Object.isFrozen(node.attributes) ? node.attributes : Object.freeze({ ...node.attributes }),
     children: Object.freeze(node.children.map(freezeNode)),
   });
+}
+
+function freezeLocation(location: SourceLocation | undefined): SourceLocation | undefined {
+  if (location === undefined) {
+    return undefined;
+  }
+
+  if (
+    Object.isFrozen(location) &&
+    Object.isFrozen(location.start) &&
+    Object.isFrozen(location.end)
+  ) {
+    return location;
+  }
+
+  return Object.freeze({
+    start: Object.isFrozen(location.start) ? location.start : Object.freeze({ ...location.start }),
+    end: Object.isFrozen(location.end) ? location.end : Object.freeze({ ...location.end }),
+  });
+}
+
+function markTreeValidated(node: ASTNode): void {
+  validatedASTNodes.add(node);
+  for (const child of node.children) {
+    markTreeValidated(child);
+  }
+}
+
+function isDeeplyFrozenASTNode(value: unknown): boolean {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !Object.isFrozen(value) ||
+    !("type" in value) ||
+    typeof (value as { readonly type: unknown }).type !== "string" ||
+    !("attributes" in value) ||
+    !Object.isFrozen((value as ASTNode).attributes) ||
+    !("children" in value) ||
+    !Array.isArray((value as ASTNode).children) ||
+    !Object.isFrozen((value as ASTNode).children)
+  ) {
+    return false;
+  }
+
+  const location = (value as ASTNode).location;
+  if (
+    location !== undefined &&
+    (!Object.isFrozen(location) ||
+      !Object.isFrozen(location.start) ||
+      !Object.isFrozen(location.end))
+  ) {
+    return false;
+  }
+
+  return true;
 }

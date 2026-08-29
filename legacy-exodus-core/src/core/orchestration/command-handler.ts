@@ -121,7 +121,7 @@ export class AnalyzeProjectHandler {
         events.push(createDomainEvent({
           type: "ParserFailure",
           aggregateId: discovery.projectId,
-          payload: { fileId: file.id, path: file.path, code: getErrorCode(error) },
+          payload: { fileId: file.id, path: file.path, code: getErrorCode(error, "PARSER_FAILURE") },
         }));
         continue;
       }
@@ -165,7 +165,7 @@ export class AnalyzeProjectHandler {
         events.push(createDomainEvent({
           type: "SymbolsExtractionFailure",
           aggregateId: discovery.projectId,
-          payload: { fileId: file.id, path: file.path, code: getErrorCode(error) },
+          payload: { fileId: file.id, path: file.path, code: getErrorCode(error, "SYMBOL_EXTRACTION_FAILED") },
         }));
         continue;
       }
@@ -372,13 +372,16 @@ async function readPathAliases(projectPath: string): Promise<ModuleResolutionOpt
   } catch { return {}; }
 }
 
-function getErrorCode(error: unknown): string {
+function getErrorCode(error: unknown, fallback = "UNKNOWN_ERROR"): string {
   if (typeof error === "object" && error !== null && "code" in error) {
     const code = (error as { readonly code: unknown }).code;
-    if (typeof code === "string" && code.length > 0) {
-      return code;
+    if (typeof code === "string") {
+      const trimmed = code.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
     }
   }
 
-  return "PARSER_FAILURE";
+  return fallback;
 }
