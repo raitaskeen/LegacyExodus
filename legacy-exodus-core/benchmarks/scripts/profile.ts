@@ -249,6 +249,8 @@ export async function profilePipeline(targetPath: string): Promise<ProfileReport
     timedRecord("ast-result", {
       fileId: ast.metadata.sourcePath,
       path: ast.metadata.sourcePath,
+      projectId: discovery.projectId,
+      analysisRunId: "00000000-0000-4000-8000-000000000002",
       parserId: ast.metadata.parserId,
       nodeCount: ast.statistics.nodeCount,
       errorCount: ast.errors.length,

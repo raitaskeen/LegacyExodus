@@ -137,6 +137,8 @@ export class AnalyzeProjectHandler {
         createStorageRecord("ast-result", {
           fileId: file.id,
           path: file.path,
+          projectId: discovery.projectId,
+          analysisRunId: command.id,
           parserId: ast.metadata.parserId,
           nodeCount: ast.statistics.nodeCount,
           errorCount: ast.errors.length,
