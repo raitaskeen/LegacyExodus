@@ -13,9 +13,9 @@ import {
 import { LegacyExodusError } from "@shared/errors";
 import { JavaScriptSymbolExtractor } from "@symbols/index";
 
-describe("F-03: AST Validation Fast-Path, Deep-Freeze Idempotency & Schema Integrity", () => {
-  describe("A. Validation & Deep Freeze Idempotency", () => {
-    it("validates and deeply freezes an unvalidated AST node", () => {
+describe("F-03 / CodeRabbit Remediation: AST Validation Provenance & Trust Boundary", () => {
+  describe("A. Validation & Deep Freeze Idempotency Fast-Path", () => {
+    it("validates and deeply freezes an unvalidated AST node, then reuses identity on subsequent validation", () => {
       const rawNode = {
         type: "Identifier",
         role: "name",
@@ -37,7 +37,7 @@ describe("F-03: AST Validation Fast-Path, Deep-Freeze Idempotency & Schema Integ
       expect(directFreeze).toBe(frozenNode);
     });
 
-    it("validates and deeply freezes an unvalidated ASTResult", () => {
+    it("validates and deeply freezes an unvalidated ASTResult, then reuses identity on subsequent validation", () => {
       const rawResult = {
         metadata: {
           parserId: "test-parser",
@@ -104,7 +104,92 @@ describe("F-03: AST Validation Fast-Path, Deep-Freeze Idempotency & Schema Integ
     });
   });
 
-  describe("B. Pipeline Integration & Zero Duplicate Cloning", () => {
+  describe("B. Security & Trust Boundary: Frozen ≠ Validated", () => {
+    it("rejects a manually frozen malformed ASTNode without trusting Object.isFrozen()", () => {
+      const frozenMalformedNode = Object.freeze({
+        type: "", // invalid: empty type
+        attributes: Object.freeze({}),
+        children: Object.freeze([]),
+      });
+
+      expect(Object.isFrozen(frozenMalformedNode)).toBe(true);
+      expect(() => validateASTNode(frozenMalformedNode)).toThrow(LegacyExodusError);
+      try {
+        validateASTNode(frozenMalformedNode);
+      } catch (error) {
+        expect(error).toBeInstanceOf(LegacyExodusError);
+        expect((error as LegacyExodusError).code).toBe("AST_NODE_INVALID");
+      }
+    });
+
+    it("rejects a manually frozen malformed ASTResult without trusting Object.isFrozen()", () => {
+      const frozenMalformedResult = Object.freeze({
+        metadata: Object.freeze({
+          parserId: "", // invalid: empty parserId
+          language: "javascript",
+          sourcePath: "src/bad.js",
+        }),
+        root: Object.freeze({
+          type: "Program",
+          attributes: Object.freeze({}),
+          children: Object.freeze([]),
+        }),
+        statistics: Object.freeze({ durationMs: -1, nodeCount: -1 }), // invalid: negative
+        warnings: Object.freeze([]),
+        errors: Object.freeze([]),
+      });
+
+      expect(Object.isFrozen(frozenMalformedResult)).toBe(true);
+      expect(() => validateASTResult(frozenMalformedResult)).toThrow(LegacyExodusError);
+      try {
+        validateASTResult(frozenMalformedResult);
+      } catch (error) {
+        expect(error).toBeInstanceOf(LegacyExodusError);
+        expect((error as LegacyExodusError).code).toBe("AST_RESULT_INVALID");
+      }
+    });
+
+    it("rejects a manually frozen malformed ParseResponse without trusting Object.isFrozen()", () => {
+      const frozenMalformedResponse = Object.freeze({
+        result: Object.freeze({
+          invalidPayload: true,
+        }),
+      });
+
+      expect(Object.isFrozen(frozenMalformedResponse)).toBe(true);
+      expect(() => validateParseResponse(frozenMalformedResponse)).toThrow(LegacyExodusError);
+    });
+
+    it("processes an unknown manually frozen valid ASTResult through full validation rather than blind trust", () => {
+      // Create a valid result that is frozen manually, NOT through validateASTResult
+      const unknownFrozenResult = Object.freeze({
+        metadata: Object.freeze({
+          parserId: "manual-parser",
+          language: "javascript",
+          sourcePath: "src/manual.js",
+        }),
+        root: Object.freeze({
+          type: "Program",
+          attributes: Object.freeze({ strict: true }),
+          children: Object.freeze([]),
+        }),
+        statistics: Object.freeze({ durationMs: 1, nodeCount: 1 }),
+        warnings: Object.freeze([]),
+        errors: Object.freeze([]),
+      });
+
+      expect(Object.isFrozen(unknownFrozenResult)).toBe(true);
+
+      // validateASTResult must process and return a validated instance
+      const validated = validateASTResult(unknownFrozenResult);
+      expect(validated.metadata.sourcePath).toBe("src/manual.js");
+
+      // The returned instance is now in the module-private WeakSet and uses the fast-path
+      expect(validateASTResult(validated)).toBe(validated);
+    });
+  });
+
+  describe("C. Pipeline Integration & Zero Duplicate Cloning", () => {
     it("ParserManager.parse produces a frozen ASTResult that passes symbol extraction in O(1) without re-cloning", async () => {
       const registry = new ParserRegistry();
       registry.register(new JavaScriptParser());
@@ -136,7 +221,7 @@ describe("F-03: AST Validation Fast-Path, Deep-Freeze Idempotency & Schema Integ
     });
   });
 
-  describe("C. Error Rejection & Security Boundary", () => {
+  describe("D. Raw / Unfrozen Schema Error Rejection", () => {
     it("rejects invalid AST nodes missing required fields", () => {
       expect(() => validateASTNode({ type: "" })).toThrow(LegacyExodusError);
       expect(() => validateASTNode(null)).toThrow(LegacyExodusError);

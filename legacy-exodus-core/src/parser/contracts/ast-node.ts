@@ -42,8 +42,15 @@ export const astNodeSchema: z.ZodType<ASTNode> = z.lazy(() =>
   }),
 );
 
+const validatedASTNodes = new WeakSet<object>();
+
 export function validateASTNode(node: unknown): ASTNode {
-  if (isDeeplyFrozenASTNode(node)) {
+  if (
+    typeof node === "object" &&
+    node !== null &&
+    isDeeplyFrozenASTNode(node) &&
+    validatedASTNodes.has(node)
+  ) {
     return node as ASTNode;
   }
 
@@ -57,11 +64,18 @@ export function validateASTNode(node: unknown): ASTNode {
     });
   }
 
-  return freezeNode(parsedNode.data);
+  const frozen = freezeNode(parsedNode.data);
+  markTreeValidated(frozen);
+  return frozen;
 }
 
 export function freezeNode(node: ASTNode): ASTNode {
-  if (isDeeplyFrozenASTNode(node)) {
+  if (
+    typeof node === "object" &&
+    node !== null &&
+    isDeeplyFrozenASTNode(node) &&
+    validatedASTNodes.has(node)
+  ) {
     return node;
   }
 
@@ -80,6 +94,13 @@ export function freezeNode(node: ASTNode): ASTNode {
     attributes: Object.isFrozen(node.attributes) ? node.attributes : Object.freeze({ ...node.attributes }),
     children: Object.freeze(node.children.map(freezeNode)),
   });
+}
+
+function markTreeValidated(node: ASTNode): void {
+  validatedASTNodes.add(node);
+  for (const child of node.children) {
+    markTreeValidated(child);
+  }
 }
 
 function isDeeplyFrozenASTNode(value: unknown): boolean {

@@ -9,12 +9,14 @@ export interface ParseResponse {
 }
 
 const parseResponseSchema = z.object({ result: z.unknown() });
+const validatedParseResponses = new WeakSet<object>();
 
 export function validateParseResponse(response: unknown): ParseResponse {
   if (
     typeof response === "object" &&
     response !== null &&
     Object.isFrozen(response) &&
+    validatedParseResponses.has(response) &&
     "result" in response &&
     typeof (response as ParseResponse).result === "object" &&
     (response as ParseResponse).result !== null &&
@@ -33,5 +35,10 @@ export function validateParseResponse(response: unknown): ParseResponse {
     });
   }
 
-  return Object.freeze({ result: validateASTResult(parsedResponse.data.result) });
+  const frozenResponse: ParseResponse = Object.freeze({
+    result: validateASTResult(parsedResponse.data.result),
+  });
+
+  validatedParseResponses.add(frozenResponse);
+  return frozenResponse;
 }

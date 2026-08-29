@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { LegacyExodusError } from "@shared/errors";
 
-import { astNodeSchema, freezeNode, type ASTNode } from "./ast-node";
+import { astNodeSchema, validateASTNode, type ASTNode } from "./ast-node";
 import type { ParserError, ParserWarning } from "./parser-errors";
 import { validateParserStatistics, type ParserStatistics } from "@parser/models/parser-statistics";
 
@@ -46,9 +46,16 @@ const astResultSchema = z.object({
   errors: z.array(parserDiagnosticSchema),
 });
 
+const validatedASTResults = new WeakSet<object>();
+
 export function validateASTResult(result: unknown): ASTResult {
-  if (isDeeplyFrozenASTResult(result)) {
-    return result;
+  if (
+    typeof result === "object" &&
+    result !== null &&
+    isDeeplyFrozenASTResult(result) &&
+    validatedASTResults.has(result)
+  ) {
+    return result as ASTResult;
   }
 
   const parsedResult = astResultSchema.safeParse(result);
@@ -61,9 +68,9 @@ export function validateASTResult(result: unknown): ASTResult {
     });
   }
 
-  return Object.freeze({
+  const frozenResult: ASTResult = Object.freeze({
     metadata: Object.freeze({ ...parsedResult.data.metadata }),
-    root: freezeNode(parsedResult.data.root),
+    root: validateASTNode(parsedResult.data.root),
     statistics: validateParserStatistics(parsedResult.data.statistics),
     warnings: Object.freeze(
       parsedResult.data.warnings.map((warning) =>
@@ -83,6 +90,9 @@ export function validateASTResult(result: unknown): ASTResult {
       ),
     ),
   });
+
+  validatedASTResults.add(frozenResult);
+  return frozenResult;
 }
 
 function isDeeplyFrozenASTResult(value: unknown): value is ASTResult {
