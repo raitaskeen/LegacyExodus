@@ -37,10 +37,14 @@ export function detectTerminalCapabilities(options: {
   let mode: RenderingMode = "interactive";
   if (options.json) {
     mode = "json";
-  } else if (options.plain || !isTTY || noColor) {
-    mode = isCI ? "ci" : "plain";
+  } else if (options.plain) {
+    mode = "plain";
+  } else if (!isTTY) {
+    mode = "plain";
   } else if (isCI) {
     mode = "ci";
+  } else if (noColor) {
+    mode = "plain";
   }
 
   return {
