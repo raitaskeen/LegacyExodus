@@ -99,10 +99,92 @@ describe("CLI Error Contracts & Error-Path Behavioral Hardening", () => {
         const error = new CliError("TEST_CLI_CODE", "Something failed in CLI.");
         writeCliError(error);
 
-        expect(writtenData).toBe("Error: Something failed in CLI.\nCode: TEST_CLI_CODE\n");
+        expect(writtenData).toContain("TEST_CLI_CODE");
+        expect(writtenData).toContain("Something failed in CLI.");
       } finally {
         process.stderr.write = originalWrite;
       }
+    });
+
+    it("writes plain error format to a plain stream", () => {
+      let writtenData = "";
+      const mockStream = {
+        isTTY: false,
+        write: (chunk: string) => {
+          writtenData += chunk;
+          return true;
+        },
+      } as unknown as NodeJS.WriteStream;
+
+      const error = new CliError("TEST_CLI_CODE", "Something failed in CLI.");
+      writeCliError(error, mockStream);
+
+      expect(writtenData).toBe("Error: Something failed in CLI.\nCode: TEST_CLI_CODE\n");
+    });
+  });
+
+  // ─── ErrorPresenter Formatting & Remediation Tests ────────────────────────
+  describe("ErrorPresenter", () => {
+    it("renders compact plain output for DISCOVERY_PATH_NOT_FOUND with remediation", async () => {
+      const { ErrorPresenter } = await import("@cli/presentation/errors");
+      const presenter = new ErrorPresenter({
+        isTTY: false,
+        isCI: false,
+        noColor: true,
+        isUnicodeSupported: false,
+        width: 80,
+        mode: "plain",
+      });
+
+      const error = new LegacyExodusError({
+        code: "DISCOVERY_PATH_NOT_FOUND",
+        message: "The requested discovery path does not exist.",
+      });
+
+      const output = presenter.renderError(error);
+      expect(output).toContain("Error: The requested discovery path does not exist.");
+      expect(output).toContain("Code: DISCOVERY_PATH_NOT_FOUND");
+      expect(output).toContain("Remediation: Verify the target project path exists and has read permissions.");
+    });
+
+    it("renders interactive card layout with hints and banners for WORKSPACE_ALREADY_INITIALIZED", async () => {
+      const { ErrorPresenter } = await import("@cli/presentation/errors");
+      const presenter = new ErrorPresenter({
+        isTTY: true,
+        isCI: false,
+        noColor: false,
+        isUnicodeSupported: true,
+        width: 80,
+        mode: "interactive",
+      });
+
+      const error = new CliError("WORKSPACE_ALREADY_INITIALIZED", "This workspace is already initialized.");
+      const output = presenter.renderError(error);
+
+      expect(output).toContain("WORKSPACE_ALREADY_INITIALIZED");
+      expect(output).toContain("This workspace is already initialized.");
+      expect(output).toContain("Hint");
+      expect(output).toContain("To reinitialize, remove the existing .legacy-exodus directory first.");
+      expect(output).toContain("Operation failed");
+    });
+
+    it("renders CONFIG_INVALID with configuration context and remediation hint", async () => {
+      const { ErrorPresenter } = await import("@cli/presentation/errors");
+      const presenter = new ErrorPresenter({
+        isTTY: false,
+        isCI: true,
+        noColor: true,
+        isUnicodeSupported: false,
+        width: 80,
+        mode: "ci",
+      });
+
+      const error = new ConfigurationError("Missing database file path.");
+      const output = presenter.renderError(error);
+
+      expect(output).toContain("Error: Missing database file path.");
+      expect(output).toContain("Code: CONFIG_INVALID");
+      expect(output).toContain("Remediation: Verify environment variables and configuration files.");
     });
   });
 

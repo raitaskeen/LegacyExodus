@@ -1,4 +1,6 @@
 import { ConfigurationError, LegacyExodusError } from "@shared/errors";
+import { detectTerminalCapabilities } from "./presentation/capabilities";
+import { ErrorPresenter } from "./presentation/errors";
 
 export class CliError extends Error {
   public constructor(
@@ -48,8 +50,10 @@ export function toCliErrorResponse(error: unknown): CliErrorResponse {
   };
 }
 
-export function writeCliError(error: unknown): void {
-  const response = toCliErrorResponse(error);
-
-  process.stderr.write(`Error: ${response.message}\nCode: ${response.code}\n`);
+export function writeCliError(error: unknown, stream: NodeJS.WriteStream = process.stderr): void {
+  const capabilities = detectTerminalCapabilities({
+    stream,
+  });
+  const presenter = new ErrorPresenter(capabilities);
+  stream.write(`${presenter.renderError(error)}\n`);
 }

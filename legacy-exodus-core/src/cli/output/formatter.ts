@@ -1,6 +1,7 @@
 import type { PluginListReport } from "../commands/plugins";
 import type { StatusReport } from "../commands/status";
 import type { AnalyzeProjectReport } from "../commands/analyze";
+import type { InitReport } from "../commands/init";
 
 export function formatStatusOutput(report: StatusReport): string {
   return [
@@ -41,5 +42,12 @@ export function formatAnalyzeOutput(report: AnalyzeProjectReport): string {
     `Languages: ${report.languages.join(", ") || "none"}`,
     `Frameworks: ${report.frameworks.join(", ") || "none"}`,
     `Dependencies: ${report.dependencies}`,
+  ].join("\n");
+}
+
+export function formatInitOutput(report: InitReport): string {
+  return [
+    "LegacyExodus workspace initialized",
+    `${report.metadataPath}`,
   ].join("\n");
 }

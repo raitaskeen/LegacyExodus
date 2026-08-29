@@ -128,7 +128,18 @@ export const analysisRunPayloadSchema = z.object({
     .optional(),
 });
 
+export const astResultPayloadSchema = z.object({
+  projectId: z.string().uuid(),
+  analysisRunId: z.string().uuid().optional(),
+  fileId: z.string().min(1),
+  path: z.string().min(1),
+  parserId: z.string().min(1),
+  nodeCount: z.number().int().nonnegative(),
+  errorCount: z.number().int().nonnegative(),
+});
+
 export type ProjectDiscoveryPayload = z.infer<typeof discoveryPayloadSchema>;
+export type AstResultPayload = z.infer<typeof astResultPayloadSchema>;
 export type SymbolTablePayload = z.infer<typeof symbolTablePayloadSchema>;
 export type DependencyGraphPayload = z.infer<typeof dependencyGraphPayloadSchema>;
 export type KnowledgeGraphPayload = z.infer<typeof knowledgeGraphPayloadSchema>;

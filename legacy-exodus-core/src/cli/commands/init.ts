@@ -5,6 +5,8 @@ import type { Command } from "commander";
 
 import { CliError } from "../errors";
 import { formatJsonOutput } from "../output/json-output";
+import { detectTerminalCapabilities } from "../presentation/capabilities";
+import { SummaryPresenter } from "../presentation/summaries";
 
 export interface InitializationMetadata {
   readonly version: string;
@@ -52,13 +54,14 @@ export function registerInitCommand(program: Command, version: string): void {
     .option("--json", "Emit machine-readable JSON")
     .action(async (path: string, options: { readonly json?: boolean }): Promise<void> => {
       const report = await initializeWorkspace(path, version);
-
       if (options.json) {
         process.stdout.write(`${formatJsonOutput(report)}\n`);
         return;
       }
 
-      process.stdout.write(`LegacyExodus workspace initialized\n${report.metadataPath}\n`);
+      const capabilities = detectTerminalCapabilities();
+      const presenter = new SummaryPresenter(capabilities);
+      process.stdout.write(`${presenter.formatInit(report)}\n`);
     });
 }
 

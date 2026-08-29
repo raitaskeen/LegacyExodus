@@ -675,4 +675,146 @@ describe("Analysis-Run Atomicity & Completion Semantics (F-004)", () => {
       // Ignore lock delay
     }
   });
+
+  it("8. downstream analysis failure persists failed analysis-run record and emits AnalysisRunFailed event (F-09)", async () => {
+    const testDir = join(import.meta.dir, "../../fixtures/scratch-f09-test");
+    await mkdir(testDir, { recursive: true });
+    await writeFile(
+      join(testDir, "index.js"),
+      "function add(a, b) { return a + b; }\nmodule.exports = { add };\n",
+    );
+
+    class DownstreamFailingSymbolExtractor extends JavaScriptSymbolExtractor {
+      public failDownstream = false;
+
+      public override extract(ast: any): any {
+        const table = super.extract(ast);
+        if (!this.failDownstream) {
+          return table;
+        }
+        let accessCount = 0;
+        return new Proxy(table, {
+          get(target, prop, receiver) {
+            if (prop === "symbols") {
+              accessCount++;
+              // Allow accesses during per-file record and event creation (3 accesses), then throw on downstream analysis access
+              if (accessCount > 3) {
+                throw new Error("Simulated unexpected downstream analysis crash");
+              }
+            }
+            return Reflect.get(target, prop, receiver);
+          },
+        });
+      }
+    }
+
+    try {
+      const eventStore = new InMemoryEventStore();
+      const eventBus = new EventBus();
+      const receivedEvents: any[] = [];
+      eventBus.subscribe("AnalysisRunFailed", (event) => receivedEvents.push(event));
+      eventBus.subscribe("AnalysisRunCompleted", (event) => receivedEvents.push(event));
+
+      const parserRegistry = new ParserRegistry();
+      parserRegistry.register(new JavaScriptParser());
+      const symbolExtractor = new DownstreamFailingSymbolExtractor();
+
+      const orchestrator = new Orchestrator(
+        eventStore,
+        eventBus,
+        storage,
+        new DiscoveryEngine(),
+        createProjectState("F-09 Test"),
+        new ParserManager(parserRegistry),
+        symbolExtractor,
+      );
+
+      // --- RUN 1: Successful run ---
+      const run1Command = {
+        id: run1Id,
+        type: "AnalyzeProject" as const,
+        createdAt: new Date(),
+        payload: { projectId, path: testDir },
+      };
+      const exec1 = await orchestrator.execute(run1Command);
+      expect(exec1.records.some((r) => r.type === "analysis-run")).toBe(true);
+      expect(await queryService.getLatestCompletedRunId(projectId)).toBe(run1Id);
+      expect(receivedEvents.some((e) => e.type === "AnalysisRunCompleted" && e.payload.analysisRunId === run1Id)).toBe(true);
+
+      // --- RUN 2: Downstream failure injected ---
+      symbolExtractor.failDownstream = true;
+      const run2Command = {
+        id: run2Id,
+        type: "AnalyzeProject" as const,
+        createdAt: new Date(),
+        payload: { projectId, path: testDir },
+      };
+
+      const exec2 = await orchestrator.execute(run2Command);
+
+      // 1. Orchestrator status returns to idle
+      expect(orchestrator.getStatus()).toBe("idle");
+
+      // 2. An analysis-run record exists with status: 'failed'
+      const failedRunRecord = exec2.records.find((r) => r.type === "analysis-run");
+      expect(failedRunRecord).toBeDefined();
+      const failedPayload = failedRunRecord?.payload as any;
+      expect(failedPayload.status).toBe("failed");
+      expect(failedPayload.projectId).toBe(projectId);
+      expect(failedPayload.analysisRunId).toBe(run2Id);
+      expect(failedPayload.error).toBe("Simulated unexpected downstream analysis crash");
+
+      // 3. Exactly one AnalysisRunFailed event emitted on EventBus and stored in EventStore
+      const run2FailedEvents = eventStore.getAll().filter((e) => e.type === "AnalysisRunFailed");
+      expect(run2FailedEvents).toHaveLength(1);
+      expect(run2FailedEvents[0]?.payload).toMatchObject({
+        projectId,
+        analysisRunId: run2Id,
+        error: "Simulated unexpected downstream analysis crash",
+      });
+
+      const busFailedEvents = receivedEvents.filter((e) => e.type === "AnalysisRunFailed" && e.payload.analysisRunId === run2Id);
+      expect(busFailedEvents).toHaveLength(1);
+
+      // 4. AnalysisRunCompleted is NOT emitted for Run 2
+      const run2CompletedEvents = eventStore.getAll().filter((e) => e.type === "AnalysisRunCompleted" && (e.payload as any).analysisRunId === run2Id);
+      expect(run2CompletedEvents).toHaveLength(0);
+
+      // 5. QueryService preserves Run 1 as the latest completed run
+      const activeRunAfterFailure = await queryService.getLatestCompletedRunId(projectId);
+      expect(activeRunAfterFailure).toBe(run1Id);
+
+      const activeDiscovery = await queryService.getProjectDiscovery(projectId);
+      expect(activeDiscovery?.analysisRunId).toBe(run1Id);
+
+      // 6. QueryService.listAnalysisRuns() contains both Run 1 (completed) and Run 2 (failed)
+      const allRuns = await queryService.listAnalysisRuns(projectId);
+      expect(allRuns).toHaveLength(2);
+      expect(allRuns.find((r) => r.analysisRunId === run1Id)?.status).toBe("completed");
+      expect(allRuns.find((r) => r.analysisRunId === run2Id)?.status).toBe("failed");
+      expect(allRuns.find((r) => r.analysisRunId === run2Id)?.error).toBe("Simulated unexpected downstream analysis crash");
+
+      // --- RUN 3: Subsequent normal run succeeds ---
+      symbolExtractor.failDownstream = false;
+      const run3IdLocal = "33333333-3333-4333-8333-333333333333";
+      const run3Command = {
+        id: run3IdLocal,
+        type: "AnalyzeProject" as const,
+        createdAt: new Date(),
+        payload: { projectId, path: testDir },
+      };
+
+      const exec3 = await orchestrator.execute(run3Command);
+      expect(orchestrator.getStatus()).toBe("idle");
+      expect(exec3.records.some((r) => r.type === "analysis-run" && (r.payload as any).status === "completed")).toBe(true);
+
+      const latestCompletedRun = await queryService.getLatestCompletedRunId(projectId);
+      expect(latestCompletedRun).toBe(run3IdLocal);
+
+      const allRunsAfterRun3 = await queryService.listAnalysisRuns(projectId);
+      expect(allRunsAfterRun3).toHaveLength(3);
+    } finally {
+      await rm(testDir, { recursive: true, force: true });
+    }
+  });
 });

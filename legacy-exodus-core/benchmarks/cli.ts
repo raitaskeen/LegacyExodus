@@ -27,6 +27,10 @@ import { generateMarkdownReport } from "./scripts/report";
 import { runFidelityValidation } from "./fidelity/runner";
 import { BENCHMARKS_ROOT, CORPUS_DIR, RESULTS_DIR, resolveBenchmarkRepoPath, resolveResultsDir } from "./paths";
 import type { BenchmarkResult } from "./types";
+import { detectTerminalCapabilities } from "../src/cli/presentation/capabilities";
+import { ErrorPresenter } from "../src/cli/presentation/errors";
+import { LayoutRenderer } from "../src/cli/presentation/layout";
+import { VerificationPresenter } from "../src/cli/presentation/verification";
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -86,27 +90,19 @@ async function main(): Promise<void> {
     }
 
     case "audit": {
-      console.log(`\n╔══════════════════════════════════════════════════════════╗`);
-      console.log(`║  LegacyExodus Phase 3A — Benchmark System Self-Audit     ║`);
-      console.log(`╚══════════════════════════════════════════════════════════╝\n`);
-
       const auditReport = await runBenchmarkSelfAudit();
-      console.log(`Audit Timestamp: ${auditReport.auditedAt}`);
-      console.log(`Engine SHA:      ${auditReport.engineSha}`);
-      console.log(`Total Checks:    ${auditReport.totalChecks}`);
-      console.log(`Passed:          ${auditReport.passedChecks}`);
-      console.log(`Failed:          ${auditReport.failedChecks}`);
-      console.log(`Verdict:         ${auditReport.verdict}\n`);
+      const capabilities = detectTerminalCapabilities();
+      const presenter = new VerificationPresenter(capabilities);
+
+      console.log(presenter.renderBenchmarkAudit(auditReport));
 
       if (auditReport.findings.length > 0) {
-        console.log(`Findings:`);
+        console.log(`\nFindings:`);
         for (const f of auditReport.findings) {
           console.log(`  [${f.severity}] ${f.category}: ${f.description}`);
           console.log(`    Evidence: ${f.evidence}`);
           if (f.remediation) console.log(`    Remediation: ${f.remediation}`);
         }
-      } else {
-        console.log(`✓ All 10 benchmark governance checks passed with zero findings!`);
       }
 
       if (auditReport.verdict === "NO_GO") process.exit(1);
@@ -119,13 +115,31 @@ async function main(): Promise<void> {
         console.error("Usage: bun run benchmarks/cli.ts validate <target-path>");
         process.exit(1);
       }
-      console.log(`Validating accounting & completeness for: ${target}`);
+      const capabilities = detectTerminalCapabilities();
+      const layout = new LayoutRenderer(capabilities);
       const resolvedTarget = resolveBenchmarkRepoPath(target);
       const runRes = await executeBenchmarkRun(resolvedTarget, 0);
-      console.log(`  Discovered:   ${runRes.fileAccounting.filesDiscovered}`);
-      console.log(`  Computed:     ${runRes.fileAccounting.computedTotal}`);
-      console.log(`  Reconciles:   ${runRes.fileAccounting.reconciles ? "✓ YES" : "✗ NO (discrepancy: " + runRes.fileAccounting.discrepancy + ")"}`);
-      console.log(`  Completeness: ${runRes.completeness.status}`);
+
+      const header = layout.renderHeader("Benchmark Accounting Validation", basename(target));
+      const card = layout.renderCard([
+        { label: "Target Workspace", value: target },
+        { label: "Files Discovered", value: runRes.fileAccounting.filesDiscovered },
+        { label: "Computed Total", value: runRes.fileAccounting.computedTotal },
+        {
+          label: "Reconciliation",
+          value: runRes.fileAccounting.reconciles ? "Reconciled" : `Discrepancy: ${runRes.fileAccounting.discrepancy}`,
+          badge: runRes.fileAccounting.reconciles ? "PASS" : "FAIL",
+          badgeType: runRes.fileAccounting.reconciles ? "success" : "error",
+        },
+        {
+          label: "Completeness",
+          value: runRes.completeness.status,
+          badge: runRes.completeness.status === "COMPLETE" ? "PASS" : "NEEDS_REVIEW",
+          badgeType: runRes.completeness.status === "COMPLETE" ? "success" : "warning",
+        },
+      ]);
+      const divider = layout.renderDivider();
+      console.log([header, "", card, "", divider].join("\n"));
       if (!runRes.fileAccounting.reconciles) process.exit(1);
       break;
     }
@@ -160,18 +174,23 @@ async function runAllCorpus(corpusDir: string, runs: number): Promise<void> {
 }
 
 function printUsage(): void {
-  console.log(`
-LegacyExodus Phase 3A — Benchmark Intelligence CLI
-
-Commands:
-  run <manifest-or-dir> [--runs N]   Execute benchmark runs against targets
-  compare <runA.json> <runB.json>    Compare baseline vs current benchmark run
-  report [--results-dir D]           Generate consolidated Markdown benchmark report
-  audit                              Execute 10-point benchmark system self-audit
-  validate <target-path>             Validate mathematical file accounting on target
-  fidelity [target-path]             Validate migration discovery fidelity against ground truth
-  help                               Show this help message
-`);
+  const capabilities = detectTerminalCapabilities();
+  const layout = new LayoutRenderer(capabilities);
+  const header = layout.renderHeader("Benchmark Intelligence CLI");
+  console.log([
+    header,
+    "",
+    "  Commands:",
+    "    run <manifest-or-dir> [--runs N]   Execute benchmark runs against targets",
+    "    compare <runA.json> <runB.json>    Compare baseline vs current benchmark run",
+    "    report [--results-dir D]           Generate consolidated Markdown benchmark report",
+    "    audit                              Execute 10-point benchmark system self-audit",
+    "    validate <target-path>             Validate mathematical file accounting on target",
+    "    fidelity [target-path]             Validate migration discovery fidelity against ground truth",
+    "    help                               Show this help message",
+    "",
+    layout.renderDivider(),
+  ].join("\n"));
 }
 
 function getArgValue(args: readonly string[], flag: string): string | undefined {
@@ -194,6 +213,8 @@ async function statSafe(path: string) {
 }
 
 main().catch((err) => {
-  console.error("CLI Error:", err);
+  const capabilities = detectTerminalCapabilities({ stream: process.stderr });
+  const presenter = new ErrorPresenter(capabilities);
+  process.stderr.write(`${presenter.renderError(err)}\n`);
   process.exit(1);
 });
