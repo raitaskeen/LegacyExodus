@@ -62,6 +62,28 @@ export async function runFidelityValidation(options: RunFidelityOptions): Promis
       throw new Error(`Malformed discovery manifest at ${manifestPath}: Missing required provenance sections.`);
     }
 
+    // Verify and Normalize Engine Identity
+    const rawProvSha = provenance.engine.commitSha;
+    const provEngineSha =
+      typeof rawProvSha === "string" && rawProvSha.trim().length > 0
+        ? rawProvSha.trim()
+        : undefined;
+
+    if (!provEngineSha) {
+      throw new Error(
+        `Malformed discovery manifest at ${manifestPath}: Missing or invalid engine.commitSha in provenance.`,
+      );
+    }
+
+    // Ensure normalized provenance is stored for downstream reporting
+    provenance = {
+      ...provenance,
+      engine: {
+        ...provenance.engine,
+        commitSha: provEngineSha,
+      },
+    };
+
     // Verify Repository Identity
     const expectedRepo = options.expectedRepositoryName ?? (isExpress ? "express" : "fastify");
     const actualRepoName = provenance.repository.name;
@@ -86,10 +108,6 @@ export async function runFidelityValidation(options: RunFidelityOptions): Promis
     }
 
     // Verify Engine Identity & Evaluate Dynamic Freshness
-    const rawProvSha = provenance.engine.commitSha;
-    const provEngineSha =
-      typeof rawProvSha === "string" ? rawProvSha.trim() : "";
-
     if (options.expectedEngineCommitSha) {
       const expectedSha = options.expectedEngineCommitSha.trim();
       if (provEngineSha !== expectedSha) {
