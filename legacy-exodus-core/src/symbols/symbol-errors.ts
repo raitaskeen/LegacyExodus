@@ -11,3 +11,15 @@ export class UnsupportedSymbolLanguageError extends LegacyExodusError {
     this.name = "UnsupportedSymbolLanguageError";
   }
 }
+
+export class SymbolExtractionError extends LegacyExodusError {
+  public constructor(message: string, code = "SYMBOL_EXTRACTION_FAILED", metadata: Record<string, unknown> = {}) {
+    super({
+      code,
+      message,
+      metadata,
+    });
+
+    this.name = "SymbolExtractionError";
+  }
+}
