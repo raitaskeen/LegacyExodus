@@ -7,6 +7,7 @@ import type { EngineState, EngineStatus } from "./engine-status";
 export class LegacyExodusEngine {
   private state: EngineState = "created";
   private readonly activeExecutions = new Set<Promise<unknown>>();
+  private shutdownPromise: Promise<void> | null = null;
 
   public constructor(private readonly context: EngineContext) {}
 
@@ -26,19 +27,30 @@ export class LegacyExodusEngine {
     this.state = "running";
   }
 
-  public async shutdown(): Promise<void> {
+  public shutdown(): Promise<void> {
     if (this.state === "stopped") {
-      return;
+      return Promise.resolve();
+    }
+
+    if (this.shutdownPromise !== null) {
+      return this.shutdownPromise;
     }
 
     this.state = "stopping";
 
-    if (this.activeExecutions.size > 0) {
-      await Promise.allSettled([...this.activeExecutions]);
-    }
+    this.shutdownPromise = (async () => {
+      try {
+        if (this.activeExecutions.size > 0) {
+          await Promise.allSettled([...this.activeExecutions]);
+        }
 
-    await this.context.runtime.shutdown();
-    this.state = "stopped";
+        await this.context.runtime.shutdown();
+      } finally {
+        this.state = "stopped";
+      }
+    })();
+
+    return this.shutdownPromise;
   }
 
   public status(): EngineStatus {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -105,7 +105,9 @@ describe("Runtime Shutdown Cleanup & Resource Disposal (F-006)", () => {
     const dbPath = join(tempDir, "shutdown-test.sqlite");
 
     try {
-      const sqliteStorage = new StorageManager(new SqliteStorageProvider({ databasePath: dbPath }));
+      const sqliteProvider = new SqliteStorageProvider({ databasePath: dbPath });
+      const closeSpy = spyOn(sqliteProvider, "close");
+      const sqliteStorage = new StorageManager(sqliteProvider);
       const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
 
       const runtime = new ApplicationRuntime(
@@ -173,6 +175,9 @@ describe("Runtime Shutdown Cleanup & Resource Disposal (F-006)", () => {
       // Plugin was unregistered
       expect(runtime.getPluginRegistry().has("plugin-p1")).toBe(false);
 
+      // Explicitly prove original sqliteProvider.close() was invoked exactly once before reopen
+      expect(closeSpy).toHaveBeenCalledTimes(1);
+
       // Verify SQLite connection was closed: a new provider can open the file without lock error
       const freshProvider = new SqliteStorageProvider({ databasePath: dbPath });
       const freshStorage = new StorageManager(freshProvider);
@@ -227,7 +232,9 @@ describe("Runtime Shutdown Cleanup & Resource Disposal (F-006)", () => {
     const dbPath = join(tempDir, "plugin-fail.sqlite");
 
     try {
-      const sqliteStorage = new StorageManager(new SqliteStorageProvider({ databasePath: dbPath }));
+      const sqliteProvider = new SqliteStorageProvider({ databasePath: dbPath });
+      const closeSpy = spyOn(sqliteProvider, "close");
+      const sqliteStorage = new StorageManager(sqliteProvider);
       const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
 
       const runtime = new ApplicationRuntime(
@@ -264,6 +271,9 @@ describe("Runtime Shutdown Cleanup & Resource Disposal (F-006)", () => {
 
       expect(runtime.getStatus()).toBe("stopped");
       expect(runtime.getPluginRegistry().has("failing-plugin")).toBe(false);
+
+      // Verify original sqliteProvider was closed exactly once
+      expect(closeSpy).toHaveBeenCalledTimes(1);
 
       // Verify storage was closed cleanly despite plugin failure
       const reopenProvider = new SqliteStorageProvider({ databasePath: dbPath });

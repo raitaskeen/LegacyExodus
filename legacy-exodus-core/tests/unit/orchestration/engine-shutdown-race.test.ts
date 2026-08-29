@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -342,4 +342,77 @@ describe("F-004 / F-005 / F-006: In-Flight Analysis vs Engine & Runtime Shutdown
       await rm(dbDir, { recursive: true, force: true });
     }
   }, 60000);
+
+  it("8. concurrent and repeated engine.shutdown() calls share the exact same in-flight operation and execute runtime.shutdown once", async () => {
+    const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+    const runtimeShutdownSpy = spyOn(context.runtime, "shutdown");
+
+    const engine = new LegacyExodusEngine(context);
+    await engine.initialize();
+    expect(engine.status().state).toBe("running");
+
+    // Case B: Concurrent calls share the in-progress operation
+    const shutdownPromise1 = engine.shutdown();
+    const shutdownPromise2 = engine.shutdown();
+    const shutdownPromise3 = engine.shutdown();
+
+    // Verify all return identical promise reference while in-flight
+    expect(shutdownPromise2).toBe(shutdownPromise1);
+    expect(shutdownPromise3).toBe(shutdownPromise1);
+
+    const [res1, res2, res3] = await Promise.allSettled([shutdownPromise1, shutdownPromise2, shutdownPromise3]);
+
+    expect(res1.status).toBe("fulfilled");
+    expect(res2.status).toBe("fulfilled");
+    expect(res3.status).toBe("fulfilled");
+    expect(engine.status().state).toBe("stopped");
+
+    // Runtime shutdown was called exactly once despite 3 concurrent calls
+    expect(runtimeShutdownSpy).toHaveBeenCalledTimes(1);
+
+    // Case C: Repeated calls after completion are idempotent and no-op
+    await engine.shutdown();
+    await engine.shutdown();
+    expect(runtimeShutdownSpy).toHaveBeenCalledTimes(1);
+    expect(engine.status().state).toBe("stopped");
+  });
+
+  it("9. concurrent shutdown calls during active execution wait for the same drain operation", async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), "legacy-exodus-race-concurrent-drain-"));
+    try {
+      await writeFile(join(projectDir, "index.js"), "export const val = 42;", "utf8");
+
+      const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+      context.parserRegistry.unregister("javascript-parser");
+      context.parserRegistry.register(new ControllablePausingParser(60));
+
+      const runtimeShutdownSpy = spyOn(context.runtime, "shutdown");
+      const engine = new LegacyExodusEngine(context);
+      await engine.initialize();
+
+      const cmd = {
+        id: "00000000-0000-4000-8000-000000000888",
+        type: "AnalyzeProject" as const,
+        createdAt: new Date(),
+        payload: { projectId: "00000000-0000-4000-8000-000000000999", path: projectDir },
+      };
+
+      const execP = engine.execute(cmd);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const shutP1 = engine.shutdown();
+      const shutP2 = engine.shutdown();
+      expect(shutP2).toBe(shutP1);
+
+      const [execRes, shutRes1, shutRes2] = await Promise.allSettled([execP, shutP1, shutP2]);
+
+      expect(execRes.status).toBe("fulfilled");
+      expect(shutRes1.status).toBe("fulfilled");
+      expect(shutRes2.status).toBe("fulfilled");
+      expect(runtimeShutdownSpy).toHaveBeenCalledTimes(1);
+      expect(engine.status().state).toBe("stopped");
+    } finally {
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
 });
