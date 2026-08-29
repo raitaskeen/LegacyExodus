@@ -311,6 +311,42 @@ When `shutdown()` or a failed `start()` rollback executes:
 
 ---
 
+## 8) CLI & Developer Experience Architecture `[IMPLEMENTED]`
+
+The CLI layer (`src/cli/`) is architected around a strict separation between command routing, domain computation, deterministic JSON serialization, and capability-aware presentation adapters:
+
+```text
+                 LegacyExodus CLI
+                        │
+                        ▼
+                 Domain Result DTO
+                        │
+             ┌──────────┴──────────┐
+             │                     │
+          --json               Human CLI
+             │                     │
+             ▼                     ▼
+      JSON Serializer       Capability Detection
+                                   │
+                    ┌──────────────┼──────────────┐
+                    ▼              ▼              ▼
+               interactive       plain           CI
+                    │              │              │
+                    ▼              ▼              ▼
+             Rich Presenter   Pure Formatter  Pure Formatter
+```
+
+### 8.1 Pure Formatter vs Capability Presenter Separation
+* **Pure Formatters (`src/cli/output/formatter.ts`):** Deterministic, zero-dependency string formatters (`formatStatusOutput`, `formatAnalyzeOutput`, etc.) with zero runtime stream or global environment side-effects.
+* **Capability Presenter (`src/cli/presentation/`):** Dynamically detects terminal capabilities (TTY, CI, `NO_COLOR`, column width) and renders structured cards, dividers, and tables in interactive terminals, delegating to pure formatters in plain or CI environments.
+* **JSON Purity (`src/cli/output/json-output.ts`):** When `--json` is supplied, all presentation adapters are bypassed and raw structured JSON is emitted exclusively to `stdout`.
+
+### 8.2 Error & Verification Diagnostics
+* **Error Presenter (`src/cli/presentation/errors.ts`):** Centralized error formatting capturing error codes, messages, target paths, analysis run IDs, causes, and actionable remediation hints, routed cleanly to `stderr`.
+* **Verification Subprocess Diagnostics (`src/cli/commands/verify.ts`):** Captures `stdout` and `stderr` streams across TypeScript compiler, unit/integration test suite, benchmark governance audits, and Git tree hygiene, surfacing actionable failure diagnostics directly in the dashboard on gate failures.
+
+---
+
 ## Summary
 
 LegacyExodus “actually runs” as a staged, event-orchestrated execution system:
@@ -320,6 +356,7 @@ LegacyExodus “actually runs” as a staged, event-orchestrated execution syste
 - workers perform isolated stage tasks concurrently,
 - events coordinate transitions and persistence,
 - runtime state machine guarantees total resource disposal upon shutdown,
+- unified presentation adapters guarantee deterministic output across interactive, CI, and machine consumers,
 - validation gates determine final modernization readiness.
 
 This architecture enables safe, auditable modernization at enterprise scale without sacrificing control, determinism, or traceability.
