@@ -52,14 +52,15 @@ export function registerInitCommand(program: Command, version: string): void {
     .command("init <path>")
     .description("Initialize a LegacyExodus workspace")
     .option("--json", "Emit machine-readable JSON")
-    .action(async (path: string, options: { readonly json?: boolean }): Promise<void> => {
+    .option("--theme <name>", "Visual theme (classic, aurora, mono)")
+    .action(async (path: string, options: { readonly json?: boolean; readonly theme?: string }): Promise<void> => {
       const report = await initializeWorkspace(path, version);
       if (options.json) {
         process.stdout.write(`${formatJsonOutput(report)}\n`);
         return;
       }
 
-      const capabilities = detectTerminalCapabilities();
+      const capabilities = detectTerminalCapabilities({ json: options.json, theme: options.theme });
       const presenter = new SummaryPresenter(capabilities);
       process.stdout.write(`${presenter.formatInit(report)}\n`);
     });

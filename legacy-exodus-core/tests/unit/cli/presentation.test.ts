@@ -23,6 +23,7 @@ describe("CLI Presentation Subsystem", () => {
     isUnicodeSupported: true,
     width: 80,
     mode: "interactive",
+    theme: "classic",
   };
 
   const plainCaps: TerminalCapabilities = {
@@ -32,6 +33,7 @@ describe("CLI Presentation Subsystem", () => {
     isUnicodeSupported: false,
     width: 80,
     mode: "plain",
+    theme: "mono",
   };
 
   const ciCaps: TerminalCapabilities = {
@@ -41,6 +43,7 @@ describe("CLI Presentation Subsystem", () => {
     isUnicodeSupported: true,
     width: 80,
     mode: "ci",
+    theme: "mono",
   };
 
   // ─── 1. Terminal Capabilities ─────────────────────────────────────────────
@@ -123,6 +126,7 @@ describe("CLI Presentation Subsystem", () => {
         noColor: false,
         isUnicodeSupported: true,
         width: 60,
+        theme: "classic",
       };
       const narrowLayout = new LayoutRenderer(narrowCaps);
       const outNarrow = narrowLayout.renderLogo(true);

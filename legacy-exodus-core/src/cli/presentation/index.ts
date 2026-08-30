@@ -7,3 +7,6 @@ export * from "./errors";
 export * from "./summaries";
 export * from "./progress";
 export * from "./verification";
+export * from "./test-runner";
+export * from "./shell";
+export * from "./help";

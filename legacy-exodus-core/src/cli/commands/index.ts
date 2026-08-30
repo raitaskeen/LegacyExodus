@@ -6,6 +6,7 @@ import { registerAnalyzeCommand } from "./analyze";
 import { registerInitCommand } from "./init";
 import { registerPluginsCommand } from "./plugins";
 import { registerStatusCommand } from "./status";
+import { registerTestCommand } from "./test";
 import { registerVerifyCommand } from "./verify";
 
 export interface CommandRegistrationOptions {
@@ -18,5 +19,6 @@ export function registerCommands(program: Command, options: CommandRegistrationO
   registerInitCommand(program, options.version);
   registerPluginsCommand(program, options.createEngine);
   registerAnalyzeCommand(program, options.createEngine);
+  registerTestCommand(program);
   registerVerifyCommand(program);
 }
