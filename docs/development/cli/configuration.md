@@ -36,7 +36,7 @@ The CLI automatically detects terminal capabilities and selects the appropriate 
 | Mode | Trigger Conditions | Behavior |
 |---|---|---|
 | **Interactive TTY** | `stdout.isTTY = true`, no `CI`, no `NO_COLOR` | Rich cards, progress bars, styled tables, and TrueColor ANSI themes |
-| **CI / Non-TTY** | `stdout.isTTY = false` or `CI=true` or `NO_COLOR=1` | Deterministic plain-text summaries without ANSI escape codes or cursor movement |
+| **CI / Non-TTY** | `stdout.isTTY = false` or `CI=true` or `NO_COLOR` is present | Deterministic plain-text summaries without ANSI escape codes or cursor movement |
 | **JSON Mode** | `--json` flag passed | Pure machine-readable JSON emitted directly to `stdout` (zero decorative text) |
 
 ### Color Suppression

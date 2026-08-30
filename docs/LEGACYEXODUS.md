@@ -13,9 +13,9 @@
     <a href="../LICENSE"><img src="https://img.shields.io/badge/License-MIT-success?style=for-the-badge" alt="MIT License"></a>
   </p>
   <p>
-    <img src="https://img.shields.io/badge/Runtime-Bun_v1.0+-f9f8f6?style=for-the-badge&logo=bun" alt="Bun">
+    <img src="https://img.shields.io/badge/Runtime-Bun_>=1.3.0-f9f8f6?style=for-the-badge&logo=bun" alt="Bun">
     <img src="https://img.shields.io/badge/TypeScript-Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript Strict">
-    <img src="https://img.shields.io/badge/Tests-660_Passing_|_0_Regressions-success?style=for-the-badge" alt="660 Tests Passing">
+    <img src="https://img.shields.io/badge/Tests-668_Passing_|_0_Regressions-success?style=for-the-badge" alt="668 Tests Passing">
     <img src="https://img.shields.io/badge/Governance-10_/_10_Audits_Passed-success?style=for-the-badge" alt="10/10 Governance Passed">
     <img src="https://img.shields.io/badge/Status-Phase_3A_/_Hardened-success?style=for-the-badge" alt="Phase 3A / Hardened">
   </p>
@@ -136,7 +136,7 @@ If you feed this directly to an LLM, it attempts to recreate the exact syntactic
 
 `NolaraStruct` solves this by traversing the Abstract Syntax Tree (AST) and abstracting these conditionals into a semantic, mathematical model:
 
-1. **AST Token Diet:** Standard ASTs produce massive JSON payloads (e.g., 700 lines for 7 lines of code). NolaraStruct filters out noisy metadata (line numbers, loc, formatting, comments) to generate a clean, compressed Unified Intermediate Representation (UIR).
+1. **AST Token Diet:** Standard ASTs produce massive JSON payloads (e.g., 700 lines for 7 lines of code). NolaraStruct filters out noisy metadata (line numbers, loc, formatting, comments) to generate a clean, normalized AST representation (`ASTResult`) with semantic symbol tables.
 2. **Symbol & Scope Tables:** Functions, classes, variables, and parameters are cataloged into relational tables, differentiating definitions from call-site occurrences.
 3. **Control & Data Flow Graphs (CFG/DFG):** Constructs directed graphs modeling state mutations, conditional branches, and data flows.
 4. **Pure `BusinessRule` Entities:** Extracts business invariants into schema-defined objects connecting preconditions, operations, and state side-effects.
@@ -583,7 +583,7 @@ Class XL (Monorepo) ──► Enterprise monorepos with multi-tenant namespace p
 ┌────────────────────────┬────────────────────────────────────────────────────────┐
 │ Layer                  │ Technology Selection & Rationale                       │
 ├────────────────────────┼────────────────────────────────────────────────────────┤
-│ Core Engine & CLI      │ Bun v1.0+ + TypeScript (Strict Mode)                   │
+│ Core Engine & CLI      │ Bun >=1.3.0 + TypeScript (Strict Mode)                 │
 │                        │ • Ultra-fast I/O, native TS execution, embedded SQLite │
 ├────────────────────────┼────────────────────────────────────────────────────────┤
 │ Target Modernization   │ Rust + Axum + SQLx                                     │
@@ -664,7 +664,7 @@ git diff --check
 All claims in LegacyExodus are grounded in reproducible automated test suites, multi-tier real-repository benchmarks, and cryptographic provenance locks.
 
 ### 17.1 Test Suite & Static Typing
-* **Full Test Suite:** `bun test` $\to$ **660 / 660 passing tests across 87 files** (7,281 assertions, 0 failures, ~40s runtime).
+* **Full Test Suite:** `bun test` $\to$ **668 / 668 passing tests across 88 files** (7,558 assertions, 0 failures, ~40s runtime).
 * **TypeScript Type Checking:** `bun run typecheck` $\to$ **0 errors**.
 * **Benchmark Governance Audit:** `bun run benchmark audit` $\to$ **10 / 10 checks passed (`PASS`)**.
 * **Repository Verification Dashboard:** `bun run verify` $\to$ **4 / 4 gates passed (`PASS`)**.
@@ -681,10 +681,10 @@ Evaluated across three tiers of external real-world repositories with 3 consecut
 ### 17.3 Multi-File Migration Fidelity Evidence
 Sample-based validation across 25 representative core files per framework target under the Three-Universe model:
 
-| Framework Target | Validated Files | Ground Truth Facts | True Positives | False Negatives | Sample Recall | Actionable Correctness | Migration Safety Verdict |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Express v4.21.2** | 25 | 173 (+5 KN) | 172 | 1 | **99.4%** | **100.0%** | `MIGRATION_SAFETY_NOT_YET_ESTABLISHED` |
-| **Fastify v5.3.3** | 25 | 193 (+6 KN) | 193 | 0 | **100.0%** | **100.0%** | `MIGRATION_SAFETY_NOT_YET_ESTABLISHED` |
+| Framework Target | Validated Files | Positive Facts ($U_{GT}^+$) | Known Negatives ($U_{GT}^-$) | Total Facts | True Positives (TP) | False Negatives (FN) | Sample Recall | Actionable Correctness | Migration Safety Verdict |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Express v4.21.2** | 25 | 168 | 5 | 173 | 172 | 1 | **99.4%** | **100.0%** | `MIGRATION_SAFETY_NOT_YET_ESTABLISHED` |
+| **Fastify v5.3.3** | 25 | 187 | 6 | 193 | 193 | 0 | **100.0%** | **100.0%** | `MIGRATION_SAFETY_NOT_YET_ESTABLISHED` |
 
 ---
 

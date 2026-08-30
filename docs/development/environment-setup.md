@@ -59,7 +59,7 @@ Run the quality gate commands to confirm your local setup:
 # 1. Type check the entire codebase
 bun run typecheck
 
-# 2. Run the test suite (660 tests across 87 files)
+# 2. Run the test suite (668 tests across 88 files)
 bun test
 
 # 3. Verify benchmark governance checks
@@ -73,13 +73,16 @@ If all commands exit with code `0`, your environment is fully operational.
 
 ```mermaid
 flowchart LR
-    A["Install Bun >=1.3"] --> B["Clone Repository"]
+    A["Install Bun >=1.3.0"] --> B["Clone Repository"]
     B --> C["cd legacy-exodus-core"]
     C --> D["bun install"]
-    D --> E["bun test & bun run typecheck"]
-    E --> F{"Health Pass?"}
-    F -->|Yes| G["Ready for Development"]
-    F -->|No| H["Troubleshoot Environment"]
+    D --> E["bun test"]
+    E --> F["bun run typecheck"]
+    F --> G["bun run benchmark audit"]
+    G --> H["bun run verify"]
+    H --> I{"Health Pass?"}
+    I -->|Yes| J["Ready for Development"]
+    I -->|No| K["Troubleshoot Environment"]
 ```
 
 ---
