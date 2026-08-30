@@ -190,6 +190,79 @@ describe("CLI Presentation Subsystem", () => {
       const output = tables.renderTable([{ key: "name", header: "Name" }], []);
       expect(output).toContain("No data to display.");
     });
+
+    it("truncates long columns to fit within narrow terminal width", () => {
+      const narrowCaps: TerminalCapabilities = {
+        ...interactiveCaps,
+        width: 60,
+      };
+      const tables = new TableRenderer(narrowCaps);
+      const output = tables.renderTable(
+        [
+          { key: "plugin", header: "Plugin" },
+          { key: "id", header: "Identifier" },
+        ],
+        [
+          {
+            plugin: "legacy-exodus-ast-analyzer-engine",
+            id: "plugin:ast:express:migration:v1:analyzer:implementation",
+          },
+        ],
+      );
+
+      const lines = output.split("\n");
+      for (const line of lines) {
+        expect(stripAnsi(line).length).toBeLessThanOrEqual(60);
+      }
+      expect(output).toContain("...");
+    });
+
+    it("safely truncates ANSI-styled cell content without breaking escape codes", () => {
+      const narrowCaps: TerminalCapabilities = {
+        ...interactiveCaps,
+        width: 50,
+      };
+      const tables = new TableRenderer(narrowCaps);
+      const theme = createTheme(interactiveCaps);
+      const output = tables.renderTable(
+        [
+          { key: "status", header: "Status" },
+          { key: "description", header: "Description" },
+        ],
+        [
+          {
+            status: theme.success("SUCCESS"),
+            description: theme.warning("A very long warning message that must be truncated within narrow terminal bounds"),
+          },
+        ],
+      );
+
+      const lines = output.split("\n");
+      for (const line of lines) {
+        expect(stripAnsi(line).length).toBeLessThanOrEqual(50);
+      }
+      expect(output).toContain("\x1b[");
+      expect(output).toContain("...");
+    });
+
+    it("produces deterministic output across repeated renders at multiple viewports", () => {
+      for (const width of [120, 80, 60, 40, 32]) {
+        const caps: TerminalCapabilities = { ...interactiveCaps, width };
+        const tables = new TableRenderer(caps);
+        const cols = [
+          { key: "col1", header: "Header 1" },
+          { key: "col2", header: "Header 2" },
+        ];
+        const data = [{ col1: "Long text value number one", col2: "Long text value number two" }];
+
+        const render1 = tables.renderTable(cols, data);
+        const render2 = tables.renderTable(cols, data);
+        expect(render1).toBe(render2);
+        for (const line of render1.split("\n")) {
+          expect(stripAnsi(line).length).toBeLessThanOrEqual(width);
+        }
+      }
+    });
   });
 
   // ─── 6. Error Presentation ────────────────────────────────────────────────
