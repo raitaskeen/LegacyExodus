@@ -11,7 +11,7 @@ flowchart TD
     A[Real-Repository Determinism & Benchmarks] -->|3 Consecutive Runs / 0 Diffs| B[Fidelity Validator & Three-Universe Recall]
     B -->|Ground-Truth Comparisons| C[Integration & Engine End-to-End Tests]
     C -->|Multi-Stage Pipeline Execution| D[Unit & Invariant Regression Tests]
-    D -->|329 Tests / 2,757 Assertions| E[Strict Typecheck tsc --noEmit]
+    D -->|613 Tests / 4,328 Assertions| E[Strict Typecheck tsc --noEmit]
 ```
 
 ---
@@ -34,16 +34,16 @@ Before changing any production static analysis logic:
 1. **Write the Minimal Reproducer:** Create a standalone test file reproducing the weakness or missing pattern.
 2. **Observe Baseline Failure:** Run `bun test <new-test-file>` and confirm it fails against baseline for the exact expected reason.
 3. **Apply Minimal Fix:** Implement the minimal production change.
-4. **Prove Resolution & Regression Safety:** Re-run the test (must pass) and then run the entire test suite (329/329 must pass).
+4. **Prove Resolution & Regression Safety:** Re-run the test (must pass) and then run the entire test suite (613/613 must pass).
 
 ---
 
 ## 4. Current Baseline Verification
 
-As of Phase 3A / Track 3 (P1.7D):
-* **Passing Tests:** `329 / 329`
-* **Test Files:** `55`
-* **Expect Assertions:** `2,757`
+As of Phase 3A / Track 3 (P1.8):
+* **Passing Tests:** `613 / 613`
+* **Test Files:** `82`
+* **Assertions:** `4,328`
 * **Typecheck Errors:** `0`
 * **Benchmark Governance:** `10 / 10 PASS`
 
