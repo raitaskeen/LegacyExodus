@@ -172,6 +172,27 @@ function extractBoundNames(node: ASTNode | undefined): string[] {
   return [];
 }
 
+function targetScopeForDeclaration(node: ASTNode, name: string, scope: ScopeFrame, table: SymbolTable | undefined): ScopeFrame {
+  if (table !== undefined) {
+    const symbol = table.symbols.find(
+      (s) => s.name === name && (
+        (node.location !== undefined && s.location !== undefined &&
+         s.location.start.line === node.location.start.line &&
+         s.location.start.column === node.location.start.column) ||
+        (s.scopeId === scope.id)
+      ),
+    );
+    if (symbol !== undefined && symbol.declarationKind === "var") {
+      for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
+        if (current.id === symbol.scopeId) {
+          return current;
+        }
+      }
+    }
+  }
+  return scope;
+}
+
 function recordReceiverType(node: ASTNode, context: ResolutionContext, table: SymbolTable | undefined): void {
   const binding = node.children.find((child) => child.role === "id");
   const initializer = node.children.find((child) => child.role === "init");
@@ -184,14 +205,16 @@ function recordReceiverType(node: ASTNode, context: ResolutionContext, table: Sy
     if (className !== undefined) {
       const candidates = table?.symbols.filter((symbol) => symbol.kind === "class" && symbol.name === className && isInScope(symbol, context.scope)) ?? [];
       if (candidates.length === 1 && candidates[0] !== undefined) {
-        (context.receiverTypes as Map<string, string | null>).set(receiverKey(context.scope, boundNames[0]!), candidates[0].id);
+        const targetScope = targetScopeForDeclaration(node, boundNames[0]!, context.scope, table);
+        (context.receiverTypes as Map<string, string | null>).set(receiverKey(targetScope, boundNames[0]!), candidates[0].id);
         return;
       }
     }
   }
 
   for (const name of boundNames) {
-    (context.receiverTypes as Map<string, string | null>).set(receiverKey(context.scope, name), null);
+    const targetScope = targetScopeForDeclaration(node, name, context.scope, table);
+    (context.receiverTypes as Map<string, string | null>).set(receiverKey(targetScope, name), null);
   }
 }
 

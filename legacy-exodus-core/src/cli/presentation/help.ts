@@ -2,6 +2,7 @@ import type { Command } from "commander";
 
 import type { TerminalCapabilities } from "./capabilities";
 import { createSymbols, type Symbols } from "./symbols";
+import { truncateAnsi } from "./tables";
 import { createTheme, stripAnsi, type Theme } from "./theme";
 
 export interface CommandDocGroup {
@@ -40,7 +41,10 @@ export class HelpPresenter {
 
     const prefix = subtitle ? `${brandPart}${subPart}${titlePart} ` : `${brandPart}${titlePart} `;
     const rawLen = stripAnsi(prefix).length;
-    const targetWidth = Math.min(Math.max(this.capabilities.width, 40), 100);
+    const targetWidth = Math.max(this.capabilities.width, 20);
+    if (rawLen >= targetWidth) {
+      return truncateAnsi(prefix.trimEnd(), targetWidth);
+    }
     const remaining = Math.max(0, targetWidth - rawLen);
     const rule = this.theme.border(this.symbols.horizontalRule.repeat(remaining));
 
@@ -48,7 +52,7 @@ export class HelpPresenter {
   }
 
   public renderDivider(): string {
-    const len = Math.min(Math.max(this.capabilities.width, 40), 100);
+    const len = Math.max(this.capabilities.width, 20);
     return this.theme.border(this.symbols.horizontalRule.repeat(len));
   }
 
@@ -110,9 +114,6 @@ export class HelpPresenter {
     const globalOptions: readonly OptionDoc[] = [
       { flags: "-V, --version", description: "Output the version number" },
       { flags: "-h, --help", description: "Display help for command" },
-      { flags: "--json", description: "Emit machine-readable JSON to stdout" },
-      { flags: "--theme <name>", description: "Visual theme: classic (default), aurora, mono" },
-      { flags: "--no-color", description: "Disable ANSI color styling" },
     ];
 
     const maxFlagLen = Math.max(...globalOptions.map((o) => o.flags.length));
@@ -159,7 +160,7 @@ export class HelpPresenter {
     const divider = this.renderDivider();
     const footer = `  ${this.theme.muted("Run 'legacy-exodus <command> --help' for options and examples on a specific command.")}`;
 
-    return [
+    return this.boundLines([
       header,
       tagline,
       "",
@@ -177,7 +178,7 @@ export class HelpPresenter {
       "",
       divider,
       footer,
-    ].join("\n");
+    ].join("\n"));
   }
 
   public renderCommandHelp(cmd: Command): string {
@@ -186,30 +187,41 @@ export class HelpPresenter {
     const isParentRoot = !parentName || parentName === "legacy-exodus";
     const fullCmdName = isParentRoot ? rawName : `${parentName} ${rawName}`;
 
+    let result = "";
     // Detailed command metadata mapping
     switch (fullCmdName) {
       case "status":
-        return this.renderStatusHelp();
+        result = this.renderStatusHelp();
+        break;
       case "init":
-        return this.renderInitHelp();
+        result = this.renderInitHelp();
+        break;
       case "analyze":
-        return this.renderAnalyzeHelp();
+        result = this.renderAnalyzeHelp();
+        break;
       case "test":
-        return this.renderTestHelp();
+        result = this.renderTestHelp();
+        break;
       case "verify":
-        return this.renderVerifyHelp();
+        result = this.renderVerifyHelp();
+        break;
       case "plugins":
-        return this.renderPluginsParentHelp();
+        result = this.renderPluginsParentHelp();
+        break;
       case "plugins list":
-        return this.renderPluginsListHelp();
+        result = this.renderPluginsListHelp();
+        break;
       default:
-        return this.renderGenericCommandHelp(cmd);
+        result = this.renderGenericCommandHelp(cmd);
+        break;
     }
+
+    return this.boundLines(result);
   }
 
   private renderStatusHelp(): string {
     const header = this.renderHeader("status", "Command");
-    const desc = `  ${this.theme.text("Report runtime health, storage readiness, and composed dependencies")} ${this.theme.dim("[read-only]")}`;
+    const desc = `  ${this.theme.text("Report runtime health, storage & dependencies")} ${this.theme.dim("[read-only]")}`;
 
     const usage = [
       this.theme.heading("USAGE"),
@@ -235,7 +247,7 @@ export class HelpPresenter {
 
   private renderInitHelp(): string {
     const header = this.renderHeader("init", "Command");
-    const desc = `  ${this.theme.text("Initialize a new LegacyExodus workspace configuration in the target directory")} ${this.theme.dim("[mutates workspace]")}`;
+    const desc = `  ${this.theme.text("Initialize a new workspace configuration")} ${this.theme.dim("[mutates workspace]")}`;
 
     const usage = [
       this.theme.heading("USAGE"),
@@ -244,12 +256,12 @@ export class HelpPresenter {
 
     const args = [
       this.theme.heading("ARGUMENTS"),
-      `  ${this.theme.active("<path>".padEnd(16, " "))}  ${this.theme.text("Target directory to initialize as a LegacyExodus workspace")}`,
+      `  ${this.theme.active("<path>".padEnd(16, " "))}  ${this.theme.text("Target directory to initialize with workspace metadata")}`,
     ].join("\n");
 
     const options = [
       this.theme.heading("OPTIONS"),
-      `  ${this.theme.active("--json".padEnd(16, " "))}  ${this.theme.text("Emit machine-readable JSON initialization report to stdout")}`,
+      `  ${this.theme.active("--json".padEnd(16, " "))}  ${this.theme.text("Emit machine-readable JSON result to stdout")}`,
       `  ${this.theme.active("--theme <name>".padEnd(16, " "))}  ${this.theme.text("Visual theme: classic (default), aurora, mono")}`,
       `  ${this.theme.active("-h, --help".padEnd(16, " "))}  ${this.theme.text("Display this help message")}`,
     ].join("\n");
@@ -266,7 +278,7 @@ export class HelpPresenter {
 
   private renderAnalyzeHelp(): string {
     const header = this.renderHeader("analyze", "Command");
-    const desc = `  ${this.theme.text("Analyze repository structure, ASTs, symbols, dependencies & projections")} ${this.theme.dim("[read-only]")}`;
+    const desc = `  ${this.theme.text("Analyze repository structure, ASTs, symbols & graph")} ${this.theme.dim("[read-only]")}`;
 
     const usage = [
       this.theme.heading("USAGE"),
@@ -440,5 +452,14 @@ export class HelpPresenter {
     const options = opts.length > 0 ? [this.theme.heading("OPTIONS"), ...opts].join("\n") : "";
 
     return [header, desc, "", usage, "", options].filter(Boolean).join("\n");
+  }
+
+  private boundLines(content: string): string {
+    const maxWidth = this.capabilities.width;
+    if (maxWidth <= 0) return content;
+    return content
+      .split("\n")
+      .map((line) => truncateAnsi(line, maxWidth))
+      .join("\n");
   }
 }

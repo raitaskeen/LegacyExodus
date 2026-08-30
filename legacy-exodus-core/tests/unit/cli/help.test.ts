@@ -163,22 +163,40 @@ describe("CLI Help & Command Discovery Subsystem", () => {
   });
 
   it("bounds horizontal rule and card layout to narrow viewports without overflow", () => {
-    const narrowCaps: TerminalCapabilities = {
-      isTTY: true,
-      isCI: false,
-      noColor: false,
-      isUnicodeSupported: true,
-      width: 40,
-      mode: "interactive",
-      theme: "classic",
-    };
+    for (const width of [40, 50, 60, 80]) {
+      const caps: TerminalCapabilities = {
+        isTTY: true,
+        isCI: false,
+        noColor: false,
+        isUnicodeSupported: true,
+        width,
+        mode: "interactive",
+        theme: "classic",
+      };
 
-    const presenter = new HelpPresenter(narrowCaps);
-    const header = presenter.renderHeader("test", "Command");
-    const lines = header.split("\n");
+      const presenter = new HelpPresenter(caps);
+      const rootHelp = presenter.renderRootHelp("0.1.0");
+      const rootLines = rootHelp.split("\n");
 
-    for (const line of lines) {
-      expect(stripAnsi(line).length).toBeLessThanOrEqual(50);
+      for (const line of rootLines) {
+        expect(stripAnsi(line).length).toBeLessThanOrEqual(width);
+      }
+
+      const analyzeHelp = presenter.renderCommandHelp(new Command("analyze"));
+      const analyzeLines = analyzeHelp.split("\n");
+
+      for (const line of analyzeLines) {
+        expect(stripAnsi(line).length).toBeLessThanOrEqual(width);
+      }
     }
+  });
+
+  it("only documents true root options in GLOBAL OPTIONS", () => {
+    const presenter = new HelpPresenter(interactiveCaps);
+    const output = presenter.renderRootHelp("0.1.0");
+
+    expect(output).toContain("GLOBAL OPTIONS");
+    expect(output).toContain("-V, --version");
+    expect(output).toContain("-h, --help");
   });
 });

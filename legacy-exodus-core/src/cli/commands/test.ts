@@ -106,12 +106,15 @@ export async function discoverTestDomains(testsRoot = "tests"): Promise<readonly
       const fullPath = resolve(pattern.replace(/^tests/, testsRoot));
       try {
         if (pattern.includes("*")) {
-          // Parent directory search
-          const parent = resolve(pattern.slice(0, pattern.lastIndexOf("/")));
-          const entries = await readdir(parent, { withFileTypes: true });
+          // Wildcard pattern matching against filename
+          const slashIdx = pattern.lastIndexOf("/");
+          const parentDir = resolve((slashIdx === -1 ? "." : pattern.slice(0, slashIdx)).replace(/^tests/, testsRoot));
+          const wildcardName = slashIdx === -1 ? pattern : pattern.slice(slashIdx + 1);
+          const regex = new RegExp(`^${wildcardName.replace(/\./g, "\\.").replace(/\*/g, ".*")}$`);
+          const entries = await readdir(parentDir, { withFileTypes: true });
           for (const entry of entries) {
-            if (entry.isFile() && entry.name.endsWith(".test.ts")) {
-              fileSet.add(join(parent, entry.name));
+            if (entry.isFile() && entry.name.endsWith(".test.ts") && regex.test(entry.name)) {
+              fileSet.add(join(parentDir, entry.name));
             }
           }
         } else {
@@ -233,7 +236,7 @@ export function registerTestCommand(program: Command): void {
 
       if (options.json) {
         process.stdout.write(`${formatJsonOutput(parsed)}\n`);
-        if (parsed.testsFailed > 0) {
+        if (parsed.testsFailed > 0 || result.code !== 0) {
           process.exitCode = 1;
         }
         return;
