@@ -50,12 +50,17 @@ export function detectTerminalCapabilities(options: {
     mode = "plain";
   }
 
-  // Extract theme from option, CLI arg --theme <name>, env var, or default to classic
+  // Extract theme from option, CLI arg --theme <name> or --theme=<name>, env var, or default to classic
   let requestedTheme = options.theme ?? process.env.LEGACYEXODUS_THEME;
   if (!requestedTheme) {
     const themeArgIdx = process.argv.indexOf("--theme");
     if (themeArgIdx !== -1 && process.argv[themeArgIdx + 1]) {
       requestedTheme = process.argv[themeArgIdx + 1];
+    } else {
+      const themeEqualArg = process.argv.find((arg) => arg.startsWith("--theme="));
+      if (themeEqualArg) {
+        requestedTheme = themeEqualArg.slice(8);
+      }
     }
   }
 
