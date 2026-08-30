@@ -25,11 +25,17 @@ bun run src/cli/index.ts status
 # Analyze a local target repository
 bun run src/cli/index.ts analyze path/to/legacy-repo
 
+# Run subsystem test explorer
+bun run src/cli/index.ts test parser
+
+# Run full 4-gate verification dashboard
+bun run src/cli/index.ts verify
+
 # Output analysis results as JSON
 bun run src/cli/index.ts analyze path/to/legacy-repo --json
 
 # List registered plugins
-bun run src/cli/index.ts plugins
+bun run src/cli/index.ts plugins list
 ```
 
 ---
@@ -66,7 +72,7 @@ sequenceDiagram
     Test-->>Dev: Expected failure observed
     Dev->>Engine: 2. Implement minimal fix
     Dev->>Test: 3. Re-run focused test (Pass)
-    Dev->>Test: 4. Run full test suite (613 tests pass)
+    Dev->>Test: 4. Run full test suite (660 tests pass)
     Dev->>Gov: 5. Run benchmark audit & typecheck
     Gov-->>Dev: 10/10 PASS & 0 typecheck errors
 ```

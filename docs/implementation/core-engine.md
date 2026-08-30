@@ -10,13 +10,13 @@ This document describes the boundary, composition, and lifecycle of `LegacyExodu
 
 ```mermaid
 flowchart TD
-    A[CLI / Caller] -->|createLegacyExodusEngine| B[LegacyExodusEngine]
-    B --> C[EngineContext]
-    C --> D[Runtime Configuration & Logger]
-    C --> E[EventBus & EventStore]
-    C --> F[MemoryStorageAdapter]
-    C --> G[PluginRegistry & PluginLoader]
-    C --> H[Orchestrator & CommandHandler]
+    A["CLI / Caller"] -->|createLegacyExodusEngine| B["LegacyExodusEngine"]
+    B --> C["EngineContext"]
+    C --> D["Runtime Configuration & Logger"]
+    C --> E["EventBus & EventStore"]
+    C --> F["MemoryStorageProvider & StorageManager"]
+    C --> G["PluginRegistry & PluginLoader"]
+    C --> H["Orchestrator & CommandHandler"]
 ```
 
 ---

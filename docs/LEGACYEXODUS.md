@@ -15,9 +15,9 @@
   <p>
     <img src="https://img.shields.io/badge/Runtime-Bun_v1.0+-f9f8f6?style=for-the-badge&logo=bun" alt="Bun">
     <img src="https://img.shields.io/badge/TypeScript-Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript Strict">
-    <img src="https://img.shields.io/badge/Tests-613_Passing_|_0_Regressions-success?style=for-the-badge" alt="613 Tests Passing">
+    <img src="https://img.shields.io/badge/Tests-660_Passing_|_0_Regressions-success?style=for-the-badge" alt="660 Tests Passing">
     <img src="https://img.shields.io/badge/Governance-10_/_10_Audits_Passed-success?style=for-the-badge" alt="10/10 Governance Passed">
-    <img src="https://img.shields.io/badge/Status-Phase_3A_/_P2_Hardened-success?style=for-the-badge" alt="Phase 3A / P2 Hardened">
+    <img src="https://img.shields.io/badge/Status-Phase_3A_/_Hardened-success?style=for-the-badge" alt="Phase 3A / Hardened">
   </p>
 
   <p>
@@ -29,9 +29,9 @@
 
 > **Current Implementation Reality (August 2026):**
 > * **Implemented & Verified:** Deterministic JavaScript/TypeScript multi-stage repository intelligence pipeline running natively on Bun (Discovery, Babel AST Parsing & Normalization, Scope & Symbol Extraction with `var` hoisting, Destructuring pattern extraction, Default parameter filtering, CommonJS exports & prototype methods, Module resolution & Dependency graphs, Semantic Call graphs with constructor instantiation resolution, Basic-Block CFG, Def-Use DFG with interprocedural taint flow, Streaming JSON serialization with 64KB backpressure, In-Memory and SQLite indexed storage providers, Three-Universe fidelity validator, 10-point governance self-audit, and 3-run bit-for-bit determinism across Tier 1, 2, and 3 targets).
+> * **CLI Foundation:** Comprehensive terminal interface with 3 themes (`classic`, `aurora`, `mono`), dynamic test explorer with 12 subsystem domains (`test [domain]`, `--list`, `-v, --verbose`, `--bail`), multi-gate repository verification (`verify`), width-safe rendering (F-024), and pure machine-readable JSON output (`--json`).
 > * **Target Architecture (Future Vision):** Unified IR/SSA intermediate representation, AI Gateway proxying, ZelvoxForge multi-agent code generation swarms, VymosGate isolated compiler sandboxes, and Rust/Axum/SQLx synthesis are planned target architecture and are not present in current core implementation.
 > * **Migration Safety Verdict:** Sample-based validation across 25 representative files per target establishes 100% sample recall, but whole-repository migration safety is strictly maintained as `MIGRATION_SAFETY_NOT_YET_ESTABLISHED`.
-> **Implementation status:** Phase 2.8, Phase 3A (Memory Scalability, Fidelity Verification, Three-Universe Benchmark Governance, SQLite Storage Provider), and P2 Core Hardening are complete. This document also describes target architecture. IR/SSA, AI Gateway, sandboxing, Parquet, tenant isolation, migration orchestration, and Rust generation are planned.
 
 ## 1. Executive Vision
 
@@ -55,28 +55,28 @@ This approach fatally ignores the realities of enterprise software. It results i
 
 ```mermaid
 flowchart TD
-    subgraph Stage1 [Stage 1: VyrixScout — Discovery (Implemented)]
-        A[Untrusted Legacy Source Code] -->|Sandboxed Traversal| B(File Inventory & Manifests)
-        B -->|Static Dependency Mapping| C(Runtime Signals & Risk Seeds)
+    subgraph Stage1 ["Stage 1: VyrixScout - Discovery (Implemented)"]
+        A["Untrusted Legacy Source Code"] -->|Sandboxed Traversal| B["File Inventory & Manifests"]
+        B -->|Static Dependency Mapping| C["Runtime Signals & Risk Seeds"]
     end
 
-    subgraph Stage2 [Stage 2: NolaraStruct — Understanding (Implemented)]
-        C -->|AST Extraction & Token Diet| D(Unified Intermediate Representation)
-        D -->|Symbol Resolution & CFG/DFG| E[(SQLite Storage & Knowledge Graph)]
+    subgraph Stage2 ["Stage 2: NolaraStruct - Understanding (Implemented)"]
+        C -->|AST Extraction & Token Diet| D["Unified Intermediate Representation"]
+        D -->|Symbol Resolution & CFG/DFG| E[("SQLite Storage & Knowledge Graph")]
     end
 
-    subgraph Stage3 [Stage 3: ZelvoxForge — Transformation (Target Architecture)]
-        E -->|Sanitized Context Slices| F(AI Gateway & Prompt Engine)
-        F -->|Multi-Agent Swarm| G[Draft Rust / Axum / SQLx Artifacts]
+    subgraph Stage3 ["Stage 3: ZelvoxForge - Transformation (Target Architecture)"]
+        E -->|Sanitized Context Slices| F["AI Gateway & Prompt Engine"]
+        F -->|Multi-Agent Swarm| G["Draft Rust / Axum / SQLx Artifacts"]
     end
 
-    subgraph Stage4 [Stage 4: VymosGate — Verification & Governance (Target Architecture)]
-        G --> H(Isolated Compiler Sandbox)
-        H -->|cargo check / cargo test| I{Compilation & Tests Pass?}
-        I -->|Diagnostic Errors| J[Self-Healing Loop ──► RepairAgent]
+    subgraph Stage4 ["Stage 4: VymosGate - Verification & Governance (Target Architecture)"]
+        G --> H["Isolated Compiler Sandbox"]
+        H -->|cargo check / cargo test| I{"Compilation & Tests Pass?"}
+        I -->|Diagnostic Errors| J["Self-Healing Loop -> RepairAgent"]
         J --> F
-        I -->|Pass| K[Human-in-the-Loop Approval]
-        K --> L[Validated Modern Production Software]
+        I -->|Pass| K["Human-in-the-Loop Approval"]
+        K --> L["Validated Modern Production Software"]
     end
 ```
 
@@ -231,13 +231,13 @@ Agents and deterministic services **never** mutate state directly:
 
 ```mermaid
 flowchart LR
-    A[Actor / Agent] -->|Issues| B[Command]
-    B -->|Zero-Trust Policy| C[Governance Engine]
-    C -->|Validated| D[Orchestrator Committer]
-    D -->|Append-Only| E[(Event Store .jsonl)]
-    E -->|Synchronous Reducers| F[(SQLite Projections)]
-    E -->|Async Broadcast| G[WebSocket / UI Views]
-    F -->|Read-Only| H[Queries]
+    A["Actor / Agent"] -->|Issues| B["Command"]
+    B -->|Zero-Trust Policy| C["Governance Engine"]
+    C -->|Validated| D["Orchestrator Committer"]
+    D -->|Append-Only| E[("Event Store .jsonl")]
+    E -->|Synchronous Reducers| F[("SQLite Projections")]
+    E -->|Async Broadcast| G["WebSocket / UI Views"]
+    F -->|Read-Only| H["Queries"]
 ```
 
 ### 6.3 The Canonical Message Envelope
@@ -280,24 +280,24 @@ export interface MessageEnvelope<T = unknown> {
 
 ```mermaid
 flowchart TD
-    CLI[CLI / API Layer] -->|Commands| ORCH[Orchestrator Control Plane]
+    CLI["CLI / API Layer"] -->|Commands| ORCH["Orchestrator Control Plane"]
 
-    subgraph Deterministic Services
-        ORCH --> DISC[Discovery Service]
-        ORCH --> PARS[Parser Service]
-        ORCH --> GRAPH[Graph Service]
-        ORCH --> KNOW[Knowledge Service]
-        ORCH --> COMP[Compiler Service]
+    subgraph DetServices ["Deterministic Services"]
+        ORCH --> DISC["Discovery Service"]
+        ORCH --> PARS["Parser Service"]
+        ORCH --> GRAPH["Graph Service"]
+        ORCH --> KNOW["Knowledge Service"]
+        ORCH --> COMP["Compiler Service"]
     end
 
-    subgraph Intelligence & Safety
-        KNOW -->|Sanitized Slices| AIGW[AI Gateway]
-        AIGW --> SWARM[AI Agent Swarm]
-        SWARM -->|Proposals| GOV[Governance Engine]
+    subgraph IntelSafety ["Intelligence & Safety"]
+        KNOW -->|Sanitized Slices| AIGW["AI Gateway"]
+        AIGW --> SWARM["AI Agent Swarm"]
+        SWARM -->|Proposals| GOV["Governance Engine"]
     end
 
     COMP --> GOV
-    GOV -->|Validated Events| STOR[Storage Service]
+    GOV -->|Validated Events| STOR["Storage Service"]
     STOR -->|State Projections| ORCH
 ```
 
@@ -318,15 +318,65 @@ flowchart TD
 
 ---
 
-## 8. Non-Negotiable Security Architecture & Compliance Matrix
+## 8. CLI Terminal Foundation & Command Discovery
 
-### 8.1 The Master Trust Boundary
+LegacyExodus features a unified, accessible terminal interface designed with strict output mode separation, theme customization, and terminal width safety.
+
+### 8.1 Command Overview
+
+```text
+* LegacyExodus > v0.1.0 > Modernization Engine ---------------------------------
+  Knowledge-first codebase modernization and repository intelligence
+
+COMMANDS
+  Workspace & Runtime
+    status                Report runtime health and composed dependencies [read-only]
+    init <path>           Initialize a new LegacyExodus workspace [mutates workspace]
+
+  Repository Analysis
+    analyze <path>        Analyze repository structure, ASTs, symbols & graph [read-only]
+
+  Quality & Verification
+    test [domain]         Explore and run test suites by architectural domain [read-only]
+    verify                Run complete 4-gate repository verification [read-only]
+
+  Plugins & Extensions
+    plugins list          Inspect loaded plugins and discovery extensions [read-only]
+```
+
+### 8.2 Themes & Accessibility
+- **`classic` (default):** TrueColor sky/emerald palette for interactive developer terminals.
+- **`aurora`:** Soft lavender/teal palette with gentle contrast.
+- **`mono`:** Monochrome high-contrast presentation for CI logs and automated environments (`NO_COLOR=1` compatible).
+
+```bash
+# Switch visual theme
+legacy-exodus status --theme aurora
+
+# List test domain taxonomy
+legacy-exodus test --list
+
+# Run focused AST parser tests
+legacy-exodus test parser
+
+# Run parser tests with detailed execution trace
+legacy-exodus test parser --verbose
+
+# Run full multi-gate verification dashboard
+legacy-exodus verify
+```
+
+---
+
+## 9. Non-Negotiable Security Architecture & Compliance Matrix
+
+### 9.1 The Master Trust Boundary
 ```text
 Untrusted Legacy Code ──► Sandbox ──► Parser ──► Knowledge Model ──► AI Gateway
 ```
 *No transformation engine, agent, or service may consume raw legacy source code directly or bypass intermediate governance boundaries.*
 
-### 8.2 Boundary Compliance Matrix
+### 9.2 Boundary Compliance Matrix
 
 <table>
   <thead>
@@ -386,7 +436,7 @@ Untrusted Legacy Code ──► Sandbox ──► Parser ──► Knowledge Mod
 
 ---
 
-## 9. The AI Constitution & Governed Intelligence Model
+## 10. The AI Constitution & Governed Intelligence Model
 
 AI operates strictly as an advisory cognitive worker, never as an authoritative controller.
 
@@ -416,7 +466,7 @@ AI Suggestion ──► Evidence Collection ──► Schema Validation ──�
 
 ---
 
-## 10. Plugin-First Extension Architecture
+## 11. Plugin-First Extension Architecture
 
 LegacyExodus uses a **stable core** extended via **isolated, contract-first plugins**.
 
@@ -456,24 +506,24 @@ Every plugin must supply a versioned, machine-readable manifest (`plugin.json`):
 
 ---
 
-## 11. Data Flow, Storage Architecture, & Checkpoints
+## 12. Data Flow, Storage Architecture, & Checkpoints
 
 ```mermaid
 flowchart LR
-    A[(Legacy Repo)] --> B[VyrixScout]
-    B --> C[inventory.json]
-    C --> D[NolaraStruct]
-    D --> E[(UIR & Knowledge Graph)]
-    E --> F[ZelvoxForge]
-    F --> G[Rust Crates + Trace Map]
-    G --> H[VymosGate Sandbox]
-    H --> I[(Validated Production Rust)]
+    A[("Legacy Repo")] --> B["VyrixScout"]
+    B --> C["inventory.json"]
+    C --> D["NolaraStruct"]
+    D --> E[("UIR & Knowledge Graph")]
+    E --> F["ZelvoxForge"]
+    F --> G["Rust Crates + Trace Map"]
+    G --> H["VymosGate Sandbox"]
+    H --> I[("Validated Production Rust")]
 
-    subgraph Durable Stores
-        J[(Event Store .jsonl)]
-        K[(SQLite Projections)]
-        L[(Parquet KG Store)]
-        M[(Artifact Store)]
+    subgraph DurableStores ["Durable Stores"]
+        J[("Event Store .jsonl")]
+        K[("SQLite Projections")]
+        L[("Parquet KG Store")]
+        M[("Artifact Store")]
     end
 
     B -.-> J
@@ -487,7 +537,7 @@ flowchart LR
 2. **Artifact Store:** Content-addressed, hash-verified immutable files and code bundles.
 3. **Knowledge Graph Store:** Parquet and SQLite databases for node/edge relationship queries.
 4. **Operational Metadata Store:** Task queues, locks, retries, and approval states.
-5. **Projection Store:** Query-optimized SQLite read models for CLI, API, and UI queries.
+5. **Projection Store:** Query-optimized SQLite read models for CLI, API, and UI queries (`SqliteStorageProvider`).
 
 ### Resumable Checkpoints
 Checkpoints are created atomically at:
@@ -500,9 +550,9 @@ Resuming a run loads the latest valid checkpoint, verifies artifact hashes, rebu
 
 ---
 
-## 12. Failure Recovery & Scalability Strategy
+## 13. Failure Recovery & Scalability Strategy
 
-### 12.1 Failure Classification & Handling
+### 13.1 Failure Classification & Handling
 
 | Failure Domain | Examples | Recovery Strategy |
 |---|---|---|
@@ -511,7 +561,7 @@ Resuming a run loads the latest valid checkpoint, verifies artifact hashes, rebu
 | **Resource Exhaustion** | Out of Memory (OOM), CPU throttling | Rebalance resources $\to$ Route to constrained recovery worker tier. |
 | **Human / Governance Gated** | Approval timeout, risk policy rejection | Pause pipeline $\to$ Emit `EscalationRaised` $\to$ Await HITL decision. |
 
-### 12.2 Capacity Classes & Worker Pools
+### 13.2 Capacity Classes & Worker Pools
 Worker pools scale horizontally and independently:
 - **`vyrixscout-workers`:** Fast directory traversal and I/O intake.
 - **`nolara-parse-workers`:** CPU-bound parsing, Token Diet, and AST reduction.
@@ -527,7 +577,7 @@ Class XL (Monorepo) ──► Enterprise monorepos with multi-tenant namespace p
 
 ---
 
-## 13. Technology Stack Decisions & Tradeoffs
+## 14. Technology Stack Decisions & Tradeoffs
 
 ```text
 ┌────────────────────────┬────────────────────────────────────────────────────────┐
@@ -554,20 +604,20 @@ Class XL (Monorepo) ──► Enterprise monorepos with multi-tenant namespace p
 
 ---
 
-## 14. Multi-AI Operating Framework & Role Division
+## 15. Multi-AI Operating Framework & Role Division
 
 To maintain engineering discipline and prevent AI drift across sessions:
 
 ```mermaid
 flowchart TD
-    A[Taskeen Haider — Chief Architect] -->|Specifications & ADR Decisions| B[Primary Builder: Codex / Gemini]
-    B -->|Code, Tests, Diff| C[GitHub Repository — Single Source of Truth]
+    A["Taskeen Haider - Chief Architect"] -->|Specifications & ADR Decisions| B["Primary Builder: Codex / Gemini"]
+    B -->|Code, Tests, Diff| C["GitHub Repository - Single Source of Truth"]
 
-    C -->|Repository Context| D[Claude Free — Adversarial Reviewer]
-    C -->|Local Completions| E[Copilot — IDE Acceleration]
+    C -->|Repository Context| D["Claude Free - Adversarial Reviewer"]
+    C -->|Local Completions| E["Copilot - IDE Acceleration"]
 
     D -->|Counterexamples & Edge Cases| B
-    B -->|Verify & Fix| F{Quality Gate: typecheck + test + diff}
+    B -->|Verify & Fix| F{"Quality Gate: typecheck + test + diff"}
     F -->|Green Pass| A
 ```
 
@@ -579,7 +629,7 @@ flowchart TD
 
 ---
 
-## 15. Quality Gate & Definition of Done
+## 16. Quality Gate & Definition of Done
 
 No milestone or pull request is accepted based on AI claims. Every change must pass the non-negotiable quality gate:
 
@@ -590,7 +640,10 @@ bun run typecheck
 # 2. Comprehensive test suite execution
 bun test
 
-# 3. Git whitespace and format verification
+# 3. Multi-gate repository verification
+bun run verify
+
+# 4. Git whitespace and format verification
 git diff --check
 ```
 
@@ -601,21 +654,22 @@ git diff --check
 - [ ] **Regression & Invariant Tests:** Unit tests, mathematical invariant tests, and edge-case coverage pass.
 - [ ] **Traceability Preserved:** Emitted artifacts maintain lineage links and input hashes.
 - [ ] **Fail-Closed Security:** Sandboxing, secret redaction, and prompt isolation verified.
-- [ ] **Quality Gate Green:** `bun run typecheck`, `bun test`, and `git diff --check` return exit code `0`.
+- [ ] **Quality Gate Green:** `bun run typecheck`, `bun test`, `bun run verify`, and `git diff --check` return exit code `0`.
 - [ ] **Architect Sign-Off:** Human review completed and committed to Git history.
 
 ---
 
-## 16. Verified Evidence & Empirical Validation Baseline
+## 17. Verified Evidence & Empirical Validation Baseline
 
 All claims in LegacyExodus are grounded in reproducible automated test suites, multi-tier real-repository benchmarks, and cryptographic provenance locks.
 
-### 16.1 Test Suite & Static Typing
-* **Full Test Suite:** `bun test` $\to$ **613 / 613 passing tests across 82 files** (4,328 assertions, 0 failures, ~45s runtime).
+### 17.1 Test Suite & Static Typing
+* **Full Test Suite:** `bun test` $\to$ **660 / 660 passing tests across 87 files** (7,281 assertions, 0 failures, ~40s runtime).
 * **TypeScript Type Checking:** `bun run typecheck` $\to$ **0 errors**.
 * **Benchmark Governance Audit:** `bun run benchmark audit` $\to$ **10 / 10 checks passed (`PASS`)**.
+* **Repository Verification Dashboard:** `bun run verify` $\to$ **4 / 4 gates passed (`PASS`)**.
 
-### 16.2 Real-Repository 3-Run Determinism Evidence
+### 17.2 Real-Repository 3-Run Determinism Evidence
 Evaluated across three tiers of external real-world repositories with 3 consecutive cold analysis runs:
 
 | Repository | Tier | Role | Files Discovered / Analyzed | 3-Run Determinism | Health Gate |
@@ -624,17 +678,17 @@ Evaluated across three tiers of external real-world repositories with 3 consecut
 | **`fastify`** | Tier-2 | Enterprise Framework | 385 / 287 (0 failures) | **`✓ PASS (0 semantic diffs)`** | **`PASS`** |
 | **`express`** | Tier-3 | Enterprise Framework | 234 / 152 (0 failures) | **`✓ PASS (0 semantic diffs)`** | **`NEEDS_REVIEW`** *(82 non-source fixtures)* |
 
-### 16.3 Multi-File Migration Fidelity Evidence
+### 17.3 Multi-File Migration Fidelity Evidence
 Sample-based validation across 25 representative core files per framework target under the Three-Universe model:
 
 | Framework Target | Validated Files | Ground Truth Facts | True Positives | False Negatives | Sample Recall | Actionable Correctness | Migration Safety Verdict |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Express v4.21.2** | 25 | 173 (+5 KN) | 173 | 0 | **100.0%** | **100.0%** | `MIGRATION_SAFETY_NOT_YET_ESTABLISHED` |
+| **Express v4.21.2** | 25 | 173 (+5 KN) | 172 | 1 | **99.4%** | **100.0%** | `MIGRATION_SAFETY_NOT_YET_ESTABLISHED` |
 | **Fastify v5.3.3** | 25 | 193 (+6 KN) | 193 | 0 | **100.0%** | **100.0%** | `MIGRATION_SAFETY_NOT_YET_ESTABLISHED` |
 
 ---
 
-## 17. The Three-Universe Fidelity Evidence Model
+## 18. The Three-Universe Fidelity Evidence Model
 
 To ensure mathematical integrity and eliminate false positive distortion when evaluating large open-world codebases, LegacyExodus implements the **Three-Universe Model**:
 
@@ -647,7 +701,7 @@ To ensure mathematical integrity and eliminate false positive distortion when ev
 
 ---
 
-## 18. Intentional Architectural Boundaries & Conservative Invariants
+## 19. Intentional Architectural Boundaries & Conservative Invariants
 
 The following behaviors represent deliberate conservative design invariants:
 
@@ -658,7 +712,7 @@ The following behaviors represent deliberate conservative design invariants:
 
 ---
 
-## 19. Authoritative Documentation Ecosystem
+## 20. Authoritative Documentation Ecosystem
 
 For deeper technical documentation, refer to the following canonical resources:
 
@@ -667,7 +721,7 @@ For deeper technical documentation, refer to the following canonical resources:
 * **[CHANGELOG.md](../CHANGELOG.md):** Detailed release history, verified fixes, and milestone summaries.
 * **[SUPPORT.md](../SUPPORT.md):** Technical support policies, bug reporting guidelines, and maintainers.
 * **[CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md):** Contributor Covenant community code of conduct.
-* **[.github/CODEOWNERS](../.github/CODEOWNERS):** Repository code ownership mappings.
+* **[.github/CODEOWNERS](../../.github/CODEOWNERS):** Repository code ownership mappings.
 * **[docs/PROJECT_CONTEXT.md](PROJECT_CONTEXT.md):** Foundational architecture context and pipeline specifications.
 * **[docs/DOCUMENTATION_MAP.md](DOCUMENTATION_MAP.md):** Master documentation index and knowledge routing.
 * **[docs/development/contribution-guide.md](development/contribution-guide.md):** Contributor workflows, testing standards, and Definition of Done.

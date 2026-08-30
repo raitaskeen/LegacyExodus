@@ -1,76 +1,146 @@
 # CLI Command Reference
 
-LegacyExodus provides a command-line interface implemented via Commander.js.
+LegacyExodus provides a unified command-line interface featuring workflow-grouped commands, theme customization, dynamic test exploration, and multi-gate repository verification.
 
 ---
 
-## 1. `legacy-exodus status`
+## Global Options
 
-Prints the engine version, runtime environment, and operational component health.
+The following global options apply across the CLI router:
 
-```bash
-bun run src/cli/index.ts status
-```
-
-**Output Example:**
-```text
-LegacyExodus CLI v0.1.0
-Runtime: Bun v1.3.14 (win32-x64)
-Components:
-  Discovery: OK
-  Parser (Babel): OK
-  Symbol Extractor: OK
-  Module Graph: OK
-  Semantic Engine: OK
-  Flow Engine: OK
-  Storage (Streaming): OK
-```
+| Option | Description |
+|---|---|
+| `-V, --version` | Output the version number. |
+| `-h, --help` | Display structured help for command or root CLI. |
+| `--json` | Emit pure machine-readable JSON directly to `stdout`. |
+| `--theme <name>` | Select visual theme: `classic` (default), `aurora`, `mono`. |
+| `--no-color` | Disable ANSI color sequences (equivalent to `NO_COLOR=1`). |
 
 ---
 
-## 2. `legacy-exodus init <name>`
+## 1. `legacy-exodus status [options]`
 
-Initializes an analysis workspace configuration in the target directory.
+Reports runtime health, storage readiness, and composed engine dependencies `[read-only]`.
 
 ```bash
-bun run src/cli/index.ts init my-legacy-project
+# Standard status card
+legacy-exodus status
+
+# Aurora theme
+legacy-exodus status --theme aurora
+
+# Pure JSON health probe
+legacy-exodus status --json
 ```
 
 ---
 
-## 3. `legacy-exodus analyze <path>`
+## 2. `legacy-exodus init <path> [options]`
 
-Performs multi-stage deterministic static analysis on the target repository.
+Initializes a new LegacyExodus workspace configuration in the target directory `[mutates workspace]`.
 
 ```bash
-# Standard table output
-bun run src/cli/index.ts analyze ../path/to/legacy-repo
+# Initialize a project directory
+legacy-exodus init ./my-project
 
-# JSON output to stdout or file
-bun run src/cli/index.ts analyze ../path/to/legacy-repo --json
+# Initialize current directory
+legacy-exodus init .
 
-# Custom projection output directory
-bun run src/cli/index.ts analyze ../path/to/legacy-repo --output ./results
+# Machine-readable output
+legacy-exodus init ./app --json
 ```
-
-**Options:**
-* `--json`: Outputs structured analysis results in JSON format.
-* `--output <dir>`: Specifies destination directory for projection artifacts.
 
 ---
 
-## 4. `legacy-exodus plugins`
+## 3. `legacy-exodus analyze <path> [options]`
 
-Lists all loaded and registered plugins in the current runtime environment.
+Analyzes repository structure, ASTs, symbols, dependencies, and projections `[read-only]`.
 
 ```bash
-bun run src/cli/index.ts plugins
+# Analyze web application
+legacy-exodus analyze ./apps/web
+
+# Analyze current workspace with aurora theme
+legacy-exodus analyze . --theme aurora
+
+# Stream JSON discovery inventory to stdout
+legacy-exodus analyze ./repo --json
+```
+
+---
+
+## 4. `legacy-exodus test [domain] [options]`
+
+Explores and executes test suites filtered by architectural domain `[read-only]`.
+
+```bash
+# View domain taxonomy and file counts
+legacy-exodus test --list
+
+# Run focused JavaScript/TypeScript parser tests
+legacy-exodus test parser
+
+# Run parser tests with detailed execution log
+legacy-exodus test parser --verbose
+
+# Run symbol extraction and export tests
+legacy-exodus test symbols
+
+# Run call-graph & receiver resolution tests
+legacy-exodus test semantic
+
+# Run CFG and DFG flow analysis tests
+legacy-exodus test flow
+
+# Run all test suites, aborting on first failure
+legacy-exodus test all --bail
+
+# Emit parsed JSON test results
+legacy-exodus test parser --json
+```
+
+**Available Domains:**
+`runtime`, `discovery`, `parser`, `symbols`, `semantic`, `flow`, `storage`, `governance`, `plugins`, `cli`, `integration`, `architecture`, `all`.
+
+---
+
+## 5. `legacy-exodus verify [options]`
+
+Executes complete 4-gate repository verification `[read-only]`:
+1. **Static Typecheck:** Zero compiler errors (`tsc --noEmit`).
+2. **Test Suite:** All unit, integration, and architecture test suites (`bun test`).
+3. **Benchmark Governance:** 10-point benchmark system self-audit (`bun run benchmark audit`).
+4. **Working Tree Hygiene:** Git diff whitespace and file hygiene check (`git diff --check`).
+
+```bash
+# Run verification dashboard
+legacy-exodus verify
+
+# Themed verification
+legacy-exodus verify --theme aurora
+
+# Monochrome CI verification
+legacy-exodus verify --theme mono
+```
+
+---
+
+## 6. `legacy-exodus plugins list [options]`
+
+Lists registered plugins and discovery extensions in an auto-aligning table `[read-only]`.
+
+```bash
+# Formatted table of loaded plugins
+legacy-exodus plugins list
+
+# JSON array of plugin metadata
+legacy-exodus plugins list --json
 ```
 
 ---
 
 ## Related Documentation
 
-* **[CLI Configuration](configuration.md):** CLI options and environment variables.
-* **[CLI Troubleshooting](troubleshooting.md):** Resolving common CLI analysis errors.
-* **[Command Contracts](../../api/command-contracts.md):** Programmatic command schemas.
+* **[CLI Configuration](configuration.md):** Environment variables, path resolution, and themes.
+* **[CLI Design & Architecture](../../implementation/cli-design.md):** Presentation layer, tables, layout, and error boundaries.
+* **[Command Contracts](../../api/command-contracts.md):** Programmatic command schemas and message envelopes.

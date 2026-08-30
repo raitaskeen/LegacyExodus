@@ -79,7 +79,7 @@ At runtime, the system is composed of cooperating services:
 
 ### 1.6 Storage services `[IMPLEMENTED]`
 - Event store (in-memory)
-- Storage adapters (`MemoryStorageAdapter`, `SqliteStorageAdapter`)
+- Storage providers (`MemoryStorageProvider`, `SqliteStorageProvider`)
 - Streaming JSON disk projections (`.discovery/*.json`, `manifest.json`)
 - Knowledge graph builder and query services
 
