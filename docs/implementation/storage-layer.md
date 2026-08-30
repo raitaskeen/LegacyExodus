@@ -84,9 +84,9 @@ To guarantee that concurrent projection operations targeting the same repository
    * Projections targeting distinct repositories execute concurrently in parallel with zero contention.
    * **Bounded Lifecycle:** When all in-flight projection operations for a target directory complete, the corresponding map entry is immediately cleaned up, preventing memory retention.
    * **Error Resilience:** Failed or aborted projection tasks do not deadlock subsequent queued projections.
-2. **Atomic File Replacement with Unique Temporary Paths (`StreamingJsonWriter`):**
-   * Individual artifact writes stream to uniquely identified temporary files (`${destinationPath}.${randomUUID()}.tmp`) and atomically replace the destination path via filesystem `rename` (with fallback to `copyFile` + `unlink` on Windows).
-   * Unique temporary paths prevent concurrent file-level write collisions, ensuring no temporary files are overwritten or unlinked mid-stream.
+2. **Atomic File Replacement with Unique Temporary Paths and Bounded Retries (`StreamingJsonWriter`):**
+   * Individual artifact writes stream to uniquely identified temporary files (`${destinationPath}.${randomUUID()}.tmp`) and atomically replace the destination path via `replaceFile()` with bounded exponential backoff retries (up to 15 attempts with 10ms incremental backoff) for transient Windows filesystem lock contention (`EBUSY`, `EPERM`, `EACCES`), falling back to `copyFile` + `unlink` on Windows before cleanup on terminal failure.
+   * Unique temporary paths prevent concurrent file-level write collisions, ensuring no temporary files are overwritten or unlinked mid-stream, and unhandled write failures cleanly unlink the temporary file without leaving orphaned `.tmp` artifacts.
 
 ### 4.5 SQLite Storage Schema Versioning & Compatibility Guards
 

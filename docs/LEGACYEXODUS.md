@@ -10,12 +10,12 @@
     <a href="community/CODE_OF_CONDUCT.md"><img src="https://img.shields.io/badge/Code_of_Conduct-purple?style=for-the-badge" alt="Code of Conduct"></a>
     <a href="development/contribution-guide.md"><img src="https://img.shields.io/badge/Contributing-blue?style=for-the-badge" alt="Contributing"></a>
     <a href="architecture/security-architecture.md"><img src="https://img.shields.io/badge/Security-red?style=for-the-badge" alt="Security"></a>
-    <a href="../LICENSE"><img src="https://img.shields.io/badge/License-BSD--3--Clause-success?style=for-the-badge" alt="BSD-3-Clause"></a>
+    <a href="../LICENSE"><img src="https://img.shields.io/badge/License-MIT-success?style=for-the-badge" alt="MIT License"></a>
   </p>
   <p>
     <img src="https://img.shields.io/badge/Runtime-Bun_v1.0+-f9f8f6?style=for-the-badge&logo=bun" alt="Bun">
     <img src="https://img.shields.io/badge/TypeScript-Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript Strict">
-    <img src="https://img.shields.io/badge/Tests-492_Passing_|_0_Regressions-success?style=for-the-badge" alt="492 Tests Passing">
+    <img src="https://img.shields.io/badge/Tests-613_Passing_|_0_Regressions-success?style=for-the-badge" alt="613 Tests Passing">
     <img src="https://img.shields.io/badge/Governance-10_/_10_Audits_Passed-success?style=for-the-badge" alt="10/10 Governance Passed">
     <img src="https://img.shields.io/badge/Status-Phase_3A_/_P2_Hardened-success?style=for-the-badge" alt="Phase 3A / P2 Hardened">
   </p>
@@ -611,7 +611,7 @@ git diff --check
 All claims in LegacyExodus are grounded in reproducible automated test suites, multi-tier real-repository benchmarks, and cryptographic provenance locks.
 
 ### 16.1 Test Suite & Static Typing
-* **Full Test Suite:** `bun test` $\to$ **329 / 329 passing tests across 55 files** (2,757 assertions, 0 failures, ~5.5s runtime).
+* **Full Test Suite:** `bun test` $\to$ **613 / 613 passing tests across 82 files** (4,328 assertions, 0 failures, ~45s runtime).
 * **TypeScript Type Checking:** `bun run typecheck` $\to$ **0 errors**.
 * **Benchmark Governance Audit:** `bun run benchmark audit` $\to$ **10 / 10 checks passed (`PASS`)**.
 
@@ -629,8 +629,8 @@ Sample-based validation across 25 representative core files per framework target
 
 | Framework Target | Validated Files | Ground Truth Facts | True Positives | False Negatives | Sample Recall | Actionable Correctness | Migration Safety Verdict |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Express v4.21.2** | 25 | 142 (+5 KN) | 142 | 0 | **100.0%** | **100.0%** | `MIGRATION_SAFETY_NOT_YET_ESTABLISHED` |
-| **Fastify v5.3.3** | 25 | 154 (+5 KN) | 154 | 0 | **100.0%** | **100.0%** | `MIGRATION_SAFETY_NOT_YET_ESTABLISHED` |
+| **Express v4.21.2** | 25 | 173 (+5 KN) | 173 | 0 | **100.0%** | **100.0%** | `MIGRATION_SAFETY_NOT_YET_ESTABLISHED` |
+| **Fastify v5.3.3** | 25 | 193 (+6 KN) | 193 | 0 | **100.0%** | **100.0%** | `MIGRATION_SAFETY_NOT_YET_ESTABLISHED` |
 
 ---
 

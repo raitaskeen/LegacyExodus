@@ -16,21 +16,21 @@ Key challenges:
 2. **In-Memory Volatile Adapter:** Use `MemoryStorageAdapter` (`memory-storage.ts`) for fast, isolated, deterministic in-memory operations during CLI analysis runs.
 3. **Streaming JSON Projections:** Implement `StreamingJsonWriter` (`streaming-json-writer.ts`) for disk projections. Uses bounded 64KB chunk buffers with backpressure and atomic flush to stream multi-megabyte JSON arrays/objects with minimal heap memory consumption.
 4. **Current Implementation vs Target Architecture:**
-   * **Current / Implemented:** `MemoryStorageAdapter`, `StreamingJsonWriter` streaming disk projection, atomic filesystem writes.
-   * **Target / Planned:** SQLite / DuckDB embedded querying, Parquet analytical columnar dumps, and multi-tenant PostgreSQL persistence.
+   * **Current / Implemented:** `MemoryStorageAdapter`, `SqliteStorageAdapter` (with `PRAGMA user_version = 1` schema compatibility, `PRAGMA busy_timeout = 5000;`, and WAL journaling), `StreamingJsonWriter` chunked disk projection with bounded 64KB backpressure, atomic filesystem replacement with bounded retries.
+   * **Target / Planned:** DuckDB embedded analytics, Parquet columnar export dumps, and multi-tenant PostgreSQL persistence.
 
 ## Alternatives Considered
 * **Eager JSON Serialization (`JSON.stringify`):** Rejected because serializing multi-megabyte graph models in a single call causes heap thrashing and out-of-memory errors on large repositories.
-* **Direct SQLite Requirement:** Rejected for base CLI to preserve zero native C-dependency runtime footprint on Bun.
+* **External Heavy Database Requirement:** Rejected for base CLI to preserve zero external infrastructure dependencies by leveraging in-memory storage and Bun's built-in native embedded SQLite engine.
 
 ## Consequences
 * **Positive:** Flat memory profile during large repository scans (verified on Tier-2 Fastify and Tier-3 Express).
-* **Positive:** Clean abstraction allows adding database persistence adapters without changing analysis engines.
+* **Positive:** Clean abstraction allows switching between in-memory and persistent SQLite storage providers without changing analysis engines.
 * **Tradeoff:** Streaming output requires careful chunk delimiter and backpressure management.
 
 ## Verification / Evidence
-* **Source Implementation:** [`src/storage/adapters/memory-storage.ts`](../../legacy-exodus-core/src/storage/adapters/memory-storage.ts), [`src/storage/projections/streaming-json-writer.ts`](../../legacy-exodus-core/src/storage/projections/streaming-json-writer.ts), [`src/storage/storage-manager.ts`](../../legacy-exodus-core/src/storage/storage-manager.ts).
-* **Test Suite:** `memory-storage.test.ts`, `streaming-json-writer.test.ts` (8 passing tests).
+* **Source Implementation:** [`src/storage/adapters/memory-storage.ts`](../../legacy-exodus-core/src/storage/adapters/memory-storage.ts), [`src/storage/adapters/sqlite-storage.ts`](../../legacy-exodus-core/src/storage/adapters/sqlite-storage.ts), [`src/storage/projections/streaming-json-writer.ts`](../../legacy-exodus-core/src/storage/projections/streaming-json-writer.ts), [`src/storage/storage-manager.ts`](../../legacy-exodus-core/src/storage/storage-manager.ts).
+* **Test Suite:** `memory-storage.test.ts`, `sqlite-storage.test.ts`, `streaming-json-writer.test.ts`, `storage-manager.test.ts` (100% passing tests).
 * **Performance Evidence:** Stable memory profile across 3-run deterministic benchmark sweeps (documented in `BENCHMARK_REPORT.md`).
 
 ## Related Documentation

@@ -10,7 +10,7 @@
     <a href="docs/community/CODE_OF_CONDUCT.md"><img src="https://img.shields.io/badge/Code_of_Conduct-purple?style=for-the-badge" alt="Code of Conduct"></a>
     <a href="docs/development/contribution-guide.md"><img src="https://img.shields.io/badge/Contributing-blue?style=for-the-badge" alt="Contributing"></a>
     <a href="docs/architecture/security-architecture.md"><img src="https://img.shields.io/badge/Security-red?style=for-the-badge" alt="Security"></a>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/License-BSD--3--Clause-success?style=for-the-badge" alt="BSD-3-Clause"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-success?style=for-the-badge" alt="MIT License"></a>
   </p>
   <p>
     <img src="https://img.shields.io/badge/Runtime-Bun_v1.0+-f9f8f6?style=for-the-badge&logo=bun" alt="Bun">
@@ -610,7 +610,7 @@ git diff --check
 All claims in LegacyExodus are grounded in reproducible automated test suites, multi-tier real-repository benchmarks, and cryptographic provenance locks.
 
 ### 16.1 Test Suite & Static Typing
-* **Full Test Suite:** `bun test` $\to$ **329 / 329 passing tests across 55 files** (2,757 assertions, 0 failures, ~5.5s runtime).
+* **Full Test Suite:** `bun test` $\to$ **613 / 613 passing tests across 82 files** (4,328 assertions, 0 failures, ~45s runtime).
 * **TypeScript Type Checking:** `bun run typecheck` $\to$ **0 errors**.
 * **Benchmark Governance Audit:** `bun run benchmark audit` $\to$ **10 / 10 checks passed (`PASS`)**.
 
@@ -628,8 +628,8 @@ Sample-based validation across 25 representative core files per framework target
 
 | Framework Target | Validated Files | Ground Truth Facts | True Positives | False Negatives | Sample Recall | Actionable Correctness | Migration Safety Verdict |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Express v4.21.2** | 25 | 142 (+5 KN) | 142 | 0 | **100.0%** | **100.0%** | `MIGRATION_SAFETY_NOT_YET_ESTABLISHED` |
-| **Fastify v5.3.3** | 25 | 154 (+5 KN) | 154 | 0 | **100.0%** | **100.0%** | `MIGRATION_SAFETY_NOT_YET_ESTABLISHED` |
+| **Express v4.21.2** | 25 | 173 (+5 KN) | 173 | 0 | **100.0%** | **100.0%** | `MIGRATION_SAFETY_NOT_YET_ESTABLISHED` |
+| **Fastify v5.3.3** | 25 | 193 (+6 KN) | 193 | 0 | **100.0%** | **100.0%** | `MIGRATION_SAFETY_NOT_YET_ESTABLISHED` |
 
 ---
 

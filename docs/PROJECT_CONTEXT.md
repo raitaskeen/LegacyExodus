@@ -455,11 +455,11 @@ LegacyExodus/                          <-- Git Repository Root (Governance, Work
 8. **Fidelity & Governance (`src/governance/`):** Enforces the Three-Universe validation model, computing sample recall, actionable correctness, provenance freshness locks, and 10-point governance audits.
 
 ### 14.2 Verified Evidence Summary
-* **Test Suite:** 492 / 492 tests passing across 73 test files (3,536 assertions).
+* **Test Suite:** 613 / 613 tests passing across 82 test files (4,328 assertions, 0 failures).
 * **Typecheck:** 0 TypeScript compile errors.
 * **Governance Audit:** 10 / 10 benchmark checks passed (`PASS`).
 * **Determinism Gate:** 3-run bit-for-bit identical outputs (0 diffs) across Tier-1 (`cookie-parser`), Tier-2 (`fastify`), and Tier-3 (`express`).
-* **Migration Fidelity:** 100.0% sample recall and 100.0% actionable correctness across 296 ground-truth facts (Express 142 facts, Fastify 154 facts).
+* **Migration Fidelity:** 100.0% sample recall and 100.0% actionable correctness across 366 ground-truth facts (Express 173 facts, Fastify 193 facts).
 * **Safety Verdict Policy:** Strictly maintained as `MIGRATION_SAFETY_NOT_YET_ESTABLISHED` under the Three-Universe evidence model.
 
 ---

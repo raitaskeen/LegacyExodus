@@ -9,10 +9,24 @@ and this project adheres to deterministic semantic contracts and verifiable engi
 
 ## [Unreleased]
 
-### Planned & Upcoming (Track 3 — Scalability & Multi-Language Validation)
+### Planned & Upcoming (Track 4 — Enterprise Intelligence Scaling)
 - Whole-repository multi-file ground-truth scaling.
 - Template and fixture classification enhancements.
 - TypeScript / multi-language fidelity expansion.
+
+---
+
+## [0.6.0] - Core Foundation, Concurrency Hardening & Engine Governance
+
+- **Idempotent Concurrent Runtime Shutdown & Draining (F-004 / F-006):** Hardened `LegacyExodusEngine.shutdown()` and `ApplicationRuntime.shutdown()` with state machine transitions (`stopping` -> `stopped`), preventing concurrent re-entry during active execution draining. `Orchestrator` tracks and drains in-flight analysis promises with a timeout, and `FileDiscoveryProjectionAdapter` drains active directory projection queues before database handles close.
+- **Concurrent Atomic Projection Replacement (F-005):** Hardened `StreamingJsonWriter.writeAtomic()` with unique temporary filenames (`${destination}.${randomUUID()}.tmp`) and bounded exponential backoff retries (`replaceFile()`, up to 15 attempts with 10ms incremental backoff) for transient Windows filesystem contention (`EBUSY`, `EPERM`, `EACCES`), preserving zero-orphan cleanup and atomic publication guarantees.
+- **SQLite Storage Provider & Schema Versioning (F-007):** Implemented `SqliteStorageAdapter` with schema compatibility enforcement (`PRAGMA user_version = 1`), `StorageSchemaVersionMismatchError`, busy timeout handling (`PRAGMA busy_timeout = 5000;`), WAL journaling (`PRAGMA journal_mode = WAL;`), and transactional batch atomicity.
+- **Canonical Path Identity & Cyclic Dependency Resolution (F-008):** Hardened `ModuleResolver` and `DeterministicDependencyGraphBuilder` using normalized canonical POSIX path identity (`canonicalizePath`), WeakMap-cached lookups for `ReadonlySet<string>`, and `SymbolTable.filePath` canonicalization, ensuring correct graph resolution across cyclic, recursive, aliased, and path-based dependencies.
+- **Dynamic Engine SHA Freshness Validation (F-023):** Enforced dynamic Git commit SHA extraction in benchmark and fidelity runners, preventing stale engine SHA reuse and strictly rejecting missing, empty, or non-string provenance before generating fidelity reports.
+- **Semantic `.bind()` Receiver Invariant (F-001):** Hardened semantic call graph resolution for `.bind()` receiver calls (`fn.bind(this)`), ensuring the underlying function symbol is correctly resolved without semantic drift.
+- **Symbol Extraction Error Classification (F-002):** Normalized `SymbolExtractionError` contract in `src/symbols/symbol-errors.ts`, ensuring deterministic error taxonomy across all AST extraction failure modes.
+- **AST Validation Provenance & Immutability Trust Boundary:** Decoupled immutability from validation proof (`Frozen ≠ Validated`), establishing module-private `WeakSet` registries in `validateASTNode`, `validateASTResult`, and `validateParseResponse` to enable $O(1)$ fast-path validation of pre-validated deep-frozen AST objects while rejecting forged frozen structures.
+- **Test Suite & Empirical Baseline Scaling:** Expanded full test suite to 613/613 passing tests across 82 test files (4,328 assertions, 0 failures), with 10/10 benchmark governance checks passing and bit-for-bit 3-run determinism across all benchmark tiers.
 
 ---
 
@@ -121,11 +135,5 @@ and this project adheres to deterministic semantic contracts and verifiable engi
 
 ## Deferred Architectural Capabilities
 - **Intermediate Representation (IR):** Intentionally deferred until multiple distinct language frontends provide empirical requirements for a shared abstraction.
-- **Persistent Storage (SQLite):** Intentionally deferred to maintain flexibility during active semantic schema stabilization.
 - **Multi-Language Expansion (PHP, Java, C/C++, Rust):** Planned for future phases following JavaScript/TypeScript real-repository validation.
 - **Automated Transformation / Modernization:** Planned for later phases following verified zero-hallucination semantic baseline.
-
-# LegacyExodus Codeowners
-# Defines the primary maintainers responsible for reviewing code, architecture, and contracts.
-
-* @raitaskeen
