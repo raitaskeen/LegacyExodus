@@ -11,7 +11,7 @@ The storage layer provides abstracted persistence and streaming projection servi
 ```mermaid
 flowchart TD
     A[Engine Pipelines] --> B[StorageManager]
-    B --> C[MemoryStorageAdapter In-Memory Records]
+    B --> C[MemoryStorageProvider In-Memory Records]
     B --> D[DiscoveryProjectionService]
     D --> E[FileDiscoveryProjection]
     E --> F[StreamingJsonWriter 64KB Bounded Chunks]
@@ -24,8 +24,8 @@ flowchart TD
 
 1. **`StorageManager` (`storage-manager.ts`):** High-level storage facade managing storage providers and projection pipelines. Implements `findScoped(criteria)` to delegate bounded queries.
 2. **`StorageProvider` (`storage-provider.ts`):** Canonical persistence contract supporting `save`, `findById`, `findAll`, and `findScoped(criteria: StorageQueryCriteria)`.
-3. **`MemoryStorageAdapter` (`adapters/memory-storage.ts`):** High-performance in-memory storage provider with index-aware scoped querying.
-4. **`SqliteStorageAdapter` (`adapters/sqlite-storage.ts`):** Durable SQLite persistence provider with parameterized SQL queries utilizing composite indexes (`idx_records_lookup`, `idx_records_file`) for zero-overhead bounded retrieval.
+3. **`MemoryStorageProvider` (`adapters/memory-storage.ts`):** High-performance in-memory storage provider with index-aware scoped querying.
+4. **`SqliteStorageProvider` (`adapters/sqlite-storage.ts`):** Durable SQLite persistence provider with parameterized SQL queries utilizing composite indexes (`idx_records_lookup`, `idx_records_file`) for zero-overhead bounded retrieval.
 5. **`StreamingJsonWriter` (`projections/streaming-json-writer.ts`):** Low-memory streaming writer that splits JSON output into bounded 64KB chunks with backpressure handling to prevent out-of-memory errors on large repositories.
 6. **`FileDiscoveryProjection` (`projections/file-discovery-projection.ts`):** Generates structured discovery ledgers mapping file paths, languages, hashes, and symbol counts.
 
@@ -84,8 +84,8 @@ To guarantee that concurrent projection operations targeting the same repository
    * Projections targeting distinct repositories execute concurrently in parallel with zero contention.
    * **Bounded Lifecycle:** When all in-flight projection operations for a target directory complete, the corresponding map entry is immediately cleaned up, preventing memory retention.
    * **Error Resilience:** Failed or aborted projection tasks do not deadlock subsequent queued projections.
-2. **Atomic File Replacement with Unique Temporary Paths and Bounded Retries (`StreamingJsonWriter`):**
-   * Individual artifact writes stream to uniquely identified temporary files (`${destinationPath}.${randomUUID()}.tmp`) and atomically replace the destination path via `replaceFile()` with bounded exponential backoff retries (up to 15 attempts with 10ms incremental backoff) for transient Windows filesystem lock contention (`EBUSY`, `EPERM`, `EACCES`), falling back to `copyFile` + `unlink` on Windows before cleanup on terminal failure.
+2. **Atomic File Replacement with Unique Temporary Paths (`StreamingJsonWriter`):**
+   * Individual artifact writes stream to uniquely identified temporary files (`${destinationPath}.${randomUUID()}.tmp`) and promote to the destination path via `rename()`, falling back to `copyFile` + `unlink` when atomic rename is constrained, followed by automatic cleanup on terminal failure.
    * Unique temporary paths prevent concurrent file-level write collisions, ensuring no temporary files are overwritten or unlinked mid-stream, and unhandled write failures cleanly unlink the temporary file without leaving orphaned `.tmp` artifacts.
 
 ### 4.5 SQLite Storage Schema Versioning & Compatibility Guards

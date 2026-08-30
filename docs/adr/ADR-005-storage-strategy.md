@@ -12,11 +12,11 @@ Key challenges:
 3. Distinguishing current zero-dependency CLI execution from future high-throughput enterprise persistence.
 
 ## Decision
-1. **Abstract Storage Manager:** Implement `StorageManager` (`storage-manager.ts`) providing pluggable `StorageAdapter` interfaces for CRUD operations on typed `StorageRecord` entities.
-2. **In-Memory Volatile Adapter:** Use `MemoryStorageAdapter` (`memory-storage.ts`) for fast, isolated, deterministic in-memory operations during CLI analysis runs.
+1. **Abstract Storage Manager:** Implement `StorageManager` (`storage-manager.ts`) providing pluggable `StorageProvider` interfaces for CRUD operations on typed `StorageRecord` entities.
+2. **In-Memory Volatile Provider:** Use `MemoryStorageProvider` (`memory-storage.ts`) for fast, isolated, deterministic in-memory operations during CLI analysis runs.
 3. **Streaming JSON Projections:** Implement `StreamingJsonWriter` (`streaming-json-writer.ts`) for disk projections. Uses bounded 64KB chunk buffers with backpressure and atomic flush to stream multi-megabyte JSON arrays/objects with minimal heap memory consumption.
 4. **Current Implementation vs Target Architecture:**
-   * **Current / Implemented:** `MemoryStorageAdapter`, `SqliteStorageAdapter` (with `PRAGMA user_version = 1` schema compatibility, `PRAGMA busy_timeout = 5000;`, and WAL journaling), `StreamingJsonWriter` chunked disk projection with bounded 64KB backpressure, atomic filesystem replacement with bounded retries.
+   * **Current / Implemented:** `MemoryStorageProvider`, `SqliteStorageProvider` (with `PRAGMA user_version = 1` schema compatibility, `PRAGMA busy_timeout = 5000;`, and WAL journaling), `StreamingJsonWriter` chunked disk projection with bounded 64KB backpressure, atomic filesystem replacement with unique temporary paths and fallback promotion.
    * **Target / Planned:** DuckDB embedded analytics, Parquet columnar export dumps, and multi-tenant PostgreSQL persistence.
 
 ## Alternatives Considered
