@@ -1,4 +1,5 @@
 export type RenderingMode = "interactive" | "ci" | "plain" | "json";
+export type ThemeName = "classic" | "aurora" | "mono";
 
 export interface TerminalCapabilities {
   readonly isTTY: boolean;
@@ -7,11 +8,13 @@ export interface TerminalCapabilities {
   readonly isUnicodeSupported: boolean;
   readonly width: number;
   readonly mode: RenderingMode;
+  readonly theme: ThemeName;
 }
 
 export function detectTerminalCapabilities(options: {
   readonly json?: boolean;
   readonly plain?: boolean;
+  readonly theme?: ThemeName | string;
   readonly stream?: NodeJS.WriteStream;
 } = {}): TerminalCapabilities {
   const stream = options.stream ?? process.stdout;
@@ -47,6 +50,20 @@ export function detectTerminalCapabilities(options: {
     mode = "plain";
   }
 
+  // Extract theme from option, CLI arg --theme <name>, env var, or default to classic
+  let requestedTheme = options.theme ?? process.env.LEGACYEXODUS_THEME;
+  if (!requestedTheme) {
+    const themeArgIdx = process.argv.indexOf("--theme");
+    if (themeArgIdx !== -1 && process.argv[themeArgIdx + 1]) {
+      requestedTheme = process.argv[themeArgIdx + 1];
+    }
+  }
+
+  const normalizedTheme = String(requestedTheme ?? "classic").toLowerCase();
+  const theme: ThemeName = (normalizedTheme === "aurora" || normalizedTheme === "mono")
+    ? normalizedTheme
+    : "classic";
+
   return {
     isTTY,
     isCI,
@@ -54,5 +71,6 @@ export function detectTerminalCapabilities(options: {
     isUnicodeSupported,
     width,
     mode,
+    theme,
   };
 }

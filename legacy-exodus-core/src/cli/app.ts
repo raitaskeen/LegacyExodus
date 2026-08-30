@@ -3,6 +3,8 @@ import { Command } from "commander";
 import { createLegacyExodusEngine } from "@core/engine";
 
 import { registerCommands } from "./commands";
+import { detectTerminalCapabilities } from "./presentation/capabilities";
+import { HelpPresenter } from "./presentation/help";
 
 export const CLI_VERSION = "0.1.0";
 
@@ -11,28 +13,32 @@ export function createCLI(): Command {
 
   program
     .name("legacy-exodus")
-    .description("Knowledge-first modernization engine")
+    .description("Knowledge-first codebase modernization and repository intelligence")
     .version(CLI_VERSION);
-
-  program.addHelpText(
-    "after",
-    `
-Examples:
-  $ legacy-exodus status
-  $ legacy-exodus analyze ./my-app
-  $ legacy-exodus analyze ./my-app --json
-  $ legacy-exodus verify
-
-Output Modes:
-  Interactive TTY     Formatted presentation with status cards and tables
-  CI / Non-TTY        Deterministic plain-text summaries
-  --json              Machine-readable JSON emitted to stdout`,
-  );
 
   registerCommands(program, {
     version: CLI_VERSION,
     createEngine: () => createLegacyExodusEngine({ ...process.env, LOG_LEVEL: process.env.LOG_LEVEL ?? "silent" }),
   });
+
+  function configureHelpRecursively(cmd: Command): void {
+    cmd.configureHelp({
+      formatHelp: (currentCmd) => {
+        const capabilities = detectTerminalCapabilities();
+        const presenter = new HelpPresenter(capabilities);
+        if (currentCmd === program) {
+          return `${presenter.renderRootHelp(CLI_VERSION)}\n`;
+        }
+        return `${presenter.renderCommandHelp(currentCmd)}\n`;
+      },
+    });
+
+    for (const sub of cmd.commands) {
+      configureHelpRecursively(sub);
+    }
+  }
+
+  configureHelpRecursively(program);
 
   return program;
 }

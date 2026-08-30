@@ -460,4 +460,65 @@ describe("MigrationFidelityValidator — Metric Correctness & Synthetic Suite", 
     expect(run1.totalValidatedScopePredictions).toBe(run2.totalValidatedScopePredictions);
     expect(run1.totalUnvalidatedPredictions).toBe(run2.totalUnvalidatedPredictions);
   });
+
+  // 18. F-022: Ground Truth Schema Contract Compliance
+  it("Scenario 18: validates GroundTruthSymbol and GroundTruthImport contract optionality", () => {
+    const symbolWithoutExport: GroundTruthFact = {
+      id: "gt-sym-opt",
+      category: "symbol",
+      filePath: "lib/application.js",
+      attributes: {
+        filePath: "lib/application.js",
+        name: "init",
+        kind: "method",
+      },
+      provenance: "MANUAL_VERIFICATION",
+      sourceDescription: "Prototype method without explicit export flag",
+      migrationRelevance: "Symbol extraction",
+    };
+
+    const importWithoutLocal: GroundTruthFact = {
+      id: "gt-imp-opt",
+      category: "import",
+      filePath: "lib/express.js",
+      attributes: {
+        filePath: "lib/express.js",
+        moduleSpecifier: "./router",
+      },
+      provenance: "MANUAL_VERIFICATION",
+      sourceDescription: "Module import without local alias requirement",
+      migrationRelevance: "Dependency resolution",
+    };
+
+    const validator = new MigrationFidelityValidator();
+    const predictions: PredictionPayload = {
+      symbols: [{ filePath: "lib/application.js", name: "init", kind: "method" }],
+      imports: [{ filePath: "lib/express.js", moduleSpecifier: "./router", localName: "Router" }],
+    };
+
+    const report = validator.validate([symbolWithoutExport, importWithoutLocal], predictions, {
+      targetName: "test-opt-schema",
+      closedScopeFilePaths: ["lib/application.js", "lib/express.js"],
+    });
+
+    expect(report.overallTruePositives).toBe(2);
+    expect(report.overallFalseNegatives).toBe(0);
+  });
+
+  // 19. F-022: Express & Fastify Ground Truth Schema Validation
+  it("Scenario 19: verifies all Express and Fastify ground truth facts conform to canonical schemas", async () => {
+    const { expressGroundTruth } = await import("../../../benchmarks/fidelity/express-ground-truth");
+    const { fastifyGroundTruth } = await import("../../../benchmarks/fidelity/fastify-ground-truth");
+    const { fidelityFactCategorySchema, groundTruthProvenanceSchema } = await import("@contracts/fidelity");
+
+    for (const fact of [...expressGroundTruth, ...fastifyGroundTruth]) {
+      expect(fact.id).toBeDefined();
+      expect(fact.id.length).toBeGreaterThan(0);
+      expect(fidelityFactCategorySchema.safeParse(fact.category).success).toBe(true);
+      expect(groundTruthProvenanceSchema.safeParse(fact.provenance).success).toBe(true);
+      expect(typeof fact.sourceDescription).toBe("string");
+      expect(typeof fact.migrationRelevance).toBe("string");
+      expect(typeof fact.attributes).toBe("object");
+    }
+  });
 });

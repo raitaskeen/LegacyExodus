@@ -134,6 +134,7 @@ describe("CLI Error Contracts & Error-Path Behavioral Hardening", () => {
         isUnicodeSupported: false,
         width: 80,
         mode: "plain",
+        theme: "mono",
       });
 
       const error = new LegacyExodusError({
@@ -156,6 +157,7 @@ describe("CLI Error Contracts & Error-Path Behavioral Hardening", () => {
         isUnicodeSupported: true,
         width: 80,
         mode: "interactive",
+        theme: "classic",
       });
 
       const error = new CliError("WORKSPACE_ALREADY_INITIALIZED", "This workspace is already initialized.");
@@ -177,6 +179,7 @@ describe("CLI Error Contracts & Error-Path Behavioral Hardening", () => {
         isUnicodeSupported: false,
         width: 80,
         mode: "ci",
+        theme: "mono",
       });
 
       const error = new ConfigurationError("Missing database file path.");
