@@ -26,6 +26,8 @@ describe("F-011 ESM Export Semantics & Downstream Resolution Integrity", () => {
     return extractor.extract(parseRes.result);
   }
 
+  // --- Declaration before Export (Reverse / Standard Order) ---
+
   it("marks local symbol as exported for export { foo }", async () => {
     const code = `
       const foo = 1;
@@ -92,6 +94,124 @@ describe("F-011 ESM Export Semantics & Downstream Resolution Integrity", () => {
     expect(defExport?.defaultExport).toBe(true);
     expect(defExport?.sourceSymbolName).toBe("calculateTotal");
   });
+
+  // --- Forward References (Export before Declaration) ---
+
+  it("resolves forward-referenced local export binding for export { handler } before function declaration", async () => {
+    const code = `
+      export { handler };
+      function handler() {}
+    `;
+    const table = await extractFromSource(code);
+    const fn = table.symbols.find((s) => s.name === "handler" && s.kind === "function");
+    const exp = table.symbols.find((s) => s.name === "handler" && s.kind === "export");
+
+    expect(fn).toBeDefined();
+    expect(fn?.exported).toBe(true);
+    expect(exp).toBeDefined();
+    expect(exp?.sourceSymbolName).toBe("handler");
+    expect(exp?.defaultExport).toBe(false);
+  });
+
+  it("resolves forward-referenced local export binding for export default handler before function declaration", async () => {
+    const code = `
+      export default handler;
+      function handler() {}
+    `;
+    const table = await extractFromSource(code);
+    const fn = table.symbols.find((s) => s.name === "handler" && s.kind === "function");
+    const exp = table.symbols.find((s) => s.name === "default" && s.kind === "export");
+
+    expect(fn).toBeDefined();
+    expect(fn?.exported).toBe(true);
+    expect(exp).toBeDefined();
+    expect(exp?.defaultExport).toBe(true);
+    expect(exp?.sourceSymbolName).toBe("handler");
+  });
+
+  it("resolves forward-referenced local export binding for aliased export { handler as runHandler } before function declaration", async () => {
+    const code = `
+      export { handler as runHandler };
+      function handler() {}
+    `;
+    const table = await extractFromSource(code);
+    const fn = table.symbols.find((s) => s.name === "handler" && s.kind === "function");
+    const exp = table.symbols.find((s) => s.name === "runHandler" && s.kind === "export");
+
+    expect(fn).toBeDefined();
+    expect(fn?.exported).toBe(true);
+    expect(exp).toBeDefined();
+    expect(exp?.name).toBe("runHandler");
+    expect(exp?.sourceSymbolName).toBe("handler");
+  });
+
+  it("resolves forward-referenced local export binding for default alias export { handler as default } before class declaration", async () => {
+    const code = `
+      export { HandlerService as default };
+      class HandlerService {}
+    `;
+    const table = await extractFromSource(code);
+    const cls = table.symbols.find((s) => s.name === "HandlerService" && s.kind === "class");
+    const exp = table.symbols.find((s) => s.name === "default" && s.kind === "export");
+
+    expect(cls).toBeDefined();
+    expect(cls?.exported).toBe(true);
+    expect(exp).toBeDefined();
+    expect(exp?.defaultExport).toBe(true);
+    expect(exp?.sourceSymbolName).toBe("HandlerService");
+  });
+
+  // --- Scope Safety and Isolation ---
+
+  it("preserves scope isolation when forward-referenced export matches module-level binding over nested function", async () => {
+    const code = `
+      export { handler };
+
+      function wrapper() {
+        function handler() {}
+      }
+      function handler() {}
+    `;
+    const table = await extractFromSource(code);
+    const moduleFn = table.symbols.find(
+      (s) => s.name === "handler" && s.kind === "function" && s.scopeId === "scope:module",
+    );
+    const nestedFn = table.symbols.find(
+      (s) => s.name === "handler" && s.kind === "function" && s.scopeId !== "scope:module",
+    );
+
+    expect(moduleFn).toBeDefined();
+    expect(moduleFn?.exported).toBe(true);
+    expect(nestedFn).toBeDefined();
+    expect(nestedFn?.exported).toBe(false);
+  });
+
+  it("does not mark local symbols as exported for forward re-exports", async () => {
+    const code = `
+      export { handler } from "./other";
+      function handler() {}
+    `;
+    const table = await extractFromSource(code);
+    const localFn = table.symbols.find((s) => s.name === "handler" && s.kind === "function");
+    const exp = table.symbols.find((s) => s.name === "handler" && s.kind === "export");
+
+    expect(localFn).toBeDefined();
+    expect(localFn?.exported).toBe(false);
+    expect(exp).toBeDefined();
+    expect(exp?.moduleSpecifier).toBe("./other");
+  });
+
+  it("does not fabricate local symbols for forward exports referencing undefined names", async () => {
+    const code = `
+      export { missing };
+      export default nonExistent;
+    `;
+    const table = await extractFromSource(code);
+    expect(table.symbols.length).toBe(2);
+    expect(table.symbols.every((s) => s.kind === "export")).toBe(true);
+  });
+
+  // --- Inline Export Declarations ---
 
   it("records sourceSymbolName for export default function declaration", async () => {
     const code = `
@@ -172,14 +292,16 @@ describe("F-011 ESM Export Semantics & Downstream Resolution Integrity", () => {
     expect(expNamespace?.sourceSymbolName).toBe("*");
   });
 
+  // --- Downstream Semantic and Flow Verifications ---
+
   it("does not falsely report exported functions/variables as unreferenced dead code", async () => {
     const serviceCode = `
+      export default exportedFunction;
+      export { exportedConfig };
       function exportedFunction(val) {
         return val + 1;
       }
       const exportedConfig = { port: 8080 };
-      export default exportedFunction;
-      export { exportedConfig };
     `;
     const serviceFile = { id: "f-srv", path: "src/srv.js", language: "javascript", size: serviceCode.length };
     const ast = (await parser.parse({ file: serviceFile, source: serviceCode })).result;
@@ -199,12 +321,12 @@ describe("F-011 ESM Export Semantics & Downstream Resolution Integrity", () => {
     expect(deadConfig).toBeUndefined();
   });
 
-  it("propagates cross-file data flow and taint through export default identifier", async () => {
+  it("propagates cross-file data flow and taint through forward-referenced export default identifier", async () => {
     const serviceCode = `
+      export default runCmd;
       function runCmd(cmd) {
         child_process.exec(cmd);
       }
-      export default runCmd;
     `;
     const consumerCode = `
       import runCmd from "./service";
