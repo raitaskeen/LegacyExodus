@@ -43,7 +43,7 @@ Before changing any production static analysis logic:
 As of Phase 3A / Track 3 (P1.8):
 * **Passing Tests:** `613 / 613`
 * **Test Files:** `82`
-* **Expect Assertions:** `4,328`
+* **Assertions:** `4,328`
 * **Typecheck Errors:** `0`
 * **Benchmark Governance:** `10 / 10 PASS`
 
