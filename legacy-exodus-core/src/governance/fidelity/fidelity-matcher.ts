@@ -35,6 +35,7 @@ export function matchFact(
     const predName = String(prediction.name ?? "");
     if (predName !== gtAttr.name) return false;
     if (gtAttr.kind && prediction.kind !== gtAttr.kind) return false;
+    if (gtAttr.version && prediction.version !== gtAttr.version) return false;
     return true;
   }
 

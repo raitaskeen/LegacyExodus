@@ -521,4 +521,55 @@ describe("MigrationFidelityValidator — Metric Correctness & Synthetic Suite", 
       expect(typeof fact.attributes).toBe("object");
     }
   });
+
+  // 20. Dependency version matching semantics
+  it("Scenario 20: enforces optional dependency version matching in GroundTruthDependency", () => {
+    const gtWithVersion: GroundTruthFact = {
+      id: "gt-dep-ver",
+      category: "dependency",
+      attributes: {
+        name: "fastify",
+        version: "^5.0.0",
+        kind: "production",
+      },
+      provenance: "GROUND_TRUTH_SOURCE",
+      sourceDescription: "package.json dependencies",
+      migrationRelevance: "Framework dependency",
+    };
+
+    const gtWithoutVersion: GroundTruthFact = {
+      id: "gt-dep-nover",
+      category: "dependency",
+      attributes: {
+        name: "cookie-parser",
+        kind: "production",
+      },
+      provenance: "GROUND_TRUTH_SOURCE",
+      sourceDescription: "package.json dependencies",
+      migrationRelevance: "Middleware dependency",
+    };
+
+    const validator = new MigrationFidelityValidator();
+
+    // Matching version matches
+    const report1 = validator.validate([gtWithVersion], {
+      dependencies: [{ name: "fastify", version: "^5.0.0", kind: "production" }],
+    }, { targetName: "test-ver-match", isSampleBased: false, categoryScopes: { dependency: "CLOSED_WORLD" } });
+    expect(report1.overallTruePositives).toBe(1);
+    expect(report1.overallFalseNegatives).toBe(0);
+
+    // Mismatched version does NOT match (treated as FN and FP in closed world)
+    const report2 = validator.validate([gtWithVersion], {
+      dependencies: [{ name: "fastify", version: "1.0.0", kind: "production" }],
+    }, { targetName: "test-ver-mismatch", isSampleBased: false, categoryScopes: { dependency: "CLOSED_WORLD" } });
+    expect(report2.overallTruePositives).toBe(0);
+    expect(report2.overallFalseNegatives).toBe(1);
+
+    // Omitted GT version matches any prediction version
+    const report3 = validator.validate([gtWithoutVersion], {
+      dependencies: [{ name: "cookie-parser", version: "1.4.7", kind: "production" }],
+    }, { targetName: "test-nover-match", isSampleBased: false, categoryScopes: { dependency: "CLOSED_WORLD" } });
+    expect(report3.overallTruePositives).toBe(1);
+    expect(report3.overallFalseNegatives).toBe(0);
+  });
 });

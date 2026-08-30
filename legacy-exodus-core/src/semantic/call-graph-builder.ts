@@ -36,6 +36,13 @@ export class DeterministicCallGraphBuilder {
     const nextContext = childContext(node, context, table);
     if (isCallable(node) || node.type === "CatchClause") recordParamReceiverTypes(node, nextContext);
     if (node.type === "VariableDeclarator") recordReceiverType(node, nextContext, table);
+    if (node.type === "AssignmentExpression") recordAssignmentReceiverType(node, nextContext, table);
+    if (node.type === "FunctionDeclaration" || node.type === "ClassDeclaration") {
+      const declName = nodeName(node);
+      if (declName !== undefined) {
+        (nextContext.receiverTypes as Map<string, string | null>).set(receiverKey(context.scope, declName), null);
+      }
+    }
     if (node.type === "CallExpression" || node.type === "NewExpression") {
       const calleeName = callName(node);
       if (calleeName !== undefined) {
@@ -100,7 +107,7 @@ function findClassSymbolId(node: ASTNode, scope: ScopeFrame, table: SymbolTable 
 }
 
 function isCallable(node: ASTNode): boolean {
-  return ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ObjectMethod"].includes(node.type);
+  return ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ClassPrivateMethod", "ObjectMethod"].includes(node.type);
 }
 
 function nodeName(node: ASTNode): string | undefined {
@@ -132,8 +139,15 @@ function memberName(node: ASTNode): string | undefined {
 }
 
 function identifier(node: ASTNode | undefined): string | undefined {
-  const value = node?.attributes.name;
-  return typeof value === "string" ? value : undefined;
+  if (node === undefined) return undefined;
+  const value = node.attributes.name;
+  if (typeof value === "string") return value;
+  const idChild = node.children.find((child) => child.role === "id" || child.role === "key");
+  if (idChild !== undefined) {
+    const childVal = idChild.attributes.name;
+    if (typeof childVal === "string") return childVal;
+  }
+  return undefined;
 }
 
 function extractBoundNames(node: ASTNode | undefined): string[] {
@@ -214,6 +228,43 @@ function recordReceiverType(node: ASTNode, context: ResolutionContext, table: Sy
 
   for (const name of boundNames) {
     const targetScope = targetScopeForDeclaration(node, name, context.scope, table);
+    (context.receiverTypes as Map<string, string | null>).set(receiverKey(targetScope, name), null);
+  }
+}
+
+function targetScopeForAssignment(name: string, scope: ScopeFrame, table: SymbolTable | undefined): ScopeFrame {
+  if (table !== undefined) {
+    for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
+      const symbol = table.symbols.find((s) => s.name === name && s.scopeId === current?.id);
+      if (symbol !== undefined) {
+        return current;
+      }
+    }
+  }
+  return scope;
+}
+
+function recordAssignmentReceiverType(node: ASTNode, context: ResolutionContext, table: SymbolTable | undefined): void {
+  const left = node.children.find((child) => child.role === "left");
+  const right = node.children.find((child) => child.role === "right");
+  const boundNames = extractBoundNames(left);
+  if (boundNames.length === 0) return;
+
+  if (boundNames.length === 1 && left?.type === "Identifier" && right?.type === "NewExpression") {
+    const callee = right.children.find((child) => child.role === "callee");
+    const className = callee === undefined ? undefined : identifier(callee);
+    if (className !== undefined) {
+      const candidates = table?.symbols.filter((symbol) => symbol.kind === "class" && symbol.name === className && isInScope(symbol, context.scope)) ?? [];
+      if (candidates.length === 1 && candidates[0] !== undefined) {
+        const targetScope = targetScopeForAssignment(boundNames[0]!, context.scope, table);
+        (context.receiverTypes as Map<string, string | null>).set(receiverKey(targetScope, boundNames[0]!), candidates[0].id);
+        return;
+      }
+    }
+  }
+
+  for (const name of boundNames) {
+    const targetScope = targetScopeForAssignment(name, context.scope, table);
     (context.receiverTypes as Map<string, string | null>).set(receiverKey(targetScope, name), null);
   }
 }

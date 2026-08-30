@@ -98,6 +98,34 @@ export interface DomainFileCount {
   readonly fileCount: number;
 }
 
+export async function resolveConcreteTestPaths(patterns: readonly string[], testsRoot = "tests"): Promise<readonly string[]> {
+  const resolvedPaths: string[] = [];
+
+  for (const pattern of patterns) {
+    if (pattern.includes("*")) {
+      const slashIdx = pattern.lastIndexOf("/");
+      const parentDir = resolve((slashIdx === -1 ? "." : pattern.slice(0, slashIdx)).replace(/^tests/, testsRoot));
+      const wildcardName = slashIdx === -1 ? pattern : pattern.slice(slashIdx + 1);
+      const regex = new RegExp(`^${wildcardName.replace(/\./g, "\\.").replace(/\*/g, ".*")}$`);
+      try {
+        const entries = await readdir(parentDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isFile() && entry.name.endsWith(".test.ts") && regex.test(entry.name)) {
+            const relPrefix = slashIdx === -1 ? "." : pattern.slice(0, slashIdx);
+            resolvedPaths.push(`${relPrefix}/${entry.name}`.replace(/\\/g, "/"));
+          }
+        }
+      } catch {
+        // Directory may not exist in some environments
+      }
+    } else {
+      resolvedPaths.push(pattern.replace(/\\/g, "/"));
+    }
+  }
+
+  return Array.from(new Set(resolvedPaths)).sort();
+}
+
 export async function discoverTestDomains(testsRoot = "tests"): Promise<readonly DomainFileCount[]> {
   async function countFilesInPatterns(patterns: readonly string[]): Promise<number> {
     const fileSet = new Set<string>();
@@ -215,7 +243,7 @@ export function registerTestCommand(program: Command): void {
           process.exitCode = 1;
           return;
         }
-        testPaths = matched.pathPatterns;
+        testPaths = await resolveConcreteTestPaths(matched.pathPatterns);
       }
 
       const args = ["test", ...testPaths];
@@ -225,7 +253,7 @@ export function registerTestCommand(program: Command): void {
 
       const result = await runCommand("bun", args);
       const combinedOutput = `${result.stdout}\n${result.stderr}`;
-      const parsed = parseBunTestOutput(combinedOutput, targetDomain);
+      const parsed = parseBunTestOutput(combinedOutput, targetDomain === "all" ? undefined : targetDomain);
 
       if (options.verbose && !options.json) {
         const rawOutput = `${result.stdout}\n${result.stderr}`.trim();

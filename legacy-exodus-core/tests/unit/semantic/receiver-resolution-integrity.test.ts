@@ -300,6 +300,117 @@ describe("P1 Task 9: Semantic Receiver Resolution Integrity & Anti-Hallucination
       expect(calls).not.toContain("obj[name]");
       expect(analysis.calls.find((c) => c.calleeName === "getName")?.resolutionState).toBe("UNRESOLVED");
     });
+
+    it("Case J1: clears receiver provenance upon dynamic variable reassignment", async () => {
+      const source = `
+        class Service {
+          start() {}
+        }
+        let service = new Service();
+        service.start();
+        service = getOther();
+        service.start();
+      `;
+      const { analysis, symbolTable } = await analyze(source);
+      const startSymbol = symbolTable.symbols.find((s) => s.kind === "method" && s.name === "start" && s.containerName === "Service");
+      const calls = analysis.calls.filter((c) => c.calleeName === "service.start");
+
+      expect(startSymbol).toBeDefined();
+      expect(calls.length).toBe(2);
+      expect(calls[0]?.resolutionState).toBe("RESOLVED");
+      expect(calls[0]?.targetSymbolId).toBe(startSymbol?.id);
+      expect(calls[1]?.resolutionState).toBe("UNRESOLVED");
+      expect(calls[1]?.targetSymbolId).toBeUndefined();
+    });
+
+    it("Case J2: clears receiver provenance upon destructuring reassignment", async () => {
+      const source = `
+        class Service {
+          start() {}
+        }
+        let service = new Service();
+        service.start();
+        ({ service } = getOther());
+        service.start();
+      `;
+      const { analysis, symbolTable } = await analyze(source);
+      const startSymbol = symbolTable.symbols.find((s) => s.kind === "method" && s.name === "start" && s.containerName === "Service");
+      const calls = analysis.calls.filter((c) => c.calleeName === "service.start");
+
+      expect(startSymbol).toBeDefined();
+      expect(calls.length).toBe(2);
+      expect(calls[0]?.resolutionState).toBe("RESOLVED");
+      expect(calls[0]?.targetSymbolId).toBe(startSymbol?.id);
+      expect(calls[1]?.resolutionState).toBe("UNRESOLVED");
+      expect(calls[1]?.targetSymbolId).toBeUndefined();
+    });
+
+    it("Case K1: named function declaration shadows outer receiver in applicable scope", async () => {
+      const source = `
+        class Service {
+          start() {}
+        }
+        const service = new Service();
+        function wrapper() {
+          function service() {}
+          service.start();
+        }
+        service.start();
+      `;
+      const { analysis, symbolTable } = await analyze(source);
+      const startSymbol = symbolTable.symbols.find((s) => s.kind === "method" && s.name === "start" && s.containerName === "Service");
+      const wrapperCall = analysis.calls.find((c) => c.callerName === "wrapper" && c.calleeName === "service.start");
+      const outerCall = analysis.calls.find((c) => c.callerName === "module" && c.calleeName === "service.start");
+
+      expect(wrapperCall?.resolutionState).toBe("UNRESOLVED");
+      expect(wrapperCall?.targetSymbolId).toBeUndefined();
+      expect(outerCall?.resolutionState).toBe("RESOLVED");
+      expect(outerCall?.targetSymbolId).toBe(startSymbol?.id);
+    });
+
+    it("Case K2: named class declaration shadows outer receiver in applicable scope", async () => {
+      const source = `
+        class Service {
+          start() {}
+        }
+        const service = new Service();
+        function wrapper() {
+          class service {}
+          service.start();
+        }
+        service.start();
+      `;
+      const { analysis, symbolTable } = await analyze(source);
+      const startSymbol = symbolTable.symbols.find((s) => s.kind === "method" && s.name === "start" && s.containerName === "Service");
+      const wrapperCall = analysis.calls.find((c) => c.callerName === "wrapper" && c.calleeName === "service.start");
+      const outerCall = analysis.calls.find((c) => c.callerName === "module" && c.calleeName === "service.start");
+
+      expect(wrapperCall?.resolutionState).toBe("UNRESOLVED");
+      expect(wrapperCall?.targetSymbolId).toBeUndefined();
+      expect(outerCall?.resolutionState).toBe("RESOLVED");
+      expect(outerCall?.targetSymbolId).toBe(startSymbol?.id);
+    });
+
+    it("Case L: class private method parameter shadows outer receiver variable", async () => {
+      const source = `
+        class Service {
+          start() {}
+        }
+        const service = new Service();
+        class Worker {
+          #run(service) {
+            service.start();
+          }
+        }
+      `;
+      const { analysis } = await analyze(source);
+      const privateCall = analysis.calls.find((c) => c.calleeName === "service.start");
+
+      expect(privateCall).toBeDefined();
+      expect(privateCall?.callerName).toBe("run");
+      expect(privateCall?.resolutionState).toBe("UNRESOLVED");
+      expect(privateCall?.targetSymbolId).toBeUndefined();
+    });
   });
 
   // ─── Determinism ─────────────────────────────────────────────────────────
