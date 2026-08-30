@@ -23,6 +23,11 @@ interface ExtractionContext {
   readonly scopeChain: readonly string[];
 }
 
+interface PendingExportBinding {
+  readonly name: string;
+  readonly scopeChain: readonly string[];
+}
+
 const initialContext: ExtractionContext = Object.freeze({
   exported: false,
   defaultExport: false,
@@ -45,7 +50,12 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
 
     this.unlocatedSequence = 0;
     const symbols: CodeSymbol[] = [];
-    this.visit(validatedAst.root, validatedAst, initialContext, symbols);
+    const pendingExports: PendingExportBinding[] = [];
+    this.visit(validatedAst.root, validatedAst, initialContext, symbols, pendingExports);
+
+    for (const pending of pendingExports) {
+      this.markLocalSymbolAsExported(pending.name, symbols, pending.scopeChain);
+    }
 
     return validateSymbolTable({
       filePath: validatedAst.metadata.sourcePath,
@@ -60,15 +70,16 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     ast: ASTResult,
     context: ExtractionContext,
     symbols: CodeSymbol[],
+    pendingExports: PendingExportBinding[],
   ): void {
     switch (node.type) {
       case "ExportNamedDeclaration":
-        this.addExportSymbol(node, ast, false, symbols);
-        this.visitChildren(node, ast, { ...context, exported: true }, symbols);
+        this.addExportSymbol(node, ast, false, symbols, context, pendingExports);
+        this.visitChildren(node, ast, { ...context, exported: true }, symbols, pendingExports);
         return;
       case "ExportDefaultDeclaration":
-        this.addExportSymbol(node, ast, true, symbols);
-        this.visitChildren(node, ast, { ...context, exported: true, defaultExport: true }, symbols);
+        this.addExportSymbol(node, ast, true, symbols, context, pendingExports);
+        this.visitChildren(node, ast, { ...context, exported: true, defaultExport: true }, symbols, pendingExports);
         return;
       case "ExportAllDeclaration":
         symbols.push(this.createSymbol("export", "*", node, ast, { ...initialContext, exported: true, defaultExport: false }, {
@@ -87,11 +98,11 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
           ...context,
           scopeId: blockScopeId,
           scopeChain: [blockScopeId, ...context.scopeChain],
-        }, symbols);
+        }, symbols, pendingExports);
         return;
       }
       case "AssignmentExpression":
-        this.processAssignment(node, ast, context, symbols);
+        this.processAssignment(node, ast, context, symbols, pendingExports);
         return;
       case "FunctionDeclaration": {
         const fnScopeId = createLexicalScopeId(node.type, node.location);
@@ -101,7 +112,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
           scopeId: fnScopeId,
           functionScopeId: fnScopeId,
           scopeChain: [fnScopeId, ...context.scopeChain],
-        }, symbols);
+        }, symbols, pendingExports);
         return;
       }
       case "FunctionExpression":
@@ -112,14 +123,14 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
           scopeId: fnScopeId,
           functionScopeId: fnScopeId,
           scopeChain: [fnScopeId, ...context.scopeChain],
-        }, symbols);
+        }, symbols, pendingExports);
         return;
       }
       case "ClassDeclaration": {
         const className = getName(node) ?? "anonymous-class";
         const classSymbol = this.createSymbol("class", className, node, ast, context);
         symbols.push(classSymbol);
-        this.visitChildren(node, ast, { ...context, containerName: className, containerId: classSymbol.id }, symbols);
+        this.visitChildren(node, ast, { ...context, containerName: className, containerId: classSymbol.id }, symbols, pendingExports);
         return;
       }
       case "ClassMethod":
@@ -131,7 +142,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
           scopeId: methodScopeId,
           functionScopeId: methodScopeId,
           scopeChain: [methodScopeId, ...context.scopeChain],
-        }, symbols);
+        }, symbols, pendingExports);
         return;
       }
       case "ObjectMethod": {
@@ -142,14 +153,14 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
           scopeId: methodScopeId,
           functionScopeId: methodScopeId,
           scopeChain: [methodScopeId, ...context.scopeChain],
-        }, symbols);
+        }, symbols, pendingExports);
         return;
       }
       default:
         break;
     }
 
-    this.visitChildren(node, ast, context, symbols);
+    this.visitChildren(node, ast, context, symbols, pendingExports);
   }
 
   private visitChildren(
@@ -157,9 +168,10 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     ast: ASTResult,
     context: ExtractionContext,
     symbols: CodeSymbol[],
+    pendingExports: PendingExportBinding[],
   ): void {
     for (const child of node.children) {
-      this.visit(child, ast, context, symbols);
+      this.visit(child, ast, context, symbols, pendingExports);
     }
   }
 
@@ -327,16 +339,32 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     symbols.push(this.createSymbol("method", name, node, ast, context, { parameters: getParameters(node) }));
   }
 
-  private addExportSymbol(node: ASTNode, ast: ASTResult, defaultExport: boolean, symbols: CodeSymbol[]): void {
+  private addExportSymbol(
+    node: ASTNode,
+    ast: ASTResult,
+    defaultExport: boolean,
+    symbols: CodeSymbol[],
+    context: ExtractionContext,
+    pendingExports: PendingExportBinding[],
+  ): void {
     const moduleSpecifier = findModuleSpecifier(node);
     const specifiers = node.children.filter((child) =>
       child.role === "specifiers" && (child.type === "ExportSpecifier" || child.type === "ExportNamespaceSpecifier"),
     );
 
     if (specifiers.length === 0) {
-      const names = defaultExport ? ["default"] : findDeclaredNames(node);
-      for (const name of names) {
-        this.addExport(node, ast, name, defaultExport, moduleSpecifier, undefined, symbols);
+      if (defaultExport) {
+        const decl = node.children.find((child) => child.role === "declaration");
+        const localName = decl ? (readIdentifierName(decl) ?? getName(decl)) : undefined;
+        this.addExport(node, ast, "default", true, moduleSpecifier, localName, symbols);
+        if (localName !== undefined && moduleSpecifier === undefined) {
+          pendingExports.push({ name: localName, scopeChain: context.scopeChain });
+        }
+      } else {
+        const names = findDeclaredNames(node);
+        for (const name of names) {
+          this.addExport(node, ast, name, false, moduleSpecifier, undefined, symbols);
+        }
       }
       return;
     }
@@ -351,6 +379,9 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
           ?? readIdentifierName(specifier.children.find((child) => child.role === "local"));
       const isDefault = defaultExport || exportedName === "default";
       this.addExport(node, ast, defaultExport ? "default" : exportedName, isDefault, moduleSpecifier, sourceSymbolName, symbols);
+      if (sourceSymbolName !== undefined && sourceSymbolName !== "*" && moduleSpecifier === undefined) {
+        pendingExports.push({ name: sourceSymbolName, scopeChain: context.scopeChain });
+      }
     }
   }
 
@@ -380,6 +411,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     ast: ASTResult,
     context: ExtractionContext,
     symbols: CodeSymbol[],
+    pendingExports: PendingExportBinding[],
   ): void {
     const targets: ASTNode[] = [];
     let current: ASTNode | undefined = node;
@@ -424,7 +456,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
           for (const prop of properties) {
             this.addExport(prop.node, ast, prop.key, false, undefined, prop.localSymbolName, symbols);
             const symbolToMark = prop.localSymbolName ?? prop.key;
-            this.markLocalSymbolAsExported(symbolToMark, symbols, context.scopeChain);
+            pendingExports.push({ name: symbolToMark, scopeChain: context.scopeChain });
           }
           this.addExport(node, ast, "default", true, undefined, undefined, symbols);
         } else if (innermostRight.type === "Identifier") {
@@ -436,17 +468,17 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
               for (const prop of properties) {
                 this.addExport(prop.node, ast, prop.key, false, undefined, prop.localSymbolName, symbols);
                 const symbolToMark = prop.localSymbolName ?? prop.key;
-                this.markLocalSymbolAsExported(symbolToMark, symbols, context.scopeChain);
+                pendingExports.push({ name: symbolToMark, scopeChain: context.scopeChain });
               }
             }
-            this.markLocalSymbolAsExported(varName, symbols, context.scopeChain);
+            pendingExports.push({ name: varName, scopeChain: context.scopeChain });
             this.addExport(node, ast, "default", true, undefined, varName, symbols);
           }
         } else {
           const rightName = identifierName(innermostRight);
           this.addExport(node, ast, "default", true, undefined, rightName, symbols);
           if (rightName) {
-            this.markLocalSymbolAsExported(rightName, symbols, context.scopeChain);
+            pendingExports.push({ name: rightName, scopeChain: context.scopeChain });
           }
         }
       } else if (targetPath.startsWith("module.exports.") || targetPath.startsWith("exports.")) {
@@ -455,7 +487,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
           const sourceSymbolName = identifierName(innermostRight);
           this.addExport(node, ast, propName, false, undefined, sourceSymbolName, symbols);
           const symbolToMark = sourceSymbolName ?? propName;
-          this.markLocalSymbolAsExported(symbolToMark, symbols, context.scopeChain);
+          pendingExports.push({ name: symbolToMark, scopeChain: context.scopeChain });
           symbols.push(
             this.createSymbol("variable", propName, target, ast, {
               ...context,
@@ -513,9 +545,9 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
           scopeId: fnScopeId,
           functionScopeId: fnScopeId,
           scopeChain: [fnScopeId, ...context.scopeChain],
-        }, symbols);
+        }, symbols, pendingExports);
       } else {
-        this.visitChildren(innermostRight, ast, context, symbols);
+        this.visitChildren(innermostRight, ast, context, symbols, pendingExports);
       }
     }
   }
@@ -603,9 +635,13 @@ function countSymbols(symbols: readonly CodeSymbol[], kind: SymbolKind): number 
 }
 
 function getName(node: ASTNode): string | undefined {
+  if (node.type === "Identifier") {
+    return readIdentifierName(node);
+  }
   return readIdentifierName(node.children.find((child) => child.role === "id"))
     ?? readIdentifierName(node.children.find((child) => child.role === "key"))
-    ?? readIdentifierName(node.children.find((child) => child.type === "Identifier"));
+    ?? readIdentifierName(node.children.find((child) => child.role === "local"))
+    ?? readIdentifierName(node.children.find((child) => child.role === "exported"));
 }
 
 function getParameters(node: ASTNode): readonly string[] {

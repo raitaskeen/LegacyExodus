@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from "bun:test";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Writable } from "node:stream";
@@ -156,14 +156,9 @@ describe("StreamingJsonWriter — Deterministic Streaming Serialization & Failur
     }
 
     expect(errorThrown).toBe(true);
-    let tmpExists = false;
-    try {
-      await stat(`${invalidDest}.tmp`);
-      tmpExists = true;
-    } catch {
-      tmpExists = false;
-    }
-    expect(tmpExists).toBe(false);
+    const files = await readdir(testDir);
+    const tmpFiles = files.filter((f) => f.endsWith(".tmp"));
+    expect(tmpFiles).toHaveLength(0);
   });
 
   it("preserves existing valid file if an error occurs during atomic stream writing", async () => {
@@ -190,14 +185,33 @@ describe("StreamingJsonWriter — Deterministic Streaming Serialization & Failur
     const intactContent = await readFile(finalDest, "utf8");
     expect(intactContent).toBe(originalContent);
 
-    let tmpExists = false;
-    try {
-      await stat(`${finalDest}.tmp`);
-      tmpExists = true;
-    } catch {
-      tmpExists = false;
-    }
-    expect(tmpExists).toBe(false);
+    const files = await readdir(testDir);
+    const tmpFiles = files.filter((f) => f.endsWith(".tmp"));
+    expect(tmpFiles).toHaveLength(0);
+  });
+
+  it("handles concurrent writeAtomic calls to the same destination without temp file collisions or orphans", async () => {
+    const dest = join(testDir, "concurrent-safety.json");
+
+    const writes = Array.from({ length: 10 }, (_, i) =>
+      writer.writeAtomic(dest, {
+        writerId: i,
+        records: Array.from({ length: 50 }, (_, j) => ({ id: j, label: `record_${i}_${j}` })),
+      }),
+    );
+
+    const results = await Promise.allSettled(writes);
+    expect(results.every((r) => r.status === "fulfilled")).toBe(true);
+
+    const content = await readFile(dest, "utf8");
+    const parsed = JSON.parse(content);
+    expect(parsed).toHaveProperty("writerId");
+    expect(parsed).toHaveProperty("records");
+    expect(parsed.records).toHaveLength(50);
+
+    const files = await readdir(testDir);
+    const tmpFiles = files.filter((f) => f.endsWith(".tmp"));
+    expect(tmpFiles).toHaveLength(0);
   });
 
   // ─── 5. Incremental Chunking Verification ─────────────────────────────────

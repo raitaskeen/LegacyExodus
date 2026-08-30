@@ -1,4 +1,4 @@
-import { dirname, normalize, posix } from "node:path";
+import { dirname, posix } from "node:path";
 
 import type { FileArtifact } from "@contracts/discovery";
 
@@ -16,8 +16,14 @@ export interface ModuleResolutionOptions {
 
 export type KnownPathLookup = readonly FileArtifact[] | ReadonlySet<string>;
 
+/** Canonicalizes a repository file path or specifier to normalized POSIX format. */
+export function canonicalizePath(path: string): string {
+  return posix.normalize(path.replaceAll("\\", "/"));
+}
+
 export class ModuleResolver {
-  private readonly pathSetCache = new WeakMap<readonly FileArtifact[], ReadonlySet<string>>();
+  private readonly fileArtifactCache = new WeakMap<readonly FileArtifact[], ReadonlySet<string>>();
+  private readonly setCache = new WeakMap<ReadonlySet<string>, ReadonlySet<string>>();
 
   public constructor(private readonly options: ModuleResolutionOptions = {}) {}
 
@@ -27,50 +33,65 @@ export class ModuleResolver {
     files: KnownPathLookup,
   ): ResolvedImport {
     const knownPaths = this.getKnownPathSet(files);
+    const normalizedImporter = canonicalizePath(importerPath);
+    const rawNormalizedSpecifier = moduleSpecifier.replaceAll("\\", "/");
 
-    if (!moduleSpecifier.startsWith(".")) {
-      const aliased = this.resolveAlias(moduleSpecifier, knownPaths);
+    if (!rawNormalizedSpecifier.startsWith(".")) {
+      const aliased = this.resolveAlias(rawNormalizedSpecifier, knownPaths);
       if (aliased !== null) {
         return Object.freeze({ importerPath, moduleSpecifier, resolvedPath: aliased });
       }
       return Object.freeze({ importerPath, moduleSpecifier, resolvedPath: null });
     }
 
-    const basePath = posix.normalize(posix.join(dirname(importerPath).replaceAll("\\", "/"), moduleSpecifier));
+    const basePath = canonicalizePath(posix.join(dirname(normalizedImporter), rawNormalizedSpecifier));
     const candidates = candidatesFor(basePath);
-    const resolvedPath = candidates.find((candidate) => knownPaths.has(normalize(candidate).replaceAll("\\", "/"))) ?? null;
+    const resolvedPath = candidates.find((candidate) => knownPaths.has(candidate)) ?? null;
 
-    return Object.freeze({ importerPath, moduleSpecifier, resolvedPath });
+    return Object.freeze({
+      importerPath,
+      moduleSpecifier,
+      resolvedPath,
+    });
   }
 
   private getKnownPathSet(files: KnownPathLookup): ReadonlySet<string> {
-    if (files instanceof Set) {
-      return files;
+    if (Array.isArray(files)) {
+      const cached = this.fileArtifactCache.get(files);
+      if (cached !== undefined) {
+        return cached;
+      }
+      const pathSet = new Set(files.map((file) => canonicalizePath(file.path)));
+      this.fileArtifactCache.set(files, pathSet);
+      return pathSet;
     }
-    if (!Array.isArray(files)) {
-      return files as ReadonlySet<string>;
-    }
-    const cached = this.pathSetCache.get(files);
+
+    const setFiles = files as ReadonlySet<string>;
+    const cached = this.setCache.get(setFiles);
     if (cached !== undefined) {
       return cached;
     }
-    const pathSet = new Set(files.map((file) => file.path));
-    this.pathSetCache.set(files, pathSet);
-    return pathSet;
+    const normalizedSet = new Set<string>(Array.from(setFiles, (p) => canonicalizePath(p)));
+    this.setCache.set(setFiles, normalizedSet);
+    return normalizedSet;
   }
 
   private resolveAlias(moduleSpecifier: string, knownPaths: ReadonlySet<string>): string | null {
+    const normalizedSpecifier = moduleSpecifier.replaceAll("\\", "/");
+    const normalizedBaseUrl = canonicalizePath(this.options.baseUrl ?? "");
     const aliases = Object.entries(this.options.paths ?? {}).sort(([left], [right]) => left.localeCompare(right));
     for (const [pattern, targets] of aliases) {
-      const wildcard = pattern.indexOf("*");
+      const normalizedPattern = pattern.replaceAll("\\", "/");
+      const wildcard = normalizedPattern.indexOf("*");
       const match = wildcard < 0
-        ? pattern === moduleSpecifier ? "" : undefined
-        : moduleSpecifier.startsWith(pattern.slice(0, wildcard)) && moduleSpecifier.endsWith(pattern.slice(wildcard + 1))
-          ? moduleSpecifier.slice(wildcard, moduleSpecifier.length - pattern.slice(wildcard + 1).length)
+        ? normalizedPattern === normalizedSpecifier ? "" : undefined
+        : normalizedSpecifier.startsWith(normalizedPattern.slice(0, wildcard)) && normalizedSpecifier.endsWith(normalizedPattern.slice(wildcard + 1))
+          ? normalizedSpecifier.slice(wildcard, normalizedSpecifier.length - normalizedPattern.slice(wildcard + 1).length)
           : undefined;
       if (match === undefined) continue;
       for (const target of [...targets].sort()) {
-        const candidate = posix.normalize(posix.join(this.options.baseUrl ?? "", target.replace("*", match)));
+        const normalizedTarget = target.replaceAll("\\", "/");
+        const candidate = canonicalizePath(posix.join(normalizedBaseUrl, normalizedTarget.replace("*", match)));
         for (const resolved of candidatesFor(candidate)) {
           if (knownPaths.has(resolved)) return resolved;
         }
@@ -81,19 +102,20 @@ export class ModuleResolver {
 }
 
 function candidatesFor(basePath: string): readonly string[] {
+  const clean = canonicalizePath(basePath);
   return Object.freeze([
-    basePath,
-    `${basePath}.js`,
-    `${basePath}.jsx`,
-    `${basePath}.ts`,
-    `${basePath}.tsx`,
-    `${basePath}.mjs`,
-    `${basePath}.cjs`,
-    `${basePath}/index.js`,
-    `${basePath}/index.jsx`,
-    `${basePath}/index.ts`,
-    `${basePath}/index.tsx`,
-    `${basePath}/index.mjs`,
-    `${basePath}/index.cjs`,
+    clean,
+    `${clean}.js`,
+    `${clean}.jsx`,
+    `${clean}.ts`,
+    `${clean}.tsx`,
+    `${clean}.mjs`,
+    `${clean}.cjs`,
+    posix.join(clean, "index.js"),
+    posix.join(clean, "index.jsx"),
+    posix.join(clean, "index.ts"),
+    posix.join(clean, "index.tsx"),
+    posix.join(clean, "index.mjs"),
+    posix.join(clean, "index.cjs"),
   ]);
 }
