@@ -15,7 +15,7 @@
   <p>
     <img src="https://img.shields.io/badge/Runtime-Bun_v1.0+-f9f8f6?style=for-the-badge&logo=bun" alt="Bun">
     <img src="https://img.shields.io/badge/TypeScript-Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript Strict">
-    <img src="https://img.shields.io/badge/Tests-492_Passing_|_0_Regressions-success?style=for-the-badge" alt="492 Tests Passing">
+    <img src="https://img.shields.io/badge/Tests-613_Passing_|_0_Regressions-success?style=for-the-badge" alt="613 Tests Passing">
     <img src="https://img.shields.io/badge/Governance-10_/_10_Audits_Passed-success?style=for-the-badge" alt="10/10 Governance Passed">
     <img src="https://img.shields.io/badge/Status-Phase_3A_/_P2_Hardened-success?style=for-the-badge" alt="Phase 3A / P2 Hardened">
   </p>
