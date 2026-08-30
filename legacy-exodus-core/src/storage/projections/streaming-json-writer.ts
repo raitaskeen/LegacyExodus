@@ -143,12 +143,7 @@ export class StreamingJsonWriter {
       await this.writeToStream(payload, stream);
       stream.end();
       await finished(stream);
-      try {
-        await rename(temporaryPath, destinationPath);
-      } catch {
-        await copyFile(temporaryPath, destinationPath);
-        await unlink(temporaryPath);
-      }
+      await this.replaceFile(temporaryPath, destinationPath);
     } catch (error) {
       await new Promise<void>((resolve) => {
         if (stream.closed) {
@@ -164,6 +159,39 @@ export class StreamingJsonWriter {
         // Ignore unlink error if temporary file was not yet created or already unlinked
       }
       throw error;
+    }
+  }
+
+  private async replaceFile(sourcePath: string, targetPath: string): Promise<void> {
+    const maxRetries = 15;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        await rename(sourcePath, targetPath);
+        return;
+      } catch (err: unknown) {
+        const code = (err as { code?: string })?.code;
+        const isTransient = code === "EBUSY" || code === "EPERM" || code === "EACCES";
+        if (attempt === maxRetries - 1) {
+          try {
+            await copyFile(sourcePath, targetPath);
+            await unlink(sourcePath);
+            return;
+          } catch {
+            throw err;
+          }
+        }
+        if (isTransient) {
+          await new Promise((resolve) => setTimeout(resolve, (attempt + 1) * 10));
+          continue;
+        }
+        try {
+          await copyFile(sourcePath, targetPath);
+          await unlink(sourcePath);
+          return;
+        } catch {
+          await new Promise((resolve) => setTimeout(resolve, (attempt + 1) * 10));
+        }
+      }
     }
   }
 }
