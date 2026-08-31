@@ -16,7 +16,9 @@ export class DeterministicCallGraphBuilder {
     const references: SymbolReference[] = [];
 
     for (const ast of [...astResults].sort((left, right) => left.metadata.sourcePath.localeCompare(right.metadata.sourcePath))) {
-      this.visit(ast.root, ast, { callerName: "module", scope: createScope("scope:module"), receiverTypes: new Map() }, tablesByPath, importsByFile, targetByImportId, calls, references);
+      const initialContext = { callerName: "module", scope: createScope("scope:module"), receiverTypes: new Map() };
+      predeclareScopeBindings(ast.root, initialContext);
+      this.visit(ast.root, ast, initialContext, tablesByPath, importsByFile, targetByImportId, calls, references);
     }
 
     return Object.freeze({ calls: Object.freeze(calls), references: Object.freeze(references) });
@@ -34,6 +36,9 @@ export class DeterministicCallGraphBuilder {
   ): void {
     const table = tablesByPath.get(ast.metadata.sourcePath);
     const nextContext = childContext(node, context, table);
+    if (nextContext.scope !== context.scope) {
+      predeclareScopeBindings(node, nextContext);
+    }
     if (isCallable(node) || node.type === "CatchClause") recordParamReceiverTypes(node, nextContext);
     if (node.type === "VariableDeclarator") recordReceiverType(node, nextContext, table);
     if (node.type === "AssignmentExpression") recordAssignmentReceiverType(node, nextContext, table);
@@ -250,7 +255,8 @@ function recordAssignmentReceiverType(node: ASTNode, context: ResolutionContext,
   const boundNames = extractBoundNames(left);
   if (boundNames.length === 0) return;
 
-  if (boundNames.length === 1 && left?.type === "Identifier" && right?.type === "NewExpression") {
+  const operator = node.attributes.operator;
+  if (operator === "=" && boundNames.length === 1 && left?.type === "Identifier" && right?.type === "NewExpression") {
     const callee = right.children.find((child) => child.role === "callee");
     const className = callee === undefined ? undefined : identifier(callee);
     if (className !== undefined) {
@@ -266,6 +272,17 @@ function recordAssignmentReceiverType(node: ASTNode, context: ResolutionContext,
   for (const name of boundNames) {
     const targetScope = targetScopeForAssignment(name, context.scope, table);
     (context.receiverTypes as Map<string, string | null>).set(receiverKey(targetScope, name), null);
+  }
+}
+
+function predeclareScopeBindings(node: ASTNode, context: ResolutionContext): void {
+  for (const child of node.children) {
+    if (child.type === "FunctionDeclaration" || child.type === "ClassDeclaration") {
+      const declName = nodeName(child);
+      if (declName !== undefined) {
+        (context.receiverTypes as Map<string, string | null>).set(receiverKey(context.scope, declName), null);
+      }
+    }
   }
 }
 
