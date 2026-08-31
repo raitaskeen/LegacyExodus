@@ -70,8 +70,8 @@ export async function runCommand(
   });
 }
 
-export async function executeVerification(): Promise<boolean> {
-  const capabilities = detectTerminalCapabilities();
+export async function executeVerification(options: { readonly theme?: string } = {}): Promise<boolean> {
+  const capabilities = detectTerminalCapabilities({ theme: options.theme });
   const presenter = new VerificationPresenter(capabilities);
   const totalStart = performance.now();
   const gates: VerificationGateResult[] = [];
@@ -88,7 +88,7 @@ export async function executeVerification(): Promise<boolean> {
 
   // Gate 2: Unit & Integration Test Suite
   const tests = await runCommand("bun", ["run", "test"]);
-  const parsedTests = parseBunTestOutput(tests.stdout || tests.stderr);
+  const parsedTests = parseBunTestOutput(`${tests.stdout}\n${tests.stderr}`);
   const testDetails = tests.code === 0
     ? (parsedTests.testsPassed > 0
       ? `All ${parsedTests.testsPassed} tests passing across ${parsedTests.suitesTotal} files`
@@ -134,8 +134,9 @@ export function registerVerifyCommand(program: Command): void {
   program
     .command("verify")
     .description("Run complete repository verification (Typecheck, Tests, Benchmark Audit, Git Hygiene)")
-    .action(async (): Promise<void> => {
-      const passed = await executeVerification();
+    .option("--theme <name>", "Visual theme (classic, aurora, mono)")
+    .action(async (options: { readonly theme?: string }): Promise<void> => {
+      const passed = await executeVerification({ theme: options?.theme });
       if (!passed) {
         process.exitCode = 1;
       }

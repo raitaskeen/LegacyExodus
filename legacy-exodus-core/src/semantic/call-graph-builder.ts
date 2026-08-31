@@ -34,19 +34,27 @@ export class DeterministicCallGraphBuilder {
   ): void {
     const table = tablesByPath.get(ast.metadata.sourcePath);
     const nextContext = childContext(node, context, table);
+    if (isCallable(node) || node.type === "CatchClause") recordParamReceiverTypes(node, nextContext);
     if (node.type === "VariableDeclarator") recordReceiverType(node, nextContext, table);
+    if (node.type === "AssignmentExpression") recordAssignmentReceiverType(node, nextContext, table);
+    if (node.type === "FunctionDeclaration" || node.type === "ClassDeclaration") {
+      const declName = nodeName(node);
+      if (declName !== undefined) {
+        (nextContext.receiverTypes as Map<string, string | null>).set(receiverKey(context.scope, declName), null);
+      }
+    }
     if (node.type === "CallExpression" || node.type === "NewExpression") {
       const calleeName = callName(node);
       if (calleeName !== undefined) {
         const imported = importsByFile.get(ast.metadata.sourcePath)?.find((symbol) => symbol.name === calleeName);
         const targetSymbolId = imported === undefined
-          ? resolveLocalCall(tablesByPath.get(ast.metadata.sourcePath), calleeName, context)
+          ? resolveLocalCall(tablesByPath.get(ast.metadata.sourcePath), calleeName, nextContext)
           : targetByImportId.get(imported.id);
-        const id = hash(`${ast.metadata.sourcePath}:${context.callerName}:${calleeName}:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`);
+        const id = hash(`${ast.metadata.sourcePath}:${nextContext.callerName}:${calleeName}:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`);
         const resolutionState = targetSymbolId === undefined ? "UNRESOLVED" as const : "RESOLVED" as const;
         const reference: SymbolReference = { id: hash(`reference:${id}`), filePath: ast.metadata.sourcePath, name: calleeName, kind: "call", resolutionState, ...(targetSymbolId === undefined ? {} : { resolvedSymbolId: targetSymbolId }) };
         references.push(reference);
-        calls.push({ id, sourceFilePath: ast.metadata.sourcePath, callerName: context.callerName, calleeName, resolutionState, ...(targetSymbolId === undefined ? {} : { targetSymbolId }), ...(node.location === undefined ? {} : { location: node.location.start }) });
+        calls.push({ id, sourceFilePath: ast.metadata.sourcePath, callerName: nextContext.callerName, calleeName, resolutionState, ...(targetSymbolId === undefined ? {} : { targetSymbolId }), ...(node.location === undefined ? {} : { location: node.location.start }) });
       }
     }
 
@@ -65,7 +73,7 @@ interface ResolutionContext {
   readonly callerName: string;
   readonly scope: ScopeFrame;
   readonly containerId?: string;
-  readonly receiverTypes: ReadonlyMap<string, string>;
+  readonly receiverTypes: ReadonlyMap<string, string | null>;
 }
 
 function createScope(id: string, parent?: ScopeFrame): ScopeFrame {
@@ -76,12 +84,17 @@ function childContext(node: ASTNode, context: ResolutionContext, table: SymbolTa
   let scope = context.scope;
   let callerName = context.callerName;
   let containerId = context.containerId;
-  if (node.type === "BlockStatement" || isCallable(node)) scope = createScope(createLexicalScopeId(node.type, node.location), context.scope);
+  if (node.type === "BlockStatement" || isCallable(node) || node.type === "CatchClause") {
+    scope = createScope(createLexicalScopeId(node.type, node.location), context.scope);
+  }
   if (isCallable(node)) callerName = nodeName(node) ?? callerName;
   if (node.type === "ClassDeclaration") containerId = findClassSymbolId(node, context.scope, table);
   if (node.type === "ClassMethod" || node.type === "ClassPrivateMethod") {
     // Class members are always visited directly below their ClassDeclaration.
     containerId = context.containerId;
+  } else if (node.type === "FunctionDeclaration" || node.type === "FunctionExpression" || node.type === "ObjectMethod") {
+    // Regular functions and object methods introduce dynamic / non-class this bindings.
+    containerId = undefined;
   }
   return { callerName, scope, ...(containerId === undefined ? {} : { containerId }), receiverTypes: context.receiverTypes };
 }
@@ -94,7 +107,7 @@ function findClassSymbolId(node: ASTNode, scope: ScopeFrame, table: SymbolTable 
 }
 
 function isCallable(node: ASTNode): boolean {
-  return ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ObjectMethod"].includes(node.type);
+  return ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ClassPrivateMethod", "ObjectMethod"].includes(node.type);
 }
 
 function nodeName(node: ASTNode): string | undefined {
@@ -126,21 +139,143 @@ function memberName(node: ASTNode): string | undefined {
 }
 
 function identifier(node: ASTNode | undefined): string | undefined {
-  const value = node?.attributes.name;
-  return typeof value === "string" ? value : undefined;
+  if (node === undefined) return undefined;
+  const value = node.attributes.name;
+  if (typeof value === "string") return value;
+  const idChild = node.children.find((child) => child.role === "id" || child.role === "key");
+  if (idChild !== undefined) {
+    const childVal = idChild.attributes.name;
+    if (typeof childVal === "string") return childVal;
+  }
+  return undefined;
+}
+
+function extractBoundNames(node: ASTNode | undefined): string[] {
+  if (node === undefined) return [];
+  if (node.type === "Identifier") {
+    const name = identifier(node);
+    return name === undefined ? [] : [name];
+  }
+  if (node.type === "AssignmentPattern") {
+    const left = node.children.find((child) => child.role === "left");
+    return extractBoundNames(left);
+  }
+  if (node.type === "RestElement") {
+    const argument = node.children.find((child) => child.role === "argument");
+    return extractBoundNames(argument);
+  }
+  if (node.type === "ObjectPattern") {
+    const names: string[] = [];
+    for (const child of node.children) {
+      if (child.type === "ObjectProperty") {
+        const val = child.children.find((c) => c.role === "value") ?? child.children.find((c) => c.role === "key");
+        names.push(...extractBoundNames(val));
+      } else if (child.type === "RestElement") {
+        names.push(...extractBoundNames(child));
+      }
+    }
+    return names;
+  }
+  if (node.type === "ArrayPattern") {
+    const names: string[] = [];
+    for (const child of node.children) {
+      names.push(...extractBoundNames(child));
+    }
+    return names;
+  }
+  return [];
+}
+
+function targetScopeForDeclaration(node: ASTNode, name: string, scope: ScopeFrame, table: SymbolTable | undefined): ScopeFrame {
+  if (table !== undefined) {
+    const symbol = table.symbols.find(
+      (s) => s.name === name && (
+        (node.location !== undefined && s.location !== undefined &&
+         s.location.start.line === node.location.start.line &&
+         s.location.start.column === node.location.start.column) ||
+        (s.scopeId === scope.id)
+      ),
+    );
+    if (symbol !== undefined && symbol.declarationKind === "var") {
+      for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
+        if (current.id === symbol.scopeId) {
+          return current;
+        }
+      }
+    }
+  }
+  return scope;
 }
 
 function recordReceiverType(node: ASTNode, context: ResolutionContext, table: SymbolTable | undefined): void {
   const binding = node.children.find((child) => child.role === "id");
   const initializer = node.children.find((child) => child.role === "init");
-  const bindingName = identifier(binding);
-  if (bindingName === undefined || initializer?.type !== "NewExpression") return;
-  const callee = initializer.children.find((child) => child.role === "callee");
-  const className = callee === undefined ? undefined : identifier(callee);
-  if (className === undefined) return;
-  const candidates = table?.symbols.filter((symbol) => symbol.kind === "class" && symbol.name === className && isInScope(symbol, context.scope)) ?? [];
-  if (candidates.length !== 1 || candidates[0] === undefined) return;
-  (context.receiverTypes as Map<string, string>).set(receiverKey(context.scope, bindingName), candidates[0].id);
+  const boundNames = extractBoundNames(binding);
+  if (boundNames.length === 0) return;
+
+  if (boundNames.length === 1 && binding?.type === "Identifier" && initializer?.type === "NewExpression") {
+    const callee = initializer.children.find((child) => child.role === "callee");
+    const className = callee === undefined ? undefined : identifier(callee);
+    if (className !== undefined) {
+      const candidates = table?.symbols.filter((symbol) => symbol.kind === "class" && symbol.name === className && isInScope(symbol, context.scope)) ?? [];
+      if (candidates.length === 1 && candidates[0] !== undefined) {
+        const targetScope = targetScopeForDeclaration(node, boundNames[0]!, context.scope, table);
+        (context.receiverTypes as Map<string, string | null>).set(receiverKey(targetScope, boundNames[0]!), candidates[0].id);
+        return;
+      }
+    }
+  }
+
+  for (const name of boundNames) {
+    const targetScope = targetScopeForDeclaration(node, name, context.scope, table);
+    (context.receiverTypes as Map<string, string | null>).set(receiverKey(targetScope, name), null);
+  }
+}
+
+function targetScopeForAssignment(name: string, scope: ScopeFrame, table: SymbolTable | undefined): ScopeFrame {
+  if (table !== undefined) {
+    for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
+      const symbol = table.symbols.find((s) => s.name === name && s.scopeId === current?.id);
+      if (symbol !== undefined) {
+        return current;
+      }
+    }
+  }
+  return scope;
+}
+
+function recordAssignmentReceiverType(node: ASTNode, context: ResolutionContext, table: SymbolTable | undefined): void {
+  const left = node.children.find((child) => child.role === "left");
+  const right = node.children.find((child) => child.role === "right");
+  const boundNames = extractBoundNames(left);
+  if (boundNames.length === 0) return;
+
+  if (boundNames.length === 1 && left?.type === "Identifier" && right?.type === "NewExpression") {
+    const callee = right.children.find((child) => child.role === "callee");
+    const className = callee === undefined ? undefined : identifier(callee);
+    if (className !== undefined) {
+      const candidates = table?.symbols.filter((symbol) => symbol.kind === "class" && symbol.name === className && isInScope(symbol, context.scope)) ?? [];
+      if (candidates.length === 1 && candidates[0] !== undefined) {
+        const targetScope = targetScopeForAssignment(boundNames[0]!, context.scope, table);
+        (context.receiverTypes as Map<string, string | null>).set(receiverKey(targetScope, boundNames[0]!), candidates[0].id);
+        return;
+      }
+    }
+  }
+
+  for (const name of boundNames) {
+    const targetScope = targetScopeForAssignment(name, context.scope, table);
+    (context.receiverTypes as Map<string, string | null>).set(receiverKey(targetScope, name), null);
+  }
+}
+
+function recordParamReceiverTypes(node: ASTNode, context: ResolutionContext): void {
+  for (const child of node.children.filter((c) => c.role === "param" || c.role === "params")) {
+    const paramNames = extractBoundNames(child);
+    for (const name of paramNames) {
+      (context.receiverTypes as Map<string, string | null>).set(receiverKey(context.scope, name), null);
+    }
+  }
 }
 
 function resolveLocalCall(table: SymbolTable | undefined, name: string, context: ResolutionContext): string | undefined {
@@ -169,11 +304,12 @@ function resolveLocalCall(table: SymbolTable | undefined, name: string, context:
   }
 
   // 3. Prototypal / contextual this receiver (e.g. this.defaultConfiguration inside application.js, this.set inside response.js)
-  if (receiver === "this") {
+  if (receiver === "this" && context.containerId === undefined) {
     const candidates = table.symbols.filter(
       (symbol) => (symbol.kind === "method" || symbol.kind === "function") &&
         symbol.name === methodName &&
-        symbol.containerName !== undefined,
+        symbol.containerName !== undefined &&
+        symbol.containerId === undefined,
     );
     if (candidates.length === 1) return candidates[0]?.id;
   }
@@ -195,10 +331,12 @@ function isInScope(symbol: CodeSymbol, scope: ScopeFrame): boolean {
   return false;
 }
 
-function receiverType(receiverTypes: ReadonlyMap<string, string>, scope: ScopeFrame, name: string): string | undefined {
+function receiverType(receiverTypes: ReadonlyMap<string, string | null>, scope: ScopeFrame, name: string): string | undefined {
   for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
-    const classId = receiverTypes.get(receiverKey(current, name));
-    if (classId !== undefined) return classId;
+    const entry = receiverTypes.get(receiverKey(current, name));
+    if (entry !== undefined) {
+      return entry === null ? undefined : entry;
+    }
   }
   return undefined;
 }

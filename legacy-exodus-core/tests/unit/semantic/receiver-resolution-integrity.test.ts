@@ -150,6 +150,128 @@ describe("P1 Task 9: Semantic Receiver Resolution Integrity & Anti-Hallucination
       expect(innerAppUseCall?.targetSymbolId).toBeUndefined();
     });
 
+    it("Case G2: prevents outer class instance receiver from leaking into shadowed variable scope", async () => {
+      const source = `
+        class Service {
+          start() {}
+        }
+        const service = new Service();
+        function wrapper() {
+          const service = getOther();
+          service.start();
+        }
+        service.start();
+      `;
+      const { analysis, symbolTable } = await analyze(source);
+      const startSymbol = symbolTable.symbols.find((s) => s.kind === "method" && s.name === "start" && s.containerName === "Service");
+      const innerCall = analysis.calls.find((c) => c.callerName === "wrapper" && c.calleeName === "service.start");
+      const outerCall = analysis.calls.find((c) => c.callerName === "module" && c.calleeName === "service.start");
+
+      expect(startSymbol).toBeDefined();
+      expect(outerCall?.resolutionState).toBe("RESOLVED");
+      expect(outerCall?.targetSymbolId).toBe(startSymbol?.id);
+      expect(innerCall?.resolutionState).toBe("UNRESOLVED");
+      expect(innerCall?.targetSymbolId).toBeUndefined();
+    });
+
+    it("Case G3: prevents outer class instance receiver from leaking into function parameter scope", async () => {
+      const source = `
+        class Service {
+          start() {}
+        }
+        const service = new Service();
+        function wrapper(service) {
+          service.start();
+        }
+      `;
+      const { analysis } = await analyze(source);
+      const paramCall = analysis.calls.find((c) => c.callerName === "wrapper" && c.calleeName === "service.start");
+
+      expect(paramCall?.resolutionState).toBe("UNRESOLVED");
+      expect(paramCall?.targetSymbolId).toBeUndefined();
+    });
+
+    it("Case G4: prevents outer class instance receiver from leaking into catch parameter scope", async () => {
+      const source = `
+        class Service {
+          start() {}
+        }
+        const service = new Service();
+        function wrapper() {
+          try {} catch (service) {
+            service.start();
+          }
+        }
+      `;
+      const { analysis } = await analyze(source);
+      const catchCall = analysis.calls.find((c) => c.callerName === "wrapper" && c.calleeName === "service.start");
+
+      expect(catchCall?.resolutionState).toBe("UNRESOLVED");
+      expect(catchCall?.targetSymbolId).toBeUndefined();
+    });
+
+    it("Case G5: isolates this context in nested regular functions while preserving arrow function lexical this", async () => {
+      const source = `
+        class Controller {
+          handle() {
+            const arrow = () => {
+              this.validate();
+            };
+            function regular() {
+              this.validate();
+            }
+            this.validate();
+          }
+          validate() {}
+        }
+      `;
+      const { analysis, symbolTable } = await analyze(source);
+      const validateSymbol = symbolTable.symbols.find((s) => s.kind === "method" && s.name === "validate" && s.containerName === "Controller");
+      const calls = analysis.calls.filter((c) => c.calleeName === "this.validate");
+
+      expect(validateSymbol).toBeDefined();
+      expect(calls.length).toBe(3);
+
+      const arrowCall = calls.find((c) => c.callerName === "arrow" || (c.callerName === "handle" && c.location?.line === 5));
+      const regularCall = calls.find((c) => c.callerName === "regular");
+      const handleCall = calls.find((c) => c.callerName === "handle" && c.location?.line === 10);
+
+      expect(arrowCall?.resolutionState).toBe("RESOLVED");
+      expect(arrowCall?.targetSymbolId).toBe(validateSymbol?.id);
+      expect(regularCall?.resolutionState).toBe("UNRESOLVED");
+      expect(regularCall?.targetSymbolId).toBeUndefined();
+      expect(handleCall?.resolutionState).toBe("RESOLVED");
+      expect(handleCall?.targetSymbolId).toBe(validateSymbol?.id);
+    });
+
+    it("Case G6: distinguishes same-name methods across distinct class instances without cross-target collision", async () => {
+      const source = `
+        class ServiceA {
+          execute() { return "A"; }
+        }
+        class ServiceB {
+          execute() { return "B"; }
+        }
+        const a = new ServiceA();
+        const b = new ServiceB();
+        a.execute();
+        b.execute();
+      `;
+      const { analysis, symbolTable } = await analyze(source);
+      const methodA = symbolTable.symbols.find((s) => s.kind === "method" && s.name === "execute" && s.containerName === "ServiceA");
+      const methodB = symbolTable.symbols.find((s) => s.kind === "method" && s.name === "execute" && s.containerName === "ServiceB");
+      const callA = analysis.calls.find((c) => c.calleeName === "a.execute");
+      const callB = analysis.calls.find((c) => c.calleeName === "b.execute");
+
+      expect(methodA).toBeDefined();
+      expect(methodB).toBeDefined();
+      expect(callA?.resolutionState).toBe("RESOLVED");
+      expect(callA?.targetSymbolId).toBe(methodA?.id);
+      expect(callB?.resolutionState).toBe("RESOLVED");
+      expect(callB?.targetSymbolId).toBe(methodB?.id);
+      expect(callA?.targetSymbolId).not.toBe(callB?.targetSymbolId);
+    });
+
     it("Case H: leaves ambiguous receivers UNRESOLVED when multiple containers declare the same method", async () => {
       const source = `
         const proto1 = {};
@@ -177,6 +299,117 @@ describe("P1 Task 9: Semantic Receiver Resolution Integrity & Anti-Hallucination
 
       expect(calls).not.toContain("obj[name]");
       expect(analysis.calls.find((c) => c.calleeName === "getName")?.resolutionState).toBe("UNRESOLVED");
+    });
+
+    it("Case J1: clears receiver provenance upon dynamic variable reassignment", async () => {
+      const source = `
+        class Service {
+          start() {}
+        }
+        let service = new Service();
+        service.start();
+        service = getOther();
+        service.start();
+      `;
+      const { analysis, symbolTable } = await analyze(source);
+      const startSymbol = symbolTable.symbols.find((s) => s.kind === "method" && s.name === "start" && s.containerName === "Service");
+      const calls = analysis.calls.filter((c) => c.calleeName === "service.start");
+
+      expect(startSymbol).toBeDefined();
+      expect(calls.length).toBe(2);
+      expect(calls[0]?.resolutionState).toBe("RESOLVED");
+      expect(calls[0]?.targetSymbolId).toBe(startSymbol?.id);
+      expect(calls[1]?.resolutionState).toBe("UNRESOLVED");
+      expect(calls[1]?.targetSymbolId).toBeUndefined();
+    });
+
+    it("Case J2: clears receiver provenance upon destructuring reassignment", async () => {
+      const source = `
+        class Service {
+          start() {}
+        }
+        let service = new Service();
+        service.start();
+        ({ service } = getOther());
+        service.start();
+      `;
+      const { analysis, symbolTable } = await analyze(source);
+      const startSymbol = symbolTable.symbols.find((s) => s.kind === "method" && s.name === "start" && s.containerName === "Service");
+      const calls = analysis.calls.filter((c) => c.calleeName === "service.start");
+
+      expect(startSymbol).toBeDefined();
+      expect(calls.length).toBe(2);
+      expect(calls[0]?.resolutionState).toBe("RESOLVED");
+      expect(calls[0]?.targetSymbolId).toBe(startSymbol?.id);
+      expect(calls[1]?.resolutionState).toBe("UNRESOLVED");
+      expect(calls[1]?.targetSymbolId).toBeUndefined();
+    });
+
+    it("Case K1: named function declaration shadows outer receiver in applicable scope", async () => {
+      const source = `
+        class Service {
+          start() {}
+        }
+        const service = new Service();
+        function wrapper() {
+          function service() {}
+          service.start();
+        }
+        service.start();
+      `;
+      const { analysis, symbolTable } = await analyze(source);
+      const startSymbol = symbolTable.symbols.find((s) => s.kind === "method" && s.name === "start" && s.containerName === "Service");
+      const wrapperCall = analysis.calls.find((c) => c.callerName === "wrapper" && c.calleeName === "service.start");
+      const outerCall = analysis.calls.find((c) => c.callerName === "module" && c.calleeName === "service.start");
+
+      expect(wrapperCall?.resolutionState).toBe("UNRESOLVED");
+      expect(wrapperCall?.targetSymbolId).toBeUndefined();
+      expect(outerCall?.resolutionState).toBe("RESOLVED");
+      expect(outerCall?.targetSymbolId).toBe(startSymbol?.id);
+    });
+
+    it("Case K2: named class declaration shadows outer receiver in applicable scope", async () => {
+      const source = `
+        class Service {
+          start() {}
+        }
+        const service = new Service();
+        function wrapper() {
+          class service {}
+          service.start();
+        }
+        service.start();
+      `;
+      const { analysis, symbolTable } = await analyze(source);
+      const startSymbol = symbolTable.symbols.find((s) => s.kind === "method" && s.name === "start" && s.containerName === "Service");
+      const wrapperCall = analysis.calls.find((c) => c.callerName === "wrapper" && c.calleeName === "service.start");
+      const outerCall = analysis.calls.find((c) => c.callerName === "module" && c.calleeName === "service.start");
+
+      expect(wrapperCall?.resolutionState).toBe("UNRESOLVED");
+      expect(wrapperCall?.targetSymbolId).toBeUndefined();
+      expect(outerCall?.resolutionState).toBe("RESOLVED");
+      expect(outerCall?.targetSymbolId).toBe(startSymbol?.id);
+    });
+
+    it("Case L: class private method parameter shadows outer receiver variable", async () => {
+      const source = `
+        class Service {
+          start() {}
+        }
+        const service = new Service();
+        class Worker {
+          #run(service) {
+            service.start();
+          }
+        }
+      `;
+      const { analysis } = await analyze(source);
+      const privateCall = analysis.calls.find((c) => c.calleeName === "service.start");
+
+      expect(privateCall).toBeDefined();
+      expect(privateCall?.callerName).toBe("run");
+      expect(privateCall?.resolutionState).toBe("UNRESOLVED");
+      expect(privateCall?.targetSymbolId).toBeUndefined();
     });
   });
 

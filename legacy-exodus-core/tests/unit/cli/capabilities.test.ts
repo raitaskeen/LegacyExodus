@@ -51,4 +51,44 @@ describe("CLI Capabilities Determinism & Environment Isolation", () => {
       else delete process.env.CI;
     }
   });
+
+  it("extracts theme from --theme <name> and --theme=<name> CLI arguments with precedence over env var", () => {
+    const originalTheme = process.env.LEGACYEXODUS_THEME;
+    const originalArgv = [...process.argv];
+
+    try {
+      process.env.LEGACYEXODUS_THEME = "mono";
+
+      process.argv = ["bun", "src/cli/index.ts", "--theme", "aurora"];
+      expect(detectTerminalCapabilities().theme).toBe("aurora");
+
+      process.argv = ["bun", "src/cli/index.ts", "--theme=aurora"];
+      expect(detectTerminalCapabilities().theme).toBe("aurora");
+
+      process.argv = ["bun", "src/cli/index.ts", "--theme=invalid"];
+      expect(detectTerminalCapabilities().theme).toBe("classic");
+    } finally {
+      if (originalTheme !== undefined) process.env.LEGACYEXODUS_THEME = originalTheme;
+      else delete process.env.LEGACYEXODUS_THEME;
+      process.argv = originalArgv;
+    }
+  });
+
+  it("respects LEGACYEXODUS_THEME environment variable with classic default", () => {
+    const originalTheme = process.env.LEGACYEXODUS_THEME;
+    const originalArgv = [...process.argv];
+
+    try {
+      process.argv = ["bun", "src/cli/index.ts"];
+      process.env.LEGACYEXODUS_THEME = "mono";
+      expect(detectTerminalCapabilities().theme).toBe("mono");
+
+      delete process.env.LEGACYEXODUS_THEME;
+      expect(detectTerminalCapabilities().theme).toBe("classic");
+    } finally {
+      if (originalTheme !== undefined) process.env.LEGACYEXODUS_THEME = originalTheme;
+      else delete process.env.LEGACYEXODUS_THEME;
+      process.argv = originalArgv;
+    }
+  });
 });

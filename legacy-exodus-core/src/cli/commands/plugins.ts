@@ -43,14 +43,15 @@ export function registerPluginsCommand(
     .command("list")
     .description("List registered plugins")
     .option("--json", "Emit machine-readable JSON")
-    .action(async (options: { readonly json?: boolean }): Promise<void> => {
+    .option("--theme <name>", "Visual theme (classic, aurora, mono)")
+    .action(async (options: { readonly json?: boolean; readonly theme?: string }): Promise<void> => {
       const report = await getPluginListReport(createEngine);
       if (options.json) {
         process.stdout.write(`${formatJsonOutput(report)}\n`);
         return;
       }
 
-      const capabilities = detectTerminalCapabilities();
+      const capabilities = detectTerminalCapabilities({ json: options.json, theme: options.theme });
       const presenter = new SummaryPresenter(capabilities);
       process.stdout.write(`${presenter.formatPlugins(report)}\n`);
     });

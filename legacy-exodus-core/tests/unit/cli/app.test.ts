@@ -13,6 +13,7 @@ describe("CLI application", () => {
       "init",
       "plugins",
       "analyze",
+      "test",
       "verify",
     ]);
   });

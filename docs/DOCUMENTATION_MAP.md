@@ -66,8 +66,8 @@ The LegacyExodus documentation system is designed as a layered knowledge archite
 * **[docs/development/testing-strategy.md](development/testing-strategy.md):** Testing pyramid and failure-first invariant testing.
 * **[docs/development/testing/unit-testing.md](development/testing/unit-testing.md):** Writing and running isolated subsystem unit tests.
 * **[docs/development/testing/integration-testing.md](development/testing/integration-testing.md):** End-to-end multi-stage pipeline tests.
-* **[docs/development/cli/commands.md](development/cli/commands.md):** CLI command reference (`status`, `init`, `analyze`, `plugins`).
-* **[docs/development/cli/configuration.md](development/cli/configuration.md):** Path normalization and runtime options.
+* **[docs/development/cli/commands.md](development/cli/commands.md):** CLI command reference (`status`, `init`, `analyze`, `test`, `verify`, `plugins`).
+* **[docs/development/cli/configuration.md](development/cli/configuration.md):** Themes, output modes, and runtime options.
 * **[docs/development/cli/troubleshooting.md](development/cli/troubleshooting.md):** Common errors, parse recovery, and memory scaling.
 
 #### 4. Architecture Specifications (`docs/architecture/` — Canonical & Populated)
@@ -97,7 +97,7 @@ The LegacyExodus documentation system is designed as a layered knowledge archite
 * **[docs/implementation/parser-strategy.md](implementation/parser-strategy.md):** Babel parser adapter and error recovery.
 * **[docs/implementation/storage-layer.md](implementation/storage-layer.md):** Storage manager, memory adapter, and streaming JSON projections.
 * **[docs/implementation/knowledge-graph.md](implementation/knowledge-graph.md):** Deterministic knowledge graph builder and edge hashing.
-* **[docs/implementation/cli-design.md](implementation/cli-design.md):** Commander.js dispatch and error boundaries.
+* **[docs/implementation/cli-design.md](implementation/cli-design.md):** CLI presentation layer, themes, tables, and error boundaries.
 
 #### 7. Pipeline & Security (`docs/pipeline/` & `docs/security/`)
 * **[docs/pipeline/pipeline-overview.md](pipeline/pipeline-overview.md):** 4-stage modernization pipeline overview.
@@ -139,5 +139,5 @@ The LegacyExodus documentation system is designed as a layered knowledge archite
 ## 5. Maintenance & Ownership Rules
 
 1. **Reality Over Aspiration:** Never document planned features as implemented.
-2. **Single Source of Truth:** High-level metrics must point to verified test and benchmark counts (e.g. 613 tests / 82 files / 4,328 assertions).
+2. **Single Source of Truth:** High-level metrics must point to verified test and benchmark counts (e.g. 660 tests / 87 files / 7,281 assertions).
 3. **No Drift:** Whenever a milestone is completed, update `CHANGELOG.md`, `ROADMAP.md`, and `README.md` concurrently.

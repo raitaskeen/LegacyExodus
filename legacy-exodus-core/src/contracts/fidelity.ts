@@ -45,14 +45,14 @@ export interface GroundTruthFact<T = Record<string, unknown>> {
 /** Specific ground truth payload shapes */
 export interface GroundTruthFile {
   readonly path: string;
-  readonly language: string;
+  readonly language?: string;
   readonly fileKind?: string;
 }
 
 export interface GroundTruthDependency {
   readonly name: string;
-  readonly version: string;
-  readonly kind: "production" | "development";
+  readonly version?: string;
+  readonly kind?: "production" | "development";
 }
 
 export interface GroundTruthFramework {
@@ -62,8 +62,8 @@ export interface GroundTruthFramework {
 export interface GroundTruthSymbol {
   readonly filePath: string;
   readonly name: string;
-  readonly kind: "function" | "class" | "method" | "variable" | "import" | "export" | "type" | "unknown";
-  readonly exported: boolean;
+  readonly kind?: "function" | "class" | "method" | "variable" | "import" | "export" | "type" | "unknown";
+  readonly exported?: boolean;
   readonly defaultExport?: boolean;
 }
 
@@ -71,7 +71,7 @@ export interface GroundTruthImport {
   readonly filePath: string;
   readonly moduleSpecifier: string;
   readonly importedSymbolName?: string;
-  readonly localName: string;
+  readonly localName?: string;
 }
 
 export interface GroundTruthExport {
@@ -84,7 +84,7 @@ export interface GroundTruthExport {
 export interface GroundTruthDependencyEdge {
   readonly sourceFilePath: string;
   readonly targetFilePath: string;
-  readonly moduleSpecifier: string;
+  readonly moduleSpecifier?: string;
 }
 
 export interface GroundTruthCall {

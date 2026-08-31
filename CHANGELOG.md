@@ -16,6 +16,18 @@ and this project adheres to deterministic semantic contracts and verifiable engi
 
 ---
 
+## [0.7.0] - CLI Foundation, Command Discovery & Verification Hardening
+
+- **Unified Visual Theme Engine:** Implemented 3 curated terminal themes (`classic`, `aurora`, `mono`) via `ThemeEngine` with semantic color roles (`brand`, `heading`, `text`, `muted`, `border`, `success`, `warning`, `error`, `info`, `active`), controlled by `--theme <name>` flag and `LEGACYEXODUS_THEME` environment variable.
+- **Workflow-Structured Command Discovery (`HelpPresenter`):** Built structured root and subcommand help presenters grouping commands into logical workflows (`Workspace & Runtime`, `Repository Analysis`, `Quality & Verification`, `Plugins & Extensions`), documenting safety dispositions (`[read-only]` vs `[mutates workspace]`), option flags, and real-world examples.
+- **Subsystem Test Explorer (`legacy-exodus test`):** Introduced dedicated test exploration and runner command with dynamic 12-domain taxonomy discovery (`test --list`), domain filtering (`test parser`, `test symbols`, `test flow`, etc.), `-v, --verbose` mode for detailed execution logs, `--bail` support, and pure `--json` output.
+- **Multi-Gate Repository Verification (`legacy-exodus verify`):** Built unified 4-gate verification dashboard evaluating Static Typecheck, Unit/Integration Test Suite, Benchmark Governance Audit, and Working Tree Git Hygiene in a single command.
+- **Narrow Terminal Viewport Safety (F-024):** Added terminal-width-aware column budgeting and ANSI-safe truncation in `TableRenderer` and `LayoutRenderer`, preventing horizontal overflow down to 24 columns without corrupting ANSI escape sequences.
+- **Clean Machine-Readable Output Invariant:** Enforced strict separation between interactive TTY rendering, deterministic plain text CI output (`NO_COLOR=1` / non-TTY), and raw JSON payloads (`--json`).
+- **Empirical Baseline Scaling:** Expanded full test suite to 660/660 passing tests across 87 test files (7,281 assertions, 0 failures), maintaining 10/10 benchmark governance checks and 3-tier bit-for-bit determinism.
+
+---
+
 ## [0.6.0] - Core Foundation, Concurrency Hardening & Engine Governance
 
 - **Idempotent Concurrent Runtime Shutdown & Draining (F-004 / F-006):** Hardened `LegacyExodusEngine.shutdown()` and `ApplicationRuntime.shutdown()` with state machine transitions (`stopping` -> `stopped`), preventing concurrent re-entry during active execution draining. `Orchestrator` tracks and drains in-flight analysis promises with a timeout, and `FileDiscoveryProjectionAdapter` drains active directory projection queues before database handles close.
