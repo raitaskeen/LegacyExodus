@@ -298,7 +298,7 @@ function recordParamReceiverTypes(node: ASTNode, context: ResolutionContext): vo
 function resolveLocalCall(table: SymbolTable | undefined, name: string, context: ResolutionContext): string | undefined {
   if (table === undefined) return undefined;
   const pieces = name.split(".");
-  if (pieces.length === 1) return nearestScoped(table.symbols, name, context.scope)?.id;
+  if (pieces.length === 1) return nearestScoped(table.symbols, name, context)?.id;
   if (pieces.length !== 2) return undefined;
   const [receiver, methodName] = pieces;
   if (receiver === undefined || methodName === undefined) return undefined;
@@ -334,11 +334,15 @@ function resolveLocalCall(table: SymbolTable | undefined, name: string, context:
   return undefined;
 }
 
-function nearestScoped(symbols: readonly CodeSymbol[], name: string, scope: ScopeFrame): CodeSymbol | undefined {
-  for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
-    const candidates = symbols.filter((symbol) => symbol.name === name && (symbol.kind === "function" || symbol.kind === "class") && symbol.scopeId === current.id);
-    if (candidates.length === 1) return candidates[0];
-    if (candidates.length > 1) return undefined;
+function nearestScoped(symbols: readonly CodeSymbol[], name: string, context: ResolutionContext): CodeSymbol | undefined {
+  for (let current: ScopeFrame | undefined = context.scope; current !== undefined; current = current.parent) {
+    const matchingSymbols = symbols.filter((symbol) => symbol.name === name && symbol.scopeId === current.id);
+    const callableSymbols = matchingSymbols.filter((symbol) => symbol.kind === "function" || symbol.kind === "class");
+    const nonCallableSymbols = matchingSymbols.filter((symbol) => symbol.kind !== "function" && symbol.kind !== "class");
+    if (callableSymbols.length === 1) return callableSymbols[0];
+    if (callableSymbols.length > 1) return undefined;
+    if (nonCallableSymbols.length > 0) return undefined;
+    if (context.receiverTypes.has(receiverKey(current, name))) return undefined;
   }
   return undefined;
 }

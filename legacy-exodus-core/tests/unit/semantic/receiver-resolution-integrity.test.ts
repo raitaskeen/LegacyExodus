@@ -585,6 +585,88 @@ describe("P1 Task 9: Semantic Receiver Resolution Integrity & Anti-Hallucination
       expect(startCall?.resolutionState).toBe("RESOLVED");
       expect(startCall?.targetSymbolId).toBe(startSymbol?.id);
     });
+
+    it("Case V1: bare call parameter shadows outer function (anti-hallucination)", async () => {
+      const source = `
+        function handler() {}
+        function execute(handler) {
+          handler();
+        }
+      `;
+      const { analysis } = await analyze(source);
+      const executeCall = analysis.calls.find((c) => c.callerName === "execute" && c.calleeName === "handler");
+
+      expect(executeCall).toBeDefined();
+      expect(executeCall?.resolutionState).toBe("UNRESOLVED");
+      expect(executeCall?.targetSymbolId).toBeUndefined();
+    });
+
+    it("Case V2: bare call local variable shadows outer function", async () => {
+      const source = `
+        function handler() {}
+        function execute() {
+          const handler = something;
+          handler();
+        }
+      `;
+      const { analysis } = await analyze(source);
+      const executeCall = analysis.calls.find((c) => c.callerName === "execute" && c.calleeName === "handler");
+
+      expect(executeCall).toBeDefined();
+      expect(executeCall?.resolutionState).toBe("UNRESOLVED");
+      expect(executeCall?.targetSymbolId).toBeUndefined();
+    });
+
+    it("Case V3: unshadowed bare call resolves to outer function correctly", async () => {
+      const source = `
+        function handler() {}
+        function execute() {
+          handler();
+        }
+      `;
+      const { analysis, symbolTable } = await analyze(source);
+      const handlerSymbol = symbolTable.symbols.find((s) => s.kind === "function" && s.name === "handler");
+      const executeCall = analysis.calls.find((c) => c.callerName === "execute" && c.calleeName === "handler");
+
+      expect(executeCall).toBeDefined();
+      expect(executeCall?.resolutionState).toBe("RESOLVED");
+      expect(executeCall?.targetSymbolId).toBe(handlerSymbol?.id);
+    });
+
+    it("Case V4: bare call local assigned function resolves to inner function", async () => {
+      const source = `
+        function handler() {}
+        function execute() {
+          const handler = () => {};
+          handler();
+        }
+      `;
+      const { analysis, symbolTable } = await analyze(source);
+      const outerHandler = symbolTable.symbols.find((s) => s.kind === "function" && s.name === "handler" && s.scopeId === "scope:module");
+      const executeCall = analysis.calls.find((c) => c.callerName === "execute" && c.calleeName === "handler");
+
+      expect(executeCall).toBeDefined();
+      expect(executeCall?.resolutionState).toBe("RESOLVED");
+      expect(executeCall?.targetSymbolId).toBeDefined();
+      expect(executeCall?.targetSymbolId).not.toBe(outerHandler?.id);
+    });
+
+    it("Case V5: catch clause parameter shadows outer function", async () => {
+      const source = `
+        function handler() {}
+        try {
+          doWork();
+        } catch (handler) {
+          handler();
+        }
+      `;
+      const { analysis } = await analyze(source);
+      const catchCall = analysis.calls.find((c) => c.calleeName === "handler");
+
+      expect(catchCall).toBeDefined();
+      expect(catchCall?.resolutionState).toBe("UNRESOLVED");
+      expect(catchCall?.targetSymbolId).toBeUndefined();
+    });
   });
 
   // ─── Determinism ─────────────────────────────────────────────────────────
