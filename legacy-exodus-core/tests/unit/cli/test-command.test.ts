@@ -109,4 +109,29 @@ describe("CLI Test Command & Domain Discovery", () => {
     expect(domainParsed.isFocused).toBe(true);
     expect(domainParsed.target).toBe("parser");
   });
+
+  it("deduplicates redundant patterns and normalizes path separators", async () => {
+    const patterns = [
+      "tests/unit/core",
+      "tests/unit/core",
+      "tests/unit/runtime*.test.ts",
+      "tests/unit/runtime*.test.ts",
+    ];
+    const resolved = await resolveConcreteTestPaths(patterns, "tests");
+
+    // Must be unique
+    const unique = Array.from(new Set(resolved));
+    expect(resolved).toEqual(unique);
+
+    // All paths must use forward slashes
+    for (const path of resolved) {
+      expect(path).not.toContain("\\");
+    }
+  });
+
+  it("safely handles non-matching wildcard patterns without throwing", async () => {
+    const patterns = ["tests/unit/nonexistent_pattern_*.test.ts"];
+    const resolved = await resolveConcreteTestPaths(patterns, "tests");
+    expect(resolved).toEqual([]);
+  });
 });

@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { Command } from "commander";
@@ -98,20 +99,51 @@ export interface DomainFileCount {
   readonly fileCount: number;
 }
 
+export function resolveTestsRoot(testsRoot = "tests"): string {
+  if (existsSync(resolve(testsRoot))) {
+    return resolve(testsRoot);
+  }
+  if (existsSync(resolve(process.cwd(), testsRoot))) {
+    return resolve(process.cwd(), testsRoot);
+  }
+  if (existsSync(resolve(process.cwd(), "legacy-exodus-core", testsRoot))) {
+    return resolve(process.cwd(), "legacy-exodus-core", testsRoot);
+  }
+  try {
+    const metaPath = resolve(import.meta.dir, "../../../tests");
+    if (existsSync(metaPath)) {
+      return metaPath;
+    }
+  } catch {
+    // import.meta.dir may be unavailable in some runtime targets
+  }
+  return resolve(testsRoot);
+}
+
+function globToRegex(glob: string): RegExp {
+  const escaped = glob
+    .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*/g, ".*");
+  return new RegExp(`^${escaped}$`);
+}
+
 export async function resolveConcreteTestPaths(patterns: readonly string[], testsRoot = "tests"): Promise<readonly string[]> {
+  const root = resolveTestsRoot(testsRoot);
   const resolvedPaths: string[] = [];
 
   for (const pattern of patterns) {
     if (pattern.includes("*")) {
-      const slashIdx = pattern.lastIndexOf("/");
-      const parentDir = resolve((slashIdx === -1 ? "." : pattern.slice(0, slashIdx)).replace(/^tests/, testsRoot));
-      const wildcardName = slashIdx === -1 ? pattern : pattern.slice(slashIdx + 1);
-      const regex = new RegExp(`^${wildcardName.replace(/\./g, "\\.").replace(/\*/g, ".*")}$`);
+      const relPattern = pattern.replace(/^tests[\\/]?/, "");
+      const slashIdx = relPattern.lastIndexOf("/");
+      const relDir = slashIdx === -1 ? "" : relPattern.slice(0, slashIdx);
+      const parentDir = resolve(root, relDir);
+      const wildcardName = slashIdx === -1 ? relPattern : relPattern.slice(slashIdx + 1);
+      const regex = globToRegex(wildcardName);
       try {
         const entries = await readdir(parentDir, { withFileTypes: true });
         for (const entry of entries) {
           if (entry.isFile() && entry.name.endsWith(".test.ts") && regex.test(entry.name)) {
-            const relPrefix = slashIdx === -1 ? "." : pattern.slice(0, slashIdx);
+            const relPrefix = pattern.slice(0, pattern.lastIndexOf("/"));
             resolvedPaths.push(`${relPrefix}/${entry.name}`.replace(/\\/g, "/"));
           }
         }
@@ -127,34 +159,43 @@ export async function resolveConcreteTestPaths(patterns: readonly string[], test
 }
 
 export async function discoverTestDomains(testsRoot = "tests"): Promise<readonly DomainFileCount[]> {
+  const root = resolveTestsRoot(testsRoot);
+
   async function countFilesInPatterns(patterns: readonly string[]): Promise<number> {
     const fileSet = new Set<string>();
 
     for (const pattern of patterns) {
-      const fullPath = resolve(pattern.replace(/^tests/, testsRoot));
-      try {
-        if (pattern.includes("*")) {
-          // Wildcard pattern matching against filename
-          const slashIdx = pattern.lastIndexOf("/");
-          const parentDir = resolve((slashIdx === -1 ? "." : pattern.slice(0, slashIdx)).replace(/^tests/, testsRoot));
-          const wildcardName = slashIdx === -1 ? pattern : pattern.slice(slashIdx + 1);
-          const regex = new RegExp(`^${wildcardName.replace(/\./g, "\\.").replace(/\*/g, ".*")}$`);
+      const relPattern = pattern.replace(/^tests[\\/]?/, "");
+      if (pattern.includes("*")) {
+        // Wildcard pattern matching against filename
+        const slashIdx = relPattern.lastIndexOf("/");
+        const relDir = slashIdx === -1 ? "" : relPattern.slice(0, slashIdx);
+        const parentDir = resolve(root, relDir);
+        const wildcardName = slashIdx === -1 ? relPattern : relPattern.slice(slashIdx + 1);
+        const regex = globToRegex(wildcardName);
+        try {
           const entries = await readdir(parentDir, { withFileTypes: true });
           for (const entry of entries) {
             if (entry.isFile() && entry.name.endsWith(".test.ts") && regex.test(entry.name)) {
               fileSet.add(join(parentDir, entry.name));
             }
           }
-        } else {
+        } catch {
+          // Directory may not exist in some environments
+        }
+      } else {
+        const fullPath = resolve(root, relPattern);
+        try {
           const entries = await readdir(fullPath, { recursive: true, withFileTypes: true });
           for (const entry of entries) {
             if (entry.isFile() && entry.name.endsWith(".test.ts")) {
-              fileSet.add(join(entry.parentPath ?? fullPath, entry.name));
+              const dir = entry.parentPath ?? (entry as any).path ?? fullPath;
+              fileSet.add(join(dir, entry.name));
             }
           }
+        } catch {
+          // Directory may not exist in some environments
         }
-      } catch {
-        // Directory may not exist in some environments
       }
     }
 
