@@ -6,7 +6,7 @@ LegacyExodus runs as a deterministic, event-driven modernization engine.
 A user-triggered command enters through a CLI boundary, is validated and planned by the orchestrator, and executes through structured pipeline services connected by an event bus.
 
 > **Implementation Reality:**
-> * **Current Runtime (Implemented):** In-process, single-runtime execution on Bun. The CLI (`src/cli/`) delegates to `Orchestrator` (`src/core/orchestration/`), executing `DiscoveryEngine`, `JavaScriptParser`, `JavaScriptSymbolExtractor`, `DeterministicDependencyGraphBuilder`, `DeterministicSemanticAnalysisEngine`, and `DeterministicFlowAnalysisEngine` directly in-memory, writing bounded projections via `StreamingJsonWriter` and persisting records via `MemoryStorageAdapter` or `SqliteStorageAdapter`.
+> * **Current Runtime (Implemented):** In-process, single-runtime execution on Bun. The CLI (`src/cli/`) delegates to `Orchestrator` (`src/core/orchestration/`), executing `DiscoveryEngine`, `JavaScriptParser`, `JavaScriptSymbolExtractor`, `DeterministicDependencyGraphBuilder`, `DeterministicSemanticAnalysisEngine`, and `DeterministicFlowAnalysisEngine` directly in-memory, writing bounded projections via `StreamingJsonWriter` and persisting records via `MemoryStorageProvider` or `SqliteStorageProvider`.
 > * **Target Architecture (Planned):** Distributed worker pools, isolated container sandboxing (`VymosGate`), multi-agent generation swarms (`ZelvoxForge`), and multi-tenant operational metadata databases.
 
 The runtime is designed around five core principles:

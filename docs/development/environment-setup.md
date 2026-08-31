@@ -59,7 +59,7 @@ Run the quality gate commands to confirm your local setup:
 # 1. Type check the entire codebase
 bun run typecheck
 
-# 2. Run the test suite (668 tests across 88 files)
+# 2. Run the test suite (678 tests across 88 files)
 bun test
 
 # 3. Verify benchmark governance checks

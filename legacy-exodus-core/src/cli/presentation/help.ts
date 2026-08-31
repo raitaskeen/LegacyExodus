@@ -41,7 +41,7 @@ export class HelpPresenter {
 
     const prefix = subtitle ? `${brandPart}${subPart}${titlePart} ` : `${brandPart}${titlePart} `;
     const rawLen = stripAnsi(prefix).length;
-    const targetWidth = Math.max(this.capabilities.width, 20);
+    const targetWidth = this.capabilities.width > 0 ? this.capabilities.width : 80;
     if (rawLen >= targetWidth) {
       return truncateAnsi(prefix.trimEnd(), targetWidth);
     }
@@ -52,7 +52,7 @@ export class HelpPresenter {
   }
 
   public renderDivider(): string {
-    const len = Math.max(this.capabilities.width, 20);
+    const len = this.capabilities.width > 0 ? this.capabilities.width : 80;
     return this.theme.border(this.symbols.horizontalRule.repeat(len));
   }
 

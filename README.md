@@ -15,7 +15,7 @@
   <p>
     <img src="https://img.shields.io/badge/Runtime-Bun_>=1.3.0-f9f8f6?style=for-the-badge&logo=bun" alt="Bun">
     <img src="https://img.shields.io/badge/TypeScript-Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript Strict">
-    <img src="https://img.shields.io/badge/Tests-668_Passing_|_0_Regressions-success?style=for-the-badge" alt="668 Tests Passing">
+    <img src="https://img.shields.io/badge/Tests-678_Passing_|_0_Regressions-success?style=for-the-badge" alt="678 Tests Passing">
     <img src="https://img.shields.io/badge/Governance-10_/_10_Audits_Passed-success?style=for-the-badge" alt="10/10 Governance Passed">
     <img src="https://img.shields.io/badge/Status-Phase_3A_/_Hardened-success?style=for-the-badge" alt="Phase 3A / Hardened">
   </p>
@@ -664,7 +664,7 @@ git diff --check
 All claims in LegacyExodus are grounded in reproducible automated test suites, multi-tier real-repository benchmarks, and cryptographic provenance locks.
 
 ### 17.1 Test Suite & Static Typing
-* **Full Test Suite:** `bun test` $\to$ **660 / 660 passing tests across 87 files** (7,281 assertions, 0 failures, ~40s runtime).
+* **Full Test Suite:** `bun test` $\to$ **678 / 678 passing tests across 88 files** (7,617 assertions, 0 failures, ~30s runtime).
 * **TypeScript Type Checking:** `bun run typecheck` $\to$ **0 errors**.
 * **Benchmark Governance Audit:** `bun run benchmark audit` $\to$ **10 / 10 checks passed (`PASS`)**.
 * **Repository Verification Dashboard:** `bun run verify` $\to$ **4 / 4 gates passed (`PASS`)**.

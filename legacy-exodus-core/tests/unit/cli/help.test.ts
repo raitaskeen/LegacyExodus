@@ -163,7 +163,7 @@ describe("CLI Help & Command Discovery Subsystem", () => {
   });
 
   it("bounds horizontal rule and card layout to narrow viewports without overflow", () => {
-    for (const width of [40, 50, 60, 80]) {
+    for (const width of [120, 80, 60, 40, 20, 19, 15, 10]) {
       const caps: TerminalCapabilities = {
         isTTY: true,
         isCI: false,

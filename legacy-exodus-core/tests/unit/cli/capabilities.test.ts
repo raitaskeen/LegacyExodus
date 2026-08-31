@@ -52,19 +52,24 @@ describe("CLI Capabilities Determinism & Environment Isolation", () => {
     }
   });
 
-  it("extracts theme from --theme <name> and --theme=<name> CLI arguments", () => {
+  it("extracts theme from --theme <name> and --theme=<name> CLI arguments with precedence over env var", () => {
+    const originalTheme = process.env.LEGACYEXODUS_THEME;
     const originalArgv = [...process.argv];
 
     try {
+      process.env.LEGACYEXODUS_THEME = "mono";
+
       process.argv = ["bun", "src/cli/index.ts", "--theme", "aurora"];
       expect(detectTerminalCapabilities().theme).toBe("aurora");
 
-      process.argv = ["bun", "src/cli/index.ts", "--theme=mono"];
-      expect(detectTerminalCapabilities().theme).toBe("mono");
+      process.argv = ["bun", "src/cli/index.ts", "--theme=aurora"];
+      expect(detectTerminalCapabilities().theme).toBe("aurora");
 
       process.argv = ["bun", "src/cli/index.ts", "--theme=invalid"];
       expect(detectTerminalCapabilities().theme).toBe("classic");
     } finally {
+      if (originalTheme !== undefined) process.env.LEGACYEXODUS_THEME = originalTheme;
+      else delete process.env.LEGACYEXODUS_THEME;
       process.argv = originalArgv;
     }
   });
