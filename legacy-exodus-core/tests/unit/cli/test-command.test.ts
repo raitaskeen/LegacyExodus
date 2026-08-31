@@ -4,6 +4,7 @@ import { Command } from "commander";
 import {
   discoverTestDomains,
   registerTestCommand,
+  resolveConcreteTestPaths,
   TEST_DOMAINS,
 } from "@cli/commands/test";
 
@@ -66,31 +67,71 @@ describe("CLI Test Command & Domain Discovery", () => {
     expect(runtimeDomain!.fileCount).toBeGreaterThanOrEqual(3);
   });
 
-  it("handles non-zero exit code in JSON mode without swallowing errors", async () => {
-    const program = new Command();
-    registerTestCommand(program);
+  it("resolves concrete test paths deterministically from wildcard and directory patterns", async () => {
+    const patterns = ["tests/unit/core", "tests/unit/runtime*.test.ts"];
+    const resolved = await resolveConcreteTestPaths(patterns, "tests");
 
-    const originalExitCode = process.exitCode;
-    const originalStdoutWrite = process.stdout.write;
-    const stdoutChunks: string[] = [];
+    expect(resolved.length).toBeGreaterThan(0);
+    expect(resolved).toContain("tests/unit/core");
+    // Concrete files expanded from wildcard
+    const runtimeFiles = resolved.filter((p: string) => p.includes("runtime"));
+    expect(runtimeFiles.length).toBeGreaterThanOrEqual(1);
 
-    process.stdout.write = ((chunk: any) => {
-      stdoutChunks.push(String(chunk));
-      return true;
-    }) as any;
-
-    try {
-      process.exitCode = 0;
-      // Execute test domain with an invalid runner option to trigger failure
-      // or verify JSON parsing structure
-      await program.parseAsync(["node", "test", "test", "parser", "--json"]);
-      const output = stdoutChunks.join("");
-      const parsed = JSON.parse(output);
-      expect(parsed).toBeDefined();
-      expect(parsed.target).toBe("parser");
-    } finally {
-      process.stdout.write = originalStdoutWrite;
-      process.exitCode = originalExitCode;
+    // Verify all wildcard files start with runtime and end with .test.ts
+    for (const file of runtimeFiles) {
+      if (file.endsWith(".test.ts")) {
+        const basename = file.split("/").pop()!;
+        expect(basename.startsWith("runtime")).toBe(true);
+        expect(basename).not.toBe("config.test.ts");
+      }
     }
+
+    // Verify sorted
+    const sorted = [...resolved].sort();
+    expect(resolved).toEqual(sorted);
+  });
+
+  it("handles test all with isFocused === false and test parser with isFocused === true", async () => {
+    const { parseBunTestOutput } = await import("@cli/presentation/test-runner");
+    const sampleOutput = `
+      (pass) test file 1 [1.0ms]
+      2 pass
+      0 fail
+      2 expect() calls
+      Ran 2 tests across 2 files. [10.0ms]
+    `;
+
+    const allParsed = parseBunTestOutput(sampleOutput, undefined);
+    expect(allParsed.isFocused).toBe(false);
+    expect(allParsed.target).toBeUndefined();
+
+    const domainParsed = parseBunTestOutput(sampleOutput, "parser");
+    expect(domainParsed.isFocused).toBe(true);
+    expect(domainParsed.target).toBe("parser");
+  });
+
+  it("deduplicates redundant patterns and normalizes path separators", async () => {
+    const patterns = [
+      "tests/unit/core",
+      "tests/unit/core",
+      "tests/unit/runtime*.test.ts",
+      "tests/unit/runtime*.test.ts",
+    ];
+    const resolved = await resolveConcreteTestPaths(patterns, "tests");
+
+    // Must be unique
+    const unique = Array.from(new Set(resolved));
+    expect(resolved).toEqual(unique);
+
+    // All paths must use forward slashes
+    for (const path of resolved) {
+      expect(path).not.toContain("\\");
+    }
+  });
+
+  it("safely handles non-matching wildcard patterns without throwing", async () => {
+    const patterns = ["tests/unit/nonexistent_pattern_*.test.ts"];
+    const resolved = await resolveConcreteTestPaths(patterns, "tests");
+    expect(resolved).toEqual([]);
   });
 });

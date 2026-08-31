@@ -16,8 +16,16 @@ describe("CLI Shell & Agent Console Presentation", () => {
   });
 
   it("renders pipeline stage list across different stage statuses", () => {
-    const caps = detectTerminalCapabilities({ theme: "aurora" });
-    const shell = new CliShell(caps);
+    const unicodeCaps = {
+      isTTY: true,
+      isCI: false,
+      noColor: false,
+      isUnicodeSupported: true,
+      width: 80,
+      mode: "interactive" as const,
+      theme: "aurora" as const,
+    };
+    const shell = new CliShell(unicodeCaps);
 
     const stageOutput = shell.renderStageList([
       { name: "Discovery", status: "done", detail: "128 files", durationMs: 45 },
@@ -35,6 +43,47 @@ describe("CLI Shell & Agent Console Presentation", () => {
     expect(stageOutput).toContain("Security");
     expect(stageOutput).toContain("Verification");
     expect(stageOutput).toContain("Artifacts");
+    // Verify Unicode glyphs in interactive Unicode mode
+    expect(stageOutput).toContain("○");
+    expect(stageOutput).toContain("◐");
+    expect(stageOutput).toContain("⊘");
+  });
+
+  it("renders ASCII-only stage glyphs when Unicode is not supported", () => {
+    const asciiCaps = {
+      isTTY: true,
+      isCI: false,
+      noColor: true,
+      isUnicodeSupported: false,
+      width: 80,
+      mode: "plain" as const,
+      theme: "mono" as const,
+    };
+    const shell = new CliShell(asciiCaps);
+
+    const stageOutput = shell.renderStageList([
+      { name: "Discovery", status: "done" },
+      { name: "Parser", status: "running" },
+      { name: "Symbols", status: "pending" },
+      { name: "Security", status: "warn" },
+      { name: "Verification", status: "fail" },
+      { name: "Artifacts", status: "skip" },
+    ]);
+
+    // Ensure no Unicode glyphs leak into ASCII mode
+    expect(stageOutput).not.toContain("○");
+    expect(stageOutput).not.toContain("◐");
+    expect(stageOutput).not.toContain("⊘");
+    expect(stageOutput).not.toContain("✓");
+    expect(stageOutput).not.toContain("✗");
+
+    // Ensure ASCII fallbacks are rendered
+    expect(stageOutput).toContain("o");
+    expect(stageOutput).toContain(">");
+    expect(stageOutput).toContain("-");
+    expect(stageOutput).toContain("[+]");
+    expect(stageOutput).toContain("[x]");
+    expect(stageOutput).toContain("[!]");
   });
 
   it("renders card and footer consistently", () => {

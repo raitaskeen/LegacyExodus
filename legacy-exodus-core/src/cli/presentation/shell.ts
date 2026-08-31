@@ -50,11 +50,11 @@ export class CliShell {
       const isLast = idx === stages.length - 1;
       const branch = isLast ? this.symbols.treeCorner : this.symbols.treeBranch;
 
-      let statusIcon = this.theme.muted("○");
+      let statusIcon = this.theme.muted(this.symbols.stagePending);
       let statusColor = (t: string) => this.theme.muted(t);
 
       if (stage.status === "running") {
-        statusIcon = this.theme.active("◐");
+        statusIcon = this.theme.active(this.symbols.stageRunning);
         statusColor = (t: string) => this.theme.active(t);
       } else if (stage.status === "done") {
         statusIcon = this.theme.success(this.symbols.success);
@@ -66,7 +66,7 @@ export class CliShell {
         statusIcon = this.theme.error(this.symbols.failure);
         statusColor = (t: string) => this.theme.error(t);
       } else if (stage.status === "skip") {
-        statusIcon = this.theme.muted("⊘");
+        statusIcon = this.theme.muted(this.symbols.stageSkipped);
         statusColor = (t: string) => this.theme.muted(t);
       }
 

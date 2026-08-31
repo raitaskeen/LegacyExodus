@@ -14,6 +14,9 @@ export interface Symbols {
   readonly progressFilled: string;
   readonly progressEmpty: string;
   readonly spinnerFrames: readonly string[];
+  readonly stagePending: string;
+  readonly stageRunning: string;
+  readonly stageSkipped: string;
 }
 
 const UNICODE_SYMBOLS: Symbols = {
@@ -30,6 +33,9 @@ const UNICODE_SYMBOLS: Symbols = {
   progressFilled: "█",
   progressEmpty: "░",
   spinnerFrames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
+  stagePending: "○",
+  stageRunning: "◐",
+  stageSkipped: "⊘",
 };
 
 const ASCII_SYMBOLS: Symbols = {
@@ -46,6 +52,9 @@ const ASCII_SYMBOLS: Symbols = {
   progressFilled: "#",
   progressEmpty: "-",
   spinnerFrames: ["/", "-", "\\", "|"],
+  stagePending: "o",
+  stageRunning: ">",
+  stageSkipped: "-",
 };
 
 export function createSymbols(capabilities: TerminalCapabilities): Symbols {

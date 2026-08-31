@@ -184,8 +184,8 @@ export function parseBunTestOutput(raw: string, targetHint?: string): ParsedBunT
     }
   }
 
-  const isFocused = Boolean(targetHint) || suitesTotal === 1;
-  const target = targetHint || (suitesTotal === 1 ? currentFile : undefined);
+  const isFocused = (Boolean(targetHint) && targetHint !== "all") || (suitesTotal === 1 && !targetHint);
+  const target = (targetHint && targetHint !== "all") ? targetHint : (suitesTotal === 1 ? currentFile : undefined);
 
   const categories: TestCategorySummary[] = Array.from(categoryMap.entries()).map(([name, counts]) => ({
     name,
