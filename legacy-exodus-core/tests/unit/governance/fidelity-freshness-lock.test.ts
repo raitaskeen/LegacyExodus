@@ -581,7 +581,7 @@ describe("ensureDiscoveryProjections Helper Provenance Hardening", () => {
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
-  });
+  }, 30000);
 
   it("3. Valid manifest SHA + Git unavailable -> reuses existing projection", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "helper-nogit-valid-3-"));

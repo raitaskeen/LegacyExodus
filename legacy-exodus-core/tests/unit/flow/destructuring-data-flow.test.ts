@@ -16,13 +16,14 @@ async function parseAndAnalyze(source: string): Promise<{
   const ast = parsed.result!;
 
   const symbolExtractor = new JavaScriptSymbolExtractor();
-  const symbols = symbolExtractor.extract(ast);
+  const symbolTable = symbolExtractor.extract(ast);
+  const symbols = symbolTable.symbols;
 
   const dfgBuilder = new DeterministicDataFlowGraphBuilder();
-  const dfg = dfgBuilder.build(ast);
+  const dfg = dfgBuilder.build(ast, undefined, symbols);
 
   const flowEngine = new DeterministicFlowAnalysisEngine();
-  const flowResult = flowEngine.analyze([ast], undefined, [symbols]);
+  const flowResult = flowEngine.analyze([ast], undefined, [symbolTable]);
 
   return { ast, dfg, flowResult };
 }
@@ -178,5 +179,223 @@ describe("P0-2: Data-Flow Destructuring & Taint Propagation", () => {
 
     const cmdUse = dfg.uses.find((u) => u.name === "cmd");
     expect(cmdUse?.definitionId).toBe(cmdDef?.id);
+  });
+
+  // ─── CodeRabbit Remediation: Finding 1 (Default Expression Flow) ─────────────
+
+  it("Test 11: Destructuring default expression in declaration propagates taint from default source to sink", async () => {
+    const source = `
+      const { cmd = req.body.cmd } = options;
+      child_process.exec(cmd);
+    `;
+    const { dfg } = await parseAndAnalyze(source);
+
+    const cmdDef = dfg.definitions.find((d) => d.name === "cmd");
+    expect(cmdDef).toBeDefined();
+
+    const taintFlow = dfg.taintFlows.find((f) => f.path.includes("child_process.exec"));
+    expect(taintFlow).toBeDefined();
+    expect(taintFlow?.state).toBe("CONFIRMED");
+    expect(taintFlow?.path).toContain(cmdDef!.id);
+  });
+
+  it("Test 12: Destructuring default expression in assignment propagates taint from default source to sink", async () => {
+    const source = `
+      let cmd;
+      ({ cmd = req.body.cmd } = options);
+      child_process.exec(cmd);
+    `;
+    const { dfg } = await parseAndAnalyze(source);
+
+    const cmdDef = dfg.definitions.find((d) => d.name === "cmd" && d.kind === "assignment");
+    expect(cmdDef).toBeDefined();
+
+    const taintFlow = dfg.taintFlows.find((f) => f.path.includes("child_process.exec"));
+    expect(taintFlow).toBeDefined();
+    expect(taintFlow?.state).toBe("CONFIRMED");
+  });
+
+  it("Test 13: Nested destructuring default expression propagates taint to sink", async () => {
+    const source = `
+      const { user: { cmd = req.body.cmd } } = options;
+      child_process.exec(cmd);
+    `;
+    const { dfg } = await parseAndAnalyze(source);
+
+    const cmdDef = dfg.definitions.find((d) => d.name === "cmd");
+    expect(cmdDef).toBeDefined();
+
+    const taintFlow = dfg.taintFlows.find((f) => f.path.includes("child_process.exec"));
+    expect(taintFlow).toBeDefined();
+    expect(taintFlow?.state).toBe("CONFIRMED");
+  });
+
+  it("Test 14: Destructuring default with alias binds alias and propagates default taint", async () => {
+    const source = `
+      const { command: cmd = req.body.command } = options;
+      child_process.exec(cmd);
+    `;
+    const { dfg } = await parseAndAnalyze(source);
+
+    const cmdDef = dfg.definitions.find((d) => d.name === "cmd");
+    expect(cmdDef).toBeDefined();
+    expect(dfg.definitions.find((d) => d.name === "command")).toBeUndefined();
+
+    const taintFlow = dfg.taintFlows.find((f) => f.path.includes("child_process.exec"));
+    expect(taintFlow).toBeDefined();
+    expect(taintFlow?.state).toBe("CONFIRMED");
+  });
+
+  it("Test 15: Array destructuring default expression propagates taint", async () => {
+    const source = `
+      const [ cmd = req.body.cmd ] = options;
+      child_process.exec(cmd);
+    `;
+    const { dfg } = await parseAndAnalyze(source);
+
+    const cmdDef = dfg.definitions.find((d) => d.name === "cmd");
+    expect(cmdDef).toBeDefined();
+
+    const taintFlow = dfg.taintFlows.find((f) => f.path.includes("child_process.exec"));
+    expect(taintFlow).toBeDefined();
+    expect(taintFlow?.state).toBe("CONFIRMED");
+  });
+
+  // ─── CodeRabbit Remediation: Finding 2 (Formal Parameter Slot Semantics) ────
+
+  it("Test 16: Destructured parameter with two bindings maps argument to single formal slot and propagates to second binding", async () => {
+    const source = `
+      function handle({ first, second }) {
+        child_process.exec(second);
+      }
+      const body = req.body;
+      handle(body);
+    `;
+    const { dfg } = await parseAndAnalyze(source);
+
+    const firstDef = dfg.definitions.find((d) => d.name === "first" && d.kind === "parameter");
+    const secondDef = dfg.definitions.find((d) => d.name === "second" && d.kind === "parameter");
+    expect(firstDef).toBeDefined();
+    expect(secondDef).toBeDefined();
+
+    // Summary must group both definitions into slot 0
+    const summary = dfg.functionSummaries[0];
+    expect(summary).toBeDefined();
+    expect(summary?.parameterDefinitionIds.length).toBe(1);
+    const slot0 = summary?.parameterDefinitionIds[0];
+    expect(Array.isArray(slot0)).toBe(true);
+    expect(slot0).toContain(firstDef!.id);
+    expect(slot0).toContain(secondDef!.id);
+
+    // Call binding to slot 0 must connect req.body to both first and second
+    const interprocedural = dfg.interproceduralFlows.filter((f) => f.kind === "argument-to-parameter");
+    expect(interprocedural.some((f) => f.targetDefinitionId === firstDef!.id)).toBe(true);
+    expect(interprocedural.some((f) => f.targetDefinitionId === secondDef!.id)).toBe(true);
+
+    // Taint from req.body must reach child_process.exec through second
+    const taintFlow = dfg.taintFlows.find((f) => f.path.includes("child_process.exec"));
+    expect(taintFlow).toBeDefined();
+    expect(taintFlow?.state).toBe("CONFIRMED");
+    expect(taintFlow?.path).toContain(secondDef!.id);
+  });
+
+  it("Test 17: Multiple formal parameters with destructuring correctly align slots", async () => {
+    const source = `
+      function handle({ first, second }, third) {
+        child_process.exec(second);
+        child_process.exec(third);
+      }
+      handle(req.body, req.query);
+    `;
+    const { dfg } = await parseAndAnalyze(source);
+
+    const firstDef = dfg.definitions.find((d) => d.name === "first" && d.kind === "parameter");
+    const secondDef = dfg.definitions.find((d) => d.name === "second" && d.kind === "parameter");
+    const thirdDef = dfg.definitions.find((d) => d.name === "third" && d.kind === "parameter");
+    expect(firstDef).toBeDefined();
+    expect(secondDef).toBeDefined();
+    expect(thirdDef).toBeDefined();
+
+    // 2 formal parameter slots: slot 0 has [first, second], slot 1 has [third]
+    const summary = dfg.functionSummaries[0];
+    expect(summary).toBeDefined();
+    expect(summary?.parameterDefinitionIds.length).toBe(2);
+    expect(summary?.parameterDefinitionIds[0]).toContain(firstDef!.id);
+    expect(summary?.parameterDefinitionIds[0]).toContain(secondDef!.id);
+    expect(summary?.parameterDefinitionIds[1]).toContain(thirdDef!.id);
+
+    // Both sinks must have confirmed taint flows (one from req.body, one from req.query)
+    expect(dfg.taintFlows.length).toBe(2);
+    expect(dfg.taintFlows.every((f) => f.state === "CONFIRMED")).toBe(true);
+  });
+
+  it("Test 18: Destructured array parameter maps argument to single formal slot and propagates to second binding", async () => {
+    const source = `
+      function handle([first, second]) {
+        child_process.exec(second);
+      }
+      handle(req.body);
+    `;
+    const { dfg } = await parseAndAnalyze(source);
+
+    const secondDef = dfg.definitions.find((d) => d.name === "second" && d.kind === "parameter");
+    expect(secondDef).toBeDefined();
+
+    const taintFlow = dfg.taintFlows.find((f) => f.path.includes("child_process.exec"));
+    expect(taintFlow).toBeDefined();
+    expect(taintFlow?.state).toBe("CONFIRMED");
+    expect(taintFlow?.path).toContain(secondDef!.id);
+  });
+
+  it("Test 19: Destructured parameter with alias maps alias to slot and propagates taint", async () => {
+    const source = `
+      function handle({ command: cmd }) {
+        child_process.exec(cmd);
+      }
+      handle(req.body);
+    `;
+    const { dfg } = await parseAndAnalyze(source);
+
+    const cmdDef = dfg.definitions.find((d) => d.name === "cmd" && d.kind === "parameter");
+    expect(cmdDef).toBeDefined();
+
+    const taintFlow = dfg.taintFlows.find((f) => f.path.includes("child_process.exec"));
+    expect(taintFlow).toBeDefined();
+    expect(taintFlow?.state).toBe("CONFIRMED");
+    expect(taintFlow?.path).toContain(cmdDef!.id);
+  });
+
+  it("Test 20: Destructured parameter default expression propagates taint when default is provided", async () => {
+    const source = `
+      function handle({ first, second = req.body.second }) {
+        child_process.exec(second);
+      }
+      handle(options);
+    `;
+    const { dfg } = await parseAndAnalyze(source);
+
+    const secondDef = dfg.definitions.find((d) => d.name === "second" && d.kind === "parameter");
+    expect(secondDef).toBeDefined();
+
+    const taintFlow = dfg.taintFlows.find((f) => f.path.includes("child_process.exec"));
+    expect(taintFlow).toBeDefined();
+    expect(taintFlow?.state).toBe("CONFIRMED");
+  });
+
+  it("Test 21: Direct parameter default expression propagates taint", async () => {
+    const source = `
+      function handle(cmd = req.body.cmd) {
+        child_process.exec(cmd);
+      }
+      handle(options);
+    `;
+    const { dfg } = await parseAndAnalyze(source);
+
+    const cmdDef = dfg.definitions.find((d) => d.name === "cmd" && d.kind === "parameter");
+    expect(cmdDef).toBeDefined();
+
+    const taintFlow = dfg.taintFlows.find((f) => f.path.includes("child_process.exec"));
+    expect(taintFlow).toBeDefined();
+    expect(taintFlow?.state).toBe("CONFIRMED");
   });
 });
