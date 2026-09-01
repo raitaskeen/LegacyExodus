@@ -53,10 +53,13 @@ export class DeterministicFlowAnalysisEngine {
         const target = summaries.get(binding.targetSymbolId);
         if (target === undefined || target.filePath === graph.filePath) continue;
         for (const [index, sourceDefinitionId] of binding.argumentDefinitionIds.entries()) {
-          const parameterDefinitionId = target.parameterDefinitionIds[index];
-          if (sourceDefinitionId !== undefined && parameterDefinitionId !== undefined) {
-            transfers.push(createTransfer(binding.callId, "argument-to-parameter", sourceDefinitionId, parameterDefinitionId));
-            allCrossFileTransfers.push({ sourceDefinitionId, targetDefinitionId: parameterDefinitionId });
+          const slot = target.parameterDefinitionIds[index];
+          if (sourceDefinitionId !== undefined && slot !== undefined) {
+            const targetIds = Array.isArray(slot) ? slot : [slot];
+            for (const parameterDefinitionId of targetIds) {
+              transfers.push(createTransfer(binding.callId, "argument-to-parameter", sourceDefinitionId, parameterDefinitionId));
+              allCrossFileTransfers.push({ sourceDefinitionId, targetDefinitionId: parameterDefinitionId });
+            }
           }
         }
         if (binding.receiverDefinitionId !== undefined) {

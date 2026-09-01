@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { extractDiagnosticSnippet } from "@cli/commands/verify";
+import { extractDiagnosticSnippet, runCommand } from "@cli/commands/verify";
 
 describe("CLI Verify Command & Diagnostic Extraction", () => {
   describe("extractDiagnosticSnippet", () => {
@@ -138,6 +138,32 @@ describe("CLI Verify Command & Diagnostic Extraction", () => {
       expect(result.failures[0]?.expected).toBe("3 calls");
       expect(result.failures[0]?.received).toBe("2 calls");
       expect(result.failures[0]?.location).toContain("semantic-engine.test.ts:184:10");
+    });
+  });
+
+  describe("runCommand Subprocess Security & Argument Isolation", () => {
+    it("preserves literal arguments containing shell metacharacters without shell execution", async () => {
+      const payload = "hello & echo injected-shell-command";
+      const result = await runCommand("bun", [
+        "-e",
+        "console.log(process.argv[process.argv.length - 1])",
+        payload,
+      ]);
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toBe(`${payload}\n`);
+      expect(result.durationMs).toBeGreaterThan(0);
+    });
+
+    it("executes standard commands cleanly with exit code 0", async () => {
+      const result = await runCommand("bun", ["--version"]);
+      expect(result.code).toBe(0);
+      expect(result.stdout.length).toBeGreaterThan(0);
+    });
+
+    it("captures non-zero exit codes from failing commands", async () => {
+      const result = await runCommand("bun", ["-e", "process.exit(42)"]);
+      expect(result.code).toBe(42);
     });
   });
 });
