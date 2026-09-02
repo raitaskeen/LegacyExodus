@@ -22,6 +22,9 @@ Please do **NOT** open public GitHub issues or discussions for unpatched securit
 ## Security Architecture & Best Practices
 
 LegacyExodus applies strict least-privilege principles across its execution pipeline:
-* **Bounded Projections:** Projections write only to `.discovery/` with isolated checksum verification.
+* **Subprocess Isolation (SEC-01):** Git revision lookups invoke Git directly with explicit argument arrays and `shell: false`, eliminating shell interpretation risk at the investigated Git subprocess boundary.
+* **Manifest Path Containment (SEC-02):** Discovery manifest artifact path validation enforces lexical containment (`isPathWithinDirectory`), physical canonicalization (`realpath()`), and symlink rejection (`lstat()`). The validation is hardened against the investigated traversal and symlink-escape threat model (theoretical same-privilege local filesystem TOCTOU races remain outside the current threat model).
+* **Storage Immutability (DAT-01):** Persistent and in-memory storage record payloads are recursively deep-frozen (`deepFreeze()`), ensuring complete payload immutability across nested objects, arrays, and matrices without identified residual risk within the investigated SQLite deserialization boundary.
+* **Bounded Projections:** Projections write atomically to `.discovery/` using random UUID temporary files and atomic file replacement with SHA-256 verification.
 * **Deterministic Storage:** Persistent SQLite storage runs with foreign keys enabled, WAL mode, transaction wrapping, and explicit schema compatibility validation.
 * **CI/CD Security:** All GitHub Actions workflows enforce `permissions: contents: read` by default, with scoped write permissions granted only when required for security artifact analysis.
