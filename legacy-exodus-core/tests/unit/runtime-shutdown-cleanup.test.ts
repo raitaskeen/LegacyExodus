@@ -321,4 +321,33 @@ describe("Runtime Shutdown Cleanup & Resource Disposal (F-006)", () => {
 
     expect(runtime.getStatus()).toBe("stopped");
   });
+
+  it("8. concurrent shutdown calls coalesce to the same promise and perform cleanup once", async () => {
+    const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+    const runtime = context.runtime;
+
+    let stopCallCount = 0;
+    const slowService: RuntimeService = {
+      name: "slow-service",
+      start: () => {},
+      stop: async () => {
+        stopCallCount++;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      },
+    };
+
+    runtime.registerService(slowService);
+    await runtime.start();
+    expect(runtime.getStatus()).toBe("running");
+
+    // Launch multiple concurrent shutdown calls
+    await Promise.all([
+      runtime.shutdown(),
+      runtime.shutdown(),
+      runtime.shutdown(),
+    ]);
+
+    expect(runtime.getStatus()).toBe("stopped");
+    expect(stopCallCount).toBe(1);
+  });
 });

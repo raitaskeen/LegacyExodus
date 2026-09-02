@@ -1,7 +1,48 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { lstat, readFile, realpath } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { z } from "zod";
+
+export function isPathWithinDirectory(parentDir: string, candidatePath: string): boolean {
+  if (typeof candidatePath !== "string" || candidatePath.trim().length === 0) {
+    return false;
+  }
+
+  const trimmed = candidatePath.trim();
+
+  // Reject absolute paths
+  if (isAbsolute(trimmed)) {
+    return false;
+  }
+
+  // Reject Windows drive-relative or absolute drive prefixes (e.g. "C:foo", "c:\foo")
+  if (/^[a-zA-Z]:/.test(trimmed)) {
+    return false;
+  }
+
+  // Reject Windows UNC paths (e.g. "\\server\share")
+  if (trimmed.startsWith("\\\\") || trimmed.startsWith("//")) {
+    return false;
+  }
+
+  // Reject null bytes
+  if (trimmed.includes("\0")) {
+    return false;
+  }
+
+  const canonicalParent = resolve(parentDir);
+  const resolvedCandidate = resolve(canonicalParent, trimmed);
+
+  // Canonical relative calculation
+  const rel = relative(canonicalParent, resolvedCandidate);
+
+  // If relative path starts with ".." or is absolute, it escapes parentDir
+  if (rel.startsWith("..") || isAbsolute(rel) || rel === "") {
+    return false;
+  }
+
+  return true;
+}
 
 const manifestSchema = z.object({
   schemaVersion: z.number().int().positive(),
@@ -117,8 +158,23 @@ export class DiscoveryValidator {
 
     const verifyChecksums = options.verifyChecksums ?? true;
 
+    let canonicalDiscoveryDir = discoveryDir;
+    try {
+      canonicalDiscoveryDir = await realpath(discoveryDir);
+    } catch {}
+
     for (const artifactName of manifest.requiredArtifacts) {
-      const artifactPath = join(discoveryDir, artifactName);
+      if (!isPathWithinDirectory(discoveryDir, artifactName)) {
+        return {
+          valid: false,
+          status: "MANIFEST_INVALID",
+          reason: `Artifact path '${artifactName}' attempts traversal outside discovery directory.`,
+          manifest,
+          failedArtifact: artifactName,
+        };
+      }
+
+      const artifactPath = resolve(discoveryDir, artifactName);
       const artifactMeta = manifest.artifacts[artifactName];
 
       if (!artifactMeta) {
@@ -133,7 +189,30 @@ export class DiscoveryValidator {
 
       let content: Buffer;
       try {
-        content = await readFile(artifactPath);
+        const stats = await lstat(artifactPath);
+        if (stats.isSymbolicLink()) {
+          return {
+            valid: false,
+            status: "MANIFEST_INVALID",
+            reason: `Artifact path '${artifactName}' is a symbolic link, which is not permitted.`,
+            manifest,
+            failedArtifact: artifactName,
+          };
+        }
+
+        const canonicalArtifactPath = await realpath(artifactPath);
+        const physicalRel = relative(canonicalDiscoveryDir, canonicalArtifactPath);
+        if (physicalRel.startsWith("..") || isAbsolute(physicalRel) || physicalRel === "") {
+          return {
+            valid: false,
+            status: "MANIFEST_INVALID",
+            reason: `Artifact path '${artifactName}' physically resolves outside discovery directory.`,
+            manifest,
+            failedArtifact: artifactName,
+          };
+        }
+
+        content = await readFile(canonicalArtifactPath);
       } catch {
         return {
           valid: false,

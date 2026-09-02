@@ -1,4 +1,6 @@
 import type {
+  AnalysisRunCompleted,
+  AnalysisRunFailed,
   DependencyDetected,
   DiscoveryCompleted,
   FileDiscovered,
@@ -31,6 +33,10 @@ function reduceEvent(state: ProjectState, event: DomainEvent): ProjectState {
       return reduceFrameworkDetected(state, event as FrameworkDetected);
     case "DiscoveryCompleted":
       return reduceDiscoveryCompleted(state, event as DiscoveryCompleted);
+    case "AnalysisRunCompleted":
+      return reduceAnalysisRunCompleted(state, event as AnalysisRunCompleted);
+    case "AnalysisRunFailed":
+      return reduceAnalysisRunFailed(state, event as AnalysisRunFailed);
     default:
       return state;
   }
@@ -127,6 +133,38 @@ function reduceDiscoveryCompleted(state: ProjectState, event: DiscoveryCompleted
       discoveredFileCount: String(event.payload.fileCount),
       dependencyCount: String(event.payload.dependencyCount),
       frameworkCount: String(event.payload.frameworkCount),
+    },
+    updatedAt: event.timestamp,
+  });
+}
+
+function reduceAnalysisRunCompleted(state: ProjectState, event: AnalysisRunCompleted): ProjectState {
+  return freezeProjectState({
+    ...state,
+    id: event.payload.projectId,
+    version: state.version + 1,
+    status: ProjectStatus.COMPLETED,
+    metadata: {
+      ...state.metadata,
+      analysisStatus: "completed",
+      analysisRunId: event.payload.analysisRunId,
+      analysisDurationMs: String(event.payload.durationMs),
+    },
+    updatedAt: event.timestamp,
+  });
+}
+
+function reduceAnalysisRunFailed(state: ProjectState, event: AnalysisRunFailed): ProjectState {
+  return freezeProjectState({
+    ...state,
+    id: event.payload.projectId,
+    version: state.version + 1,
+    status: ProjectStatus.FAILED,
+    metadata: {
+      ...state.metadata,
+      analysisStatus: "failed",
+      analysisRunId: event.payload.analysisRunId,
+      analysisError: event.payload.error,
     },
     updatedAt: event.timestamp,
   });

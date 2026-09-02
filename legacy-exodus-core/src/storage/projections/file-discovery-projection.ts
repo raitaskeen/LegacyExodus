@@ -1,10 +1,27 @@
-import { execSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { mkdir, readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 
 import type { DiscoveryProjection } from "@contracts/discovery-projection";
 import { StreamingJsonWriter } from "./streaming-json-writer";
+
+export function resolveGitCommitSha(cwd?: string): string | undefined {
+  try {
+    const result = spawnSync("git", ["rev-parse", "HEAD"], {
+      ...(cwd !== undefined ? { cwd } : {}),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      shell: false,
+    });
+
+    if (result.status === 0 && typeof result.stdout === "string") {
+      const trimmed = result.stdout.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
+    }
+  } catch {}
+
+  return undefined;
+}
 
 export class FileDiscoveryProjectionAdapter {
   private readonly writer = new StreamingJsonWriter();
@@ -46,11 +63,8 @@ export class FileDiscoveryProjectionAdapter {
     for (const artifact of projection.artifacts) {
       if (artifact.name === "manifest.json") continue;
       const destination = join(discoveryDirectory, artifact.name);
-      await this.writer.writeAtomic(destination, artifact.payload);
-
-      const content = await readFile(destination);
-      const sha256 = createHash("sha256").update(content).digest("hex");
-      artifactHashes[artifact.name] = { sha256, bytes: content.length };
+      const { sha256, bytes } = await this.writer.writeAtomic(destination, artifact.payload);
+      artifactHashes[artifact.name] = { sha256, bytes };
     }
 
     // Resolve repository metadata
@@ -62,23 +76,10 @@ export class FileDiscoveryProjectionAdapter {
       pkgName = pkgJson.name;
     } catch {}
 
-    let repoCommitSha: string | undefined;
-    try {
-      repoCommitSha = execSync("git rev-parse HEAD", {
-        cwd: projection.projectPath,
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      }).trim();
-    } catch {}
+    const repoCommitSha = resolveGitCommitSha(projection.projectPath);
 
     // Resolve engine metadata
-    let engineCommitSha = "uncommitted/local";
-    try {
-      engineCommitSha = execSync("git rev-parse HEAD", {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      }).trim();
-    } catch {}
+    const engineCommitSha = resolveGitCommitSha() ?? "uncommitted/local";
 
     let enginePackageVersion = "0.1.0";
     try {

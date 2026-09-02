@@ -112,7 +112,9 @@ export class LegacyExodusEngine {
             });
           }
 
-          await this.context.discoveryProjection.project(discoveryRecord.id);
+          if (!execution.isReused) {
+            await this.context.discoveryProjection.project(discoveryRecord.id);
+          }
 
           if (execution.analysis === undefined) {
             throw new LegacyExodusError({

@@ -11,12 +11,13 @@ import type {
   ProjectInitialized,
 } from "@contracts/events";
 import { createDomainEvent, type DomainEvent } from "@core/events/domain-event";
-import { DiscoveryEngine, type DiscoveryResult } from "@discovery/index";
+import { validateProjectDiscovery } from "@contracts/discovery";
+import { DiscoveryEngine, DiscoveryValidator, type DiscoveryResult } from "@discovery/index";
 import { DeterministicDependencyGraphBuilder, ModuleResolver, type ModuleResolutionOptions } from "@graph/index";
 import { DeterministicFlowAnalysisEngine } from "@flow/index";
 import { DeterministicKnowledgeGraphBuilder } from "@knowledge/index";
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { ParserManager, type ASTResult } from "@parser/index";
 import { DeterministicSemanticAnalysisEngine } from "@semantic/index";
 import { createStorageRecord, type StorageRecord } from "@storage/index";
@@ -27,6 +28,7 @@ export interface CommandExecution {
   readonly records: readonly StorageRecord[];
   readonly discovery?: DiscoveryResult;
   readonly analysis?: AnalysisSummary;
+  readonly isReused?: boolean;
 }
 
 export class InitializeProjectHandler {
@@ -79,10 +81,139 @@ export class AnalyzeProjectHandler {
     private readonly discoveryEngine: DiscoveryEngine,
     private readonly parserManager: ParserManager,
     private readonly symbolExtractor: JavaScriptSymbolExtractor,
+    private readonly discoveryValidator: DiscoveryValidator = new DiscoveryValidator(),
   ) {}
 
   public async handle(command: AnalyzeProjectCommand): Promise<CommandExecution> {
     const startedAt = performance.now();
+
+    if (!command.payload.refresh) {
+      const validation = await this.discoveryValidator.validate({ projectPath: command.payload.path });
+      if (validation.valid && validation.manifest !== undefined) {
+        try {
+          const discoveryDir = join(resolve(command.payload.path), ".discovery");
+          const [projectRaw, filesRaw, depsRaw, frameworksRaw] = await Promise.all([
+            readFile(join(discoveryDir, "project.json"), "utf8"),
+            readFile(join(discoveryDir, "files.json"), "utf8"),
+            readFile(join(discoveryDir, "dependencies.json"), "utf8"),
+            readFile(join(discoveryDir, "frameworks.json"), "utf8"),
+          ]);
+
+          const projectJson = JSON.parse(projectRaw);
+          const filesJson = JSON.parse(filesRaw) as readonly any[];
+          const depsJson = JSON.parse(depsRaw) as readonly any[];
+          const frameworksJson = JSON.parse(frameworksRaw) as readonly any[];
+
+          const discovery = validateProjectDiscovery({
+            projectId: command.payload.projectId,
+            projectName: projectJson.name ?? validation.manifest.repository.name,
+            projectPath: command.payload.path,
+            files: filesJson.map((f) => ({
+              id: f.id,
+              path: f.path,
+              language: f.language,
+              ...(f.fileKind !== undefined ? { fileKind: f.fileKind } : {}),
+              size: f.size,
+            })),
+            dependencies: depsJson.map((d) => ({
+              name: d.name,
+              version: d.version,
+              kind: d.kind,
+            })),
+            frameworks: frameworksJson.map((f) => ({
+              name: f.name,
+              evidence: f.evidence,
+            })),
+            languages: projectJson.languages ?? [],
+            enumerationFailures: [],
+            discoveredAt: new Date(validation.manifest.analysis.generatedAt),
+          });
+
+          const record = createStorageRecord("project-discovery", {
+            projectId: discovery.projectId,
+            projectName: discovery.projectName,
+            projectPath: discovery.projectPath,
+            files: discovery.files.map((file) => ({ ...file })),
+            dependencies: discovery.dependencies.map((dependency) => ({ ...dependency })),
+            frameworks: discovery.frameworks.map((framework) => ({ ...framework })),
+            languages: [...discovery.languages],
+            enumerationFailures: [],
+            discoveredAt: discovery.discoveredAt.toISOString(),
+            analysisRunId: command.id,
+          });
+
+          const durationMs = performance.now() - startedAt;
+          const analyzedCount = discovery.files.filter(
+            (file) =>
+              (file.language === "javascript" || file.language === "typescript") &&
+              (file.fileKind === "source" || file.fileKind === undefined),
+          ).length;
+
+          const analysisSummary = createAnalysisSummary({
+            filesDiscovered: discovery.files.length,
+            filesAnalyzed: analyzedCount,
+            parserFailures: 0,
+            symbolExtractionFailures: 0,
+            unsupportedFiles: discovery.files.filter(
+              (file) => file.fileKind === "source" && file.language !== "javascript" && file.language !== "typescript",
+            ).length,
+            nonSourceArtifacts: discovery.files.filter(
+              (file) => file.fileKind !== "source" && file.fileKind !== "unknown" && file.fileKind !== undefined,
+            ).length,
+            unclassifiedArtifacts: discovery.files.filter(
+              (file) => file.fileKind === "unknown" || file.fileKind === undefined,
+            ).length,
+            enumerationFailures: 0,
+            discoveryComplete: true,
+            durationMs,
+          });
+
+          const runRecord = createStorageRecord("analysis-run", {
+            projectId: discovery.projectId,
+            analysisRunId: command.id,
+            status: "completed",
+            startedAt: discovery.discoveredAt.toISOString(),
+            completedAt: new Date().toISOString(),
+            summary: {
+              filesDiscovered: analysisSummary.filesDiscovered,
+              filesAnalyzed: analysisSummary.filesAnalyzed,
+              parserFailures: analysisSummary.parserFailures,
+              symbolExtractionFailures: analysisSummary.symbolExtractionFailures,
+              unsupportedFiles: analysisSummary.unsupportedFiles,
+              nonSourceArtifacts: analysisSummary.nonSourceArtifacts,
+              unclassifiedArtifacts: analysisSummary.unclassifiedArtifacts,
+              enumerationFailures: analysisSummary.enumerationFailures,
+              discoveryComplete: analysisSummary.discoveryComplete,
+              durationMs: analysisSummary.durationMs,
+            },
+          });
+
+          const events: DomainEvent[] = [
+            ...this.discoveryEngine.createEvents(discovery),
+            createDomainEvent({
+              type: "AnalysisRunCompleted",
+              aggregateId: discovery.projectId,
+              payload: {
+                projectId: discovery.projectId,
+                analysisRunId: command.id,
+                durationMs,
+              },
+            }),
+          ];
+
+          return {
+            events: Object.freeze(events),
+            records: Object.freeze([record, runRecord]),
+            discovery,
+            analysis: analysisSummary,
+            isReused: true,
+          };
+        } catch {
+          // If reading or parsing snapshot failed unexpectedly, fall through to fresh discovery
+        }
+      }
+    }
+
     const discovery = await this.discoveryEngine.discover({
       projectId: command.payload.projectId,
       projectPath: command.payload.path,

@@ -393,5 +393,69 @@ describe("EventBus & EventReducer Behavioral Integrity", () => {
       const state2 = reduceProjectState(initial, [fileEvent, initEvent]);
       expect(state2.status).toBe(ProjectStatus.INITIALIZED);
     });
+
+    it("Scenario 14: AnalysisRunCompleted transitions project state to COMPLETED with analysis metadata (EVT-01)", () => {
+      const projectId = "proj-completed";
+      const initial = createProjectState("Init");
+
+      const events: DomainEvent[] = [
+        createDomainEvent({
+          type: "ProjectInitialized",
+          aggregateId: projectId,
+          payload: { projectId, name: "System Complete" },
+        }),
+        createDomainEvent({
+          type: "DiscoveryCompleted",
+          aggregateId: projectId,
+          payload: { projectId, fileCount: 5, dependencyCount: 2, frameworkCount: 1 },
+        }),
+        createDomainEvent({
+          type: "AnalysisRunCompleted",
+          aggregateId: projectId,
+          payload: { projectId, analysisRunId: "run-complete-1", durationMs: 250 },
+        }),
+      ];
+
+      const state = reduceProjectState(initial, events);
+
+      expect(state.status).toBe(ProjectStatus.COMPLETED);
+      expect(state.version).toBe(3);
+      expect(state.metadata.analysisStatus).toBe("completed");
+      expect(state.metadata.analysisRunId).toBe("run-complete-1");
+      expect(state.metadata.analysisDurationMs).toBe("250");
+      expect(Object.isFrozen(state)).toBe(true);
+    });
+
+    it("Scenario 15: AnalysisRunFailed transitions project state to FAILED with error metadata (EVT-01)", () => {
+      const projectId = "proj-failed";
+      const initial = createProjectState("Init");
+
+      const events: DomainEvent[] = [
+        createDomainEvent({
+          type: "ProjectInitialized",
+          aggregateId: projectId,
+          payload: { projectId, name: "System Failed" },
+        }),
+        createDomainEvent({
+          type: "DiscoveryCompleted",
+          aggregateId: projectId,
+          payload: { projectId, fileCount: 5, dependencyCount: 2, frameworkCount: 1 },
+        }),
+        createDomainEvent({
+          type: "AnalysisRunFailed",
+          aggregateId: projectId,
+          payload: { projectId, analysisRunId: "run-failed-1", error: "Syntax error in parser" },
+        }),
+      ];
+
+      const state = reduceProjectState(initial, events);
+
+      expect(state.status).toBe(ProjectStatus.FAILED);
+      expect(state.version).toBe(3);
+      expect(state.metadata.analysisStatus).toBe("failed");
+      expect(state.metadata.analysisRunId).toBe("run-failed-1");
+      expect(state.metadata.analysisError).toBe("Syntax error in parser");
+      expect(Object.isFrozen(state)).toBe(true);
+    });
   });
 });

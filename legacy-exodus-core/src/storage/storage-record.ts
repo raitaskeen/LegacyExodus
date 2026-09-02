@@ -122,7 +122,7 @@ export function cloneStorageRecord<Payload extends SerializedPayload>(
   });
 }
 
-function deepFreeze<Payload extends SerializedPayload>(payload: Payload): Payload {
+export function deepFreeze<Payload extends SerializedPayload>(payload: Payload): Payload {
   if (payload === null || typeof payload !== "object" || Object.isFrozen(payload)) {
     return payload;
   }

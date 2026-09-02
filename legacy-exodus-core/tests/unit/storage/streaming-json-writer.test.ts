@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from "bun:test";
+import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -233,5 +234,35 @@ describe("StreamingJsonWriter — Deterministic Streaming Serialization & Failur
     expect(chunksWritten.length).toBeGreaterThanOrEqual(2);
     const completeOutput = chunksWritten.join("");
     expect(completeOutput).toBe(`${JSON.stringify(items, null, 2)}\n`);
+  });
+
+  // ─── 6. On-the-Fly SHA-256 & Byte Length Computation (P0.4) ───────────────
+
+  it("computes exact SHA-256 and byte length on the fly matching full-file read", async () => {
+    const payloads = [
+      { type: "empty", data: {} },
+      { type: "primitives", data: [1, "two", true, null, { nested: 123 }] },
+      {
+        type: "large-array",
+        data: Array.from({ length: 100 }, (_, i) => ({
+          id: `sym-${i}`,
+          name: `func_${i}`,
+          file: `src/file_${i}.ts`,
+          details: { count: i * 10, unicode: "✨ LegacyExodus 🚀" },
+        })),
+      },
+    ];
+
+    for (const { type, data } of payloads) {
+      const dest = join(testDir, `hash-test-${type}.json`);
+      const result = await writer.writeAtomic(dest, data);
+
+      const fileBytes = await readFile(dest);
+      const expectedSha256 = createHash("sha256").update(fileBytes).digest("hex");
+      const expectedBytes = fileBytes.length;
+
+      expect(result.sha256).toBe(expectedSha256);
+      expect(result.bytes).toBe(expectedBytes);
+    }
   });
 });

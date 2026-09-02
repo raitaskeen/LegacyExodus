@@ -258,5 +258,53 @@ describe("runtime foundation", () => {
       expect(runtime.getPluginRegistry()).toBeDefined();
       expect(runtime.getPluginLoader()).toBeDefined();
     });
+
+    it("Case K: allows registering multiple services with distinct names", async () => {
+      const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+      const runtime = context.runtime;
+
+      const serviceA: RuntimeService = { name: "service-alpha" };
+      const serviceB: RuntimeService = { name: "service-beta" };
+
+      expect(() => runtime.registerService(serviceA)).not.toThrow();
+      expect(() => runtime.registerService(serviceB)).not.toThrow();
+
+      await runtime.start();
+      expect(runtime.getStatus()).toBe("running");
+      await runtime.shutdown();
+      expect(runtime.getStatus()).toBe("stopped");
+    });
+
+    it("Case L: throws RUNTIME_DUPLICATE_SERVICE when registering duplicate service names and preserves original registration", async () => {
+      const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+      const runtime = context.runtime;
+
+      let service1Started = false;
+      const service1: RuntimeService = {
+        name: "duplicate-target",
+        start: () => { service1Started = true; },
+      };
+      const service2: RuntimeService = {
+        name: "duplicate-target",
+        start: () => { throw new Error("Should not start"); },
+      };
+
+      runtime.registerService(service1);
+
+      expect(() => runtime.registerService(service2)).toThrow(
+        expect.objectContaining({
+          code: "RUNTIME_DUPLICATE_SERVICE",
+          message: expect.stringContaining("duplicate-target"),
+        }),
+      );
+
+      // Original service remains registered and runs normally
+      await runtime.start();
+      expect(runtime.getStatus()).toBe("running");
+      expect(service1Started).toBe(true);
+
+      await runtime.shutdown();
+      expect(runtime.getStatus()).toBe("stopped");
+    });
   });
 });

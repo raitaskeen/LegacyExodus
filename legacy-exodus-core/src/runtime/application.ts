@@ -26,6 +26,7 @@ export class ApplicationRuntime {
   private readonly services: RuntimeService[] = [];
   private readonly startedServices: RuntimeService[] = [];
   private status: RuntimeStatus = "created";
+  private shutdownPromise?: Promise<void>;
 
   public constructor(
     private readonly config: RuntimeConfig,
@@ -41,6 +42,14 @@ export class ApplicationRuntime {
         code: "RUNTIME_SERVICE_REGISTRATION_CLOSED",
         message: "Services can only be registered before the runtime starts.",
         metadata: { status: this.status, service: service.name },
+      });
+    }
+
+    if (this.services.some((existing) => existing.name === service.name)) {
+      throw new LegacyExodusError({
+        code: "RUNTIME_DUPLICATE_SERVICE",
+        message: `A runtime service named "${service.name}" is already registered.`,
+        metadata: { service: service.name },
       });
     }
 
@@ -61,12 +70,9 @@ export class ApplicationRuntime {
     }
 
     this.status = "starting";
+    this.startedServices.length = 0;
 
     try {
-      this.status = "configured";
-      this.status = "storage-ready";
-      this.status = "plugin-system-ready";
-
       for (const service of this.services) {
         await service.start?.();
         this.startedServices.push(service);
@@ -75,13 +81,11 @@ export class ApplicationRuntime {
       this.status = "running";
       this.logger.info("Application started");
     } catch (error: unknown) {
-      this.logger.error({ error }, "Application startup failed");
+      this.status = "stopped";
       try {
         await this.performCleanup();
-      } catch {
-        // Suppress secondary cleanup errors to rethrow original startup error
-      } finally {
-        this.status = "stopped";
+      } catch (cleanupError: unknown) {
+        this.logger.error({ error: cleanupError }, "Cleanup failed after startup failure");
       }
       throw error;
     }
@@ -92,13 +96,22 @@ export class ApplicationRuntime {
       return;
     }
 
-    this.status = "stopping";
-    try {
-      await this.performCleanup();
-    } finally {
-      this.status = "stopped";
-      this.logger.info("Application stopped");
+    if (this.shutdownPromise !== undefined) {
+      return this.shutdownPromise;
     }
+
+    this.status = "stopping";
+    this.shutdownPromise = (async () => {
+      try {
+        await this.performCleanup();
+      } finally {
+        this.status = "stopped";
+        this.shutdownPromise = undefined;
+        this.logger.info("Application stopped");
+      }
+    })();
+
+    return this.shutdownPromise;
   }
 
   public getStatus(): RuntimeStatus {
