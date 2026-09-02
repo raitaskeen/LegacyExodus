@@ -1,10 +1,11 @@
+import * as cp from "node:child_process";
 import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 
 import { createDiscoveryProjection } from "@contracts/discovery-projection";
 import { FileDiscoveryProjectionAdapter, resolveGitCommitSha } from "@storage/index";
@@ -93,24 +94,33 @@ describe("FileDiscoveryProjectionAdapter", () => {
     }
   });
 
-  test("SEC-01 Test 3: Windows-style path with backslashes is handled correctly as process working directory", async (): Promise<void> => {
-    const repoDir = join(tmpdir(), `sec01-win-path-${randomUUID()}`);
-    await mkdir(repoDir, { recursive: true });
+  test("SEC-01 Test 3: Windows-style path with backslashes is handled correctly as process working directory", (): void => {
+    const windowsPath = "C:\\projects\\legacy-exodus\\repo";
+    const mockSha = "abcdef1234567890abcdef1234567890abcdef12";
+
+    const spy = spyOn(cp, "spawnSync").mockReturnValue({
+      status: 0,
+      stdout: `${mockSha}\n`,
+      stderr: "",
+      pid: 1234,
+      output: [null, `${mockSha}\n`, ""],
+      signal: null,
+    } as any);
 
     try {
-      spawnSync("git", ["init"], { cwd: repoDir, stdio: "ignore", shell: false });
-      spawnSync("git", ["config", "user.email", "audit@legacyexodus.local"], { cwd: repoDir, stdio: "ignore", shell: false });
-      spawnSync("git", ["config", "user.name", "Security Auditor"], { cwd: repoDir, stdio: "ignore", shell: false });
-      await writeFile(join(repoDir, "test.txt"), "hello", "utf8");
-      spawnSync("git", ["add", "test.txt"], { cwd: repoDir, stdio: "ignore", shell: false });
-      spawnSync("git", ["commit", "-m", "win path test"], { cwd: repoDir, stdio: "ignore", shell: false });
-
-      const windowsPath = repoDir.replace(/\//g, "\\");
       const sha = resolveGitCommitSha(windowsPath);
-      expect(sha).toBeDefined();
+      expect(sha).toBe(mockSha);
       expect(sha).toMatch(/^[0-9a-f]{40}$/);
+      expect(spy).toHaveBeenCalledWith(
+        "git",
+        ["rev-parse", "HEAD"],
+        expect.objectContaining({
+          cwd: windowsPath,
+          shell: false,
+        }),
+      );
     } finally {
-      await rm(repoDir, { force: true, recursive: true });
+      spy.mockRestore();
     }
   });
 
