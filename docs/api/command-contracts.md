@@ -45,6 +45,7 @@ Executes full multi-stage analysis (Discovery $\to$ Parsing $\to$ Symbols $\to$ 
 * **Payload:**
   * `projectId` (`string.uuid`): Project ID.
   * `path` (`string`): Repository directory path.
+  * `refresh` (`boolean`, optional): When `true`, forces fresh discovery and bypasses valid cached snapshots in `.discovery/`.
 
 ### 2.4 `UpdateKnowledge`
 Updates the knowledge graph projection with a processed artifact.

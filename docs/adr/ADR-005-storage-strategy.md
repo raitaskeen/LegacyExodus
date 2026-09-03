@@ -14,18 +14,24 @@ Key challenges:
 ## Decision
 1. **Abstract Storage Manager:** Implement `StorageManager` (`storage-manager.ts`) providing pluggable `StorageProvider` interfaces for CRUD operations on typed `StorageRecord` entities.
 2. **In-Memory Volatile Provider:** Use `MemoryStorageProvider` (`memory-storage.ts`) for fast, isolated, deterministic in-memory operations during CLI analysis runs.
-3. **Streaming JSON Projections:** Implement `StreamingJsonWriter` (`streaming-json-writer.ts`) for disk projections. Uses bounded 64KB chunk buffers with backpressure and atomic flush to stream multi-megabyte JSON arrays/objects with minimal heap memory consumption.
-4. **Current Implementation vs Target Architecture:**
-   * **Current / Implemented:** `MemoryStorageProvider`, `SqliteStorageProvider` (with `PRAGMA user_version = 1` schema compatibility, `PRAGMA busy_timeout = 5000;`, and WAL journaling), `StreamingJsonWriter` chunked disk projection with bounded 64KB backpressure, atomic filesystem replacement with unique temporary paths and fallback promotion.
+3. **Streaming JSON Projections:** Implement `StreamingJsonWriter` (`streaming-json-writer.ts`) for disk projections. Uses bounded 64KB chunk buffers with backpressure, inline SHA-256 computation, and atomic flush to stream multi-megabyte JSON arrays/objects with minimal heap memory consumption.
+4. **Discovery Snapshot Reuse & Freshness (REUSE-01, REUSE-02, REUSE-03):** Use `DiscoveryValidator` (`discovery-validator.ts`) to validate on-disk `.discovery/` projections against `manifest.json` cryptographic checksums and target workspace freshness (file set, sizes, and `sourceDigest`) before analysis. When valid, downstream commands and migration consumers reuse persisted discovery facts and restored analysis records (`dependency-graph`, `symbol-table`, `knowledge-graph`, `semantic-analysis`, `control-flow-analysis`, `data-flow-analysis`, `analysis-run`), bypassing full file scanning and AST re-parsing. Validated artifact bytes are returned in-memory to prevent filesystem TOCTOU tampering. If any artifact is corrupted, missing, or mismatched, the engine automatically falls back to fresh discovery.
+5. **Persistent Cross-Process Storage:** `SqliteStorageProvider` enables durable persistence across independent CLI and migration process lifetimes, queryable via `DiscoveryQueryService` without whole-graph memory materialization. Deserialized record payloads are recursively deep-frozen (`deepFreeze()`, DAT-01) to ensure absolute immutability.
+6. **Storage Driver Auto-Inference & Path Validation (STORAGE-01):** When `--storage-path` is provided without `--storage-driver`, the runtime automatically infers the `"sqlite"` storage driver. If `--storage-driver memory` is explicitly requested alongside `--storage-path`, the runtime throws an explicit `ConfigurationError` to prevent silent persistence misconfiguration.
+7. **Current Implementation vs Target Architecture:**
+   * **Current / Implemented:** `MemoryStorageProvider`, `SqliteStorageProvider` (with `PRAGMA user_version = 1` schema compatibility, `PRAGMA busy_timeout = 5000;`, and WAL journaling), `StreamingJsonWriter` chunked disk projection with inline hashing and backpressure, `DiscoveryValidator` cryptographic manifest integrity, automatic discovery snapshot reuse with workspace freshness and artifact restoration, `DiscoveryQueryService` run-scoped queries, storage driver auto-inference and path validation.
    * **Target / Planned:** DuckDB embedded analytics, Parquet columnar export dumps, and multi-tenant PostgreSQL persistence.
 
 ## Alternatives Considered
 * **Eager JSON Serialization (`JSON.stringify`):** Rejected because serializing multi-megabyte graph models in a single call causes heap thrashing and out-of-memory errors on large repositories.
 * **External Heavy Database Requirement:** Rejected for base CLI to preserve zero external infrastructure dependencies by leveraging in-memory storage and Bun's built-in native embedded SQLite engine.
+* **Unvalidated File Caching:** Rejected because stale or corrupted discovery files would cause false downstream migration results. `DiscoveryValidator` guarantees complete cryptographic artifact integrity before reuse.
 
 ## Consequences
+* **Positive:** Sub-millisecond discovery execution on unchanged repositories with zero AST/scanner overhead.
 * **Positive:** Flat memory profile during large repository scans (verified on Tier-2 Fastify and Tier-3 Express).
 * **Positive:** Clean abstraction allows switching between in-memory and persistent SQLite storage providers without changing analysis engines.
+* **Positive:** Independent migration processes can query persistent SQLite facts without rediscovering the target codebase.
 * **Tradeoff:** Streaming output requires careful chunk delimiter and backpressure management.
 
 ## Verification / Evidence

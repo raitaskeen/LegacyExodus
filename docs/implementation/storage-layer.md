@@ -111,6 +111,18 @@ To ensure resilient execution across concurrent access and high-throughput pipel
 3. **Integrity & Concurrency Baseline:**
    * Retains `PRAGMA journal_mode = WAL;` for concurrent reads during writes, `PRAGMA synchronous = NORMAL;` for crash-safe performance, and `PRAGMA foreign_keys = ON;` for relational integrity.
 
+### 4.7 Deep Immutability on Deserialization (DAT-01)
+
+To guarantee that retrieved records cannot be modified in-place by consumers:
+* `SqliteStorageProvider.deserializeRecord()` applies `deepFreeze()` recursively to deserialized JSON payloads.
+* All nested objects, arrays, matrices, and maps within retrieved `StorageRecord` entities are deeply frozen, preventing accidental mutations from bleeding across queries or runtime scopes.
+
+### 4.8 Storage Driver Auto-Inference & Path Validation (STORAGE-01)
+
+To guarantee that persistence requests via CLI flags or environment variables never silently fall back to volatile memory:
+* If `--storage-path` or `LEGACY_EXODUS_STORAGE_DB_PATH` is specified without an explicit storage driver, `loadRuntimeConfig` automatically selects `"sqlite"`.
+* If `--storage-driver memory` is combined with `--storage-path`, `loadRuntimeConfig` throws an immediate, explicit `ConfigurationError`, rejecting ambiguous configurations.
+
 ---
 
 ## 5. Implementation Evidence

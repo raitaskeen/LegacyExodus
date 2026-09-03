@@ -16,6 +16,36 @@ and this project adheres to deterministic semantic contracts and verifiable engi
 
 ---
 
+## [0.8.1] - Controlled Forensic Hardening, Lifecycle Integrity & Documentation Synchronization
+
+- **Discovery Freshness & Fingerprint Verification (REUSE-01):** Hardened `DiscoveryValidator` to verify workspace freshness against target directory contents before reusing cached snapshots, validating file set, file sizes, and workspace source content digest (`computeWorkspaceDigest`).
+- **Persisted Analysis Artifact Restoration (REUSE-02):** Reconstituted and restored full analysis records into storage on discovery snapshot reuse (`dependency-graph`, `symbol-table`, `knowledge-graph`, `semantic-analysis`, `control-flow-analysis`, `data-flow-analysis`, and terminal `analysis-run`), ensuring subsequent scoped queries retrieve complete persisted state.
+- **In-Memory Validated Byte Consumption / TOCTOU Boundary (REUSE-03):** Refactored `DiscoveryValidator` and `AnalyzeProjectHandler` to return and consume validated in-memory artifact bytes (`validatedArtifacts: ReadonlyMap<string, string>`), completely eliminating disk TOCTOU race conditions between validation and downstream JSON parsing.
+- **Discovery Root & Manifest Symlink Boundary (SEC-03):** Hardened `DiscoveryValidator` to verify that `.discovery/` directory root and `manifest.json` are not symbolic links (`lstat`) and physically resolve within the analyzed project workspace boundary.
+- **CFG Loop Fall-Through Ownership & Finally Routing (CFG-01 / TEST-01 / TEST-02):** Corrected `control-flow-builder.ts` loop fall-through ownership so loop bodies terminate exclusively via back-edges without illegal duplicate fall-through edges to after-loop blocks, and hardened `try-finally` routing assertions (`continueBlock -> finalizer [finally] -> loop.headerBlockId [continue]`).
+- **Runtime Awaitability, Barrier & Error Precedence (RUNTIME-01):** Hardened `ApplicationRuntime.initiateShutdown()` with a single-flight coalesced shutdown barrier (`this.shutdownPromise`), ensuring concurrent shutdown requests share a single execution path, and preserved primary startup errors when startup rollback encounters cleanup failures.
+- **Storage Driver Auto-Inference & Path Validation (STORAGE-01):** Hardened CLI configuration to automatically infer `"sqlite"` storage driver when `--storage-path` is provided without an explicit driver, and added validation strictly rejecting `--storage-path` when combined with `--storage-driver memory`.
+- **Event Reducer Metadata Lifecycle (EVENT-01 & EVENT-02):** Hardened `event-reducer.ts` to clear stale `analysisError` upon successful `AnalysisRunCompleted`, and clear stale `analysisDurationMs` upon `AnalysisRunFailed`.
+- **Strongly Typed Symbol Derivation (TEST-03):** Replaced untyped `any[]` collections in discovery reuse integration tests with strongly typed symbols derived from `DiscoveryQueryService["getSymbolsForFile"]`.
+- **Semantic Snapshot Reuse Assertion (TEST-04):** Replaced flaky wall-clock timing comparisons with deterministic semantic assertions (`isReused === true`).
+- **Comprehensive Contract Documentation (DOC-01):** Added exhaustive TSDoc contract documentation across all touched core interfaces, functions, and state machines.
+- **Empirical Baseline Scaling:** Expanded full test suite to **800/800 passing tests across 92 test files** (8,536 assertions, 0 failures), maintaining 10/10 benchmark governance checks and 4/4 verification dashboard gates.
+
+---
+
+## [0.8.0] - Security Boundary Hardening, Storage Immutability & Lifecycle Integrity
+
+- **Git Subprocess Hardening (SEC-01):** Replaced shell-based `execSync` in `file-discovery-projection.ts` with direct process execution via `spawnSync("git", ["rev-parse", "HEAD"], { shell: false })`, eliminating shell interpretation risk at the Git revision lookup boundary when analyzing repository directories.
+- **Discovery Manifest Path Traversal Hardening (SEC-02):** Hardened `DiscoveryValidator` with lexical boundary containment verification (`isPathWithinDirectory`), physical canonicalization via `realpath()`, and symlink rejection via `lstat()`. The validation is hardened against the investigated traversal and symlink-escape threat model.
+- **SQLite Deserialization Deep Immutability (DAT-01):** Restored recursive immutability in `SqliteStorageProvider.deserializeRecord()` by applying `deepFreeze()` to deserialized record payloads, guaranteeing payload immutability across nested objects, arrays, and matrices without identified residual risk within the investigated SQLite deserialization boundary.
+- **Event Reducer Terminal State & Replay Integrity (EVT-01):** Corrected `event-reducer.ts` to reduce `AnalysisRunCompleted` ($\to \text{COMPLETED}$) and `AnalysisRunFailed` ($\to \text{FAILED}$) with analysis and error metadata, ensuring `orchestrator.replay()` accurately matches live execution status without state divergence.
+- **Persistent Storage Snapshot Reuse & Streaming Projections (P0.4):** Implemented discovery snapshot reuse bypassing re-parsing on unchanged repositories, bounded 64 KB chunked streaming atomic JSON writes (`StreamingJsonWriter`), and added `--refresh`, `--storage-driver`, and `--storage-path` CLI options.
+- **CFG Loop Semantics & Runtime Lifecycle Safeguards (P0.5):** Corrected `DoWhileStatement` body-first execution and edge routing in `control-flow-builder.ts`, and guarded `ApplicationRuntime.registerService()` against duplicate service registrations.
+- **Forensic Memory Scalability & Determinism Verification (PRF-01 & DET-01):** Validated in-memory AST lifecycle (explicit array release at `astResults.length = 0` prior to persistence), confirmed zero cross-project memory accumulation in multi-run isolation tests, and verified bit-for-bit deterministic JSON output and recursive canonical key-sorting in storage record hashing.
+- **Empirical Baseline Scaling:** Expanded full test suite to **759/759 passing tests across 92 test files** (8,222 assertions, 0 failures), maintaining 10/10 benchmark governance checks and 4/4 verification dashboard gates.
+
+---
+
 ## [0.7.0] - CLI Foundation, Command Discovery & Verification Hardening
 
 - **Unified Visual Theme Engine:** Implemented 3 curated terminal themes (`classic`, `aurora`, `mono`) via `ThemeEngine` with semantic color roles (`brand`, `heading`, `text`, `muted`, `border`, `success`, `warning`, `error`, `info`, `active`), controlled by `--theme <name>` flag and `LEGACYEXODUS_THEME` environment variable.
