@@ -350,4 +350,194 @@ describe("Runtime Shutdown Cleanup & Resource Disposal (F-006)", () => {
     expect(runtime.getStatus()).toBe("stopped");
     expect(stopCallCount).toBe(1);
   });
+
+  // ─── RUNTIME-01: Startup Failure Cleanup & Shutdown Race Remediation ──────
+
+  it("RUNTIME-01 Test 1: startup failure cleanup completes before runtime enters stopped state", async () => {
+    const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+    const runtime = context.runtime;
+
+    let cleanupBarrierResolver: () => void = () => {};
+    const cleanupBarrier = new Promise<void>((resolve) => {
+      cleanupBarrierResolver = resolve;
+    });
+
+    let cleanupStarted = false;
+    let cleanupCompleted = false;
+
+    const svc1: RuntimeService = {
+      name: "svc-controlled-cleanup",
+      start: () => {},
+      stop: async () => {
+        cleanupStarted = true;
+        await cleanupBarrier;
+        cleanupCompleted = true;
+      },
+    };
+
+    const svc2: RuntimeService = {
+      name: "svc-failing",
+      start: () => {
+        throw new Error("Startup failure trigger");
+      },
+    };
+
+    runtime.registerService(svc1);
+    runtime.registerService(svc2);
+
+    const startPromise = runtime.start();
+
+    // Yield control so start() enters catch block and invokes cleanup
+    await new Promise((resolve) => setImmediate(resolve));
+
+    // Cleanup has begun, but barrier is not released
+    expect(cleanupStarted).toBe(true);
+    expect(cleanupCompleted).toBe(false);
+
+    // INVARIANT 1: Runtime must NOT report "stopped" while cleanup is still running
+    expect(runtime.getStatus()).toBe("stopping");
+
+    // Release the barrier
+    cleanupBarrierResolver();
+
+    // Startup rejects with original startup error
+    await expect(startPromise).rejects.toThrow("Startup failure trigger");
+
+    // After cleanup completes, runtime reaches terminal "stopped" state
+    expect(cleanupCompleted).toBe(true);
+    expect(runtime.getStatus()).toBe("stopped");
+  });
+
+  it("RUNTIME-01 Test 2: concurrent shutdown() awaits in-flight startup failure cleanup", async () => {
+    const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+    const runtime = context.runtime;
+
+    let cleanupBarrierResolver: () => void = () => {};
+    const cleanupBarrier = new Promise<void>((resolve) => {
+      cleanupBarrierResolver = resolve;
+    });
+
+    let cleanupCompleted = false;
+
+    const svc1: RuntimeService = {
+      name: "svc-blocking-cleanup",
+      start: () => {},
+      stop: async () => {
+        await cleanupBarrier;
+        cleanupCompleted = true;
+      },
+    };
+
+    const svc2: RuntimeService = {
+      name: "svc-failing",
+      start: () => {
+        throw new Error("Startup failed");
+      },
+    };
+
+    runtime.registerService(svc1);
+    runtime.registerService(svc2);
+
+    const startPromise = runtime.start().catch(() => {});
+
+    // Allow start() to fail and enter cleanup
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(runtime.getStatus()).toBe("stopping");
+
+    // T2 calls shutdown() while cleanup is in flight
+    let shutdownResolved = false;
+    const shutdownPromise = runtime.shutdown().then(() => {
+      shutdownResolved = true;
+    });
+
+    // Yield to allow any premature synchronous resolution
+    await new Promise((resolve) => setImmediate(resolve));
+
+    // INVARIANT 2: shutdown() must NOT have resolved while cleanup is still blocked
+    expect(shutdownResolved).toBe(false);
+    expect(cleanupCompleted).toBe(false);
+    expect(runtime.getStatus()).toBe("stopping");
+
+    // Release cleanup barrier
+    cleanupBarrierResolver();
+
+    await Promise.all([startPromise, shutdownPromise]);
+
+    // Both cleanup and shutdown are now complete
+    expect(cleanupCompleted).toBe(true);
+    expect(shutdownResolved).toBe(true);
+    expect(runtime.getStatus()).toBe("stopped");
+  });
+
+  it("RUNTIME-01 Test 3: multiple concurrent shutdown callers during startup failure coalesce to single cleanup", async () => {
+    const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+    const runtime = context.runtime;
+
+    let stopCount = 0;
+    let barrierResolver: () => void = () => {};
+    const barrier = new Promise<void>((resolve) => {
+      barrierResolver = resolve;
+    });
+
+    const svc1: RuntimeService = {
+      name: "svc-single-flight",
+      start: () => {},
+      stop: async () => {
+        stopCount++;
+        await barrier;
+      },
+    };
+
+    const svc2: RuntimeService = {
+      name: "svc-fail",
+      start: () => {
+        throw new Error("Early failure");
+      },
+    };
+
+    runtime.registerService(svc1);
+    runtime.registerService(svc2);
+
+    const startPromise = runtime.start().catch(() => {});
+
+    await new Promise((resolve) => setImmediate(resolve));
+
+    // 3 concurrent callers invoke shutdown()
+    const p1 = runtime.shutdown();
+    const p2 = runtime.shutdown();
+    const p3 = runtime.shutdown();
+
+    barrierResolver();
+
+    await Promise.all([startPromise, p1, p2, p3]);
+
+    // INVARIANT 3: Cleanup executed exactly once (single-flight)
+    expect(stopCount).toBe(1);
+    expect(runtime.getStatus()).toBe("stopped");
+  });
+
+  it("RUNTIME-01 Test 4: startup error remains observable after cleanup completes", async () => {
+    const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+    const runtime = context.runtime;
+
+    const svc1: RuntimeService = {
+      name: "svc-1",
+      start: () => {},
+      stop: () => {},
+    };
+
+    const svc2: RuntimeService = {
+      name: "svc-fail",
+      start: () => {
+        throw new Error("Specific startup failure message");
+      },
+    };
+
+    runtime.registerService(svc1);
+    runtime.registerService(svc2);
+
+    // INVARIANT 4: Startup error is accurately propagated
+    await expect(runtime.start()).rejects.toThrow("Specific startup failure message");
+    expect(runtime.getStatus()).toBe("stopped");
+  });
 });

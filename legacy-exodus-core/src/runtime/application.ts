@@ -74,16 +74,23 @@ export class ApplicationRuntime {
 
     try {
       for (const service of this.services) {
+        if (this.status !== "starting") {
+          break;
+        }
         await service.start?.();
         this.startedServices.push(service);
+      }
+
+      if (this.status !== "starting") {
+        await this.shutdownPromise;
+        return;
       }
 
       this.status = "running";
       this.logger.info("Application started");
     } catch (error: unknown) {
-      this.status = "stopped";
       try {
-        await this.performCleanup();
+        await this.initiateShutdown();
       } catch (cleanupError: unknown) {
         this.logger.error({ error: cleanupError }, "Cleanup failed after startup failure");
       }
@@ -96,6 +103,10 @@ export class ApplicationRuntime {
       return;
     }
 
+    return this.initiateShutdown();
+  }
+
+  private initiateShutdown(): Promise<void> {
     if (this.shutdownPromise !== undefined) {
       return this.shutdownPromise;
     }
