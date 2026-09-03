@@ -32,11 +32,19 @@ sequenceDiagram
 * **`DependencyDetected`:** Emitted when `package.json` dependencies are detected (`name`, `version`).
 * **`FrameworkDetected`:** Emitted when frameworks (Express, Fastify) are identified (`name`, `evidence`).
 * **`DiscoveryCompleted`:** Emitted when repository scanning finishes (`projectId`, `fileCount`, `dependencyCount`, `frameworkCount`).
+* **`DiscoveryEnumerationFailure`:** Emitted when directory traversal encounters an unreadable entry (`path`, `kind`, `code`).
+* **`KnowledgeUpdated`:** Emitted when the knowledge graph projection is updated (`artifactId`).
 
 ### 2.2 Parser & Symbol Events
 * **`FileParsed`:** Emitted when AST normalization completes (`fileId`, `path`, `parserId`, `nodeCount`, `errorCount`).
 * **`SymbolsExtracted`:** Emitted when symbol and scope extraction completes (`fileId`, `path`, `symbolCount`).
 * **`ParserFailure`:** Emitted when AST parsing encounters an unrecoverable syntax error (`fileId`, `path`, `code`).
+* **`SymbolsExtractionFailure`:** Emitted when symbol extraction encounters an unrecoverable failure on a file (`fileId`, `path`, `code`).
+
+### 2.3 Analysis Run Lifecycle Events
+* **`AnalysisRunStarted`:** Emitted when an analysis execution begins (`projectId`, `analysisRunId`).
+* **`AnalysisRunCompleted`:** Emitted when an analysis run completes successfully (`projectId`, `analysisRunId`, `durationMs`). Clears any previous `analysisError` metadata.
+* **`AnalysisRunFailed`:** Emitted when an analysis run fails (`projectId`, `analysisRunId`, `error`). Clears any previous `analysisDurationMs` metadata.
 
 ---
 

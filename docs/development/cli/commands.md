@@ -56,6 +56,15 @@ legacy-exodus init ./app --json
 
 Analyzes repository structure, ASTs, symbols, dependencies, and projections `[read-only]`.
 
+### Options
+| Option | Description |
+|---|---|
+| `--json` | Emit complete machine-readable discovery inventory in JSON to `stdout`. |
+| `--theme <name>` | Visual theme: `classic` (default), `aurora`, `mono`. |
+| `--refresh` | Force fresh discovery and bypass existing snapshot reuse. |
+| `--storage-driver <driver>` | Storage driver to use (`memory`, `sqlite`). Defaults to `memory`. |
+| `--storage-path <path>` | Database file path for SQLite storage. Auto-infers `sqlite` driver; rejects conflicting `--storage-driver memory`. |
+
 ```bash
 # Analyze web application
 legacy-exodus analyze ./apps/web
@@ -65,6 +74,12 @@ legacy-exodus analyze . --theme aurora
 
 # Stream JSON discovery inventory to stdout
 legacy-exodus analyze ./repo --json
+
+# Force fresh discovery, ignoring any valid cached snapshots
+legacy-exodus analyze ./repo --refresh
+
+# Persist analysis records to a SQLite database file
+legacy-exodus analyze ./repo --storage-path ./exodus.db
 ```
 
 ---

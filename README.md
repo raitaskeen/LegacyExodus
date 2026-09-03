@@ -15,7 +15,7 @@
   <p>
     <img src="https://img.shields.io/badge/Runtime-Bun_>=1.3.0-f9f8f6?style=for-the-badge&logo=bun" alt="Bun">
     <img src="https://img.shields.io/badge/TypeScript-Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript Strict">
-    <img src="https://img.shields.io/badge/Tests-759_Passing_|_0_Regressions-success?style=for-the-badge" alt="759 Tests Passing">
+    <img src="https://img.shields.io/badge/Tests-800_Passing_|_0_Regressions-success?style=for-the-badge" alt="800 Tests Passing">
     <img src="https://img.shields.io/badge/Governance-10_/_10_Audits_Passed-success?style=for-the-badge" alt="10/10 Governance Passed">
     <img src="https://img.shields.io/badge/Status-Phase_3A_/_Hardened-success?style=for-the-badge" alt="Phase 3A / Hardened">
   </p>
@@ -28,8 +28,8 @@
 ---
 
 > **Current Implementation Reality (September 2026):**
-> * **Implemented & Verified:** Deterministic JavaScript/TypeScript multi-stage repository intelligence pipeline running natively on Bun (Discovery, Babel AST Parsing & Normalization, Scope & Symbol Extraction with `var` hoisting, Destructuring pattern extraction, Default parameter filtering, CommonJS exports & prototype methods, Module resolution & Dependency graphs, Semantic Call graphs with constructor instantiation resolution, Do-While & Basic-Block CFG, Def-Use DFG with interprocedural taint flow, Streaming JSON serialization with 64KB backpressure, Deep-frozen In-Memory and SQLite indexed storage providers with snapshot reuse, Three-Universe fidelity validator, 10-point governance self-audit, and 3-run bit-for-bit determinism across Tier 1, 2, and 3 targets).
-> * **Security & Lifecycle Hardening:** Direct Git subprocess execution (`shell: false`), discovery manifest lexical and physical boundary containment verification, recursive immutability on SQLite deserialization, and complete terminal event reduction lifecycle handling for orchestrator replay.
+> * **Implemented & Verified:** Deterministic JavaScript/TypeScript multi-stage repository intelligence pipeline running natively on Bun (Discovery, Babel AST Parsing & Normalization, Scope & Symbol Extraction with `var` hoisting, Destructuring pattern extraction, Default parameter filtering, CommonJS exports & prototype methods, Module resolution & Dependency graphs, Semantic Call graphs with constructor instantiation resolution, Do-While & Basic-Block CFG, Def-Use DFG with interprocedural taint flow, Streaming JSON serialization with 64KB backpressure, Deep-frozen In-Memory and SQLite indexed storage providers with snapshot reuse and artifact restoration, Three-Universe fidelity validator, 10-point governance self-audit, and 3-run bit-for-bit determinism across Tier 1, 2, and 3 targets).
+> * **Security & Lifecycle Hardening:** Direct Git subprocess execution (`shell: false`), discovery manifest lexical and physical boundary containment verification, `.discovery` root and `manifest.json` symlink rejection, direct consumption of in-memory validated artifact bytes eliminating TOCTOU risk, recursive immutability on SQLite deserialization, loop fall-through correction, awaitable single-flight runtime shutdown barrier with primary error preservation, SQLite storage driver auto-inference and path validation, and terminal event reduction lifecycle handling with stale metadata cleanup.
 > * **CLI Foundation:** Comprehensive terminal interface with 3 themes (`classic`, `aurora`, `mono`), discovery options (`--refresh`, `--storage-driver`, `--storage-path`), dynamic test explorer with 12 subsystem domains (`test [domain]`, `--list`, `-v, --verbose`, `--bail`), multi-gate repository verification (`verify`), width-safe rendering (F-024), and pure machine-readable JSON output (`--json`).
 > * **Target Architecture (Future Vision):** Unified IR/SSA intermediate representation, AI Gateway proxying, ZelvoxForge multi-agent code generation swarms, VymosGate isolated compiler sandboxes, and Rust/Axum/SQLx synthesis are planned target architecture and are not present in current core implementation.
 > * **Migration Safety Verdict:** Sample-based validation across 25 representative files per target establishes 100% sample recall, but whole-repository migration safety is strictly maintained as `MIGRATION_SAFETY_NOT_YET_ESTABLISHED`.
@@ -354,6 +354,15 @@ COMMANDS
 # Switch visual theme
 legacy-exodus status --theme aurora
 
+# Analyze repository and stream discovery inventory to stdout in JSON
+legacy-exodus analyze ./my-app --json
+
+# Force fresh discovery, bypassing valid cached snapshots
+legacy-exodus analyze ./my-app --refresh
+
+# Persist analysis to SQLite database (auto-infers sqlite storage driver)
+legacy-exodus analyze ./my-app --storage-path ./workspace.db
+
 # List test domain taxonomy
 legacy-exodus test --list
 
@@ -665,7 +674,7 @@ git diff --check
 All claims in LegacyExodus are grounded in reproducible automated test suites, multi-tier real-repository benchmarks, and cryptographic provenance locks.
 
 ### 17.1 Test Suite & Static Typing
-* **Full Test Suite:** `bun test` $\to$ **678 / 678 passing tests across 88 files** (7,617 assertions, 0 failures, ~30s runtime).
+* **Full Test Suite:** `bun test` $\to$ **800 / 800 passing tests across 92 files** (8,536 assertions, 0 failures, ~30s runtime).
 * **TypeScript Type Checking:** `bun run typecheck` $\to$ **0 errors**.
 * **Benchmark Governance Audit:** `bun run benchmark audit` $\to$ **10 / 10 checks passed (`PASS`)**.
 * **Repository Verification Dashboard:** `bun run verify` $\to$ **4 / 4 gates passed (`PASS`)**.

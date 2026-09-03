@@ -72,7 +72,7 @@ sequenceDiagram
     Test-->>Dev: Expected failure observed
     Dev->>Engine: 2. Implement minimal fix
     Dev->>Test: 3. Re-run focused test (Pass)
-    Dev->>Test: 4. Run full test suite (660 tests pass)
+    Dev->>Test: 4. Run full test suite (800 tests pass)
     Dev->>Gov: 5. Run benchmark audit & typecheck
     Gov-->>Dev: 10/10 PASS & 0 typecheck errors
 ```
