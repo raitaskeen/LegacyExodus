@@ -145,12 +145,128 @@ export class AnalyzeProjectHandler {
             analysisRunId: command.id,
           });
 
-          const durationMs = performance.now() - startedAt;
-          const analyzedCount = discovery.files.filter(
+          const records: StorageRecord[] = [record];
+
+          const required = new Set(validation.manifest.requiredArtifacts);
+          const analyzableFiles = discovery.files.filter(
             (file) =>
               (file.language === "javascript" || file.language === "typescript") &&
               (file.fileKind === "source" || file.fileKind === undefined),
-          ).length;
+          );
+
+          // If project has analyzable source files, the snapshot must contain analysis artifacts
+          if (analyzableFiles.length > 0 && (!required.has("dependency-graph.json") || !required.has("symbols.json"))) {
+            throw new Error("Snapshot contains discovery only; falling through to full analysis.");
+          }
+
+          if (required.has("dependency-graph.json")) {
+            const depGraphJson = JSON.parse(await readFile(join(discoveryDir, "dependency-graph.json"), "utf8"));
+            records.push(
+              createStorageRecord("dependency-graph", {
+                projectId: discovery.projectId,
+                analysisRunId: command.id,
+                nodes: depGraphJson.nodes ?? [],
+                edges: depGraphJson.edges ?? [],
+                cycles: depGraphJson.cycles ?? [],
+              }),
+            );
+          }
+
+          if (required.has("symbols.json")) {
+            const symbolsJson = JSON.parse(await readFile(join(discoveryDir, "symbols.json"), "utf8")) as readonly any[];
+            const symbolsByFile = new Map<string, any[]>();
+            for (const symbol of symbolsJson) {
+              let list = symbolsByFile.get(symbol.filePath);
+              if (!list) {
+                list = [];
+                symbolsByFile.set(symbol.filePath, list);
+              }
+              list.push({
+                id: symbol.id,
+                kind: symbol.kind,
+                name: symbol.name,
+                filePath: symbol.filePath,
+                exported: Boolean(symbol.exported),
+                defaultExport: Boolean(symbol.defaultExport),
+                moduleSpecifier: symbol.moduleSpecifier ?? null,
+                sourceSymbolName: symbol.sourceSymbolName ?? null,
+              });
+            }
+
+            for (const file of analyzableFiles) {
+              const fileSymbols = symbolsByFile.get(file.path) ?? [];
+              records.push(
+                createStorageRecord("symbol-table", {
+                  fileId: file.id,
+                  path: file.path,
+                  projectId: discovery.projectId,
+                  analysisRunId: command.id,
+                  symbolCount: fileSymbols.length,
+                  classes: fileSymbols.filter((s) => s.kind === "class").length,
+                  functions: fileSymbols.filter((s) => s.kind === "function").length,
+                  imports: fileSymbols.filter((s) => s.kind === "import").length,
+                  exports: fileSymbols.filter((s) => s.exported === true).length,
+                  symbols: fileSymbols,
+                }),
+              );
+            }
+          }
+
+          if (required.has("knowledge.json")) {
+            const knowledgeJson = JSON.parse(await readFile(join(discoveryDir, "knowledge.json"), "utf8"));
+            records.push(
+              createStorageRecord("knowledge-graph", {
+                projectId: discovery.projectId,
+                analysisRunId: command.id,
+                nodes: knowledgeJson.nodes ?? [],
+                edges: knowledgeJson.edges ?? [],
+              }),
+            );
+          }
+
+          if (required.has("semantic.json")) {
+            const semanticJson = JSON.parse(await readFile(join(discoveryDir, "semantic.json"), "utf8"));
+            records.push(
+              createStorageRecord("semantic-analysis", {
+                projectId: discovery.projectId,
+                analysisRunId: command.id,
+                calls: semanticJson.calls ?? [],
+                references: semanticJson.references ?? [],
+                scopes: semanticJson.scopes ?? [],
+                deadCode: semanticJson.deadCode ?? [],
+                unusedImports: semanticJson.unusedImports ?? [],
+                unusedExports: semanticJson.unusedExports ?? [],
+                entryPoints: semanticJson.entryPoints ?? [],
+                routes: semanticJson.routes ?? [],
+                middlewareChains: semanticJson.middlewareChains ?? [],
+              }),
+            );
+          }
+
+          if (required.has("control-flow.json")) {
+            const cfgJson = JSON.parse(await readFile(join(discoveryDir, "control-flow.json"), "utf8"));
+            records.push(
+              createStorageRecord("control-flow-analysis", {
+                projectId: discovery.projectId,
+                analysisRunId: command.id,
+                graphs: cfgJson.graphs ?? [],
+              }),
+            );
+          }
+
+          if (required.has("data-flow.json")) {
+            const dfgJson = JSON.parse(await readFile(join(discoveryDir, "data-flow.json"), "utf8"));
+            records.push(
+              createStorageRecord("data-flow-analysis", {
+                projectId: discovery.projectId,
+                analysisRunId: command.id,
+                graphs: dfgJson.graphs ?? [],
+              }),
+            );
+          }
+
+          const durationMs = performance.now() - startedAt;
+          const analyzedCount = analyzableFiles.length;
 
           const analysisSummary = createAnalysisSummary({
             filesDiscovered: discovery.files.length,
@@ -190,6 +306,7 @@ export class AnalyzeProjectHandler {
               durationMs: analysisSummary.durationMs,
             },
           });
+          records.push(runRecord);
 
           const events: DomainEvent[] = [
             ...this.discoveryEngine.createEvents(discovery),
@@ -206,7 +323,7 @@ export class AnalyzeProjectHandler {
 
           return {
             events: Object.freeze(events),
-            records: Object.freeze([record, runRecord]),
+            records: Object.freeze(records),
             discovery,
             analysis: analysisSummary,
             isReused: true,

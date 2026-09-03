@@ -6,6 +6,9 @@ import { randomUUID } from "node:crypto";
 
 import { createLegacyExodusEngine } from "@runtime/composition/services";
 import { DiscoveryValidator } from "@discovery/discovery-validator";
+import { DiscoveryQueryService } from "@discovery/discovery-query-service";
+import { SqliteStorageProvider } from "@storage/adapters/sqlite-storage";
+import { StorageManager } from "@storage/storage-manager";
 
 describe("Phase 3A P0.4 — Discovery Snapshot Reuse & Invalidation", () => {
   let testRepoDir: string;
@@ -501,6 +504,187 @@ describe("Phase 3A P0.4 — Discovery Snapshot Reuse & Invalidation", () => {
       expect(run2.isReused).toBeUndefined();
     } finally {
       await engine.shutdown();
+    }
+  });
+
+  it("REUSE-02: Reused snapshot restores complete analysis artifacts into storage and query service", async () => {
+    const sqliteDbPath = join(tmpdir(), `test-reuse02-db-${randomUUID()}.sqlite`);
+    const projectId = randomUUID();
+    const run1Id = randomUUID();
+    const run2Id = randomUUID();
+
+    try {
+      // ─── RUN 1: Clean fresh run with SQLite storage ──────────────────────
+      const engine1 = createLegacyExodusEngine({
+        LOG_LEVEL: "silent",
+        NODE_ENV: "test",
+        LEGACY_EXODUS_STORAGE_DRIVER: "sqlite",
+        LEGACY_EXODUS_STORAGE_DB_PATH: sqliteDbPath,
+      });
+      await engine1.initialize();
+      const res1 = await engine1.execute({
+        id: run1Id,
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: { projectId, path: testRepoDir },
+      });
+      await engine1.shutdown();
+
+      expect(res1.type).toBe("AnalyzeProject");
+      if (res1.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject");
+      expect(res1.isReused).toBeUndefined();
+      expect(res1.analysis.filesAnalyzed).toBeGreaterThanOrEqual(1);
+
+      // Verify Run 1 facts in persistent storage
+      const provider = new SqliteStorageProvider({ databasePath: sqliteDbPath });
+      const storage = new StorageManager(provider);
+      const query = new DiscoveryQueryService(storage);
+
+      const run1Symbols = await query.getSymbolsForFile(projectId, "src/index.ts", run1Id);
+      expect(run1Symbols.length).toBeGreaterThanOrEqual(1);
+      const run1DepGraph = await query.getDependencyGraph(projectId, run1Id);
+      expect(run1DepGraph).not.toBeNull();
+      expect(run1DepGraph?.nodes.length).toBeGreaterThanOrEqual(1);
+
+      // ─── RUN 2: Reused snapshot execution with fresh engine instance ────
+      const engine2 = createLegacyExodusEngine({
+        LOG_LEVEL: "silent",
+        NODE_ENV: "test",
+        LEGACY_EXODUS_STORAGE_DRIVER: "sqlite",
+        LEGACY_EXODUS_STORAGE_DB_PATH: sqliteDbPath,
+      });
+      await engine2.initialize();
+      const res2 = await engine2.execute({
+        id: run2Id,
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: { projectId, path: testRepoDir },
+      });
+      await engine2.shutdown();
+
+      expect(res2.type).toBe("AnalyzeProject");
+      if (res2.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject");
+      expect(res2.isReused).toBe(true);
+      expect(res2.analysis.filesAnalyzed).toBe(res1.analysis.filesAnalyzed);
+
+      // ─── VERIFY REUSE-02 RESTORATION ────────────────────────────────────
+      // 1. Latest completed run must point to run2Id
+      const latestRunId = await query.getLatestCompletedRunId(projectId);
+      expect(latestRunId).toBe(run2Id);
+
+      // 2. Symbols for file in run2Id must match run1Id symbols (not empty!)
+      const run2Symbols = await query.getSymbolsForFile(projectId, "src/index.ts", run2Id);
+      expect(run2Symbols.length).toBe(run1Symbols.length);
+      expect(run2Symbols.map((s) => s.name).sort()).toEqual(run1Symbols.map((s) => s.name).sort());
+
+      // 3. Default query (latest run) must return restored symbols
+      const latestSymbols = await query.getSymbolsForFile(projectId, "src/index.ts");
+      expect(latestSymbols.length).toBe(run1Symbols.length);
+
+      // 4. Dependency graph for run2Id must be restored (not null!)
+      const run2DepGraph = await query.getDependencyGraph(projectId, run2Id);
+      expect(run2DepGraph).not.toBeNull();
+      expect(run2DepGraph?.nodes.length).toBe(run1DepGraph?.nodes.length);
+
+      // 5. Semantic analysis for run2Id must be restored
+      const run2Semantic = await query.getSemanticAnalysis(projectId, run2Id);
+      expect(run2Semantic).not.toBeNull();
+
+      // 6. Knowledge graph for run2Id must be restored
+      const run2Knowledge = await query.getKnowledgeGraph(projectId, run2Id);
+      expect(run2Knowledge).not.toBeNull();
+
+      await storage.close();
+    } finally {
+      try {
+        await rm(sqliteDbPath, { force: true });
+        await rm(`${sqliteDbPath}-wal`, { force: true });
+        await rm(`${sqliteDbPath}-shm`, { force: true });
+      } catch {}
+    }
+  });
+
+  it("REUSE-02: Snapshot containing only discovery artifacts falls through to fresh analysis without false completed status", async () => {
+    const dummyDir = join(tmpdir(), `test-reuse02-discovery-only-${randomUUID()}`);
+    const discoveryDir = join(dummyDir, ".discovery");
+    await mkdir(join(dummyDir, "src"), { recursive: true });
+    await mkdir(discoveryDir, { recursive: true });
+
+    await writeFile(join(dummyDir, "package.json"), JSON.stringify({ name: "disc-only", version: "1.0.0" }), "utf8");
+    await writeFile(join(dummyDir, "src", "index.ts"), "export const x = 42;", "utf8");
+
+    // Write discovery-only artifacts (no symbols.json, no dependency-graph.json)
+    const projectPayload = { name: "disc-only", path: dummyDir, languages: ["typescript"] };
+    const filesPayload = [{ id: "f-1", path: "src/index.ts", language: "typescript", fileKind: "source", size: 21 }];
+    const depsPayload: any[] = [];
+    const frameworksPayload: any[] = [];
+    const summaryPayload = {
+      projectName: "disc-only",
+      fileCount: 1,
+      dependencyCount: 0,
+      frameworkCount: 0,
+      languages: ["typescript"],
+      enumerationFailureCount: 0,
+      discoveryComplete: true,
+    };
+
+    await writeFile(join(discoveryDir, "project.json"), JSON.stringify(projectPayload), "utf8");
+    await writeFile(join(discoveryDir, "files.json"), JSON.stringify(filesPayload), "utf8");
+    await writeFile(join(discoveryDir, "dependencies.json"), JSON.stringify(depsPayload), "utf8");
+    await writeFile(join(discoveryDir, "frameworks.json"), JSON.stringify(frameworksPayload), "utf8");
+    await writeFile(join(discoveryDir, "summary.json"), JSON.stringify(summaryPayload), "utf8");
+
+    const manifest = {
+      schemaVersion: 1,
+      repository: { name: "disc-only", path: dummyDir },
+      engine: { packageVersion: "0.1.0", commitSha: "test", bunVersion: "bun-v1.3.0" },
+      analysis: { projectId: randomUUID(), generatedAt: new Date().toISOString() },
+      requiredArtifacts: ["project.json", "files.json", "dependencies.json", "frameworks.json", "summary.json"],
+      artifacts: {
+        "project.json": { sha256: "dummy", bytes: 10 },
+        "files.json": { sha256: "dummy", bytes: 10 },
+        "dependencies.json": { sha256: "dummy", bytes: 10 },
+        "frameworks.json": { sha256: "dummy", bytes: 10 },
+        "summary.json": { sha256: "dummy", bytes: 10 },
+      },
+    };
+
+    // Calculate actual SHA256s for manifest
+    const { createHash } = await import("node:crypto");
+    for (const art of manifest.requiredArtifacts) {
+      const content = await readFile(join(discoveryDir, art));
+      manifest.artifacts[art as keyof typeof manifest.artifacts] = {
+        sha256: createHash("sha256").update(content).digest("hex"),
+        bytes: content.byteLength,
+      };
+    }
+    await writeFile(join(discoveryDir, "manifest.json"), JSON.stringify(manifest), "utf8");
+
+    const engine = createLegacyExodusEngine({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+    await engine.initialize();
+
+    try {
+      const res = await engine.execute({
+        id: randomUUID(),
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: { projectId: randomUUID(), path: dummyDir },
+      });
+
+      expect(res.type).toBe("AnalyzeProject");
+      if (res.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject");
+      // Must NOT be marked as reused because discovery-only snapshot fell through to fresh analysis!
+      expect(res.isReused).toBeUndefined();
+      expect(res.analysis.filesAnalyzed).toBe(1);
+
+      // Verify that full analysis artifacts were generated as part of fresh analysis
+      const newManifestRaw = await readFile(join(discoveryDir, "manifest.json"), "utf8");
+      const newManifest = JSON.parse(newManifestRaw);
+      expect(newManifest.requiredArtifacts).toContain("dependency-graph.json");
+      expect(newManifest.requiredArtifacts).toContain("symbols.json");
+    } finally {
+      await engine.shutdown();
+      await rm(dummyDir, { recursive: true, force: true });
     }
   });
 });
