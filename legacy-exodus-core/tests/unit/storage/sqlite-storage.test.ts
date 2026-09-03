@@ -271,4 +271,65 @@ describe("SqliteStorageProvider", () => {
       } catch {}
     }
   });
+
+  it("DAT-01: Deserialized SQLite records enforce deep immutability across nested objects and arrays", async () => {
+    const complexPayload = {
+      projectId: "00000000-0000-4000-8000-000000000001",
+      analysisRunId: "run-dat-01",
+      filePath: "src/deep/nested.ts",
+      config: {
+        active: true,
+        options: { strict: true, plugins: ["flow", "semantic"] },
+      },
+      symbols: [
+        { name: "foo", range: { start: { line: 1, col: 0 }, end: { line: 5, col: 1 } } },
+        { name: "bar", range: { start: { line: 6, col: 0 }, end: { line: 10, col: 1 } } },
+      ],
+      matrix: [[1, 2], [3, 4]],
+    };
+
+    const record = createStorageRecord("deep-test-record", complexPayload);
+    await inMemoryProvider.save(record);
+
+    const retrieved = await inMemoryProvider.findById(record.id);
+    expect(retrieved).not.toBeNull();
+
+    // Verify root and payload immutability
+    expect(Object.isFrozen(retrieved)).toBe(true);
+    expect(Object.isFrozen(retrieved!.payload)).toBe(true);
+
+    const payload = retrieved!.payload as typeof complexPayload;
+
+    // Verify nested objects are deeply frozen
+    expect(Object.isFrozen(payload.config)).toBe(true);
+    expect(Object.isFrozen(payload.config.options)).toBe(true);
+    expect(Object.isFrozen(payload.config.options.plugins)).toBe(true);
+
+    // Verify arrays and objects within arrays are deeply frozen
+    expect(Object.isFrozen(payload.symbols)).toBe(true);
+    expect(Object.isFrozen(payload.symbols[0])).toBe(true);
+    expect(Object.isFrozen(payload.symbols[0]!.range)).toBe(true);
+    expect(Object.isFrozen(payload.symbols[0]!.range.start)).toBe(true);
+
+    // Verify nested arrays are deeply frozen
+    expect(Object.isFrozen(payload.matrix)).toBe(true);
+    expect(Object.isFrozen(payload.matrix[0])).toBe(true);
+
+    // Verify mutation attempts throw in strict mode
+    expect(() => {
+      (payload.config as Record<string, unknown>).active = false;
+    }).toThrow();
+
+    expect(() => {
+      (payload.config.options as Record<string, unknown>).strict = false;
+    }).toThrow();
+
+    expect(() => {
+      (payload.symbols[0] as Record<string, unknown>).name = "mutated";
+    }).toThrow();
+
+    expect(() => {
+      (payload.symbols as unknown[]).push({ name: "injected" });
+    }).toThrow();
+  });
 });

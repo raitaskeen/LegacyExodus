@@ -29,6 +29,7 @@ export interface UpdateKnowledgePayload {
 export interface AnalyzeProjectPayload {
   readonly projectId: string;
   readonly path: string;
+  readonly refresh?: boolean;
 }
 
 export type InitializeProjectCommand = Command<InitializeProjectPayload, "InitializeProject">;
@@ -80,6 +81,7 @@ export const commandSchema = z.discriminatedUnion("type", [
     payload: z.object({
       projectId: z.string().uuid(),
       path: z.string().trim().min(1),
+      refresh: z.boolean().optional(),
     }),
   }),
 ]);

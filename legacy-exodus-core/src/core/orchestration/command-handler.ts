@@ -11,7 +11,8 @@ import type {
   ProjectInitialized,
 } from "@contracts/events";
 import { createDomainEvent, type DomainEvent } from "@core/events/domain-event";
-import { DiscoveryEngine, type DiscoveryResult } from "@discovery/index";
+import { validateProjectDiscovery } from "@contracts/discovery";
+import { DiscoveryEngine, DiscoveryValidator, type DiscoveryResult } from "@discovery/index";
 import { DeterministicDependencyGraphBuilder, ModuleResolver, type ModuleResolutionOptions } from "@graph/index";
 import { DeterministicFlowAnalysisEngine } from "@flow/index";
 import { DeterministicKnowledgeGraphBuilder } from "@knowledge/index";
@@ -27,6 +28,7 @@ export interface CommandExecution {
   readonly records: readonly StorageRecord[];
   readonly discovery?: DiscoveryResult;
   readonly analysis?: AnalysisSummary;
+  readonly isReused?: boolean;
 }
 
 export class InitializeProjectHandler {
@@ -79,10 +81,273 @@ export class AnalyzeProjectHandler {
     private readonly discoveryEngine: DiscoveryEngine,
     private readonly parserManager: ParserManager,
     private readonly symbolExtractor: JavaScriptSymbolExtractor,
+    private readonly discoveryValidator: DiscoveryValidator = new DiscoveryValidator(),
   ) {}
 
   public async handle(command: AnalyzeProjectCommand): Promise<CommandExecution> {
     const startedAt = performance.now();
+
+    if (!command.payload.refresh) {
+      const validation = await this.discoveryValidator.validate({
+        projectPath: command.payload.path,
+        verifyFreshness: true,
+      });
+      if (validation.valid && validation.manifest !== undefined && validation.validatedArtifacts !== undefined) {
+        try {
+          const artifacts = validation.validatedArtifacts;
+          const projectRaw = artifacts.get("project.json");
+          const filesRaw = artifacts.get("files.json");
+          const depsRaw = artifacts.get("dependencies.json");
+          const frameworksRaw = artifacts.get("frameworks.json");
+
+          if (!projectRaw || !filesRaw || !depsRaw || !frameworksRaw) {
+            throw new Error("Missing required discovery artifact in validated set.");
+          }
+
+          const projectJson = JSON.parse(projectRaw);
+          const filesJson = JSON.parse(filesRaw) as readonly any[];
+          const depsJson = JSON.parse(depsRaw) as readonly any[];
+          const frameworksJson = JSON.parse(frameworksRaw) as readonly any[];
+
+          const discovery = validateProjectDiscovery({
+            projectId: command.payload.projectId,
+            projectName: projectJson.name ?? validation.manifest.repository.name,
+            projectPath: command.payload.path,
+            files: filesJson.map((f) => ({
+              id: f.id,
+              path: f.path,
+              language: f.language,
+              ...(f.fileKind !== undefined ? { fileKind: f.fileKind } : {}),
+              size: f.size,
+            })),
+            dependencies: depsJson.map((d) => ({
+              name: d.name,
+              version: d.version,
+              kind: d.kind,
+            })),
+            frameworks: frameworksJson.map((f) => ({
+              name: f.name,
+              evidence: f.evidence,
+            })),
+            languages: projectJson.languages ?? [],
+            enumerationFailures: [],
+            discoveredAt: new Date(validation.manifest.analysis.generatedAt),
+          });
+
+          const record = createStorageRecord("project-discovery", {
+            projectId: discovery.projectId,
+            projectName: discovery.projectName,
+            projectPath: discovery.projectPath,
+            files: discovery.files.map((file) => ({ ...file })),
+            dependencies: discovery.dependencies.map((dependency) => ({ ...dependency })),
+            frameworks: discovery.frameworks.map((framework) => ({ ...framework })),
+            languages: [...discovery.languages],
+            enumerationFailures: [],
+            discoveredAt: discovery.discoveredAt.toISOString(),
+            analysisRunId: command.id,
+          });
+
+          const records: StorageRecord[] = [record];
+
+          const required = new Set(validation.manifest.requiredArtifacts);
+          const analyzableFiles = discovery.files.filter(
+            (file) =>
+              (file.language === "javascript" || file.language === "typescript") &&
+              (file.fileKind === "source" || file.fileKind === undefined),
+          );
+
+          // If project has analyzable source files, the snapshot must contain analysis artifacts
+          if (analyzableFiles.length > 0 && (!required.has("dependency-graph.json") || !required.has("symbols.json"))) {
+            throw new Error("Snapshot contains discovery only; falling through to full analysis.");
+          }
+
+          if (required.has("dependency-graph.json")) {
+            const depGraphRaw = artifacts.get("dependency-graph.json");
+            if (!depGraphRaw) throw new Error("Missing dependency-graph.json in validated set.");
+            const depGraphJson = JSON.parse(depGraphRaw);
+            records.push(
+              createStorageRecord("dependency-graph", {
+                projectId: discovery.projectId,
+                analysisRunId: command.id,
+                nodes: depGraphJson.nodes ?? [],
+                edges: depGraphJson.edges ?? [],
+                cycles: depGraphJson.cycles ?? [],
+              }),
+            );
+          }
+
+          if (required.has("symbols.json")) {
+            const symbolsRaw = artifacts.get("symbols.json");
+            if (!symbolsRaw) throw new Error("Missing symbols.json in validated set.");
+            const symbolsJson = JSON.parse(symbolsRaw) as readonly any[];
+            const symbolsByFile = new Map<string, any[]>();
+            for (const symbol of symbolsJson) {
+              let list = symbolsByFile.get(symbol.filePath);
+              if (!list) {
+                list = [];
+                symbolsByFile.set(symbol.filePath, list);
+              }
+              list.push({
+                id: symbol.id,
+                kind: symbol.kind,
+                name: symbol.name,
+                filePath: symbol.filePath,
+                exported: Boolean(symbol.exported),
+                defaultExport: Boolean(symbol.defaultExport),
+                moduleSpecifier: symbol.moduleSpecifier ?? null,
+                sourceSymbolName: symbol.sourceSymbolName ?? null,
+              });
+            }
+
+            for (const file of analyzableFiles) {
+              const fileSymbols = symbolsByFile.get(file.path) ?? [];
+              records.push(
+                createStorageRecord("symbol-table", {
+                  fileId: file.id,
+                  path: file.path,
+                  projectId: discovery.projectId,
+                  analysisRunId: command.id,
+                  symbolCount: fileSymbols.length,
+                  classes: fileSymbols.filter((s) => s.kind === "class").length,
+                  functions: fileSymbols.filter((s) => s.kind === "function").length,
+                  imports: fileSymbols.filter((s) => s.kind === "import").length,
+                  exports: fileSymbols.filter((s) => s.exported === true).length,
+                  symbols: fileSymbols,
+                }),
+              );
+            }
+          }
+
+          if (required.has("knowledge.json")) {
+            const knowledgeRaw = artifacts.get("knowledge.json");
+            if (!knowledgeRaw) throw new Error("Missing knowledge.json in validated set.");
+            const knowledgeJson = JSON.parse(knowledgeRaw);
+            records.push(
+              createStorageRecord("knowledge-graph", {
+                projectId: discovery.projectId,
+                analysisRunId: command.id,
+                nodes: knowledgeJson.nodes ?? [],
+                edges: knowledgeJson.edges ?? [],
+              }),
+            );
+          }
+
+          if (required.has("semantic.json")) {
+            const semanticRaw = artifacts.get("semantic.json");
+            if (!semanticRaw) throw new Error("Missing semantic.json in validated set.");
+            const semanticJson = JSON.parse(semanticRaw);
+            records.push(
+              createStorageRecord("semantic-analysis", {
+                projectId: discovery.projectId,
+                analysisRunId: command.id,
+                calls: semanticJson.calls ?? [],
+                references: semanticJson.references ?? [],
+                scopes: semanticJson.scopes ?? [],
+                deadCode: semanticJson.deadCode ?? [],
+                unusedImports: semanticJson.unusedImports ?? [],
+                unusedExports: semanticJson.unusedExports ?? [],
+                entryPoints: semanticJson.entryPoints ?? [],
+                routes: semanticJson.routes ?? [],
+                middlewareChains: semanticJson.middlewareChains ?? [],
+              }),
+            );
+          }
+
+          if (required.has("control-flow.json")) {
+            const cfgRaw = artifacts.get("control-flow.json");
+            if (!cfgRaw) throw new Error("Missing control-flow.json in validated set.");
+            const cfgJson = JSON.parse(cfgRaw);
+            records.push(
+              createStorageRecord("control-flow-analysis", {
+                projectId: discovery.projectId,
+                analysisRunId: command.id,
+                graphs: cfgJson.graphs ?? [],
+              }),
+            );
+          }
+
+          if (required.has("data-flow.json")) {
+            const dfgRaw = artifacts.get("data-flow.json");
+            if (!dfgRaw) throw new Error("Missing data-flow.json in validated set.");
+            const dfgJson = JSON.parse(dfgRaw);
+            records.push(
+              createStorageRecord("data-flow-analysis", {
+                projectId: discovery.projectId,
+                analysisRunId: command.id,
+                graphs: dfgJson.graphs ?? [],
+              }),
+            );
+          }
+
+          const durationMs = performance.now() - startedAt;
+          const analyzedCount = analyzableFiles.length;
+
+          const analysisSummary = createAnalysisSummary({
+            filesDiscovered: discovery.files.length,
+            filesAnalyzed: analyzedCount,
+            parserFailures: 0,
+            symbolExtractionFailures: 0,
+            unsupportedFiles: discovery.files.filter(
+              (file) => file.fileKind === "source" && file.language !== "javascript" && file.language !== "typescript",
+            ).length,
+            nonSourceArtifacts: discovery.files.filter(
+              (file) => file.fileKind !== "source" && file.fileKind !== "unknown" && file.fileKind !== undefined,
+            ).length,
+            unclassifiedArtifacts: discovery.files.filter(
+              (file) => file.fileKind === "unknown" || file.fileKind === undefined,
+            ).length,
+            enumerationFailures: 0,
+            discoveryComplete: true,
+            durationMs,
+          });
+
+          const runRecord = createStorageRecord("analysis-run", {
+            projectId: discovery.projectId,
+            analysisRunId: command.id,
+            status: "completed",
+            startedAt: discovery.discoveredAt.toISOString(),
+            completedAt: new Date().toISOString(),
+            summary: {
+              filesDiscovered: analysisSummary.filesDiscovered,
+              filesAnalyzed: analysisSummary.filesAnalyzed,
+              parserFailures: analysisSummary.parserFailures,
+              symbolExtractionFailures: analysisSummary.symbolExtractionFailures,
+              unsupportedFiles: analysisSummary.unsupportedFiles,
+              nonSourceArtifacts: analysisSummary.nonSourceArtifacts,
+              unclassifiedArtifacts: analysisSummary.unclassifiedArtifacts,
+              enumerationFailures: analysisSummary.enumerationFailures,
+              discoveryComplete: analysisSummary.discoveryComplete,
+              durationMs: analysisSummary.durationMs,
+            },
+          });
+          records.push(runRecord);
+
+          const events: DomainEvent[] = [
+            ...this.discoveryEngine.createEvents(discovery),
+            createDomainEvent({
+              type: "AnalysisRunCompleted",
+              aggregateId: discovery.projectId,
+              payload: {
+                projectId: discovery.projectId,
+                analysisRunId: command.id,
+                durationMs,
+              },
+            }),
+          ];
+
+          return {
+            events: Object.freeze(events),
+            records: Object.freeze(records),
+            discovery,
+            analysis: analysisSummary,
+            isReused: true,
+          };
+        } catch {
+          // If reading or parsing snapshot failed unexpectedly, fall through to fresh discovery
+        }
+      }
+    }
+
     const discovery = await this.discoveryEngine.discover({
       projectId: command.payload.projectId,
       projectPath: command.payload.path,

@@ -112,7 +112,9 @@ export class LegacyExodusEngine {
             });
           }
 
-          await this.context.discoveryProjection.project(discoveryRecord.id);
+          if (!execution.isReused) {
+            await this.context.discoveryProjection.project(discoveryRecord.id);
+          }
 
           if (execution.analysis === undefined) {
             throw new LegacyExodusError({
@@ -121,7 +123,12 @@ export class LegacyExodusEngine {
             });
           }
 
-          return { type: "AnalyzeProject" as const, discovery: execution.discovery, analysis: execution.analysis };
+          return {
+            type: "AnalyzeProject" as const,
+            discovery: execution.discovery,
+            analysis: execution.analysis,
+            ...(execution.isReused === true ? { isReused: true } : {}),
+          };
         }
       }
     })();

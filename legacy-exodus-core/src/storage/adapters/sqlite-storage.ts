@@ -6,6 +6,7 @@ import {
   StorageValidationError,
 } from "../storage-errors";
 import {
+  deepFreeze,
   extractRecordMetadata,
   type SerializedPayload,
   type StorageRecord,
@@ -266,7 +267,7 @@ export class SqliteStorageProvider implements StorageProvider {
     return Object.freeze({
       id: row.id,
       type: row.type,
-      payload: Object.freeze(payload),
+      payload: deepFreeze(payload),
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     });

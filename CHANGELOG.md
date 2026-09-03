@@ -16,6 +16,19 @@ and this project adheres to deterministic semantic contracts and verifiable engi
 
 ---
 
+## [0.8.0] - Security Boundary Hardening, Storage Immutability & Lifecycle Integrity
+
+- **Git Subprocess Hardening (SEC-01):** Replaced shell-based `execSync` in `file-discovery-projection.ts` with direct process execution via `spawnSync("git", ["rev-parse", "HEAD"], { shell: false })`, eliminating shell interpretation risk at the Git revision lookup boundary when analyzing repository directories.
+- **Discovery Manifest Path Traversal Hardening (SEC-02):** Hardened `DiscoveryValidator` with lexical boundary containment verification (`isPathWithinDirectory`), physical canonicalization via `realpath()`, and symlink rejection via `lstat()`. The validation is hardened against the investigated traversal and symlink-escape threat model.
+- **SQLite Deserialization Deep Immutability (DAT-01):** Restored recursive immutability in `SqliteStorageProvider.deserializeRecord()` by applying `deepFreeze()` to deserialized record payloads, guaranteeing payload immutability across nested objects, arrays, and matrices without identified residual risk within the investigated SQLite deserialization boundary.
+- **Event Reducer Terminal State & Replay Integrity (EVT-01):** Corrected `event-reducer.ts` to reduce `AnalysisRunCompleted` ($\to \text{COMPLETED}$) and `AnalysisRunFailed` ($\to \text{FAILED}$) with analysis and error metadata, ensuring `orchestrator.replay()` accurately matches live execution status without state divergence.
+- **Persistent Storage Snapshot Reuse & Streaming Projections (P0.4):** Implemented discovery snapshot reuse bypassing re-parsing on unchanged repositories, bounded 64 KB chunked streaming atomic JSON writes (`StreamingJsonWriter`), and added `--refresh`, `--storage-driver`, and `--storage-path` CLI options.
+- **CFG Loop Semantics & Runtime Lifecycle Safeguards (P0.5):** Corrected `DoWhileStatement` body-first execution and edge routing in `control-flow-builder.ts`, and guarded `ApplicationRuntime.registerService()` against duplicate service registrations.
+- **Forensic Memory Scalability & Determinism Verification (PRF-01 & DET-01):** Validated in-memory AST lifecycle (explicit array release at `astResults.length = 0` prior to persistence), confirmed zero cross-project memory accumulation in multi-run isolation tests, and verified bit-for-bit deterministic JSON output and recursive canonical key-sorting in storage record hashing.
+- **Empirical Baseline Scaling:** Expanded full test suite to **759/759 passing tests across 92 test files** (8,222 assertions, 0 failures), maintaining 10/10 benchmark governance checks and 4/4 verification dashboard gates.
+
+---
+
 ## [0.7.0] - CLI Foundation, Command Discovery & Verification Hardening
 
 - **Unified Visual Theme Engine:** Implemented 3 curated terminal themes (`classic`, `aurora`, `mono`) via `ThemeEngine` with semantic color roles (`brand`, `heading`, `text`, `muted`, `border`, `success`, `warning`, `error`, `info`, `active`), controlled by `--theme <name>` flag and `LEGACYEXODUS_THEME` environment variable.

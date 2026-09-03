@@ -26,6 +26,7 @@ export class ApplicationRuntime {
   private readonly services: RuntimeService[] = [];
   private readonly startedServices: RuntimeService[] = [];
   private status: RuntimeStatus = "created";
+  private shutdownPromise?: Promise<void>;
 
   public constructor(
     private readonly config: RuntimeConfig,
@@ -44,9 +45,26 @@ export class ApplicationRuntime {
       });
     }
 
+    if (this.services.some((existing) => existing.name === service.name)) {
+      throw new LegacyExodusError({
+        code: "RUNTIME_DUPLICATE_SERVICE",
+        message: `A runtime service named "${service.name}" is already registered.`,
+        metadata: { service: service.name },
+      });
+    }
+
     this.services.push(service);
   }
 
+  /**
+   * Starts all registered application services in sequential order.
+   *
+   * If any service fails during startup, cleanup is triggered immediately via
+   * `initiateShutdown()` while preserving the primary startup error. If a concurrent
+   * shutdown is initiated during startup, `start()` awaits the shutdown cycle before resolving.
+   *
+   * @throws {LegacyExodusError} If the runtime is not in the `"created"` state or a service fails to start.
+   */
   public async start(): Promise<void> {
     if (this.status === "running") {
       return;
@@ -61,44 +79,71 @@ export class ApplicationRuntime {
     }
 
     this.status = "starting";
+    this.startedServices.length = 0;
 
     try {
-      this.status = "configured";
-      this.status = "storage-ready";
-      this.status = "plugin-system-ready";
-
       for (const service of this.services) {
+        if (this.status !== "starting") {
+          break;
+        }
         await service.start?.();
         this.startedServices.push(service);
+      }
+
+      if (this.status !== "starting") {
+        await this.shutdownPromise;
+        return;
       }
 
       this.status = "running";
       this.logger.info("Application started");
     } catch (error: unknown) {
-      this.logger.error({ error }, "Application startup failed");
       try {
-        await this.performCleanup();
-      } catch {
-        // Suppress secondary cleanup errors to rethrow original startup error
-      } finally {
-        this.status = "stopped";
+        await this.initiateShutdown();
+      } catch (cleanupError: unknown) {
+        this.logger.error({ error: cleanupError }, "Cleanup failed after startup failure");
       }
       throw error;
     }
   }
 
+  /**
+   * Gracefully and idempotently shuts down the application runtime.
+   *
+   * Coalesces concurrent calls to `shutdown()` into a single awaitable cleanup cycle.
+   * Services are stopped in reverse registration order (LIFO), guaranteeing resource release.
+   */
   public async shutdown(): Promise<void> {
     if (this.status === "stopped") {
       return;
     }
 
-    this.status = "stopping";
-    try {
-      await this.performCleanup();
-    } finally {
-      this.status = "stopped";
-      this.logger.info("Application stopped");
+    return this.initiateShutdown();
+  }
+
+  /**
+   * Internal synchronization barrier for runtime shutdown.
+   *
+   * Atomically transitions runtime state to `"stopping"` and returns an existing or new
+   * shutdown Promise to prevent concurrent cleanup races (RUNTIME-01).
+   */
+  private initiateShutdown(): Promise<void> {
+    if (this.shutdownPromise !== undefined) {
+      return this.shutdownPromise;
     }
+
+    this.status = "stopping";
+    this.shutdownPromise = (async () => {
+      try {
+        await this.performCleanup();
+      } finally {
+        this.status = "stopped";
+        this.shutdownPromise = undefined;
+        this.logger.info("Application stopped");
+      }
+    })();
+
+    return this.shutdownPromise;
   }
 
   public getStatus(): RuntimeStatus {

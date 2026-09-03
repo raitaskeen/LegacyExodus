@@ -292,9 +292,12 @@ export class HelpPresenter {
 
     const options = [
       this.theme.heading("OPTIONS"),
-      `  ${this.theme.active("--json".padEnd(16, " "))}  ${this.theme.text("Emit complete machine-readable discovery inventory in JSON")}`,
-      `  ${this.theme.active("--theme <name>".padEnd(16, " "))}  ${this.theme.text("Visual theme: classic (default), aurora, mono")}`,
-      `  ${this.theme.active("-h, --help".padEnd(16, " "))}  ${this.theme.text("Display this help message")}`,
+      `  ${this.theme.active("--refresh".padEnd(28, " "))}  ${this.theme.text("Force fresh discovery and bypass existing snapshot reuse")}`,
+      `  ${this.theme.active("--storage-driver <driver>".padEnd(28, " "))}  ${this.theme.text("Storage driver to use (memory, sqlite)")}`,
+      `  ${this.theme.active("--storage-path <path>".padEnd(28, " "))}  ${this.theme.text("Database file path for SQLite storage (infers sqlite driver)")}`,
+      `  ${this.theme.active("--json".padEnd(28, " "))}  ${this.theme.text("Emit complete machine-readable discovery inventory in JSON")}`,
+      `  ${this.theme.active("--theme <name>".padEnd(28, " "))}  ${this.theme.text("Visual theme: classic (default), aurora, mono")}`,
+      `  ${this.theme.active("-h, --help".padEnd(28, " "))}  ${this.theme.text("Display this help message")}`,
     ].join("\n");
 
     const examples = [
@@ -302,6 +305,8 @@ export class HelpPresenter {
       `  $ ${this.theme.brand("legacy-exodus analyze ./apps/web")}           ${this.theme.muted("# Analyze web application")}`,
       `  $ ${this.theme.brand("legacy-exodus analyze . --theme aurora")}     ${this.theme.muted("# Analyze current workspace with aurora theme")}`,
       `  $ ${this.theme.brand("legacy-exodus analyze ./repo --json")}        ${this.theme.muted("# Stream JSON discovery inventory to stdout")}`,
+      `  $ ${this.theme.brand("legacy-exodus analyze . --refresh")}          ${this.theme.muted("# Force fresh discovery bypassing cached snapshot")}`,
+      `  $ ${this.theme.brand("legacy-exodus analyze . --storage-path ./exodus.db")}  ${this.theme.muted("# Persist discovery to SQLite database")}`,
     ].join("\n");
 
     return [header, desc, "", usage, "", args, "", options, "", examples].join("\n");
