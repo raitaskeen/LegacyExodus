@@ -107,7 +107,8 @@ describe("Phase 3A P0.4 — Migration Discovery Consumption & Reuse", () => {
       expect(discovery?.dependencies[0]?.name).toBe("fastify");
 
       // Extract symbols for files
-      const symbols: any[] = [];
+      type DiscoveredSymbol = Awaited<ReturnType<DiscoveryQueryService["getSymbolsForFile"]>>[number];
+      const symbols: DiscoveredSymbol[] = [];
       for (const file of files) {
         const fileSymbols = await queryService.getSymbolsForFile(projectId, file.path, runId);
         symbols.push(...fileSymbols);
