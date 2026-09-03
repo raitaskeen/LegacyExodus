@@ -321,8 +321,19 @@ describe("P1 Core Hardening: Natural-Loop Body Completeness & CFG Semantics", ()
 
     const continueEdges = cfg!.edges.filter((e) => e.kind === "continue");
     expect(continueEdges).toHaveLength(2);
-    expect(continueEdges[0]!.toBlockId).toBe(cfg!.loops[0]!.headerBlockId);
-    expect(continueEdges[1]!.toBlockId).toBe(cfg!.loops[1]!.headerBlockId);
+
+    const loopHeaderBlockIds = new Set(cfg!.loops.map((l) => l.headerBlockId));
+    expect(loopHeaderBlockIds.size).toBe(2);
+
+    for (const edge of continueEdges) {
+      expect(loopHeaderBlockIds.has(edge.toBlockId)).toBe(true);
+      const targetLoop = cfg!.loops.find((l) => l.headerBlockId === edge.toBlockId);
+      expect(targetLoop).toBeDefined();
+      expect(targetLoop!.blockIds).toContain(edge.fromBlockId);
+    }
+
+    const targetedHeaders = new Set(continueEdges.map((e) => e.toBlockId));
+    expect(targetedHeaders).toEqual(loopHeaderBlockIds);
   });
 
   it("Test L: nested loops with inner continue isolates inner loop header", async () => {
