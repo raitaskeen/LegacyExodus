@@ -543,4 +543,256 @@ describe("P1 Core Hardening: Natural-Loop Body Completeness & CFG Semantics", ()
 
     expect(JSON.stringify(cfgs1)).toBe(JSON.stringify(cfgs2));
   });
+
+  // ─── CFG-01: Loop Fall-Through & Edge Ownership Remediation ──────────────
+
+  it("CFG-01 Test 1: while loop body routes only via loop-back to header, with no duplicate or illegal fall-through edge to after", async () => {
+    const code = `
+      function testWhileFallThrough() {
+        while (condition) {
+          step();
+        }
+        after();
+      }
+    `;
+
+    const cfgs = await buildCfgs(code);
+    const cfg = cfgs.find((c) => c.scopeName.startsWith("testWhileFallThrough"));
+    expect(cfg).toBeDefined();
+
+    // Assert no duplicate edges exist anywhere in CFG
+    const seenEdges = new Set<string>();
+    for (const edge of cfg!.edges) {
+      const key = `${edge.fromBlockId}:${edge.toBlockId}:${edge.kind}`;
+      expect(seenEdges.has(key)).toBe(false);
+      seenEdges.add(key);
+    }
+
+    const whileHeaderBlock = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "WhileStatement"));
+    expect(whileHeaderBlock).toBeDefined();
+
+    const afterBlock = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "ExpressionStatement" && s.location?.line === 6));
+    expect(afterBlock).toBeDefined();
+
+    const bodyBlock = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "ExpressionStatement" && s.location?.line === 4));
+    expect(bodyBlock).toBeDefined();
+
+    // Loop header routes to body on true, and to after on false
+    const trueEdge = cfg!.edges.find((e) => e.fromBlockId === whileHeaderBlock!.id && e.kind === "true");
+    expect(trueEdge).toBeDefined();
+    expect(trueEdge!.toBlockId).toBe(bodyBlock!.id);
+
+    const falseEdge = cfg!.edges.find((e) => e.fromBlockId === whileHeaderBlock!.id && e.kind === "false");
+    expect(falseEdge).toBeDefined();
+    expect(falseEdge!.toBlockId).toBe(afterBlock!.id);
+
+    // Loop body routes back to loop header via loop-back
+    const loopBackEdge = cfg!.edges.find((e) => e.fromBlockId === bodyBlock!.id && e.kind === "loop-back");
+    expect(loopBackEdge).toBeDefined();
+    expect(loopBackEdge!.toBlockId).toBe(whileHeaderBlock!.id);
+
+    // CRITICAL INVARIANT: Loop body MUST NOT have an illegal fall-through 'next' edge to afterBlock
+    const illegalFallThrough = cfg!.edges.find((e) => e.fromBlockId === bodyBlock!.id && e.toBlockId === afterBlock!.id && e.kind === "next");
+    expect(illegalFallThrough).toBeUndefined();
+  });
+
+  it("CFG-01 Test 2: do-while loop body routes to condition block exactly once without duplicate next edge", async () => {
+    const code = `
+      function testDoWhileNoDuplicate() {
+        do {
+          work();
+        } while (keepGoing);
+        after();
+      }
+    `;
+
+    const cfgs = await buildCfgs(code);
+    const cfg = cfgs.find((c) => c.scopeName.startsWith("testDoWhileNoDuplicate"));
+    expect(cfg).toBeDefined();
+
+    // Assert zero duplicate edges in graph
+    const seenEdges = new Set<string>();
+    for (const edge of cfg!.edges) {
+      const key = `${edge.fromBlockId}:${edge.toBlockId}:${edge.kind}`;
+      expect(seenEdges.has(key)).toBe(false);
+      seenEdges.add(key);
+    }
+
+    const doWhileBlock = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "DoWhileStatement"));
+    expect(doWhileBlock).toBeDefined();
+
+    const bodyBlock = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "ExpressionStatement" && s.location?.line === 4));
+    expect(bodyBlock).toBeDefined();
+
+    // Entry connects to body with next
+    const entryToBody = cfg!.edges.find((e) => e.fromBlockId === doWhileBlock!.id && e.kind === "next");
+    expect(entryToBody).toBeDefined();
+    expect(entryToBody!.toBlockId).toBe(bodyBlock!.id);
+
+    // Body routes to condition evaluation block with next exactly ONCE
+    const bodyToNextEdges = cfg!.edges.filter((e) => e.fromBlockId === bodyBlock!.id && e.kind === "next");
+    expect(bodyToNextEdges).toHaveLength(1);
+
+    const conditionBlockId = bodyToNextEdges[0]!.toBlockId;
+    // Condition block branches to body on true, and to after on false
+    const trueEdge = cfg!.edges.find((e) => e.fromBlockId === conditionBlockId && e.kind === "true");
+    expect(trueEdge).toBeDefined();
+    expect(trueEdge!.toBlockId).toBe(bodyBlock!.id);
+
+    const falseEdge = cfg!.edges.find((e) => e.fromBlockId === conditionBlockId && e.kind === "false");
+    expect(falseEdge).toBeDefined();
+  });
+
+  it("CFG-01 Test 3: for loop body routes only via loop-back without illegal fall-through to post-loop statement", async () => {
+    const code = `
+      function testForLoopFallThrough() {
+        for (let i = 0; i < 10; i++) {
+          processItem(i);
+        }
+        done();
+      }
+    `;
+
+    const cfgs = await buildCfgs(code);
+    const cfg = cfgs.find((c) => c.scopeName.startsWith("testForLoopFallThrough"));
+    expect(cfg).toBeDefined();
+
+    // Assert zero duplicate edges
+    const seenEdges = new Set<string>();
+    for (const edge of cfg!.edges) {
+      const key = `${edge.fromBlockId}:${edge.toBlockId}:${edge.kind}`;
+      expect(seenEdges.has(key)).toBe(false);
+      seenEdges.add(key);
+    }
+
+    const forHeaderBlock = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "ForStatement"));
+    expect(forHeaderBlock).toBeDefined();
+
+    const bodyBlock = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "ExpressionStatement" && s.location?.line === 4));
+    expect(bodyBlock).toBeDefined();
+
+    const doneBlock = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "ExpressionStatement" && s.location?.line === 6));
+    expect(doneBlock).toBeDefined();
+
+    // Body routes to header via loop-back
+    const loopBackEdge = cfg!.edges.find((e) => e.fromBlockId === bodyBlock!.id && e.kind === "loop-back");
+    expect(loopBackEdge).toBeDefined();
+    expect(loopBackEdge!.toBlockId).toBe(forHeaderBlock!.id);
+
+    // Body does NOT have a 'next' fall-through edge to doneBlock
+    const illegalFallThrough = cfg!.edges.find((e) => e.fromBlockId === bodyBlock!.id && e.toBlockId === doneBlock!.id && e.kind === "next");
+    expect(illegalFallThrough).toBeUndefined();
+  });
+
+  it("CFG-01 Test 4: nested while loops maintain isolated headers, loop-backs, and sequential exits without cross-leakage", async () => {
+    const code = `
+      function testNestedWhile() {
+        while (outerCond) {
+          while (innerCond) {
+            innerWork();
+          }
+          afterInner();
+        }
+        afterOuter();
+      }
+    `;
+
+    const cfgs = await buildCfgs(code);
+    const cfg = cfgs.find((c) => c.scopeName.startsWith("testNestedWhile"));
+    expect(cfg).toBeDefined();
+
+    // Assert zero duplicates
+    const seenEdges = new Set<string>();
+    for (const edge of cfg!.edges) {
+      const key = `${edge.fromBlockId}:${edge.toBlockId}:${edge.kind}`;
+      expect(seenEdges.has(key)).toBe(false);
+      seenEdges.add(key);
+    }
+
+    const outerHeader = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "WhileStatement" && s.location?.line === 3));
+    const innerHeader = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "WhileStatement" && s.location?.line === 4));
+    const innerWorkBlock = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "ExpressionStatement" && s.location?.line === 5));
+    const afterInnerBlock = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "ExpressionStatement" && s.location?.line === 7));
+    const afterOuterBlock = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "ExpressionStatement" && s.location?.line === 9));
+
+    expect(outerHeader).toBeDefined();
+    expect(innerHeader).toBeDefined();
+    expect(innerWorkBlock).toBeDefined();
+    expect(afterInnerBlock).toBeDefined();
+    expect(afterOuterBlock).toBeDefined();
+
+    // Inner loop work loops back to inner header
+    const innerBack = cfg!.edges.find((e) => e.fromBlockId === innerWorkBlock!.id && e.kind === "loop-back");
+    expect(innerBack).toBeDefined();
+    expect(innerBack!.toBlockId).toBe(innerHeader!.id);
+
+    // Inner loop work does NOT route to afterInner or afterOuter via next
+    const innerToAfterInner = cfg!.edges.find((e) => e.fromBlockId === innerWorkBlock!.id && e.toBlockId === afterInnerBlock!.id && e.kind === "next");
+    expect(innerToAfterInner).toBeUndefined();
+
+    const innerToAfterOuter = cfg!.edges.find((e) => e.fromBlockId === innerWorkBlock!.id && e.toBlockId === afterOuterBlock!.id && e.kind === "next");
+    expect(innerToAfterOuter).toBeUndefined();
+
+    // AfterInner loops back to outer header
+    const outerBack = cfg!.edges.find((e) => e.fromBlockId === afterInnerBlock!.id && e.kind === "loop-back");
+    expect(outerBack).toBeDefined();
+    expect(outerBack!.toBlockId).toBe(outerHeader!.id);
+
+    // Outer loop exits to afterOuter on false
+    const outerFalse = cfg!.edges.find((e) => e.fromBlockId === outerHeader!.id && e.kind === "false");
+    expect(outerFalse).toBeDefined();
+    expect(outerFalse!.toBlockId).toBe(afterOuterBlock!.id);
+  });
+
+  it("CFG-01 Test 5: while loop with break and continue routes break to exit and continue to header with no body fall-through", async () => {
+    const code = `
+      function testBreakContinue() {
+        while (loopCond) {
+          if (doBreak) {
+            break;
+          }
+          if (doContinue) {
+            continue;
+          }
+          remainder();
+        }
+        afterLoop();
+      }
+    `;
+
+    const cfgs = await buildCfgs(code);
+    const cfg = cfgs.find((c) => c.scopeName.startsWith("testBreakContinue"));
+    expect(cfg).toBeDefined();
+
+    const whileHeader = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "WhileStatement"));
+    const afterBlock = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "ExpressionStatement" && s.location?.line === 12));
+    const remainderBlock = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "ExpressionStatement" && s.location?.line === 10));
+    const breakBlock = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "BreakStatement"));
+    const continueBlock = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "ContinueStatement"));
+
+    expect(whileHeader).toBeDefined();
+    expect(afterBlock).toBeDefined();
+    expect(remainderBlock).toBeDefined();
+    expect(breakBlock).toBeDefined();
+    expect(continueBlock).toBeDefined();
+
+    // Break routes to afterBlock with break kind
+    const breakEdge = cfg!.edges.find((e) => e.fromBlockId === breakBlock!.id && e.kind === "break");
+    expect(breakEdge).toBeDefined();
+    expect(breakEdge!.toBlockId).toBe(afterBlock!.id);
+
+    // Continue routes to loop header with continue kind
+    const continueEdge = cfg!.edges.find((e) => e.fromBlockId === continueBlock!.id && e.kind === "continue");
+    expect(continueEdge).toBeDefined();
+    expect(continueEdge!.toBlockId).toBe(whileHeader!.id);
+
+    // Remainder routes to loop header with loop-back kind
+    const loopBackEdge = cfg!.edges.find((e) => e.fromBlockId === remainderBlock!.id && e.kind === "loop-back");
+    expect(loopBackEdge).toBeDefined();
+    expect(loopBackEdge!.toBlockId).toBe(whileHeader!.id);
+
+    // Remainder does NOT have next edge to afterBlock
+    const illegalFallThrough = cfg!.edges.find((e) => e.fromBlockId === remainderBlock!.id && e.toBlockId === afterBlock!.id && e.kind === "next");
+    expect(illegalFallThrough).toBeUndefined();
+  });
 });
