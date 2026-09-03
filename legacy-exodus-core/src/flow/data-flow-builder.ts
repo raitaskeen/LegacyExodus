@@ -4,7 +4,7 @@ import type { CodeSymbol } from "@symbols/index";
 import { createDataFlowGraph, createProvenCallTargets, type CallFlowBinding, type DataFlowGraph, type FunctionFlowSummary, type InterproceduralFlow, type ProvenCallTarget, type TaintFlow, type VariableDefinition, type VariableUse } from "./flow-contracts";
 
 export interface Scope { readonly parent?: Scope; readonly definitions: Map<string, VariableDefinition>; }
-export interface FunctionRecord { readonly name: string; readonly node: ASTNode; readonly parameters: VariableDefinition[]; readonly returns: VariableDefinition[]; readonly symbolId?: string; }
+export interface FunctionRecord { readonly name: string; readonly node: ASTNode; readonly parameters: VariableDefinition[][]; readonly returns: VariableDefinition[]; readonly symbolId?: string; }
 export interface PendingCall { readonly id: string; readonly targetSymbolId?: string; readonly callee?: FunctionRecord; readonly argumentDefinitionIds: readonly (string | undefined)[]; readonly argumentSourceIds: readonly (string | undefined)[]; readonly receiverDefinitionId?: string; }
 export interface TaintTransfer { readonly sourceDefinitionId: string; readonly targetDefinitionId: string; }
 export interface PendingSink { readonly id: string; readonly name: string; readonly argumentDefinitionIds: readonly string[]; }
@@ -101,13 +101,28 @@ export class DeterministicDataFlowGraphBuilder {
   }
 
   private declarator(node: ASTNode, scope: Scope, filePath: string, state: FlowState): void {
-    const name = identifierName(node.children.find((child) => child.role === "id"));
-    if (name === undefined) return;
+    const id = node.children.find((child) => child.role === "id");
+    const singleName = identifierName(id);
+    const boundNames = singleName !== undefined ? [singleName] : extractBoundNames(id);
+    if (boundNames.length === 0) return;
     const init = node.children.find((child) => child.role === "init");
-    const definition = this.define(name, "declaration", node, scope, filePath, state, literalValue(init));
-    if (init === undefined) return;
-    this.transferTaint(init, definition.id, scope, filePath, state);
-    this.visit(init, scope, filePath, state, undefined, definition.id);
+    const initVal = singleName !== undefined ? literalValue(init) : undefined;
+    for (const name of boundNames) {
+      const definition = this.define(name, "declaration", node, scope, filePath, state, initVal);
+      if (init !== undefined) this.transferTaint(init, definition.id, scope, filePath, state);
+    }
+    if (init !== undefined) {
+      const primaryDefId = boundNames.length === 1 ? scope.definitions.get(boundNames[0]!)?.id : undefined;
+      this.visit(init, scope, filePath, state, undefined, primaryDefId);
+    }
+    for (const { boundNames: defaultBoundNames, defaultNode } of extractPatternDefaults(id)) {
+      for (const name of defaultBoundNames) {
+        const definition = scope.definitions.get(name);
+        if (definition !== undefined) this.transferTaint(defaultNode, definition.id, scope, filePath, state);
+      }
+      const primaryDefId = defaultBoundNames.length === 1 ? scope.definitions.get(defaultBoundNames[0]!)?.id : undefined;
+      this.visit(defaultNode, scope, filePath, state, undefined, primaryDefId);
+    }
   }
 
   private function(node: ASTNode, scope: Scope, filePath: string, state: FlowState): void {
@@ -115,7 +130,23 @@ export class DeterministicDataFlowGraphBuilder {
     if (name !== undefined) this.define(name, "declaration", node, scope, filePath, state, undefined);
     const record = state.functions.get(node);
     const functionScope = createScope(scope);
-    for (const parameter of node.children.filter((child) => child.role === "params")) for (const parameterName of names(parameter)) { const definition = this.define(parameterName, "parameter", parameter, functionScope, filePath, state, undefined); record?.parameters.push(definition); }
+    for (const parameter of node.children.filter((child) => child.role === "params")) {
+      const paramNames = extractBoundNames(parameter);
+      const slotDefinitions: VariableDefinition[] = [];
+      for (const parameterName of paramNames) {
+        const definition = this.define(parameterName, "parameter", parameter, functionScope, filePath, state, undefined);
+        slotDefinitions.push(definition);
+      }
+      record?.parameters.push(slotDefinitions);
+      for (const { boundNames: defaultBoundNames, defaultNode } of extractPatternDefaults(parameter)) {
+        for (const paramName of defaultBoundNames) {
+          const definition = functionScope.definitions.get(paramName);
+          if (definition !== undefined) this.transferTaint(defaultNode, definition.id, functionScope, filePath, state);
+        }
+        const primaryDefId = defaultBoundNames.length === 1 ? functionScope.definitions.get(defaultBoundNames[0]!)?.id : undefined;
+        this.visit(defaultNode, functionScope, filePath, state, record, primaryDefId);
+      }
+    }
     const body = node.children.find((child) => child.role === "body");
     if (body !== undefined) this.visit(body, functionScope, filePath, state, record);
   }
@@ -130,12 +161,30 @@ export class DeterministicDataFlowGraphBuilder {
     if (source !== undefined) this.addInterproceduralFlow(state, hash(`return:${returned.id}:${source.id}`), "return-value", source.id, returned.id);
     this.visit(argument, scope, filePath, state, currentFunction, returned.id);
   }
+
   private assignment(node: ASTNode, scope: Scope, filePath: string, state: FlowState, currentFunction: FunctionRecord | undefined): void {
-    const left = node.children.find((child) => child.role === "left"); const right = node.children.find((child) => child.role === "right");
-    const name = identifierName(left) ?? memberPath(left); if (name === undefined) return;
-    const definition = this.define(name, "assignment", node, scope, filePath, state, literalValue(right));
-    if (right !== undefined) this.transferTaint(right, definition.id, scope, filePath, state);
-    if (right !== undefined) this.visit(right, scope, filePath, state, currentFunction, definition.id);
+    const left = node.children.find((child) => child.role === "left");
+    const right = node.children.find((child) => child.role === "right");
+    const singleName = identifierName(left) ?? memberPath(left);
+    const boundNames = singleName !== undefined ? [singleName] : extractBoundNames(left);
+    if (boundNames.length === 0) return;
+    const rightVal = singleName !== undefined ? literalValue(right) : undefined;
+    for (const name of boundNames) {
+      const definition = this.define(name, "assignment", node, scope, filePath, state, rightVal);
+      if (right !== undefined) this.transferTaint(right, definition.id, scope, filePath, state);
+    }
+    if (right !== undefined) {
+      const primaryDefId = boundNames.length === 1 ? scope.definitions.get(boundNames[0]!)?.id : undefined;
+      this.visit(right, scope, filePath, state, currentFunction, primaryDefId);
+    }
+    for (const { boundNames: defaultBoundNames, defaultNode } of extractPatternDefaults(left)) {
+      for (const name of defaultBoundNames) {
+        const definition = scope.definitions.get(name);
+        if (definition !== undefined) this.transferTaint(defaultNode, definition.id, scope, filePath, state);
+      }
+      const primaryDefId = defaultBoundNames.length === 1 ? scope.definitions.get(defaultBoundNames[0]!)?.id : undefined;
+      this.visit(defaultNode, scope, filePath, state, currentFunction, primaryDefId);
+    }
   }
 
   private call(node: ASTNode, scope: Scope, filePath: string, state: FlowState, receiverDefinitionId?: string): void {
@@ -154,10 +203,14 @@ export class DeterministicDataFlowGraphBuilder {
   private connectCalls(state: FlowState): void {
     for (const call of state.pendingCalls.sort(byId)) {
       for (const [index, argumentDefinitionId] of call.argumentDefinitionIds.entries()) {
-        const parameter = call.callee?.parameters[index];
-        if (argumentDefinitionId !== undefined && parameter !== undefined) this.addInterproceduralFlow(state, call.id, "argument-to-parameter", argumentDefinitionId, parameter.id);
-        const sourceId = call.argumentSourceIds[index];
-        if (sourceId !== undefined && parameter !== undefined) this.setTaintPath(state, parameter.id, sourceId, [sourceId, parameter.id]);
+        const slot = call.callee?.parameters[index];
+        if (slot !== undefined) {
+          for (const parameter of slot) {
+            if (argumentDefinitionId !== undefined) this.addInterproceduralFlow(state, call.id, "argument-to-parameter", argumentDefinitionId, parameter.id);
+            const sourceId = call.argumentSourceIds[index];
+            if (sourceId !== undefined) this.setTaintPath(state, parameter.id, sourceId, [sourceId, parameter.id]);
+          }
+        }
       }
       if (call.receiverDefinitionId !== undefined) for (const returned of call.callee?.returns ?? []) this.addInterproceduralFlow(state, call.id, "return-to-receiver", returned.id, call.receiverDefinitionId);
     }
@@ -211,7 +264,6 @@ function resolve(scope: Scope | undefined, name: string): VariableDefinition | u
 function isFunction(node: ASTNode): boolean { return ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ObjectMethod"].includes(node.type); }
 function functionName(node: ASTNode): string | undefined { return identifierName(node.children.find((child) => child.role === "id" || child.role === "key")); }
 function identifierName(node: ASTNode | undefined): string | undefined { const value = node?.attributes.name; return typeof value === "string" && value.length > 0 ? value : undefined; }
-function names(node: ASTNode): readonly string[] { const name = identifierName(node); return name === undefined ? node.children.flatMap(names) : [name]; }
 function memberPath(node: ASTNode | undefined): string | undefined { if (node?.type !== "MemberExpression") return undefined; const object = memberPath(node.children.find((child) => child.role === "object")) ?? identifierName(node.children.find((child) => child.role === "object")); const property = identifierName(node.children.find((child) => child.role === "property")) ?? stringValue(node.children.find((child) => child.role === "property")); return object === undefined || property === undefined ? undefined : `${object}.${property}`; }
 function memberBase(node: ASTNode | undefined): string | undefined { if (node?.type !== "MemberExpression") return undefined; const object = node.children.find((child) => child.role === "object"); return identifierName(object) ?? memberBase(object); }
 function literalValue(node: ASTNode | undefined): string | number | boolean | null | undefined { const value = node?.attributes.value; return typeof value === "string" || typeof value === "number" || typeof value === "boolean" || value === null ? value : undefined; }
@@ -221,5 +273,102 @@ function byId<T extends { readonly id: string }>(left: T, right: T): number { re
 function hash(value: string): string { return createHash("sha256").update(value).digest("hex"); }
 function callLocationKey(filePath: string, location: { readonly line: number; readonly column: number }): string { return `${filePath}:${location.line}:${location.column}`; }
 function sameLocation(symbolLocation: CodeSymbol["location"] | undefined, nodeLocation: ASTNode["location"] | undefined): boolean { return symbolLocation !== undefined && nodeLocation !== undefined && symbolLocation.start.line === nodeLocation.start.line && symbolLocation.start.column === nodeLocation.start.column; }
-function functionSummaries(state: FlowState, filePath: string): readonly FunctionFlowSummary[] { return [...state.functions.values()].flatMap((record) => record.symbolId === undefined ? [] : [{ symbolId: record.symbolId, filePath, parameterDefinitionIds: record.parameters.map((definition) => definition.id), returnDefinitionIds: record.returns.map((definition) => definition.id) }]).sort((left, right) => left.symbolId.localeCompare(right.symbolId)); }
+function functionSummaries(state: FlowState, filePath: string): readonly FunctionFlowSummary[] { return [...state.functions.values()].flatMap((record) => record.symbolId === undefined ? [] : [{ symbolId: record.symbolId, filePath, parameterDefinitionIds: record.parameters.map((slot) => slot.map((definition) => definition.id)), returnDefinitionIds: record.returns.map((definition) => definition.id) }]).sort((left, right) => left.symbolId.localeCompare(right.symbolId)); }
 function callBindings(state: FlowState): readonly CallFlowBinding[] { return state.pendingCalls.flatMap((call) => call.targetSymbolId === undefined ? [] : [{ callId: call.id, targetSymbolId: call.targetSymbolId, argumentDefinitionIds: call.argumentDefinitionIds, ...(call.receiverDefinitionId === undefined ? {} : { receiverDefinitionId: call.receiverDefinitionId }) }]).sort((left, right) => left.callId.localeCompare(right.callId)); }
+
+function extractBoundNames(node: ASTNode | undefined): readonly string[] {
+  if (!node) return [];
+  switch (node.type) {
+    case "Identifier": {
+      const name = identifierName(node);
+      return name !== undefined ? [name] : [];
+    }
+    case "AssignmentPattern": {
+      const left = node.children.find((c) => c.role === "left");
+      return extractBoundNames(left);
+    }
+    case "RestElement": {
+      const argument = node.children.find((c) => c.role === "argument");
+      return extractBoundNames(argument);
+    }
+    case "ObjectPattern": {
+      return node.children.flatMap((child) => {
+        if (child.type === "ObjectProperty" || child.role === "properties") {
+          const valChild = child.children.find((c) => c.role === "value");
+          if (valChild !== undefined) {
+            return extractBoundNames(valChild);
+          }
+          const keyChild = child.children.find((c) => c.role === "key") ?? child.children.find((c) => c.type === "Identifier");
+          return extractBoundNames(keyChild);
+        }
+        if (child.type === "RestElement") {
+          return extractBoundNames(child);
+        }
+        return [];
+      });
+    }
+    case "ArrayPattern": {
+      return node.children.filter((c) => c.role === "elements").flatMap(extractBoundNames);
+    }
+    default:
+      return [];
+  }
+}
+
+interface PatternDefault {
+  readonly boundNames: readonly string[];
+  readonly defaultNode: ASTNode;
+}
+
+function extractPatternDefaults(node: ASTNode | undefined): readonly PatternDefault[] {
+  if (!node) return [];
+  const results: PatternDefault[] = [];
+
+  const visit = (current: ASTNode): void => {
+    if (current.type === "AssignmentPattern") {
+      const left = current.children.find((c) => c.role === "left");
+      const right = current.children.find((c) => c.role === "right");
+      const boundNames = extractBoundNames(left);
+      if (right !== undefined && boundNames.length > 0) {
+        results.push({ boundNames, defaultNode: right });
+      }
+      if (left !== undefined) {
+        visit(left);
+      }
+      return;
+    }
+
+    if (current.type === "ObjectPattern") {
+      for (const child of current.children) {
+        if (child.type === "ObjectProperty" || child.role === "properties") {
+          const valChild = child.children.find((c) => c.role === "value");
+          if (valChild !== undefined) {
+            visit(valChild);
+          } else {
+            const keyChild = child.children.find((c) => c.role === "key") ?? child.children.find((c) => c.type === "Identifier");
+            if (keyChild !== undefined) visit(keyChild);
+          }
+        } else if (child.type === "RestElement") {
+          visit(child);
+        }
+      }
+      return;
+    }
+
+    if (current.type === "ArrayPattern") {
+      for (const child of current.children.filter((c) => c.role === "elements")) {
+        visit(child);
+      }
+      return;
+    }
+
+    if (current.type === "RestElement") {
+      const argument = current.children.find((c) => c.role === "argument");
+      if (argument !== undefined) visit(argument);
+      return;
+    }
+  };
+
+  visit(node);
+  return results;
+}

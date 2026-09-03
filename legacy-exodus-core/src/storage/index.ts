@@ -14,10 +14,14 @@ export {
 } from "./storage-errors";
 export { StorageManager } from "./storage-manager";
 export { DiscoveryProjectionService } from "./projections/discovery-projection-service";
-export { FileDiscoveryProjectionAdapter } from "./projections/file-discovery-projection";
+export {
+  FileDiscoveryProjectionAdapter,
+  resolveGitCommitSha,
+} from "./projections/file-discovery-projection";
 export {
   cloneStorageRecord,
   createStorageRecord,
+  deepFreeze,
   extractRecordMetadata,
   validateStorageRecord,
   type SerializedPayload,

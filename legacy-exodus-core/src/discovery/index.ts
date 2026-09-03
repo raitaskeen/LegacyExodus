@@ -4,6 +4,8 @@ export type { DiscoveryResult } from "./discovery-result";
 export { DiscoveryQueryService, type ProjectDiscoveryPayload, type SymbolTablePayload } from "./discovery-query-service";
 export {
   DiscoveryValidator,
+  computeWorkspaceDigest,
+  isPathWithinDirectory,
   type DiscoveryManifest,
   type DiscoveryValidationResult,
   type DiscoveryValidationStatus,

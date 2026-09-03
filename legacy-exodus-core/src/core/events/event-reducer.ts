@@ -1,4 +1,6 @@
 import type {
+  AnalysisRunCompleted,
+  AnalysisRunFailed,
   DependencyDetected,
   DiscoveryCompleted,
   FileDiscovered,
@@ -10,6 +12,13 @@ import { ProjectStatus, freezeProjectState, type ProjectState } from "@core/stat
 
 import type { DomainEvent } from "./domain-event";
 
+/**
+ * Pure deterministic projection of an ordered domain event stream into a frozen ProjectState.
+ *
+ * @param initialState - The starting aggregate state before any events in this stream are applied.
+ * @param events - Ordered domain events to replay into the aggregate.
+ * @returns An immutable, deep-frozen ProjectState reflecting the event history.
+ */
 export function reduceProjectState(
   initialState: ProjectState,
   events: readonly DomainEvent[],
@@ -31,6 +40,10 @@ function reduceEvent(state: ProjectState, event: DomainEvent): ProjectState {
       return reduceFrameworkDetected(state, event as FrameworkDetected);
     case "DiscoveryCompleted":
       return reduceDiscoveryCompleted(state, event as DiscoveryCompleted);
+    case "AnalysisRunCompleted":
+      return reduceAnalysisRunCompleted(state, event as AnalysisRunCompleted);
+    case "AnalysisRunFailed":
+      return reduceAnalysisRunFailed(state, event as AnalysisRunFailed);
     default:
       return state;
   }
@@ -127,6 +140,54 @@ function reduceDiscoveryCompleted(state: ProjectState, event: DiscoveryCompleted
       discoveredFileCount: String(event.payload.fileCount),
       dependencyCount: String(event.payload.dependencyCount),
       frameworkCount: String(event.payload.frameworkCount),
+    },
+    updatedAt: event.timestamp,
+  });
+}
+
+/**
+ * Reduces an AnalysisRunCompleted event into the project state.
+ * Transitions status to COMPLETED and sets current-run metadata (analysisStatus, analysisRunId,
+ * and analysisDurationMs). Explicitly omits any stale analysisError from prior failed runs
+ * to guarantee that completed states never carry phantom error diagnostics (EVENT-01).
+ */
+function reduceAnalysisRunCompleted(state: ProjectState, event: AnalysisRunCompleted): ProjectState {
+  const { analysisError: _staleAnalysisError, ...cleanMetadata } = state.metadata;
+
+  return freezeProjectState({
+    ...state,
+    id: event.payload.projectId,
+    version: state.version + 1,
+    status: ProjectStatus.COMPLETED,
+    metadata: {
+      ...cleanMetadata,
+      analysisStatus: "completed",
+      analysisRunId: event.payload.analysisRunId,
+      analysisDurationMs: String(event.payload.durationMs),
+    },
+    updatedAt: event.timestamp,
+  });
+}
+
+/**
+ * Reduces an AnalysisRunFailed event into the project state.
+ * Transitions status to FAILED and sets current-run metadata (analysisStatus, analysisRunId,
+ * and analysisError). Explicitly omits any stale analysisDurationMs from prior successful runs
+ * to guarantee that failed runs never report success-only duration metrics (EVENT-02).
+ */
+function reduceAnalysisRunFailed(state: ProjectState, event: AnalysisRunFailed): ProjectState {
+  const { analysisDurationMs: _staleAnalysisDuration, ...cleanMetadata } = state.metadata;
+
+  return freezeProjectState({
+    ...state,
+    id: event.payload.projectId,
+    version: state.version + 1,
+    status: ProjectStatus.FAILED,
+    metadata: {
+      ...cleanMetadata,
+      analysisStatus: "failed",
+      analysisRunId: event.payload.analysisRunId,
+      analysisError: event.payload.error,
     },
     updatedAt: event.timestamp,
   });

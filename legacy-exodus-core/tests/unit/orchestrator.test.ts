@@ -8,6 +8,7 @@ import type { InitializeProjectCommand } from "@contracts/commands";
 import { EventBus } from "@core/events/event-bus";
 import { InMemoryEventStore } from "@core/events/event-store";
 import { Orchestrator } from "@core/orchestration/orchestrator";
+import { ProjectStatus } from "@core/state/project-state";
 import { DiscoveryEngine } from "@discovery/index";
 import { ParserManager, ParserRegistry, type Parser } from "@parser/index";
 import { LegacyExodusError } from "@shared/errors";
@@ -99,6 +100,34 @@ describe("Orchestrator", () => {
       });
       expect(execution.analysis?.durationMs).toBeGreaterThanOrEqual(0);
     } finally { await rm(projectPath, { force: true, recursive: true }); }
+  });
+
+  test("replays complete lifecycle transition to COMPLETED after successful AnalyzeProject (EVT-01)", async (): Promise<void> => {
+    const projectPath = await mkdtemp(join(tmpdir(), "legacy-exodus-replay-"));
+    const eventStore = new InMemoryEventStore();
+    const orchestrator = new Orchestrator(
+      eventStore,
+      new EventBus(),
+      new StorageManager(new MemoryStorageProvider()),
+    );
+
+    try {
+      await writeFile(join(projectPath, "main.js"), "export const x = 42;", "utf8");
+      await orchestrator.execute({
+        id: "00000000-0000-4000-8000-000000000070",
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: { projectId: "00000000-0000-4000-8000-000000000071", path: projectPath },
+      });
+
+      const replayed = orchestrator.replay();
+      expect(replayed.status).toBe(ProjectStatus.COMPLETED);
+      expect(replayed.metadata.analysisStatus).toBe("completed");
+      expect(replayed.metadata.analysisRunId).toBe("00000000-0000-4000-8000-000000000070");
+      expect(replayed.metadata.discoveryStatus).toBe("completed");
+    } finally {
+      await rm(projectPath, { force: true, recursive: true });
+    }
   });
 });
 

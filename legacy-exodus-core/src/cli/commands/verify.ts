@@ -44,10 +44,7 @@ export async function runCommand(
   const startedAt = performance.now();
 
   return new Promise((resolve) => {
-    const isWindows = process.platform === "win32";
-    const child = isWindows
-      ? spawn(`${cmd} ${args.join(" ")}`, { stdio: "pipe", shell: true })
-      : spawn(cmd, args, { stdio: "pipe" });
+    const child = spawn(cmd, args, { stdio: "pipe", shell: false });
 
     let stdout = "";
     let stderr = "";

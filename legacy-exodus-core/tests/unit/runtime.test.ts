@@ -17,6 +17,101 @@ describe("runtime foundation", () => {
     expect(() => loadRuntimeConfig({ NODE_ENV: "staging" })).toThrow(ConfigurationError);
   });
 
+  describe("STORAGE-01: storage driver and path configuration", () => {
+    test("1. defaults to memory driver when neither driver nor path is specified", () => {
+      const config = loadRuntimeConfig({});
+      expect(config.storageDriver).toBe("memory");
+      expect(config.storageDatabasePath).toBeUndefined();
+
+      const context = createEngineContext({});
+      expect(context.storage.isPersistent()).toBe(false);
+    });
+
+    test("2. selects memory driver when explicitly specified without path", () => {
+      const config = loadRuntimeConfig({ LEGACY_EXODUS_STORAGE_DRIVER: "memory" });
+      expect(config.storageDriver).toBe("memory");
+      expect(config.storageDatabasePath).toBeUndefined();
+
+      const context = createEngineContext({ LEGACY_EXODUS_STORAGE_DRIVER: "memory" });
+      expect(context.storage.isPersistent()).toBe(false);
+    });
+
+    test("3. selects SQLite driver and consumes path when both are explicitly specified", async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), "legacy-exodus-storage-d-"));
+      const dbPath = join(tempDir, "explicit.sqlite");
+      try {
+        const config = loadRuntimeConfig({
+          LEGACY_EXODUS_STORAGE_DRIVER: "sqlite",
+          LEGACY_EXODUS_STORAGE_DB_PATH: dbPath,
+        });
+        expect(config.storageDriver).toBe("sqlite");
+        expect(config.storageDatabasePath).toBe(dbPath);
+
+        const context = createEngineContext({
+          LEGACY_EXODUS_STORAGE_DRIVER: "sqlite",
+          LEGACY_EXODUS_STORAGE_DB_PATH: dbPath,
+        });
+        expect(context.storage.isPersistent()).toBe(true);
+        await context.runtime.shutdown();
+      } finally {
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test("4. infers SQLite driver and consumes path when storage path is provided without driver", async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), "legacy-exodus-storage-e-"));
+      const dbPath = join(tempDir, "inferred.sqlite");
+      try {
+        const config = loadRuntimeConfig({
+          LEGACY_EXODUS_STORAGE_DB_PATH: dbPath,
+        });
+        expect(config.storageDriver).toBe("sqlite");
+        expect(config.storageDatabasePath).toBe(dbPath);
+
+        const context = createEngineContext({
+          LEGACY_EXODUS_STORAGE_DB_PATH: dbPath,
+        });
+        expect(context.storage.isPersistent()).toBe(true);
+        await context.runtime.shutdown();
+      } finally {
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test("5. rejects incompatible combination: explicit memory driver with storage path", () => {
+      expect(() =>
+        loadRuntimeConfig({
+          LEGACY_EXODUS_STORAGE_DRIVER: "memory",
+          LEGACY_EXODUS_STORAGE_DB_PATH: "./ignored.sqlite",
+        }),
+      ).toThrow(ConfigurationError);
+
+      try {
+        loadRuntimeConfig({
+          LEGACY_EXODUS_STORAGE_DRIVER: "memory",
+          LEGACY_EXODUS_STORAGE_DB_PATH: "./ignored.sqlite",
+        });
+      } catch (err: unknown) {
+        expect((err as ConfigurationError).code).toBe("RUNTIME_CONFIGURATION_INVALID");
+        expect((err as ConfigurationError).message).toContain("Runtime configuration is invalid");
+      }
+    });
+
+    test("6. permits SQLite driver without path (runs in-memory SQLite)", async () => {
+      const config = loadRuntimeConfig({
+        LEGACY_EXODUS_STORAGE_DRIVER: "sqlite",
+      });
+      expect(config.storageDriver).toBe("sqlite");
+      expect(config.storageDatabasePath).toBeUndefined();
+
+      const context = createEngineContext({
+        LEGACY_EXODUS_STORAGE_DRIVER: "sqlite",
+      });
+      expect(context.storage.isPersistent()).toBe(false);
+      await context.runtime.shutdown();
+    });
+  });
+
   test("initializes and shuts down deterministically", async (): Promise<void> => {
     const runtime = createEngineContext({
       LOG_LEVEL: "silent",
@@ -257,6 +352,54 @@ describe("runtime foundation", () => {
       expect(runtime.getStorageManager()).toBeDefined();
       expect(runtime.getPluginRegistry()).toBeDefined();
       expect(runtime.getPluginLoader()).toBeDefined();
+    });
+
+    it("Case K: allows registering multiple services with distinct names", async () => {
+      const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+      const runtime = context.runtime;
+
+      const serviceA: RuntimeService = { name: "service-alpha" };
+      const serviceB: RuntimeService = { name: "service-beta" };
+
+      expect(() => runtime.registerService(serviceA)).not.toThrow();
+      expect(() => runtime.registerService(serviceB)).not.toThrow();
+
+      await runtime.start();
+      expect(runtime.getStatus()).toBe("running");
+      await runtime.shutdown();
+      expect(runtime.getStatus()).toBe("stopped");
+    });
+
+    it("Case L: throws RUNTIME_DUPLICATE_SERVICE when registering duplicate service names and preserves original registration", async () => {
+      const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+      const runtime = context.runtime;
+
+      let service1Started = false;
+      const service1: RuntimeService = {
+        name: "duplicate-target",
+        start: () => { service1Started = true; },
+      };
+      const service2: RuntimeService = {
+        name: "duplicate-target",
+        start: () => { throw new Error("Should not start"); },
+      };
+
+      runtime.registerService(service1);
+
+      expect(() => runtime.registerService(service2)).toThrow(
+        expect.objectContaining({
+          code: "RUNTIME_DUPLICATE_SERVICE",
+          message: expect.stringContaining("duplicate-target"),
+        }),
+      );
+
+      // Original service remains registered and runs normally
+      await runtime.start();
+      expect(runtime.getStatus()).toBe("running");
+      expect(service1Started).toBe(true);
+
+      await runtime.shutdown();
+      expect(runtime.getStatus()).toBe("stopped");
     });
   });
 });

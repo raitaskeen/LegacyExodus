@@ -29,11 +29,23 @@ export interface AnalyzeProjectReport {
   readonly durationMs: number;
 }
 
+export interface AnalyzeProjectOptions {
+  readonly refresh?: boolean;
+  readonly storageDriver?: string;
+  readonly storagePath?: string;
+}
+
 export async function analyzeProject(
   path: string,
-  createEngine: () => LegacyExodusEngine = createLegacyExodusEngine,
+  createEngine: (env?: Record<string, string | undefined>) => LegacyExodusEngine = createLegacyExodusEngine,
+  options: AnalyzeProjectOptions = {},
 ): Promise<AnalyzeProjectReport> {
-  const engine = createEngine();
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    ...(options.storageDriver ? { LEGACY_EXODUS_STORAGE_DRIVER: options.storageDriver } : {}),
+    ...(options.storagePath ? { LEGACY_EXODUS_STORAGE_DB_PATH: options.storagePath } : {}),
+  };
+  const engine = createEngine(env);
 
   await engine.initialize();
 
@@ -42,7 +54,7 @@ export async function analyzeProject(
       id: randomUUID(),
       type: "AnalyzeProject",
       createdAt: new Date(),
-      payload: { projectId: randomUUID(), path },
+      payload: { projectId: randomUUID(), path, ...(options.refresh ? { refresh: true } : {}) },
     });
 
     if (result.type !== "AnalyzeProject") {
@@ -73,22 +85,36 @@ export async function analyzeProject(
 
 export function registerAnalyzeCommand(
   program: Command,
-  createEngine: () => LegacyExodusEngine,
+  createEngine: (env?: Record<string, string | undefined>) => LegacyExodusEngine,
 ): void {
   program
     .command("analyze <path>")
     .description("Observe a project and create a deterministic discovery inventory")
     .option("--json", "Emit machine-readable JSON")
     .option("--theme <name>", "Visual theme (classic, aurora, mono)")
-    .action(async (path: string, options: { readonly json?: boolean; readonly theme?: string }): Promise<void> => {
-      const report = await analyzeProject(path, createEngine);
-      if (options.json) {
-        process.stdout.write(`${formatJsonOutput(report)}\n`);
-        return;
-      }
+    .option("--refresh", "Force fresh discovery and bypass existing snapshot reuse")
+    .option("--storage-driver <driver>", "Storage driver to use (memory, sqlite)")
+    .option("--storage-path <path>", "Database file path for SQLite storage")
+    .action(
+      async (
+        path: string,
+        options: {
+          readonly json?: boolean;
+          readonly theme?: string;
+          readonly refresh?: boolean;
+          readonly storageDriver?: string;
+          readonly storagePath?: string;
+        },
+      ): Promise<void> => {
+        const report = await analyzeProject(path, createEngine, options);
+        if (options.json) {
+          process.stdout.write(`${formatJsonOutput(report)}\n`);
+          return;
+        }
 
-      const capabilities = detectTerminalCapabilities({ json: options.json, theme: options.theme });
-      const presenter = new SummaryPresenter(capabilities);
-      process.stdout.write(`${presenter.formatAnalyze(report)}\n`);
-    });
+        const capabilities = detectTerminalCapabilities({ json: options.json, theme: options.theme });
+        const presenter = new SummaryPresenter(capabilities);
+        process.stdout.write(`${presenter.formatAnalyze(report)}\n`);
+      },
+    );
 }

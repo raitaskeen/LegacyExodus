@@ -48,4 +48,53 @@ describe("analyze command output", () => {
     expect(formatJsonOutput(report)).toBe(formatJsonOutput(report));
     expect(JSON.parse(formatJsonOutput(report))).toEqual(report);
   });
+
+  test("analyzeProject maps storagePath to engine environment and enables SQLite inference", async () => {
+    const capturedEnv: Record<string, string | undefined>[] = [];
+    const mockEngine = {
+      initialize: async () => {},
+      execute: async () => ({
+        type: "AnalyzeProject",
+        discovery: {
+          projectName: "mock",
+          files: [],
+          languages: [],
+          frameworks: [],
+          dependencies: [],
+        },
+        analysis: {
+          filesDiscovered: 0,
+          filesAnalyzed: 0,
+          parserFailures: 0,
+          symbolExtractionFailures: 0,
+          unsupportedFiles: 0,
+          nonSourceArtifacts: 0,
+          unclassifiedArtifacts: 0,
+          durationMs: 1,
+        },
+      }),
+      shutdown: async () => {},
+    };
+
+    const createMockEngine = (env?: Record<string, string | undefined>) => {
+      if (env) capturedEnv.push(env);
+      return mockEngine as any;
+    };
+
+    const { analyzeProject } = await import("@cli/commands/analyze");
+
+    await analyzeProject("./dummy", createMockEngine, {
+      storagePath: "./db.sqlite",
+    });
+
+    expect(capturedEnv).toHaveLength(1);
+    expect(capturedEnv[0]?.LEGACY_EXODUS_STORAGE_DB_PATH).toBe("./db.sqlite");
+    expect(capturedEnv[0]?.LEGACY_EXODUS_STORAGE_DRIVER).toBeUndefined();
+
+    // Verify that the environment captured actually resolves to SQLite driver via loadRuntimeConfig
+    const { loadRuntimeConfig } = await import("@runtime/config");
+    const resolvedConfig = loadRuntimeConfig(capturedEnv[0]);
+    expect(resolvedConfig.storageDriver).toBe("sqlite");
+    expect(resolvedConfig.storageDatabasePath).toBe("./db.sqlite");
+  });
 });

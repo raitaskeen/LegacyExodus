@@ -37,28 +37,46 @@ class FlowState {
   private unlocatedStatementSequence = 0;
   public constructor(private readonly filePath: string, private readonly scopeName: string) {}
   public createBlock(): string { const id = hash(`${this.filePath}:${this.scopeName}:block:${this.sequence++}`); this.blocks.push({ id, statements: [] }); return id; }
-  public addEdge(fromBlockId: string, toBlockId: string, kind: ControlFlowEdgeKind): void { this.edges.push({ id: hash(`${fromBlockId}:${toBlockId}:${kind}`), fromBlockId, toBlockId, kind }); }
-  public buildStatements(nodes: readonly ASTNode[], current: string, exit: string, control: ControlContext | undefined): string {
+  public addEdge(fromBlockId: string, toBlockId: string, kind: ControlFlowEdgeKind): void {
+    const id = hash(`${fromBlockId}:${toBlockId}:${kind}`);
+    if (this.edges.some((candidate) => candidate.id === id)) return;
+    this.edges.push({ id, fromBlockId, toBlockId, kind });
+  }
+  public buildStatements(nodes: readonly ASTNode[], current: string, exit: string | undefined, control: ControlContext | undefined): string {
     let block = current;
+    let terminated = false;
     for (const node of nodes) {
       if (isFunction(node)) continue;
-      if (isTerminator(node)) { this.addNode(block, node); this.block(block).terminator = node.type; this.addEdge(block, node.type === "ThrowStatement" ? control?.exceptionTarget ?? exit : control?.returnTarget ?? exit, node.type === "ThrowStatement" ? "throw" : "return"); block = this.createBlock(); continue; }
-      if (node.type === "BreakStatement") { const target = resolveBreakTarget(node, control); if (target !== undefined) { this.addNode(block, node); this.block(block).terminator = node.type; this.addEdge(block, resolveBreakFinalizerTarget(node, control) ?? target, "break"); block = this.createBlock(); continue; } }
-      if (node.type === "ContinueStatement") { const target = resolveContinueTarget(node, control); if (target !== undefined) { this.addNode(block, node); this.block(block).terminator = node.type; this.addEdge(block, resolveContinueFinalizerTarget(node, control) ?? target, "continue"); block = this.createBlock(); continue; } }
+      if (isTerminator(node)) {
+        this.addNode(block, node);
+        this.block(block).terminator = node.type;
+        const termTarget = node.type === "ThrowStatement" ? control?.exceptionTarget ?? exit : control?.returnTarget ?? exit;
+        if (termTarget !== undefined) {
+          this.addEdge(block, termTarget, node.type === "ThrowStatement" ? "throw" : "return");
+        }
+        block = this.createBlock();
+        terminated = true;
+        continue;
+      }
+      if (node.type === "BreakStatement") { const target = resolveBreakTarget(node, control); if (target !== undefined) { this.addNode(block, node); this.block(block).terminator = node.type; this.addEdge(block, resolveBreakFinalizerTarget(node, control) ?? target, "break"); block = this.createBlock(); terminated = true; continue; } }
+      if (node.type === "ContinueStatement") { const target = resolveContinueTarget(node, control); if (target !== undefined) { this.addNode(block, node); this.block(block).terminator = node.type; this.addEdge(block, resolveContinueFinalizerTarget(node, control) ?? target, "continue"); block = this.createBlock(); terminated = true; continue; } }
       if (node.type === "LabeledStatement") { block = this.buildLabeled(node, block, control); continue; }
       if (node.type === "IfStatement") { block = this.buildIf(node, block, control); continue; }
+      if (node.type === "DoWhileStatement") { block = this.buildDoWhile(node, block, control); continue; }
       if (isLoop(node)) { block = this.buildLoop(node, block, control); continue; }
       if (node.type === "SwitchStatement") { block = this.buildSwitch(node, block, control); continue; }
-      if (node.type === "TryStatement") { block = this.buildTry(node, block, exit, control); continue; }
+      if (node.type === "TryStatement") { block = this.buildTry(node, block, exit ?? current, control); continue; }
       this.addNode(block, node);
+      terminated = false;
     }
-    if (block !== exit && this.block(block).terminator === undefined) this.addEdge(block, exit, "next");
+    if (exit !== undefined && block !== exit && this.block(block).terminator === undefined && !terminated) this.addEdge(block, exit, "next");
     return block;
   }
   private buildIf(node: ASTNode, block: string, control: ControlContext | undefined): string { this.addNode(block, node); const consequent = this.createBlock(); const alternate = this.createBlock(); const join = this.createBlock(); const condition = staticBoolean(node.children.find((child) => child.role === "test")); if (condition !== false) this.addEdge(block, consequent, "true"); if (condition !== true) this.addEdge(block, alternate, "false"); const children = node.children.filter((child) => child.role === "consequent" || child.role === "alternate"); const yes = children.filter((child) => child.role === "consequent").flatMap(statementChildren); const no = children.filter((child) => child.role === "alternate").flatMap(statementChildren); this.buildStatements(yes, consequent, join, control); this.buildStatements(no, alternate, join, control); return join; }
-  private buildLabeled(node: ASTNode, block: string, control: ControlContext | undefined): string { this.addNode(block, node); const label = labelName(node); const body = node.children.find((child) => child.role === "body"); if (body === undefined || label === undefined) return block; if (isLoop(body)) return this.buildLoop(body, block, control, label); const after = this.createBlock(); const labels = withLabel(control?.labels, label, { breakTarget: after }); this.buildStatements(statementChildren(body), block, after, { ...control, labels }); return after; }
-  private buildLoop(node: ASTNode, block: string, control: ControlContext | undefined, label?: string): string { const header = block; this.addNode(header, node); const body = this.createBlock(); const after = this.createBlock(); const condition = node.type === "DoWhileStatement" ? undefined : staticBoolean(node.children.find((child) => child.role === "test")); if (condition !== false) this.addEdge(header, body, "true"); if (condition !== true) this.addEdge(header, after, "false"); const labels = label === undefined ? control?.labels : withLabel(control?.labels, label, { breakTarget: after, continueTarget: header }); const content = node.children.filter((child) => child.role === "body").flatMap(statementChildren); const last = this.buildStatements(content, body, after, { ...control, breakTarget: after, continueTarget: header, labels }); if (this.block(last).terminator === undefined && condition !== false) this.addEdge(last, header, "loop-back"); return after; }
-  private buildSwitch(node: ASTNode, block: string, control: ControlContext | undefined): string { this.addNode(block, node); const after = this.createBlock(); const cases = node.children.filter((child) => child.role === "cases"); if (cases.length === 0) { this.addEdge(block, after, "next"); return after; } const blocks = cases.map(() => this.createBlock()); const hasDefault = cases.some((candidate) => candidate.children.every((child) => child.role !== "test")); for (const [index, branch] of cases.entries()) { const caseBlock = blocks[index]; if (caseBlock === undefined) continue; this.addEdge(block, caseBlock, "case"); const last = this.buildStatements(switchCaseStatements(branch), caseBlock, after, { ...control, breakTarget: after, continueTarget: control?.continueTarget }); if (this.block(last).terminator === undefined) { const next = blocks[index + 1] ?? after; this.addEdge(last, next, "next"); } } if (!hasDefault) this.addEdge(block, after, "next"); return after; }
+  private buildLabeled(node: ASTNode, block: string, control: ControlContext | undefined): string { this.addNode(block, node); const label = labelName(node); const body = node.children.find((child) => child.role === "body"); if (body === undefined || label === undefined) return block; if (body.type === "DoWhileStatement") return this.buildDoWhile(body, block, control, label); if (isLoop(body)) return this.buildLoop(body, block, control, label); const after = this.createBlock(); const labels = withLabel(control?.labels, label, { breakTarget: after }); this.buildStatements(statementChildren(body), block, after, { ...control, labels }); return after; }
+  private buildDoWhile(node: ASTNode, block: string, control: ControlContext | undefined, label?: string): string { const body = this.createBlock(); const conditionBlock = this.createBlock(); const after = this.createBlock(); const condition = staticBoolean(node.children.find((child) => child.role === "test")); this.addNode(block, node); this.addEdge(block, body, "next"); const labels = label === undefined ? control?.labels : withLabel(control?.labels, label, { breakTarget: after, continueTarget: conditionBlock }); const content = node.children.filter((child) => child.role === "body").flatMap(statementChildren); const last = this.buildStatements(content, body, undefined, { ...control, breakTarget: after, continueTarget: conditionBlock, labels }); if (this.block(last).terminator === undefined) this.addEdge(last, conditionBlock, "next"); if (condition !== false) this.addEdge(conditionBlock, body, "true"); if (condition !== true) this.addEdge(conditionBlock, after, "false"); return after; }
+  private buildLoop(node: ASTNode, block: string, control: ControlContext | undefined, label?: string): string { const header = block; this.addNode(header, node); const body = this.createBlock(); const after = this.createBlock(); const condition = staticBoolean(node.children.find((child) => child.role === "test")); if (condition !== false) this.addEdge(header, body, "true"); if (condition !== true) this.addEdge(header, after, "false"); const labels = label === undefined ? control?.labels : withLabel(control?.labels, label, { breakTarget: after, continueTarget: header }); const content = node.children.filter((child) => child.role === "body").flatMap(statementChildren); const last = this.buildStatements(content, body, undefined, { ...control, breakTarget: after, continueTarget: header, labels }); if (this.block(last).terminator === undefined && condition !== false) this.addEdge(last, header, "loop-back"); return after; }
+  private buildSwitch(node: ASTNode, block: string, control: ControlContext | undefined): string { this.addNode(block, node); const after = this.createBlock(); const cases = node.children.filter((child) => child.role === "cases"); if (cases.length === 0) { this.addEdge(block, after, "next"); return after; } const blocks = cases.map(() => this.createBlock()); const hasDefault = cases.some((candidate) => candidate.children.every((child) => child.role !== "test")); for (const [index, branch] of cases.entries()) { const caseBlock = blocks[index]; if (caseBlock === undefined) continue; this.addEdge(block, caseBlock, "case"); const last = this.buildStatements(switchCaseStatements(branch), caseBlock, undefined, { ...control, breakTarget: after, continueTarget: control?.continueTarget }); if (this.block(last).terminator === undefined) { const next = blocks[index + 1] ?? after; this.addEdge(last, next, "next"); } } if (!hasDefault) this.addEdge(block, after, "next"); return after; }
   private buildTry(node: ASTNode, block: string, exit: string, control: ControlContext | undefined): string {
     this.addNode(block, node);
     const after = this.createBlock();
@@ -197,11 +215,27 @@ class FlowState {
       ...(block.terminator === undefined ? {} : { terminator: block.terminator }),
     }));
     const dominators = calculateDominators(entry, blocks, this.edges);
-    const loops = this.edges
-      .filter((edge) => edge.kind === "loop-back")
-      .map((edge) => ({
-        headerBlockId: edge.toBlockId,
-        blockIds: computeNaturalLoopBlocks(edge.toBlockId, edge.fromBlockId, predecessorsByBlock),
+    const idomMap = new Map<string, string | undefined>();
+    for (const d of dominators) {
+      idomMap.set(d.blockId, d.immediateDominatorId);
+    }
+    const loopHeaders = new Map<string, Set<string>>();
+    for (const edge of this.edges) {
+      if (
+        edge.kind === "loop-back" ||
+        (isDominator(idomMap, edge.toBlockId, edge.fromBlockId) && (edge.kind === "continue" || edge.kind === "true"))
+      ) {
+        const headerId = edge.toBlockId;
+        const loopBlocks = computeNaturalLoopBlocks(headerId, edge.fromBlockId, predecessorsByBlock);
+        const existing = loopHeaders.get(headerId) ?? new Set<string>();
+        for (const b of loopBlocks) existing.add(b);
+        loopHeaders.set(headerId, existing);
+      }
+    }
+    const loops = Array.from(loopHeaders.entries())
+      .map(([headerBlockId, blockSet]) => ({
+        headerBlockId,
+        blockIds: Array.from(blockSet).sort(),
       }))
       .sort((left, right) =>
         left.headerBlockId === right.headerBlockId
@@ -428,6 +462,22 @@ function computeNaturalLoopBlocks(
   }
 
   return Array.from(loopBlocks).sort();
+}
+
+function isDominator(
+  idomMap: ReadonlyMap<string, string | undefined>,
+  ancestorId: string,
+  blockId: string,
+): boolean {
+  if (ancestorId === blockId) return true;
+  let curr: string | undefined = idomMap.get(blockId);
+  const visited = new Set<string>();
+  while (curr !== undefined && !visited.has(curr)) {
+    if (curr === ancestorId) return true;
+    visited.add(curr);
+    curr = idomMap.get(curr);
+  }
+  return false;
 }
 
 function hash(value: string): string { return createHash("sha256").update(value).digest("hex"); }

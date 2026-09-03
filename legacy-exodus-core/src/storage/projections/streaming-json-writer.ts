@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID, type Hash } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { copyFile, rename, unlink } from "node:fs/promises";
 import { finished } from "node:stream/promises";
@@ -8,12 +8,20 @@ const PAD_2 = "  ";
 const PAD_4 = "    ";
 const DEFAULT_BUFFER_THRESHOLD = 64 * 1024; // 64 KB bounded flush threshold
 
+export interface StreamWriteResult {
+  readonly sha256: string;
+  readonly bytes: number;
+}
+
 /**
  * Bounded buffered stream writer that batches small chunks to avoid excessive I/O syscalls
  * and microtask Promise overhead while respecting stream backpressure.
+ * Automatically computes SHA-256 hash and total byte count on the fly.
  */
 class BoundedStreamBuffer {
   private buffer = "";
+  private readonly hash: Hash = createHash("sha256");
+  private bytes = 0;
 
   public constructor(
     private readonly stream: Writable,
@@ -31,6 +39,8 @@ class BoundedStreamBuffer {
     if (this.buffer.length === 0) return;
     const chunk = this.buffer;
     this.buffer = "";
+    this.bytes += Buffer.byteLength(chunk, "utf8");
+    this.hash.update(chunk, "utf8");
     if (!this.stream.write(chunk)) {
       await new Promise<void>((resolve, reject) => {
         const onDrain = () => {
@@ -50,6 +60,13 @@ class BoundedStreamBuffer {
       });
     }
   }
+
+  public finish(): StreamWriteResult {
+    return {
+      sha256: this.hash.digest("hex"),
+      bytes: this.bytes,
+    };
+  }
 }
 
 /**
@@ -64,15 +81,16 @@ export class StreamingJsonWriter {
 
   /**
    * Serializes and writes a payload incrementally to a Writable stream.
+   * Returns the computed SHA-256 and byte length.
    */
-  public async writeToStream(payload: unknown, stream: Writable): Promise<void> {
+  public async writeToStream(payload: unknown, stream: Writable): Promise<StreamWriteResult> {
     const writer = new BoundedStreamBuffer(stream, this.bufferThreshold);
 
     if (Array.isArray(payload)) {
       if (payload.length === 0) {
         await writer.write("[]\n");
         await writer.flush();
-        return;
+        return writer.finish();
       }
 
       await writer.write("[\n");
@@ -83,7 +101,7 @@ export class StreamingJsonWriter {
       }
       await writer.write("]\n");
       await writer.flush();
-      return;
+      return writer.finish();
     }
 
     if (payload !== null && typeof payload === "object") {
@@ -93,7 +111,7 @@ export class StreamingJsonWriter {
       if (keys.length === 0) {
         await writer.write("{}\n");
         await writer.flush();
-        return;
+        return writer.finish();
       }
 
       await writer.write("{\n");
@@ -123,27 +141,30 @@ export class StreamingJsonWriter {
       }
       await writer.write("}\n");
       await writer.flush();
-      return;
+      return writer.finish();
     }
 
     // Primitives, strings, booleans, numbers, null
     await writer.write(`${JSON.stringify(payload, null, 2)}\n`);
     await writer.flush();
+    return writer.finish();
   }
 
   /**
    * Atomically writes a payload to a destination path using a temporary file and streaming.
    * On failure, cleans up the temporary file and ensures the final file is not corrupted.
+   * Returns the computed SHA-256 and byte length.
    */
-  public async writeAtomic(destinationPath: string, payload: unknown): Promise<void> {
+  public async writeAtomic(destinationPath: string, payload: unknown): Promise<StreamWriteResult> {
     const temporaryPath = `${destinationPath}.${randomUUID()}.tmp`;
     const stream = createWriteStream(temporaryPath, { encoding: "utf8" });
 
     try {
-      await this.writeToStream(payload, stream);
+      const result = await this.writeToStream(payload, stream);
       stream.end();
       await finished(stream);
       await this.replaceFile(temporaryPath, destinationPath);
+      return result;
     } catch (error) {
       await new Promise<void>((resolve) => {
         if (stream.closed) {
@@ -162,6 +183,13 @@ export class StreamingJsonWriter {
     }
   }
 
+  /**
+   * Atomically replaces targetPath with sourcePath.
+   *
+   * On Windows and POSIX systems with active scanners or indexing handles,
+   * atomic rename can encounter transient `EBUSY`, `EPERM`, or `EACCES` locks.
+   * Employs linear backoff retry before falling back to copy+unlink.
+   */
   private async replaceFile(sourcePath: string, targetPath: string): Promise<void> {
     const maxRetries = 15;
     for (let attempt = 0; attempt < maxRetries; attempt++) {

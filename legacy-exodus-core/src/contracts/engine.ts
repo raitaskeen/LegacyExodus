@@ -21,6 +21,7 @@ export interface AnalyzeProjectResult {
   readonly type: "AnalyzeProject";
   readonly discovery: ProjectDiscovery;
   readonly analysis: AnalysisSummary;
+  readonly isReused?: boolean;
 }
 
 export interface AnalysisSummary {

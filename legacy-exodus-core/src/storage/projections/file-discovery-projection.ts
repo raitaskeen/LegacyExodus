@@ -1,15 +1,48 @@
-import { execSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { mkdir, readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 
 import type { DiscoveryProjection } from "@contracts/discovery-projection";
+import { computeWorkspaceDigest } from "@discovery/index";
 import { StreamingJsonWriter } from "./streaming-json-writer";
+
+/**
+ * Resolves the git commit SHA of the given directory.
+ *
+ * Security boundary: invokes `git` directly using `spawnSync` with `shell: false`
+ * and strictly isolated stdio to eliminate shell injection risks (SEC-01).
+ *
+ * @param cwd - Optional working directory path.
+ * @returns 40-character git commit SHA string, or `undefined` if not a git repository or git fails.
+ */
+export function resolveGitCommitSha(cwd?: string): string | undefined {
+  try {
+    const result = spawnSync("git", ["rev-parse", "HEAD"], {
+      ...(cwd !== undefined ? { cwd } : {}),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      shell: false,
+    });
+
+    if (result.status === 0 && typeof result.stdout === "string") {
+      const trimmed = result.stdout.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
+    }
+  } catch {}
+
+  return undefined;
+}
 
 export class FileDiscoveryProjectionAdapter {
   private readonly writer = new StreamingJsonWriter();
   private readonly directoryQueues = new Map<string, Promise<void>>();
 
+  /**
+   * Serializes a discovery projection into atomic JSON artifacts on disk.
+   *
+   * Coordinates directory writes through an internal Promise queue to prevent concurrent
+   * write interleaving and file corruption when projections for the same directory overlap.
+   */
   public async write(projection: DiscoveryProjection): Promise<void> {
     const discoveryDirectory = join(resolve(projection.projectPath), ".discovery");
 
@@ -31,6 +64,9 @@ export class FileDiscoveryProjectionAdapter {
     }
   }
 
+  /**
+   * Flushes and awaits all in-flight filesystem projection writes before service shutdown.
+   */
   public async drain(): Promise<void> {
     const active = [...this.directoryQueues.values()];
     if (active.length > 0) {
@@ -46,11 +82,8 @@ export class FileDiscoveryProjectionAdapter {
     for (const artifact of projection.artifacts) {
       if (artifact.name === "manifest.json") continue;
       const destination = join(discoveryDirectory, artifact.name);
-      await this.writer.writeAtomic(destination, artifact.payload);
-
-      const content = await readFile(destination);
-      const sha256 = createHash("sha256").update(content).digest("hex");
-      artifactHashes[artifact.name] = { sha256, bytes: content.length };
+      const { sha256, bytes } = await this.writer.writeAtomic(destination, artifact.payload);
+      artifactHashes[artifact.name] = { sha256, bytes };
     }
 
     // Resolve repository metadata
@@ -62,23 +95,10 @@ export class FileDiscoveryProjectionAdapter {
       pkgName = pkgJson.name;
     } catch {}
 
-    let repoCommitSha: string | undefined;
-    try {
-      repoCommitSha = execSync("git rev-parse HEAD", {
-        cwd: projection.projectPath,
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      }).trim();
-    } catch {}
+    const repoCommitSha = resolveGitCommitSha(projection.projectPath);
 
     // Resolve engine metadata
-    let engineCommitSha = "uncommitted/local";
-    try {
-      engineCommitSha = execSync("git rev-parse HEAD", {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      }).trim();
-    } catch {}
+    const engineCommitSha = resolveGitCommitSha() ?? "uncommitted/local";
 
     let enginePackageVersion = "0.1.0";
     try {
@@ -88,6 +108,13 @@ export class FileDiscoveryProjectionAdapter {
 
     const bunVer = typeof process.versions.bun === "string" ? process.versions.bun : process.version;
 
+    // Compute source digest for workspace freshness
+    const filesArtifact = projection.artifacts.find((a) => a.name === "files.json");
+    const files = Array.isArray(filesArtifact?.payload)
+      ? (filesArtifact?.payload as readonly { readonly path: string }[])
+      : undefined;
+    const sourceDigest = await computeWorkspaceDigest(projection.projectPath, files);
+
     const manifest = {
       schemaVersion: 1,
       repository: {
@@ -95,6 +122,7 @@ export class FileDiscoveryProjectionAdapter {
         path: projection.projectPath,
         ...(pkgVersion ? { packageVersion: pkgVersion } : {}),
         ...(repoCommitSha ? { commitSha: repoCommitSha } : {}),
+        sourceDigest,
       },
       engine: {
         packageVersion: enginePackageVersion,

@@ -72,6 +72,9 @@ describe("CLI Help & Command Discovery Subsystem", () => {
     expect(output).toContain("ARGUMENTS");
     expect(output).toContain("<path>");
     expect(output).toContain("OPTIONS");
+    expect(output).toContain("--refresh");
+    expect(output).toContain("--storage-driver");
+    expect(output).toContain("--storage-path");
     expect(output).toContain("--json");
     expect(output).toContain("--theme");
     expect(output).toContain("EXAMPLES");

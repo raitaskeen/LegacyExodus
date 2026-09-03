@@ -16,7 +16,9 @@ export class DeterministicCallGraphBuilder {
     const references: SymbolReference[] = [];
 
     for (const ast of [...astResults].sort((left, right) => left.metadata.sourcePath.localeCompare(right.metadata.sourcePath))) {
-      this.visit(ast.root, ast, { callerName: "module", scope: createScope("scope:module"), receiverTypes: new Map() }, tablesByPath, importsByFile, targetByImportId, calls, references);
+      const initialContext = { callerName: "module", scope: createScope("scope:module"), receiverTypes: new Map() };
+      predeclareScopeBindings(ast.root, initialContext);
+      this.visit(ast.root, ast, initialContext, tablesByPath, importsByFile, targetByImportId, calls, references);
     }
 
     return Object.freeze({ calls: Object.freeze(calls), references: Object.freeze(references) });
@@ -34,6 +36,9 @@ export class DeterministicCallGraphBuilder {
   ): void {
     const table = tablesByPath.get(ast.metadata.sourcePath);
     const nextContext = childContext(node, context, table);
+    if (nextContext.scope !== context.scope) {
+      predeclareScopeBindings(node, nextContext);
+    }
     if (isCallable(node) || node.type === "CatchClause") recordParamReceiverTypes(node, nextContext);
     if (node.type === "VariableDeclarator") recordReceiverType(node, nextContext, table);
     if (node.type === "AssignmentExpression") recordAssignmentReceiverType(node, nextContext, table);
@@ -250,7 +255,8 @@ function recordAssignmentReceiverType(node: ASTNode, context: ResolutionContext,
   const boundNames = extractBoundNames(left);
   if (boundNames.length === 0) return;
 
-  if (boundNames.length === 1 && left?.type === "Identifier" && right?.type === "NewExpression") {
+  const operator = node.attributes.operator;
+  if (operator === "=" && boundNames.length === 1 && left?.type === "Identifier" && right?.type === "NewExpression") {
     const callee = right.children.find((child) => child.role === "callee");
     const className = callee === undefined ? undefined : identifier(callee);
     if (className !== undefined) {
@@ -269,6 +275,17 @@ function recordAssignmentReceiverType(node: ASTNode, context: ResolutionContext,
   }
 }
 
+function predeclareScopeBindings(node: ASTNode, context: ResolutionContext): void {
+  for (const child of node.children) {
+    if (child.type === "FunctionDeclaration" || child.type === "ClassDeclaration") {
+      const declName = nodeName(child);
+      if (declName !== undefined) {
+        (context.receiverTypes as Map<string, string | null>).set(receiverKey(context.scope, declName), null);
+      }
+    }
+  }
+}
+
 function recordParamReceiverTypes(node: ASTNode, context: ResolutionContext): void {
   for (const child of node.children.filter((c) => c.role === "param" || c.role === "params")) {
     const paramNames = extractBoundNames(child);
@@ -281,7 +298,7 @@ function recordParamReceiverTypes(node: ASTNode, context: ResolutionContext): vo
 function resolveLocalCall(table: SymbolTable | undefined, name: string, context: ResolutionContext): string | undefined {
   if (table === undefined) return undefined;
   const pieces = name.split(".");
-  if (pieces.length === 1) return nearestScoped(table.symbols, name, context.scope)?.id;
+  if (pieces.length === 1) return nearestScoped(table.symbols, name, context)?.id;
   if (pieces.length !== 2) return undefined;
   const [receiver, methodName] = pieces;
   if (receiver === undefined || methodName === undefined) return undefined;
@@ -317,11 +334,15 @@ function resolveLocalCall(table: SymbolTable | undefined, name: string, context:
   return undefined;
 }
 
-function nearestScoped(symbols: readonly CodeSymbol[], name: string, scope: ScopeFrame): CodeSymbol | undefined {
-  for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
-    const candidates = symbols.filter((symbol) => symbol.name === name && (symbol.kind === "function" || symbol.kind === "class") && symbol.scopeId === current.id);
-    if (candidates.length === 1) return candidates[0];
-    if (candidates.length > 1) return undefined;
+function nearestScoped(symbols: readonly CodeSymbol[], name: string, context: ResolutionContext): CodeSymbol | undefined {
+  for (let current: ScopeFrame | undefined = context.scope; current !== undefined; current = current.parent) {
+    const matchingSymbols = symbols.filter((symbol) => symbol.name === name && symbol.scopeId === current.id);
+    const callableSymbols = matchingSymbols.filter((symbol) => symbol.kind === "function" || symbol.kind === "class");
+    const nonCallableSymbols = matchingSymbols.filter((symbol) => symbol.kind !== "function" && symbol.kind !== "class");
+    if (callableSymbols.length === 1) return callableSymbols[0];
+    if (callableSymbols.length > 1) return undefined;
+    if (nonCallableSymbols.length > 0) return undefined;
+    if (context.receiverTypes.has(receiverKey(current, name))) return undefined;
   }
   return undefined;
 }
