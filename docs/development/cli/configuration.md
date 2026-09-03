@@ -64,10 +64,25 @@ LegacyExodus automatically inspects and resolves path aliases declared in `tscon
 * Maps path aliases to absolute physical file targets within the repository boundary.
 * Unmatched or third-party aliases resolve cleanly to `null` (out-of-boundary).
 
+## 5. Storage Driver & Database Configuration
+
+LegacyExodus provides pluggable storage drivers configured via environment variables or CLI flags:
+
+| Setting | CLI Flag | Environment Variable | Default | Behavior / Contract |
+|---|---|---|---|---|
+| **Storage Driver** | `--storage-driver <driver>` | `LEGACY_EXODUS_STORAGE_DRIVER` | `memory` | Supported values: `memory`, `sqlite`. |
+| **Database Path** | `--storage-path <path>` | `LEGACY_EXODUS_STORAGE_DB_PATH` | `undefined` | Target file path for persistent SQLite database. |
+
+### Storage Configuration Invariants (STORAGE-01)
+1. **Automatic Driver Inference:** If a database path (`--storage-path` or `LEGACY_EXODUS_STORAGE_DB_PATH`) is provided without an explicit driver, the runtime automatically infers `"sqlite"`.
+2. **Conflict Validation:** Specifying `--storage-driver memory` alongside `--storage-path` is strictly invalid. The runtime immediately throws a descriptive `ConfigurationError` to prevent persistence misconfiguration.
+3. **Database Handle Lifecycle:** When using SQLite, foreign keys (`PRAGMA foreign_keys = ON;`), WAL mode (`PRAGMA journal_mode = WAL;`), and a 5-second busy timeout (`PRAGMA busy_timeout = 5000;`) are configured automatically, and the handle is deterministically closed during runtime shutdown.
+
 ---
 
 ## Related Documentation
 
 * **[CLI Commands](commands.md):** Command-line reference.
 * **[CLI Design & Architecture](../../implementation/cli-design.md):** Presentation layer, tables, layout, and error boundaries.
+* **[Storage Layer Implementation](../../implementation/storage-layer.md):** Storage adapters, query scoping, and schema validation.
 * **[CLI Troubleshooting](troubleshooting.md):** Troubleshooting analysis execution.
