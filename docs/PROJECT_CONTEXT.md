@@ -455,7 +455,7 @@ LegacyExodus/                          <-- Git Repository Root (Governance, Work
 8. **Fidelity & Governance (`src/governance/`):** Enforces the Three-Universe validation model, computing sample recall, actionable correctness, provenance freshness locks, and 10-point governance audits.
 
 ### 14.2 Verified Evidence Summary
-* **Test Suite:** 800 / 800 tests passing across 92 test files (8,536 assertions, 0 failures).
+* **Test Suite:** 660 / 660 tests passing across 87 test files (7,281 assertions, 0 failures).
 * **Typecheck:** 0 TypeScript compile errors.
 * **Governance Audit:** 10 / 10 benchmark checks passed (`PASS`).
 * **Verification Dashboard:** 4 / 4 gates passed (`PASS`).

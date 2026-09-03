@@ -309,11 +309,6 @@ When `shutdown()` or a failed `start()` rollback executes:
    * **In-Memory:** Clears all retained in-memory storage maps.
 4. **Guaranteed Execution & Status Transition:** Cleanup executes within a `try ... finally` block, ensuring `status` always transitions to `stopped` and all disposal phases execute even if an individual service, plugin, or storage throws. If failures occurred, `RUNTIME_SHUTDOWN_FAILED` is thrown after all cleanup phases have executed.
 
-### 7.3 Concurrency Barrier & Startup Failure Precedence (RUNTIME-01)
-* **Single-Flight Coalesced Shutdown Barrier (`initiateShutdown()`):** To prevent race conditions from concurrent `shutdown()` calls during active execution draining, `ApplicationRuntime` caches the in-flight shutdown promise (`this.shutdownPromise`). All concurrent or re-entrant callers await the exact same lifecycle barrier before resolving.
-* **Startup Failure Precedence:** When a service fails during `start()`, `ApplicationRuntime` immediately initiates cleanup of previously started services. If cleanup itself encounters a failure, the original startup error is preserved as the primary rejection reason, while cleanup errors are logged, guaranteeing that startup failure semantics are never masked by secondary disposal exceptions.
-* **Awaitable Startup Interruption:** If `shutdown()` is initiated while `start()` is actively progressing, `start()` detects the transition, initiates rollback, and awaits full cleanup before rejecting with a deterministic runtime error.
-
 ---
 
 ## 8) CLI & Developer Experience Architecture `[IMPLEMENTED]`

@@ -8,7 +8,7 @@ This document explains how to write and run unit tests for the **LegacyExodus** 
 
 LegacyExodus uses the built-in **Bun Test runner** (`bun:test`).
 
-* Fast execution across 800 tests
+* Fast execution across 660 tests
 * Built-in code coverage reporting (`bun test --coverage`)
 * Standard Jest/Vitest-compatible assertion API (`describe`, `it`, `expect`, `beforeEach`)
 * Domain taxonomy runner via `legacy-exodus test <domain>`

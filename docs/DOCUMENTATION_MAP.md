@@ -139,5 +139,5 @@ The LegacyExodus documentation system is designed as a layered knowledge archite
 ## 5. Maintenance & Ownership Rules
 
 1. **Reality Over Aspiration:** Never document planned features as implemented.
-2. **Single Source of Truth:** High-level metrics must point to verified test and benchmark counts (e.g. 800 tests / 92 files / 8,536 assertions).
+2. **Single Source of Truth:** High-level metrics must point to verified test and benchmark counts (e.g. 660 tests / 87 files / 7,281 assertions).
 3. **No Drift:** Whenever a milestone is completed, update `CHANGELOG.md`, `ROADMAP.md`, and `README.md` concurrently.
