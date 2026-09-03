@@ -56,6 +56,15 @@ export class ApplicationRuntime {
     this.services.push(service);
   }
 
+  /**
+   * Starts all registered application services in sequential order.
+   *
+   * If any service fails during startup, cleanup is triggered immediately via
+   * `initiateShutdown()` while preserving the primary startup error. If a concurrent
+   * shutdown is initiated during startup, `start()` awaits the shutdown cycle before resolving.
+   *
+   * @throws {LegacyExodusError} If the runtime is not in the `"created"` state or a service fails to start.
+   */
   public async start(): Promise<void> {
     if (this.status === "running") {
       return;
@@ -98,6 +107,12 @@ export class ApplicationRuntime {
     }
   }
 
+  /**
+   * Gracefully and idempotently shuts down the application runtime.
+   *
+   * Coalesces concurrent calls to `shutdown()` into a single awaitable cleanup cycle.
+   * Services are stopped in reverse registration order (LIFO), guaranteeing resource release.
+   */
   public async shutdown(): Promise<void> {
     if (this.status === "stopped") {
       return;
@@ -106,6 +121,12 @@ export class ApplicationRuntime {
     return this.initiateShutdown();
   }
 
+  /**
+   * Internal synchronization barrier for runtime shutdown.
+   *
+   * Atomically transitions runtime state to `"stopping"` and returns an existing or new
+   * shutdown Promise to prevent concurrent cleanup races (RUNTIME-01).
+   */
   private initiateShutdown(): Promise<void> {
     if (this.shutdownPromise !== undefined) {
       return this.shutdownPromise;

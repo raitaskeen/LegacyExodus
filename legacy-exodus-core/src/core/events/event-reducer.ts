@@ -12,6 +12,13 @@ import { ProjectStatus, freezeProjectState, type ProjectState } from "@core/stat
 
 import type { DomainEvent } from "./domain-event";
 
+/**
+ * Pure deterministic projection of an ordered domain event stream into a frozen ProjectState.
+ *
+ * @param initialState - The starting aggregate state before any events in this stream are applied.
+ * @param events - Ordered domain events to replay into the aggregate.
+ * @returns An immutable, deep-frozen ProjectState reflecting the event history.
+ */
 export function reduceProjectState(
   initialState: ProjectState,
   events: readonly DomainEvent[],
@@ -138,6 +145,12 @@ function reduceDiscoveryCompleted(state: ProjectState, event: DiscoveryCompleted
   });
 }
 
+/**
+ * Reduces an AnalysisRunCompleted event into the project state.
+ * Transitions status to COMPLETED and sets current-run metadata (analysisStatus, analysisRunId,
+ * and analysisDurationMs). Explicitly omits any stale analysisError from prior failed runs
+ * to guarantee that completed states never carry phantom error diagnostics (EVENT-01).
+ */
 function reduceAnalysisRunCompleted(state: ProjectState, event: AnalysisRunCompleted): ProjectState {
   const { analysisError: _staleAnalysisError, ...cleanMetadata } = state.metadata;
 
@@ -156,6 +169,12 @@ function reduceAnalysisRunCompleted(state: ProjectState, event: AnalysisRunCompl
   });
 }
 
+/**
+ * Reduces an AnalysisRunFailed event into the project state.
+ * Transitions status to FAILED and sets current-run metadata (analysisStatus, analysisRunId,
+ * and analysisError). Explicitly omits any stale analysisDurationMs from prior successful runs
+ * to guarantee that failed runs never report success-only duration metrics (EVENT-02).
+ */
 function reduceAnalysisRunFailed(state: ProjectState, event: AnalysisRunFailed): ProjectState {
   const { analysisDurationMs: _staleAnalysisDuration, ...cleanMetadata } = state.metadata;
 

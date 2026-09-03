@@ -183,6 +183,13 @@ export class StreamingJsonWriter {
     }
   }
 
+  /**
+   * Atomically replaces targetPath with sourcePath.
+   *
+   * On Windows and POSIX systems with active scanners or indexing handles,
+   * atomic rename can encounter transient `EBUSY`, `EPERM`, or `EACCES` locks.
+   * Employs linear backoff retry before falling back to copy+unlink.
+   */
   private async replaceFile(sourcePath: string, targetPath: string): Promise<void> {
     const maxRetries = 15;
     for (let attempt = 0; attempt < maxRetries; attempt++) {

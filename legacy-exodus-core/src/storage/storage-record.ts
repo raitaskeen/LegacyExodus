@@ -28,6 +28,16 @@ const storageRecordSchema = z.object({
   updatedAt: z.date(),
 });
 
+/**
+ * Creates an immutable, content-addressed StorageRecord.
+ *
+ * Computes a deterministic SHA-256 identity hash based on type and payload content,
+ * deeply freezes the payload, and validates the record against `storageRecordSchema` (DAT-01).
+ *
+ * @param type - Storage record category identifier.
+ * @param payload - Structured data payload to persist.
+ * @returns Frozen, schema-validated StorageRecord.
+ */
 export function createStorageRecord<Payload extends SerializedPayload>(
   type: string,
   payload: Payload,
@@ -82,6 +92,11 @@ function updateCanonicalHash(hash: Hash, value: SerializedPayload | SerializedOb
   hash.update("}");
 }
 
+/**
+ * Validates a StorageRecord against the schema and guarantees deep immutability.
+ *
+ * @throws {StorageValidationError} If the record fails schema validation or timestamps are chronologically inverted.
+ */
 export function validateStorageRecord<Payload extends SerializedPayload>(
   record: StorageRecord<Payload>,
 ): StorageRecord<Payload> {
@@ -122,6 +137,14 @@ export function cloneStorageRecord<Payload extends SerializedPayload>(
   });
 }
 
+/**
+ * Recursively freezes an object tree in place to enforce deep immutability (DAT-01).
+ *
+ * Prevents mutation of nested arrays and objects stored in memory or retrieved from SQLite.
+ *
+ * @param payload - Target object, array, or primitive.
+ * @returns The deeply frozen object reference.
+ */
 export function deepFreeze<Payload extends SerializedPayload>(payload: Payload): Payload {
   if (payload === null || typeof payload !== "object" || Object.isFrozen(payload)) {
     return payload;
@@ -140,6 +163,9 @@ export interface StorageRecordMetadata {
   readonly filePath: string | null;
 }
 
+/**
+ * Extracts standard scoping identifiers (projectId, analysisRunId, filePath) from an arbitrary record payload.
+ */
 export function extractRecordMetadata(payload: unknown): StorageRecordMetadata {
   let projectId: string | null = null;
   let analysisRunId: string | null = null;

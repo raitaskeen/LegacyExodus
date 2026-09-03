@@ -105,6 +105,16 @@ export interface ValidateDiscoveryOptions {
   readonly verifyFreshness?: boolean;
 }
 
+/**
+ * Computes a deterministic SHA-256 digest of workspace source files.
+ *
+ * Sorts all files lexicographically by path and hashes each file's content
+ * to produce a single stable signature of repository state for freshness verification.
+ *
+ * @param projectPath - Absolute path to the workspace root directory.
+ * @param files - Optional precomputed file list; if omitted, scans workspace automatically.
+ * @returns Deterministic SHA-256 hex digest of the workspace source content.
+ */
 export async function computeWorkspaceDigest(
   projectPath: string,
   files?: readonly { readonly path: string }[],
@@ -139,6 +149,19 @@ export async function computeWorkspaceDigest(
 }
 
 export class DiscoveryValidator {
+  /**
+   * Validates a `.discovery` snapshot directory and its associated manifest.
+   *
+   * Enforces strict containment and security boundaries:
+   * - Rejects symlinked `.discovery` root directories and symlinked `manifest.json` (SEC-03).
+   * - Validates that artifact paths do not escape the discovery directory via path traversal or symlinks (SEC-02).
+   * - Verifies cryptographic SHA-256 hashes and byte lengths for all declared artifacts.
+   * - Returns validated in-memory artifact bytes (`validatedArtifacts`) to eliminate TOCTOU risks (REUSE-03).
+   * - Optionally performs workspace freshness check against current repository files and digest (REUSE-01).
+   *
+   * @param options - Validation configuration including project path and verification flags.
+   * @returns Comprehensive validation outcome with status, manifest, and validated artifacts.
+   */
   public async validate(options: ValidateDiscoveryOptions): Promise<DiscoveryValidationResult> {
     const projectPath = resolve(options.projectPath);
     const discoveryDir = options.discoveryDirectory ? resolve(options.discoveryDirectory) : join(projectPath, ".discovery");
@@ -374,6 +397,13 @@ export class DiscoveryValidator {
     };
   }
 
+  /**
+   * Validates a `.discovery` snapshot directory with mandatory workspace freshness verification.
+   *
+   * @param projectPath - Absolute path to the workspace root.
+   * @param discoveryDirectory - Optional custom discovery directory path.
+   * @returns Validation outcome including freshness status.
+   */
   public async validateFreshness(
     projectPath: string,
     discoveryDirectory?: string,
@@ -381,6 +411,10 @@ export class DiscoveryValidator {
     return this.validate({ projectPath, discoveryDirectory, verifyFreshness: true });
   }
 
+  /**
+   * Internal routine comparing current workspace filesystem contents against snapshot files.json
+   * and content digest (REUSE-01).
+   */
   private async verifyWorkspaceFreshness(
     projectPath: string,
     discoveryDir: string,

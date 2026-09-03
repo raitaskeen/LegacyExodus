@@ -34,6 +34,17 @@ const runtimeConfigSchema = z
     },
   );
 
+/**
+ * Loads, validates, and freezes runtime configuration from environment variables.
+ *
+ * Infers storage driver as `"sqlite"` when `LEGACY_EXODUS_STORAGE_DB_PATH` is specified without
+ * an explicit driver. Rejects contradictory configurations where a database path is supplied
+ * alongside `storageDriver: "memory"` (STORAGE-01).
+ *
+ * @param environment - Environment variable dictionary (defaults to `process.env`).
+ * @returns Validated immutable RuntimeConfig object.
+ * @throws {ConfigurationError} If required variables are missing or schema constraints are violated.
+ */
 export function loadRuntimeConfig(environment: EnvironmentVariables = process.env): RuntimeConfig {
   const rawDriver = environment.LEGACY_EXODUS_STORAGE_DRIVER;
   const rawPath = environment.LEGACY_EXODUS_STORAGE_DB_PATH;

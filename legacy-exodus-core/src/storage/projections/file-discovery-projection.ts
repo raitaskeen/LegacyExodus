@@ -6,6 +6,15 @@ import type { DiscoveryProjection } from "@contracts/discovery-projection";
 import { computeWorkspaceDigest } from "@discovery/index";
 import { StreamingJsonWriter } from "./streaming-json-writer";
 
+/**
+ * Resolves the git commit SHA of the given directory.
+ *
+ * Security boundary: invokes `git` directly using `spawnSync` with `shell: false`
+ * and strictly isolated stdio to eliminate shell injection risks (SEC-01).
+ *
+ * @param cwd - Optional working directory path.
+ * @returns 40-character git commit SHA string, or `undefined` if not a git repository or git fails.
+ */
 export function resolveGitCommitSha(cwd?: string): string | undefined {
   try {
     const result = spawnSync("git", ["rev-parse", "HEAD"], {
@@ -28,6 +37,12 @@ export class FileDiscoveryProjectionAdapter {
   private readonly writer = new StreamingJsonWriter();
   private readonly directoryQueues = new Map<string, Promise<void>>();
 
+  /**
+   * Serializes a discovery projection into atomic JSON artifacts on disk.
+   *
+   * Coordinates directory writes through an internal Promise queue to prevent concurrent
+   * write interleaving and file corruption when projections for the same directory overlap.
+   */
   public async write(projection: DiscoveryProjection): Promise<void> {
     const discoveryDirectory = join(resolve(projection.projectPath), ".discovery");
 
@@ -49,6 +64,9 @@ export class FileDiscoveryProjectionAdapter {
     }
   }
 
+  /**
+   * Flushes and awaits all in-flight filesystem projection writes before service shutdown.
+   */
   public async drain(): Promise<void> {
     const active = [...this.directoryQueues.values()];
     if (active.length > 0) {
