@@ -542,5 +542,152 @@ describe("EventBus & EventReducer Behavioral Integrity", () => {
       expect(replayedState.metadata.analysisStatus).toBe("completed");
       expect(replayedState.status).toBe(ProjectStatus.COMPLETED);
     });
+
+    it("Scenario 18: AnalysisRunFailed clears stale analysisDurationMs from previous successful run (EVENT-02)", () => {
+      const projectId = "proj-regression";
+      const initial = createProjectState("Init");
+
+      const events: DomainEvent[] = [
+        createDomainEvent({
+          type: "ProjectInitialized",
+          aggregateId: projectId,
+          payload: { projectId, name: "Regression System" },
+        }),
+        createDomainEvent({
+          type: "DiscoveryCompleted",
+          aggregateId: projectId,
+          payload: { projectId, fileCount: 10, dependencyCount: 4, frameworkCount: 2 },
+        }),
+        createDomainEvent({
+          type: "AnalysisRunCompleted",
+          aggregateId: projectId,
+          payload: { projectId, analysisRunId: "run-success-1", durationMs: 350 },
+        }),
+        createDomainEvent({
+          type: "AnalysisRunFailed",
+          aggregateId: projectId,
+          payload: { projectId, analysisRunId: "run-failed-2", error: "EXPECTED_FAILURE" },
+        }),
+      ];
+
+      const state = reduceProjectState(initial, events);
+
+      expect(state.status).toBe(ProjectStatus.FAILED);
+      expect(state.version).toBe(4);
+      expect(state.metadata.analysisStatus).toBe("failed");
+      expect(state.metadata.analysisRunId).toBe("run-failed-2");
+      expect(state.metadata.analysisError).toBe("EXPECTED_FAILURE");
+
+      // Critical assertion: stale analysisDurationMs must be completely cleared from metadata
+      expect("analysisDurationMs" in state.metadata).toBe(false);
+      expect(state.metadata.analysisDurationMs).toBeUndefined();
+
+      // Cumulative discovery metadata remains preserved
+      expect(state.metadata.discoveryStatus).toBe("completed");
+      expect(state.metadata.discoveredFileCount).toBe("10");
+      expect(state.metadata.dependencyCount).toBe("4");
+      expect(state.metadata.frameworkCount).toBe("2");
+
+      expect(Object.isFrozen(state)).toBe(true);
+      expect(Object.isFrozen(state.metadata)).toBe(true);
+    });
+
+    it("Scenario 19: Replay equivalence for SUCCESS -> FAILURE sequence (EVENT-02)", () => {
+      const projectId = "proj-replay-failure";
+      const initial = createProjectState("Init");
+
+      const events: DomainEvent[] = [
+        createDomainEvent({
+          type: "ProjectInitialized",
+          aggregateId: projectId,
+          payload: { projectId, name: "Replay Failure System" },
+        }),
+        createDomainEvent({
+          type: "DiscoveryCompleted",
+          aggregateId: projectId,
+          payload: { projectId, fileCount: 3, dependencyCount: 1, frameworkCount: 0 },
+        }),
+        createDomainEvent({
+          type: "AnalysisRunCompleted",
+          aggregateId: projectId,
+          payload: { projectId, analysisRunId: "run-1", durationMs: 150 },
+        }),
+        createDomainEvent({
+          type: "AnalysisRunFailed",
+          aggregateId: projectId,
+          payload: { projectId, analysisRunId: "run-2", error: "Fatal error" },
+        }),
+      ];
+
+      const run1State = reduceProjectState(initial, events);
+      const replayedState = reduceProjectState(createProjectState("Init"), events);
+
+      expect(replayedState).toEqual(run1State);
+      expect("analysisDurationMs" in replayedState.metadata).toBe(false);
+      expect(replayedState.metadata.analysisStatus).toBe("failed");
+      expect(replayedState.status).toBe(ProjectStatus.FAILED);
+    });
+
+    it("Scenario 20: Multi-run alternating lifecycle preserves clean metadata at every transition (EVENT-01 & EVENT-02)", () => {
+      const projectId = "proj-alternating";
+      const initial = createProjectState("Init");
+
+      // Step 1: Initialize + Discovery
+      let state = reduceProjectState(initial, [
+        createDomainEvent({
+          type: "ProjectInitialized",
+          aggregateId: projectId,
+          payload: { projectId, name: "Alternating System" },
+        }),
+        createDomainEvent({
+          type: "DiscoveryCompleted",
+          aggregateId: projectId,
+          payload: { projectId, fileCount: 5, dependencyCount: 2, frameworkCount: 1 },
+        }),
+      ]);
+      expect(state.status).toBe(ProjectStatus.ANALYZING);
+
+      // Step 2: Run 1 Success
+      state = reduceProjectState(state, [
+        createDomainEvent({
+          type: "AnalysisRunCompleted",
+          aggregateId: projectId,
+          payload: { projectId, analysisRunId: "run-1", durationMs: 100 },
+        }),
+      ]);
+      expect(state.status).toBe(ProjectStatus.COMPLETED);
+      expect(state.metadata.analysisStatus).toBe("completed");
+      expect(state.metadata.analysisRunId).toBe("run-1");
+      expect(state.metadata.analysisDurationMs).toBe("100");
+      expect("analysisError" in state.metadata).toBe(false);
+
+      // Step 3: Run 2 Failure (EVENT-02: clears analysisDurationMs)
+      state = reduceProjectState(state, [
+        createDomainEvent({
+          type: "AnalysisRunFailed",
+          aggregateId: projectId,
+          payload: { projectId, analysisRunId: "run-2", error: "Run 2 failure" },
+        }),
+      ]);
+      expect(state.status).toBe(ProjectStatus.FAILED);
+      expect(state.metadata.analysisStatus).toBe("failed");
+      expect(state.metadata.analysisRunId).toBe("run-2");
+      expect(state.metadata.analysisError).toBe("Run 2 failure");
+      expect("analysisDurationMs" in state.metadata).toBe(false);
+
+      // Step 4: Run 3 Success (EVENT-01: clears analysisError)
+      state = reduceProjectState(state, [
+        createDomainEvent({
+          type: "AnalysisRunCompleted",
+          aggregateId: projectId,
+          payload: { projectId, analysisRunId: "run-3", durationMs: 200 },
+        }),
+      ]);
+      expect(state.status).toBe(ProjectStatus.COMPLETED);
+      expect(state.metadata.analysisStatus).toBe("completed");
+      expect(state.metadata.analysisRunId).toBe("run-3");
+      expect(state.metadata.analysisDurationMs).toBe("200");
+      expect("analysisError" in state.metadata).toBe(false);
+    });
   });
 });

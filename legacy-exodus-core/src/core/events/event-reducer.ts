@@ -157,13 +157,15 @@ function reduceAnalysisRunCompleted(state: ProjectState, event: AnalysisRunCompl
 }
 
 function reduceAnalysisRunFailed(state: ProjectState, event: AnalysisRunFailed): ProjectState {
+  const { analysisDurationMs: _staleAnalysisDuration, ...cleanMetadata } = state.metadata;
+
   return freezeProjectState({
     ...state,
     id: event.payload.projectId,
     version: state.version + 1,
     status: ProjectStatus.FAILED,
     metadata: {
-      ...state.metadata,
+      ...cleanMetadata,
       analysisStatus: "failed",
       analysisRunId: event.payload.analysisRunId,
       analysisError: event.payload.error,
