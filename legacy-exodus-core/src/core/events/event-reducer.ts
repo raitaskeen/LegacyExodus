@@ -139,13 +139,15 @@ function reduceDiscoveryCompleted(state: ProjectState, event: DiscoveryCompleted
 }
 
 function reduceAnalysisRunCompleted(state: ProjectState, event: AnalysisRunCompleted): ProjectState {
+  const { analysisError: _staleAnalysisError, ...cleanMetadata } = state.metadata;
+
   return freezeProjectState({
     ...state,
     id: event.payload.projectId,
     version: state.version + 1,
     status: ProjectStatus.COMPLETED,
     metadata: {
-      ...state.metadata,
+      ...cleanMetadata,
       analysisStatus: "completed",
       analysisRunId: event.payload.analysisRunId,
       analysisDurationMs: String(event.payload.durationMs),

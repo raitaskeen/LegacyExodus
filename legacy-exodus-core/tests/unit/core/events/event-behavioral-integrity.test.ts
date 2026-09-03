@@ -457,5 +457,90 @@ describe("EventBus & EventReducer Behavioral Integrity", () => {
       expect(state.metadata.analysisError).toBe("Syntax error in parser");
       expect(Object.isFrozen(state)).toBe(true);
     });
+
+    it("Scenario 16: AnalysisRunCompleted clears stale analysisError from previous failed run (EVENT-01)", () => {
+      const projectId = "proj-recovery";
+      const initial = createProjectState("Init");
+
+      const events: DomainEvent[] = [
+        createDomainEvent({
+          type: "ProjectInitialized",
+          aggregateId: projectId,
+          payload: { projectId, name: "Recovery System" },
+        }),
+        createDomainEvent({
+          type: "DiscoveryCompleted",
+          aggregateId: projectId,
+          payload: { projectId, fileCount: 8, dependencyCount: 3, frameworkCount: 1 },
+        }),
+        createDomainEvent({
+          type: "AnalysisRunFailed",
+          aggregateId: projectId,
+          payload: { projectId, analysisRunId: "run-failed-1", error: "Fatal parser crash" },
+        }),
+        createDomainEvent({
+          type: "AnalysisRunCompleted",
+          aggregateId: projectId,
+          payload: { projectId, analysisRunId: "run-recovered-2", durationMs: 350 },
+        }),
+      ];
+
+      const state = reduceProjectState(initial, events);
+
+      expect(state.status).toBe(ProjectStatus.COMPLETED);
+      expect(state.version).toBe(4);
+      expect(state.metadata.analysisStatus).toBe("completed");
+      expect(state.metadata.analysisRunId).toBe("run-recovered-2");
+      expect(state.metadata.analysisDurationMs).toBe("350");
+
+      // Critical assertion: stale analysisError must be completely cleared from metadata
+      expect("analysisError" in state.metadata).toBe(false);
+      expect(state.metadata.analysisError).toBeUndefined();
+
+      // Cumulative discovery metadata remains preserved
+      expect(state.metadata.discoveryStatus).toBe("completed");
+      expect(state.metadata.discoveredFileCount).toBe("8");
+      expect(state.metadata.dependencyCount).toBe("3");
+      expect(state.metadata.frameworkCount).toBe("1");
+
+      expect(Object.isFrozen(state)).toBe(true);
+      expect(Object.isFrozen(state.metadata)).toBe(true);
+    });
+
+    it("Scenario 17: Replay equivalence for recovery sequence (EVENT-01)", () => {
+      const projectId = "proj-replay";
+      const initial = createProjectState("Init");
+
+      const events: DomainEvent[] = [
+        createDomainEvent({
+          type: "ProjectInitialized",
+          aggregateId: projectId,
+          payload: { projectId, name: "Replay System" },
+        }),
+        createDomainEvent({
+          type: "DiscoveryCompleted",
+          aggregateId: projectId,
+          payload: { projectId, fileCount: 2, dependencyCount: 1, frameworkCount: 0 },
+        }),
+        createDomainEvent({
+          type: "AnalysisRunFailed",
+          aggregateId: projectId,
+          payload: { projectId, analysisRunId: "run-failed", error: "Temporary failure" },
+        }),
+        createDomainEvent({
+          type: "AnalysisRunCompleted",
+          aggregateId: projectId,
+          payload: { projectId, analysisRunId: "run-success", durationMs: 120 },
+        }),
+      ];
+
+      const run1State = reduceProjectState(initial, events);
+      const replayedState = reduceProjectState(createProjectState("Init"), events);
+
+      expect(replayedState).toEqual(run1State);
+      expect("analysisError" in replayedState.metadata).toBe(false);
+      expect(replayedState.metadata.analysisStatus).toBe("completed");
+      expect(replayedState.status).toBe(ProjectStatus.COMPLETED);
+    });
   });
 });
