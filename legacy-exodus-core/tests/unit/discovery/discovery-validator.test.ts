@@ -717,4 +717,139 @@ describe("DiscoveryValidator", () => {
       await rm(testDir, { recursive: true, force: true });
     }
   });
+
+  // ─── SEC-03: .discovery Root Symlink Boundary Tests ───────────────────────
+
+  it("SEC-03 Test 1: Rejects .discovery when it is a symlink/junction pointing outside project", async () => {
+    const baseDir = join(tmpdir(), `sec03-test-outside-${Date.now()}-${Math.random()}`);
+    const projectDir = join(baseDir, "project");
+    const outsideDir = join(baseDir, "outside");
+    await mkdir(projectDir, { recursive: true });
+    await mkdir(outsideDir, { recursive: true });
+
+    const symlinkPath = join(projectDir, ".discovery");
+    try {
+      const { symlink } = await import("node:fs/promises");
+      const linkType = process.platform === "win32" ? "junction" : "dir";
+      await symlink(outsideDir, symlinkPath, linkType);
+    } catch {
+      await rm(baseDir, { recursive: true, force: true });
+      return;
+    }
+
+    const manifest = {
+      schemaVersion: 1,
+      repository: { name: "test", path: projectDir },
+      engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
+      analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
+      requiredArtifacts: [],
+      artifacts: {},
+    };
+    await writeFile(join(outsideDir, "manifest.json"), JSON.stringify(manifest), "utf8");
+
+    try {
+      const result = await validator.validate({ projectPath: projectDir });
+      expect(result.valid).toBe(false);
+      expect(result.status).toBe("MANIFEST_INVALID");
+      expect(result.reason).toContain("is a symbolic link");
+    } finally {
+      try {
+        const { unlink } = await import("node:fs/promises");
+        await unlink(symlinkPath);
+      } catch {}
+      await rm(baseDir, { recursive: true, force: true });
+    }
+  });
+
+  it("SEC-03 Test 2: Rejects .discovery when it is a symlink/junction pointing inside project", async () => {
+    const projectDir = join(tmpdir(), `sec03-test-inside-${Date.now()}-${Math.random()}`);
+    const insideDir = join(projectDir, "inside-disc");
+    await mkdir(insideDir, { recursive: true });
+
+    const symlinkPath = join(projectDir, ".discovery");
+    try {
+      const { symlink } = await import("node:fs/promises");
+      const linkType = process.platform === "win32" ? "junction" : "dir";
+      await symlink(insideDir, symlinkPath, linkType);
+    } catch {
+      await rm(projectDir, { recursive: true, force: true });
+      return;
+    }
+
+    const manifest = {
+      schemaVersion: 1,
+      repository: { name: "test", path: projectDir },
+      engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
+      analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
+      requiredArtifacts: [],
+      artifacts: {},
+    };
+    await writeFile(join(insideDir, "manifest.json"), JSON.stringify(manifest), "utf8");
+
+    try {
+      const result = await validator.validate({ projectPath: projectDir });
+      expect(result.valid).toBe(false);
+      expect(result.status).toBe("MANIFEST_INVALID");
+      expect(result.reason).toContain("is a symbolic link");
+    } finally {
+      try {
+        const { unlink } = await import("node:fs/promises");
+        await unlink(symlinkPath);
+      } catch {}
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  it("SEC-03 Test 3: Rejects .discovery when it is a regular file", async () => {
+    const projectDir = join(tmpdir(), `sec03-test-file-${Date.now()}-${Math.random()}`);
+    await mkdir(projectDir, { recursive: true });
+
+    const discFile = join(projectDir, ".discovery");
+    await writeFile(discFile, "not a directory", "utf8");
+
+    try {
+      const result = await validator.validate({ projectPath: projectDir });
+      expect(result.valid).toBe(false);
+      expect(result.status).toBe("MANIFEST_INVALID");
+      expect(result.reason).toContain("is not a directory");
+    } finally {
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  it("SEC-03 Test 4: Rejects manifest.json when it is a symbolic link", async () => {
+    const baseDir = join(tmpdir(), `sec03-test-manifest-${Date.now()}-${Math.random()}`);
+    const projectDir = join(baseDir, "project");
+    const discoveryDir = join(projectDir, ".discovery");
+    await mkdir(discoveryDir, { recursive: true });
+
+    const outsideManifest = join(baseDir, "outside-manifest.json");
+    const manifest = {
+      schemaVersion: 1,
+      repository: { name: "test", path: projectDir },
+      engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
+      analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
+      requiredArtifacts: [],
+      artifacts: {},
+    };
+    await writeFile(outsideManifest, JSON.stringify(manifest), "utf8");
+
+    const manifestSymlink = join(discoveryDir, "manifest.json");
+    try {
+      const { symlink } = await import("node:fs/promises");
+      await symlink(outsideManifest, manifestSymlink, "file");
+    } catch {
+      await rm(baseDir, { recursive: true, force: true });
+      return;
+    }
+
+    try {
+      const result = await validator.validate({ projectPath: projectDir });
+      expect(result.valid).toBe(false);
+      expect(result.status).toBe("MANIFEST_INVALID");
+      expect(result.reason).toContain("is a symbolic link");
+    } finally {
+      await rm(baseDir, { recursive: true, force: true });
+    }
+  });
 });

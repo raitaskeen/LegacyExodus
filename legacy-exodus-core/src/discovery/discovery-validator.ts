@@ -142,7 +142,85 @@ export class DiscoveryValidator {
   public async validate(options: ValidateDiscoveryOptions): Promise<DiscoveryValidationResult> {
     const projectPath = resolve(options.projectPath);
     const discoveryDir = options.discoveryDirectory ? resolve(options.discoveryDirectory) : join(projectPath, ".discovery");
+
+    let discoveryStats;
+    try {
+      discoveryStats = await lstat(discoveryDir);
+    } catch {
+      return {
+        valid: false,
+        status: "MANIFEST_MISSING",
+        reason: `Discovery directory not found at: ${discoveryDir}`,
+      };
+    }
+
+    if (discoveryStats.isSymbolicLink()) {
+      return {
+        valid: false,
+        status: "MANIFEST_INVALID",
+        reason: `Discovery directory '${discoveryDir}' is a symbolic link, which is not permitted.`,
+      };
+    }
+
+    if (!discoveryStats.isDirectory()) {
+      return {
+        valid: false,
+        status: "MANIFEST_INVALID",
+        reason: `Discovery directory '${discoveryDir}' is not a directory.`,
+      };
+    }
+
+    let canonicalDiscoveryDir = discoveryDir;
+    try {
+      canonicalDiscoveryDir = await realpath(discoveryDir);
+    } catch {}
+
+    if (!options.discoveryDirectory) {
+      try {
+        const canonicalProjectDir = await realpath(projectPath);
+        const physicalRel = relative(canonicalProjectDir, canonicalDiscoveryDir);
+        if (physicalRel.startsWith("..") || isAbsolute(physicalRel) || physicalRel === "") {
+          return {
+            valid: false,
+            status: "MANIFEST_INVALID",
+            reason: `Discovery directory '${discoveryDir}' physically resolves outside project directory.`,
+          };
+        }
+      } catch {}
+    }
+
     const manifestPath = join(discoveryDir, "manifest.json");
+
+    let manifestStats;
+    try {
+      manifestStats = await lstat(manifestPath);
+    } catch {
+      return {
+        valid: false,
+        status: "MANIFEST_MISSING",
+        reason: `Discovery manifest not found at: ${manifestPath}`,
+      };
+    }
+
+    if (manifestStats.isSymbolicLink()) {
+      return {
+        valid: false,
+        status: "MANIFEST_INVALID",
+        reason: `Discovery manifest at '${manifestPath}' is a symbolic link, which is not permitted.`,
+      };
+    }
+
+    try {
+      const canonicalManifestPath = await realpath(manifestPath);
+      const physicalRel = relative(canonicalDiscoveryDir, canonicalManifestPath);
+      if (physicalRel.startsWith("..") || isAbsolute(physicalRel) || physicalRel === "") {
+        return {
+          valid: false,
+          status: "MANIFEST_INVALID",
+          reason: `Discovery manifest at '${manifestPath}' physically resolves outside discovery directory.`,
+        };
+      }
+    } catch {}
 
     let manifestContent: string;
     try {
@@ -197,11 +275,6 @@ export class DiscoveryValidator {
     }
 
     const verifyChecksums = options.verifyChecksums ?? true;
-
-    let canonicalDiscoveryDir = discoveryDir;
-    try {
-      canonicalDiscoveryDir = await realpath(discoveryDir);
-    } catch {}
 
     const validatedArtifacts = new Map<string, string>();
 
