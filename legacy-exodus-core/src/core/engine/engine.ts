@@ -123,7 +123,12 @@ export class LegacyExodusEngine {
             });
           }
 
-          return { type: "AnalyzeProject" as const, discovery: execution.discovery, analysis: execution.analysis };
+          return {
+            type: "AnalyzeProject" as const,
+            discovery: execution.discovery,
+            analysis: execution.analysis,
+            ...(execution.isReused === true ? { isReused: true } : {}),
+          };
         }
       }
     })();

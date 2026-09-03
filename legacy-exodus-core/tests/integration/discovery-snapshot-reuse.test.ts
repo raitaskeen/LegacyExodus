@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -266,6 +266,241 @@ describe("Phase 3A P0.4 — Discovery Snapshot Reuse & Invalidation", () => {
       try {
         await rm(projectBDir, { recursive: true, force: true });
       } catch {}
+    }
+  });
+
+  it("REUSE-01 Case A: Unchanged workspace reuses snapshot deterministically", async () => {
+    const engine = createLegacyExodusEngine({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+    await engine.initialize();
+
+    try {
+      // Run 1: Initial fresh discovery and analysis
+      const run1 = await engine.execute({
+        id: randomUUID(),
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: { projectId: randomUUID(), path: testRepoDir },
+      });
+      expect(run1.type).toBe("AnalyzeProject");
+      if (run1.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject");
+      expect(run1.isReused).toBeUndefined();
+
+      // Run 2: Without modifying workspace, execute again with refresh: false
+      const run2 = await engine.execute({
+        id: randomUUID(),
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: { projectId: randomUUID(), path: testRepoDir, refresh: false },
+      });
+      expect(run2.type).toBe("AnalyzeProject");
+      if (run2.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject");
+      expect(run2.isReused).toBe(true);
+      expect(run2.discovery.files.length).toBe(run1.discovery.files.length);
+    } finally {
+      await engine.shutdown();
+    }
+  });
+
+  it("REUSE-01 Case B: Changed workspace (in-place source edit) rejects snapshot reuse without --refresh", async () => {
+    const engine = createLegacyExodusEngine({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+    await engine.initialize();
+
+    try {
+      // Run 1: Initial fresh discovery and analysis
+      const run1 = await engine.execute({
+        id: randomUUID(),
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: { projectId: randomUUID(), path: testRepoDir },
+      });
+      expect(run1.type).toBe("AnalyzeProject");
+      if (run1.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject");
+
+      // Verify snapshot is currently valid and fresh
+      const validator = new DiscoveryValidator();
+      const valInitial = await validator.validateFreshness(testRepoDir);
+      expect(valInitial.valid).toBe(true);
+      expect(valInitial.status).toBe("VALID");
+
+      // Modify existing source file in-place (changing content)
+      await writeFile(
+        join(testRepoDir, "src", "index.ts"),
+        `
+        import express from "express";
+        export const app = express();
+        export const NEW_EXPORT = "remediation-test";
+        export function start(port: number) {
+          app.listen(port);
+        }
+        `,
+        "utf8",
+      );
+
+      // Verify validator detects staleness
+      const valModified = await validator.validateFreshness(testRepoDir);
+      expect(valModified.valid).toBe(false);
+      expect(valModified.status).toBe("SNAPSHOT_STALE");
+      expect(valModified.reason).toMatch(/(Workspace file size changed|digest mismatch)/);
+
+      // Run 2: Execute with refresh: false (default). Must NOT reuse stale snapshot!
+      const run2 = await engine.execute({
+        id: randomUUID(),
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: { projectId: randomUUID(), path: testRepoDir, refresh: false },
+      });
+
+      expect(run2.type).toBe("AnalyzeProject");
+      if (run2.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject");
+      // Must not be reused
+      expect(run2.isReused).toBeUndefined();
+
+      // Snapshot is refreshed and valid again
+      const valPost = await validator.validateFreshness(testRepoDir);
+      expect(valPost.valid).toBe(true);
+      expect(valPost.status).toBe("VALID");
+    } finally {
+      await engine.shutdown();
+    }
+  });
+
+  it("REUSE-01 Case B1 (same-size edit): In-place source edit with identical byte size triggers digest mismatch and rejects reuse", async () => {
+    const engine = createLegacyExodusEngine({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+    await engine.initialize();
+
+    try {
+      // Run 1: Initial fresh discovery and analysis
+      const run1 = await engine.execute({
+        id: randomUUID(),
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: { projectId: randomUUID(), path: testRepoDir },
+      });
+      expect(run1.type).toBe("AnalyzeProject");
+      if (run1.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject");
+
+      // Replace helper.js with identical byte length content
+      const oldHelper = await readFile(join(testRepoDir, "src", "helper.js"), "utf8");
+      // Change 'function add(a, b)' to 'function sum(a, b)' (both are exactly 18 characters)
+      const newHelper = oldHelper.replace("function add(a, b)", "function sum(a, b)");
+      expect(Buffer.byteLength(newHelper)).toBe(Buffer.byteLength(oldHelper));
+      await writeFile(join(testRepoDir, "src", "helper.js"), newHelper, "utf8");
+
+      // Verify validator detects staleness via digest mismatch
+      const validator = new DiscoveryValidator();
+      const valModified = await validator.validateFreshness(testRepoDir);
+      expect(valModified.valid).toBe(false);
+      expect(valModified.status).toBe("SNAPSHOT_STALE");
+      expect(valModified.reason).toContain("digest mismatch");
+
+      // Run 2: Execute without refresh. Must NOT reuse!
+      const run2 = await engine.execute({
+        id: randomUUID(),
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: { projectId: randomUUID(), path: testRepoDir, refresh: false },
+      });
+      if (run2.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject");
+      expect(run2.isReused).toBeUndefined();
+    } finally {
+      await engine.shutdown();
+    }
+  });
+
+  it("REUSE-01 Case B2: Added file rejects snapshot reuse without --refresh", async () => {
+    const engine = createLegacyExodusEngine({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+    await engine.initialize();
+
+    try {
+      // Run 1: Initial run
+      const run1 = await engine.execute({
+        id: randomUUID(),
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: { projectId: randomUUID(), path: testRepoDir },
+      });
+      if (run1.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject");
+      const initialFileCount = run1.discovery.files.length;
+
+      // Add a new source file to the workspace
+      await writeFile(join(testRepoDir, "src", "added.ts"), "export const added = true;", "utf8");
+
+      // Run 2: Execute with refresh: false. Must detect new file and run fresh discovery!
+      const run2 = await engine.execute({
+        id: randomUUID(),
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: { projectId: randomUUID(), path: testRepoDir, refresh: false },
+      });
+      if (run2.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject");
+      expect(run2.isReused).toBeUndefined();
+      expect(run2.discovery.files.length).toBe(initialFileCount + 1);
+      expect(run2.discovery.files.some((f: { path: string }) => f.path === "src/added.ts")).toBe(true);
+    } finally {
+      await engine.shutdown();
+    }
+  });
+
+  it("REUSE-01 Case B3: Removed file rejects snapshot reuse without --refresh", async () => {
+    const engine = createLegacyExodusEngine({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+    await engine.initialize();
+
+    try {
+      // Run 1: Initial run
+      const run1 = await engine.execute({
+        id: randomUUID(),
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: { projectId: randomUUID(), path: testRepoDir },
+      });
+      if (run1.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject");
+      const initialFileCount = run1.discovery.files.length;
+
+      // Delete an existing source file from the workspace
+      await rm(join(testRepoDir, "src", "helper.js"));
+
+      // Run 2: Execute with refresh: false. Must detect deleted file and run fresh discovery!
+      const run2 = await engine.execute({
+        id: randomUUID(),
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: { projectId: randomUUID(), path: testRepoDir, refresh: false },
+      });
+      if (run2.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject");
+      expect(run2.isReused).toBeUndefined();
+      expect(run2.discovery.files.length).toBe(initialFileCount - 1);
+      expect(run2.discovery.files.some((f: { path: string }) => f.path === "src/helper.js")).toBe(false);
+    } finally {
+      await engine.shutdown();
+    }
+  });
+
+  it("REUSE-01 Case C: Explicit --refresh forces fresh discovery even when snapshot is fresh", async () => {
+    const engine = createLegacyExodusEngine({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+    await engine.initialize();
+
+    try {
+      // Run 1: Initial run
+      const run1 = await engine.execute({
+        id: randomUUID(),
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: { projectId: randomUUID(), path: testRepoDir },
+      });
+      if (run1.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject");
+
+      // Run 2: Workspace is completely unchanged, but refresh: true is passed
+      const run2 = await engine.execute({
+        id: randomUUID(),
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: { projectId: randomUUID(), path: testRepoDir, refresh: true },
+      });
+      if (run2.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject");
+      // Must not be reused because refresh was forced
+      expect(run2.isReused).toBeUndefined();
+    } finally {
+      await engine.shutdown();
     }
   });
 });

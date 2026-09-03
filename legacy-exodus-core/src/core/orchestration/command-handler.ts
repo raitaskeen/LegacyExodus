@@ -88,7 +88,10 @@ export class AnalyzeProjectHandler {
     const startedAt = performance.now();
 
     if (!command.payload.refresh) {
-      const validation = await this.discoveryValidator.validate({ projectPath: command.payload.path });
+      const validation = await this.discoveryValidator.validate({
+        projectPath: command.payload.path,
+        verifyFreshness: true,
+      });
       if (validation.valid && validation.manifest !== undefined) {
         try {
           const discoveryDir = join(resolve(command.payload.path), ".discovery");

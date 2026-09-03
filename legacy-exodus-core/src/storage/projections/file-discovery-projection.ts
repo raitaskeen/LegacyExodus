@@ -3,6 +3,7 @@ import { mkdir, readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 
 import type { DiscoveryProjection } from "@contracts/discovery-projection";
+import { computeWorkspaceDigest } from "@discovery/index";
 import { StreamingJsonWriter } from "./streaming-json-writer";
 
 export function resolveGitCommitSha(cwd?: string): string | undefined {
@@ -89,6 +90,13 @@ export class FileDiscoveryProjectionAdapter {
 
     const bunVer = typeof process.versions.bun === "string" ? process.versions.bun : process.version;
 
+    // Compute source digest for workspace freshness
+    const filesArtifact = projection.artifacts.find((a) => a.name === "files.json");
+    const files = Array.isArray(filesArtifact?.payload)
+      ? (filesArtifact?.payload as readonly { readonly path: string }[])
+      : undefined;
+    const sourceDigest = await computeWorkspaceDigest(projection.projectPath, files);
+
     const manifest = {
       schemaVersion: 1,
       repository: {
@@ -96,6 +104,7 @@ export class FileDiscoveryProjectionAdapter {
         path: projection.projectPath,
         ...(pkgVersion ? { packageVersion: pkgVersion } : {}),
         ...(repoCommitSha ? { commitSha: repoCommitSha } : {}),
+        sourceDigest,
       },
       engine: {
         packageVersion: enginePackageVersion,

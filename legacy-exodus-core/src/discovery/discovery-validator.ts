@@ -3,6 +3,9 @@ import { lstat, readFile, realpath } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { z } from "zod";
 
+import type { FileArtifact } from "@contracts/discovery";
+import { FileScanner } from "./file-scanner";
+
 export function isPathWithinDirectory(parentDir: string, candidatePath: string): boolean {
   if (typeof candidatePath !== "string" || candidatePath.trim().length === 0) {
     return false;
@@ -51,6 +54,7 @@ const manifestSchema = z.object({
     path: z.string().min(1),
     packageVersion: z.string().optional(),
     commitSha: z.string().optional(),
+    sourceDigest: z.string().optional(),
   }),
   engine: z.object({
     packageVersion: z.string(),
@@ -81,7 +85,8 @@ export type DiscoveryValidationStatus =
   | "PATH_MISMATCH"
   | "SCHEMA_MISMATCH"
   | "ARTIFACT_MISSING"
-  | "CHECKSUM_MISMATCH";
+  | "CHECKSUM_MISMATCH"
+  | "SNAPSHOT_STALE";
 
 export interface DiscoveryValidationResult {
   readonly valid: boolean;
@@ -96,6 +101,40 @@ export interface ValidateDiscoveryOptions {
   readonly discoveryDirectory?: string;
   readonly expectedSchemaVersion?: number;
   readonly verifyChecksums?: boolean;
+  readonly verifyFreshness?: boolean;
+}
+
+export async function computeWorkspaceDigest(
+  projectPath: string,
+  files?: readonly { readonly path: string }[],
+): Promise<string> {
+  const resolvedProjectPath = resolve(projectPath);
+  let fileList = files;
+  if (fileList === undefined) {
+    try {
+      const scanner = new FileScanner();
+      const scanResult = await scanner.scan(resolvedProjectPath);
+      fileList = scanResult.files;
+    } catch {
+      fileList = [];
+    }
+  }
+
+  const sortedFiles = [...fileList].sort((a, b) => a.path.localeCompare(b.path));
+  const hasher = createHash("sha256");
+
+  for (const file of sortedFiles) {
+    const filePath = resolve(resolvedProjectPath, file.path);
+    try {
+      const content = await readFile(filePath);
+      const fileHash = createHash("sha256").update(content).digest("hex");
+      hasher.update(`${file.path}:${fileHash}\n`);
+    } catch {
+      hasher.update(`${file.path}:<unreadable>\n`);
+    }
+  }
+
+  return hasher.digest("hex");
 }
 
 export class DiscoveryValidator {
@@ -237,10 +276,100 @@ export class DiscoveryValidator {
       }
     }
 
+    if (options.verifyFreshness === true) {
+      const freshness = await this.verifyWorkspaceFreshness(projectPath, discoveryDir, manifest);
+      if (!freshness.fresh) {
+        return {
+          valid: false,
+          status: "SNAPSHOT_STALE",
+          reason: freshness.reason,
+          manifest,
+        };
+      }
+    }
+
     return {
       valid: true,
       status: "VALID",
       manifest,
     };
+  }
+
+  public async validateFreshness(
+    projectPath: string,
+    discoveryDirectory?: string,
+  ): Promise<DiscoveryValidationResult> {
+    return this.validate({ projectPath, discoveryDirectory, verifyFreshness: true });
+  }
+
+  private async verifyWorkspaceFreshness(
+    projectPath: string,
+    discoveryDir: string,
+    manifest: DiscoveryManifest,
+  ): Promise<{ readonly fresh: boolean; readonly reason?: string }> {
+    let currentFiles: readonly FileArtifact[];
+    try {
+      const scanner = new FileScanner();
+      const scanResult = await scanner.scan(projectPath);
+      currentFiles = scanResult.files;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        fresh: false,
+        reason: `Failed to scan current workspace for freshness check: ${message}`,
+      };
+    }
+
+    let snapshotFiles: readonly { readonly path: string; readonly size: number }[];
+    try {
+      const filesArtifactPath = resolve(discoveryDir, "files.json");
+      const filesRaw = await readFile(filesArtifactPath, "utf8");
+      snapshotFiles = JSON.parse(filesRaw);
+    } catch {
+      return {
+        fresh: false,
+        reason: "Failed to read snapshot files.json for freshness check.",
+      };
+    }
+
+    if (currentFiles.length !== snapshotFiles.length) {
+      return {
+        fresh: false,
+        reason: `Workspace file count changed (current: ${currentFiles.length}, snapshot: ${snapshotFiles.length}).`,
+      };
+    }
+
+    const snapshotMap = new Map<string, { readonly path: string; readonly size: number }>();
+    for (const file of snapshotFiles) {
+      snapshotMap.set(file.path, file);
+    }
+
+    for (const currentFile of currentFiles) {
+      const snapshotFile = snapshotMap.get(currentFile.path);
+      if (snapshotFile === undefined) {
+        return {
+          fresh: false,
+          reason: `Workspace contains new file not present in snapshot: '${currentFile.path}'.`,
+        };
+      }
+      if (snapshotFile.size !== currentFile.size) {
+        return {
+          fresh: false,
+          reason: `Workspace file size changed: '${currentFile.path}' (current: ${currentFile.size}, snapshot: ${snapshotFile.size}).`,
+        };
+      }
+    }
+
+    if (manifest.repository.sourceDigest !== undefined) {
+      const currentDigest = await computeWorkspaceDigest(projectPath, currentFiles);
+      if (currentDigest !== manifest.repository.sourceDigest) {
+        return {
+          fresh: false,
+          reason: `Workspace source content digest mismatch (current: ${currentDigest}, snapshot: ${manifest.repository.sourceDigest}).`,
+        };
+      }
+    }
+
+    return { fresh: true };
   }
 }

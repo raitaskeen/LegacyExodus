@@ -4,7 +4,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { DiscoveryValidator } from "@discovery/discovery-validator";
+import { DiscoveryValidator, computeWorkspaceDigest } from "@discovery/discovery-validator";
 
 describe("DiscoveryValidator", () => {
   const validator = new DiscoveryValidator();
@@ -508,6 +508,173 @@ describe("DiscoveryValidator", () => {
       expect(result.valid).toBe(false);
       expect(result.status).toBe("MANIFEST_INVALID");
       expect(result.reason).toContain("physically resolves outside discovery directory");
+    } finally {
+      await rm(testDir, { recursive: true, force: true });
+    }
+  });
+
+  // ─── REUSE-01: Workspace Freshness Tests ──────────────────────────────────
+
+  it("REUSE-01: computeWorkspaceDigest produces deterministic SHA-256 and detects in-place file modifications", async () => {
+    const testDir = join(tmpdir(), `test-digest-${Date.now()}-${Math.random()}`);
+    await mkdir(join(testDir, "src"), { recursive: true });
+    await writeFile(join(testDir, "src", "a.ts"), "const a = 1;\n", "utf8");
+    await writeFile(join(testDir, "src", "b.ts"), "const b = 2;\n", "utf8");
+
+    try {
+      const digest1 = await computeWorkspaceDigest(testDir);
+      const digest2 = await computeWorkspaceDigest(testDir);
+      expect(digest1).toBe(digest2);
+      expect(digest1).toMatch(/^[0-9a-f]{64}$/);
+
+      // In-place modification of same byte size
+      await writeFile(join(testDir, "src", "a.ts"), "const a = 9;\n", "utf8");
+      const digest3 = await computeWorkspaceDigest(testDir);
+      expect(digest3).not.toBe(digest1);
+      expect(digest3).toMatch(/^[0-9a-f]{64}$/);
+    } finally {
+      await rm(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it("REUSE-01: validate with verifyFreshness returns VALID for unchanged workspace", async () => {
+    const testDir = join(tmpdir(), `test-fresh-${Date.now()}-${Math.random()}`);
+    const discoveryDir = join(testDir, ".discovery");
+    await mkdir(join(testDir, "src"), { recursive: true });
+    await mkdir(discoveryDir, { recursive: true });
+
+    const fileAContent = "export const x = 10;\n";
+    await writeFile(join(testDir, "src", "index.ts"), fileAContent, "utf8");
+
+    const filesArtifact = [
+      {
+        id: createHash("sha256").update("src/index.ts").digest("hex"),
+        path: "src/index.ts",
+        language: "typescript",
+        fileKind: "source",
+        size: Buffer.byteLength(fileAContent, "utf8"),
+      },
+    ];
+    const filesJson = JSON.stringify(filesArtifact, null, 2);
+    await writeFile(join(discoveryDir, "files.json"), filesJson, "utf8");
+
+    const sourceDigest = await computeWorkspaceDigest(testDir);
+    const filesSha = createHash("sha256").update(filesJson).digest("hex");
+
+    const manifest = {
+      schemaVersion: 1,
+      repository: { name: "test-fresh", path: testDir, sourceDigest },
+      engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
+      analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
+      requiredArtifacts: ["files.json"],
+      artifacts: {
+        "files.json": { sha256: filesSha, bytes: Buffer.byteLength(filesJson, "utf8") },
+      },
+    };
+    await writeFile(join(discoveryDir, "manifest.json"), JSON.stringify(manifest), "utf8");
+
+    try {
+      const result = await validator.validate({ projectPath: testDir, verifyFreshness: true });
+      expect(result.valid).toBe(true);
+      expect(result.status).toBe("VALID");
+    } finally {
+      await rm(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it("REUSE-01: validate with verifyFreshness returns SNAPSHOT_STALE when source file content is modified", async () => {
+    const testDir = join(tmpdir(), `test-stale-mod-${Date.now()}-${Math.random()}`);
+    const discoveryDir = join(testDir, ".discovery");
+    await mkdir(join(testDir, "src"), { recursive: true });
+    await mkdir(discoveryDir, { recursive: true });
+
+    const fileAContent = "export const x = 10;\n";
+    await writeFile(join(testDir, "src", "index.ts"), fileAContent, "utf8");
+
+    const filesArtifact = [
+      {
+        id: createHash("sha256").update("src/index.ts").digest("hex"),
+        path: "src/index.ts",
+        language: "typescript",
+        fileKind: "source",
+        size: Buffer.byteLength(fileAContent, "utf8"),
+      },
+    ];
+    const filesJson = JSON.stringify(filesArtifact, null, 2);
+    await writeFile(join(discoveryDir, "files.json"), filesJson, "utf8");
+
+    const sourceDigest = await computeWorkspaceDigest(testDir);
+    const filesSha = createHash("sha256").update(filesJson).digest("hex");
+
+    const manifest = {
+      schemaVersion: 1,
+      repository: { name: "test-stale", path: testDir, sourceDigest },
+      engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
+      analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
+      requiredArtifacts: ["files.json"],
+      artifacts: {
+        "files.json": { sha256: filesSha, bytes: Buffer.byteLength(filesJson, "utf8") },
+      },
+    };
+    await writeFile(join(discoveryDir, "manifest.json"), JSON.stringify(manifest), "utf8");
+
+    try {
+      // Modify source file
+      await writeFile(join(testDir, "src", "index.ts"), "export const x = 99;\n", "utf8");
+
+      const result = await validator.validate({ projectPath: testDir, verifyFreshness: true });
+      expect(result.valid).toBe(false);
+      expect(result.status).toBe("SNAPSHOT_STALE");
+      expect(result.reason).toContain("digest mismatch");
+    } finally {
+      await rm(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it("REUSE-01: validate with verifyFreshness returns SNAPSHOT_STALE when new file is added or removed", async () => {
+    const testDir = join(tmpdir(), `test-stale-add-${Date.now()}-${Math.random()}`);
+    const discoveryDir = join(testDir, ".discovery");
+    await mkdir(join(testDir, "src"), { recursive: true });
+    await mkdir(discoveryDir, { recursive: true });
+
+    const fileAContent = "export const x = 10;\n";
+    await writeFile(join(testDir, "src", "index.ts"), fileAContent, "utf8");
+
+    const filesArtifact = [
+      {
+        id: createHash("sha256").update("src/index.ts").digest("hex"),
+        path: "src/index.ts",
+        language: "typescript",
+        fileKind: "source",
+        size: Buffer.byteLength(fileAContent, "utf8"),
+      },
+    ];
+    const filesJson = JSON.stringify(filesArtifact, null, 2);
+    await writeFile(join(discoveryDir, "files.json"), filesJson, "utf8");
+
+    const sourceDigest = await computeWorkspaceDigest(testDir);
+    const filesSha = createHash("sha256").update(filesJson).digest("hex");
+
+    const manifest = {
+      schemaVersion: 1,
+      repository: { name: "test-stale", path: testDir, sourceDigest },
+      engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
+      analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
+      requiredArtifacts: ["files.json"],
+      artifacts: {
+        "files.json": { sha256: filesSha, bytes: Buffer.byteLength(filesJson, "utf8") },
+      },
+    };
+    await writeFile(join(discoveryDir, "manifest.json"), JSON.stringify(manifest), "utf8");
+
+    try {
+      // Add a new file to the workspace
+      await writeFile(join(testDir, "src", "extra.ts"), "export const extra = true;\n", "utf8");
+
+      const result = await validator.validate({ projectPath: testDir, verifyFreshness: true });
+      expect(result.valid).toBe(false);
+      expect(result.status).toBe("SNAPSHOT_STALE");
+      expect(result.reason).toContain("Workspace file count changed");
     } finally {
       await rm(testDir, { recursive: true, force: true });
     }
