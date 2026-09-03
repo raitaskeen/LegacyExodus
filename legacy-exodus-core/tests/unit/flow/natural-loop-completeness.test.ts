@@ -408,8 +408,33 @@ describe("P1 Core Hardening: Natural-Loop Body Completeness & CFG Semantics", ()
     expect(cfg!.loops).toHaveLength(1);
 
     const loop = cfg!.loops[0]!;
-    const continueToFinally = cfg!.edges.find((e) => e.kind === "continue");
-    expect(continueToFinally).toBeDefined();
+
+    // 1. Identify the block containing the ContinueStatement
+    const continueBlock = cfg!.blocks.find((b) =>
+      b.statements.some((s) => s.type === "ContinueStatement"),
+    );
+    expect(continueBlock).toBeDefined();
+
+    // 2. Identify the abrupt continue-to-finally edge (kind: "finally") from continueBlock
+    const continueToFinallyEdge = cfg!.edges.find(
+      (e) => e.fromBlockId === continueBlock!.id && e.kind === "finally",
+    );
+    expect(continueToFinallyEdge).toBeDefined();
+
+    // 3. Target of continueToFinallyEdge is the finalizer block
+    const finalizerBlock = cfg!.blocks.find((b) => b.id === continueToFinallyEdge!.toBlockId);
+    expect(finalizerBlock).toBeDefined();
+
+    // 4. The finalizer block routes out to the loop header with kind: "continue"
+    const finalizerToHeaderEdge = cfg!.edges.find(
+      (e) => e.fromBlockId === finalizerBlock!.id && e.toBlockId === loop.headerBlockId && e.kind === "continue",
+    );
+    expect(finalizerToHeaderEdge).toBeDefined();
+
+    // 5. Verify the entire routing path belongs to the natural loop
+    expect(loop.blockIds).toContain(continueBlock!.id);
+    expect(loop.blockIds).toContain(finalizerBlock!.id);
+    expect(loop.blockIds).toContain(loop.headerBlockId);
 
     for (const bId of loop.blockIds) {
       expect(cfg!.blocks.some((b) => b.id === bId)).toBe(true);
