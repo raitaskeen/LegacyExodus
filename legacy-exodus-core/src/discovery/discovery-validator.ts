@@ -94,6 +94,7 @@ export interface DiscoveryValidationResult {
   readonly reason?: string;
   readonly manifest?: DiscoveryManifest;
   readonly failedArtifact?: string;
+  readonly validatedArtifacts?: ReadonlyMap<string, string>;
 }
 
 export interface ValidateDiscoveryOptions {
@@ -202,6 +203,8 @@ export class DiscoveryValidator {
       canonicalDiscoveryDir = await realpath(discoveryDir);
     } catch {}
 
+    const validatedArtifacts = new Map<string, string>();
+
     for (const artifactName of manifest.requiredArtifacts) {
       if (!isPathWithinDirectory(discoveryDir, artifactName)) {
         return {
@@ -274,6 +277,8 @@ export class DiscoveryValidator {
           };
         }
       }
+
+      validatedArtifacts.set(artifactName, content.toString("utf8"));
     }
 
     if (options.verifyFreshness === true) {
@@ -292,6 +297,7 @@ export class DiscoveryValidator {
       valid: true,
       status: "VALID",
       manifest,
+      validatedArtifacts: Object.freeze(validatedArtifacts),
     };
   }
 

@@ -17,7 +17,7 @@ import { DeterministicDependencyGraphBuilder, ModuleResolver, type ModuleResolut
 import { DeterministicFlowAnalysisEngine } from "@flow/index";
 import { DeterministicKnowledgeGraphBuilder } from "@knowledge/index";
 import { readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { ParserManager, type ASTResult } from "@parser/index";
 import { DeterministicSemanticAnalysisEngine } from "@semantic/index";
 import { createStorageRecord, type StorageRecord } from "@storage/index";
@@ -92,15 +92,17 @@ export class AnalyzeProjectHandler {
         projectPath: command.payload.path,
         verifyFreshness: true,
       });
-      if (validation.valid && validation.manifest !== undefined) {
+      if (validation.valid && validation.manifest !== undefined && validation.validatedArtifacts !== undefined) {
         try {
-          const discoveryDir = join(resolve(command.payload.path), ".discovery");
-          const [projectRaw, filesRaw, depsRaw, frameworksRaw] = await Promise.all([
-            readFile(join(discoveryDir, "project.json"), "utf8"),
-            readFile(join(discoveryDir, "files.json"), "utf8"),
-            readFile(join(discoveryDir, "dependencies.json"), "utf8"),
-            readFile(join(discoveryDir, "frameworks.json"), "utf8"),
-          ]);
+          const artifacts = validation.validatedArtifacts;
+          const projectRaw = artifacts.get("project.json");
+          const filesRaw = artifacts.get("files.json");
+          const depsRaw = artifacts.get("dependencies.json");
+          const frameworksRaw = artifacts.get("frameworks.json");
+
+          if (!projectRaw || !filesRaw || !depsRaw || !frameworksRaw) {
+            throw new Error("Missing required discovery artifact in validated set.");
+          }
 
           const projectJson = JSON.parse(projectRaw);
           const filesJson = JSON.parse(filesRaw) as readonly any[];
@@ -160,7 +162,9 @@ export class AnalyzeProjectHandler {
           }
 
           if (required.has("dependency-graph.json")) {
-            const depGraphJson = JSON.parse(await readFile(join(discoveryDir, "dependency-graph.json"), "utf8"));
+            const depGraphRaw = artifacts.get("dependency-graph.json");
+            if (!depGraphRaw) throw new Error("Missing dependency-graph.json in validated set.");
+            const depGraphJson = JSON.parse(depGraphRaw);
             records.push(
               createStorageRecord("dependency-graph", {
                 projectId: discovery.projectId,
@@ -173,7 +177,9 @@ export class AnalyzeProjectHandler {
           }
 
           if (required.has("symbols.json")) {
-            const symbolsJson = JSON.parse(await readFile(join(discoveryDir, "symbols.json"), "utf8")) as readonly any[];
+            const symbolsRaw = artifacts.get("symbols.json");
+            if (!symbolsRaw) throw new Error("Missing symbols.json in validated set.");
+            const symbolsJson = JSON.parse(symbolsRaw) as readonly any[];
             const symbolsByFile = new Map<string, any[]>();
             for (const symbol of symbolsJson) {
               let list = symbolsByFile.get(symbol.filePath);
@@ -213,7 +219,9 @@ export class AnalyzeProjectHandler {
           }
 
           if (required.has("knowledge.json")) {
-            const knowledgeJson = JSON.parse(await readFile(join(discoveryDir, "knowledge.json"), "utf8"));
+            const knowledgeRaw = artifacts.get("knowledge.json");
+            if (!knowledgeRaw) throw new Error("Missing knowledge.json in validated set.");
+            const knowledgeJson = JSON.parse(knowledgeRaw);
             records.push(
               createStorageRecord("knowledge-graph", {
                 projectId: discovery.projectId,
@@ -225,7 +233,9 @@ export class AnalyzeProjectHandler {
           }
 
           if (required.has("semantic.json")) {
-            const semanticJson = JSON.parse(await readFile(join(discoveryDir, "semantic.json"), "utf8"));
+            const semanticRaw = artifacts.get("semantic.json");
+            if (!semanticRaw) throw new Error("Missing semantic.json in validated set.");
+            const semanticJson = JSON.parse(semanticRaw);
             records.push(
               createStorageRecord("semantic-analysis", {
                 projectId: discovery.projectId,
@@ -244,7 +254,9 @@ export class AnalyzeProjectHandler {
           }
 
           if (required.has("control-flow.json")) {
-            const cfgJson = JSON.parse(await readFile(join(discoveryDir, "control-flow.json"), "utf8"));
+            const cfgRaw = artifacts.get("control-flow.json");
+            if (!cfgRaw) throw new Error("Missing control-flow.json in validated set.");
+            const cfgJson = JSON.parse(cfgRaw);
             records.push(
               createStorageRecord("control-flow-analysis", {
                 projectId: discovery.projectId,
@@ -255,7 +267,9 @@ export class AnalyzeProjectHandler {
           }
 
           if (required.has("data-flow.json")) {
-            const dfgJson = JSON.parse(await readFile(join(discoveryDir, "data-flow.json"), "utf8"));
+            const dfgRaw = artifacts.get("data-flow.json");
+            if (!dfgRaw) throw new Error("Missing data-flow.json in validated set.");
+            const dfgJson = JSON.parse(dfgRaw);
             records.push(
               createStorageRecord("data-flow-analysis", {
                 projectId: discovery.projectId,

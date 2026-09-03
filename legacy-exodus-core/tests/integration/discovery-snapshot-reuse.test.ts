@@ -687,4 +687,52 @@ describe("Phase 3A P0.4 — Discovery Snapshot Reuse & Invalidation", () => {
       await rm(dummyDir, { recursive: true, force: true });
     }
   });
+
+  it("REUSE-03: Invariant bytes validated == bytes consumed: handler consumes in-memory validated artifacts and rejects tampered disk files", async () => {
+    const engine = createLegacyExodusEngine({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+    await engine.initialize();
+
+    try {
+      // Run 1: Create valid initial snapshot
+      const run1 = await engine.execute({
+        id: randomUUID(),
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: { projectId: randomUUID(), path: testRepoDir },
+      });
+      expect(run1.type).toBe("AnalyzeProject");
+      if (run1.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject");
+
+      // Run 2: Unchanged workspace reuse
+      const run2 = await engine.execute({
+        id: randomUUID(),
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: { projectId: randomUUID(), path: testRepoDir },
+      });
+      expect(run2.type).toBe("AnalyzeProject");
+      if (run2.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject");
+      expect(run2.isReused).toBe(true);
+
+      // Now tamper with an artifact on disk (e.g. inject corrupted/tampered bytes)
+      const discoveryDir = join(testRepoDir, ".discovery");
+      await writeFile(join(discoveryDir, "symbols.json"), "corrupted-unvalidated-content", "utf8");
+
+      // Run 3: The tampered artifact on disk must trigger CHECKSUM_MISMATCH in validator
+      // and NOT be consumed as a reused snapshot!
+      const run3 = await engine.execute({
+        id: randomUUID(),
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: { projectId: randomUUID(), path: testRepoDir },
+      });
+      expect(run3.type).toBe("AnalyzeProject");
+      if (run3.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject");
+      // Must NOT be reused; must fall through to fresh analysis because on-disk bytes failed validation
+      expect(run3.isReused).toBeUndefined();
+      expect(run3.analysis.filesAnalyzed).toBe(run1.analysis.filesAnalyzed);
+    } finally {
+      await engine.shutdown();
+    }
+  });
 });

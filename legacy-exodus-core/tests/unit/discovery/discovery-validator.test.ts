@@ -679,4 +679,42 @@ describe("DiscoveryValidator", () => {
       await rm(testDir, { recursive: true, force: true });
     }
   });
+
+  it("REUSE-03: returns populated validatedArtifacts containing exact verified bytes on valid snapshot", async () => {
+    const testDir = join(tmpdir(), `test-validator-reuse03-${Date.now()}`);
+    const discoveryDir = join(testDir, ".discovery");
+    await mkdir(discoveryDir, { recursive: true });
+
+    const fileContent = JSON.stringify({ name: "reuse03-test", version: "1.0.0" }, null, 2);
+    await writeFile(join(discoveryDir, "project.json"), fileContent, "utf8");
+
+    const sha256 = createHash("sha256").update(Buffer.from(fileContent, "utf8")).digest("hex");
+    const manifest = {
+      schemaVersion: 1,
+      repository: { name: "reuse03-test", path: testDir },
+      engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
+      analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
+      requiredArtifacts: ["project.json"],
+      artifacts: {
+        "project.json": { sha256, bytes: Buffer.byteLength(fileContent, "utf8") },
+      },
+    };
+    await writeFile(join(discoveryDir, "manifest.json"), JSON.stringify(manifest), "utf8");
+
+    try {
+      const result = await validator.validate({ projectPath: testDir });
+      expect(result.valid).toBe(true);
+      expect(result.status).toBe("VALID");
+      expect(result.validatedArtifacts).toBeDefined();
+      expect(result.validatedArtifacts?.get("project.json")).toBe(fileContent);
+
+      // Verify that the in-memory string has the exact digest that was verified
+      const inMemorySha = createHash("sha256")
+        .update(Buffer.from(result.validatedArtifacts!.get("project.json")!, "utf8"))
+        .digest("hex");
+      expect(inMemorySha).toBe(sha256);
+    } finally {
+      await rm(testDir, { recursive: true, force: true });
+    }
+  });
 });
