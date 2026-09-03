@@ -540,4 +540,88 @@ describe("Runtime Shutdown Cleanup & Resource Disposal (F-006)", () => {
     await expect(runtime.start()).rejects.toThrow("Specific startup failure message");
     expect(runtime.getStatus()).toBe("stopped");
   });
+
+  it("RUNTIME-01 Test 5: startup failure takes precedence over cleanup failure and secondary cleanup error is logged", async () => {
+    const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+    const runtime = context.runtime;
+    const logger = (runtime as any).logger;
+    const errorSpy = spyOn(logger, "error");
+
+    let svc1Stopped = false;
+
+    const svc1: RuntimeService = {
+      name: "svc-failing-cleanup",
+      start: () => {},
+      stop: () => {
+        svc1Stopped = true;
+        throw new Error("SECONDARY_CLEANUP_FAILURE");
+      },
+    };
+
+    const svc2: RuntimeService = {
+      name: "svc-failing-startup",
+      start: () => {
+        throw new Error("PRIMARY_STARTUP_FAILURE");
+      },
+      stop: () => {},
+    };
+
+    runtime.registerService(svc1);
+    runtime.registerService(svc2);
+
+    // Assert that start() rejects with the PRIMARY_STARTUP_FAILURE, NOT the cleanup error
+    let thrownError: unknown;
+    try {
+      await runtime.start();
+    } catch (err: unknown) {
+      thrownError = err;
+    }
+
+    expect(thrownError).toBeDefined();
+    expect((thrownError as Error).message).toBe("PRIMARY_STARTUP_FAILURE");
+    expect((thrownError as Error).message).not.toContain("SECONDARY_CLEANUP_FAILURE");
+
+    // Cleanup was still attempted
+    expect(svc1Stopped).toBe(true);
+
+    // Runtime reaches stopped state
+    expect(runtime.getStatus()).toBe("stopped");
+
+    // Secondary cleanup failure was logged via structured logger
+    expect(errorSpy).toHaveBeenCalled();
+    const cleanupLogCall = errorSpy.mock.calls.find((call) =>
+      typeof call[1] === "string" && call[1].includes("Cleanup failed after startup failure")
+    );
+    expect(cleanupLogCall).toBeDefined();
+    expect((cleanupLogCall?.[0] as any)?.error?.code).toBe("RUNTIME_SHUTDOWN_FAILED");
+
+    errorSpy.mockRestore();
+  });
+
+  it("RUNTIME-01 Test 6: normal shutdown propagates cleanup failure and reaches stopped state", async () => {
+    const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+    const runtime = context.runtime;
+
+    const svc1: RuntimeService = {
+      name: "svc-failing-stop",
+      start: () => {},
+      stop: () => {
+        throw new Error("SHUTDOWN_CLEANUP_FAILURE");
+      },
+    };
+
+    runtime.registerService(svc1);
+    await runtime.start();
+    expect(runtime.getStatus()).toBe("running");
+
+    // Normal shutdown must reject with RUNTIME_SHUTDOWN_FAILED containing the cleanup failure
+    await expect(runtime.shutdown()).rejects.toThrow(
+      expect.objectContaining({
+        code: "RUNTIME_SHUTDOWN_FAILED",
+      }),
+    );
+
+    // Runtime reaches terminal stopped state
+    expect(runtime.getStatus()).toBe("stopped");
+  });
 });
