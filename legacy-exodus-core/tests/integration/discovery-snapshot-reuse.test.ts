@@ -112,6 +112,7 @@ describe("Phase 3A P0.4 — Discovery Snapshot Reuse & Invalidation", () => {
       });
       expect(firstRun.type).toBe("AnalyzeProject");
       if (firstRun.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject");
+      expect(firstRun.isReused).toBeUndefined();
       expect(firstRun.discovery.files.length).toBeGreaterThanOrEqual(3);
 
       // 2. Second run on same repo
@@ -124,12 +125,12 @@ describe("Phase 3A P0.4 — Discovery Snapshot Reuse & Invalidation", () => {
 
       expect(secondRun.type).toBe("AnalyzeProject");
       if (secondRun.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject");
+      expect(secondRun.isReused).toBe(true);
       expect(secondRun.discovery.projectName).toBe("test-reuse-project");
       expect(secondRun.discovery.files.length).toBe(firstRun.discovery.files.length);
       expect(secondRun.discovery.dependencies.length).toBe(firstRun.discovery.dependencies.length);
       expect(secondRun.analysis.filesAnalyzed).toBe(firstRun.analysis.filesAnalyzed);
       expect(secondRun.analysis.filesDiscovered).toBe(firstRun.analysis.filesDiscovered);
-      expect(secondRun.analysis.durationMs).toBeLessThanOrEqual(firstRun.analysis.durationMs + 50);
 
       // Snapshot remains valid
       const validator = new DiscoveryValidator();
