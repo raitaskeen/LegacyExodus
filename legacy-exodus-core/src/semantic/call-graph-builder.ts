@@ -89,7 +89,7 @@ function childContext(node: ASTNode, context: ResolutionContext, table: SymbolTa
   let scope = context.scope;
   let callerName = context.callerName;
   let containerId = context.containerId;
-  if (node.type === "BlockStatement" || isCallable(node) || node.type === "CatchClause") {
+  if (node.type === "BlockStatement" || isCallable(node) || node.type === "CatchClause" || isLoop(node)) {
     scope = createScope(createLexicalScopeId(node.type, node.location), context.scope);
   }
   if (isCallable(node)) callerName = nodeName(node) ?? callerName;
@@ -113,6 +113,10 @@ function findClassSymbolId(node: ASTNode, scope: ScopeFrame, table: SymbolTable 
 
 function isCallable(node: ASTNode): boolean {
   return ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ClassPrivateMethod", "ObjectMethod"].includes(node.type);
+}
+
+function isLoop(node: ASTNode): boolean {
+  return ["ForStatement", "ForInStatement", "ForOfStatement"].includes(node.type);
 }
 
 function nodeName(node: ASTNode): string | undefined {

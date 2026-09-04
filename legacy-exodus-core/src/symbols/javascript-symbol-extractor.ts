@@ -101,6 +101,38 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         }, symbols, pendingExports);
         return;
       }
+      case "ForStatement":
+      case "ForInStatement":
+      case "ForOfStatement": {
+        const loopScopeId = createLexicalScopeId(node.type, node.location);
+        this.visitChildren(node, ast, {
+          ...context,
+          scopeId: loopScopeId,
+          scopeChain: [loopScopeId, ...context.scopeChain],
+        }, symbols, pendingExports);
+        return;
+      }
+      case "CatchClause": {
+        const catchScopeId = createLexicalScopeId(node.type, node.location);
+        const catchContext: ExtractionContext = {
+          ...context,
+          scopeId: catchScopeId,
+          scopeChain: [catchScopeId, ...context.scopeChain],
+        };
+        const param = node.children.find((child) => child.role === "param");
+        if (param !== undefined) {
+          const boundNames = extractBoundNames(param);
+          for (const name of boundNames) {
+            symbols.push(
+              this.createSymbol("variable", name, param, ast, catchContext, {
+                declarationKind: "let",
+              }),
+            );
+          }
+        }
+        this.visitChildren(node, ast, catchContext, symbols, pendingExports);
+        return;
+      }
       case "AssignmentExpression":
         this.processAssignment(node, ast, context, symbols, pendingExports);
         return;
