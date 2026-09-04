@@ -17,7 +17,7 @@ export interface BuildContextResult {
 
 const sources = new Set(["process.env", "req.body", "req.params", "req.query"]);
 const sinks = new Set(["child_process.exec", "res.send", "res.json"]);
-const sanitizers = new Set(["validator.escape"]);
+const sanitizers = new Set(["validator.escape", "sanitize"]);
 
 export class DeterministicDataFlowGraphBuilder {
   public buildContext(ast: ASTResult, provenCallTargets?: readonly ProvenCallTarget[], symbols: readonly CodeSymbol[] = []): BuildContextResult {
@@ -219,11 +219,66 @@ export class DeterministicDataFlowGraphBuilder {
   private addInterproceduralFlow(state: FlowState, callId: string, kind: InterproceduralFlow["kind"], sourceDefinitionId: string, targetDefinitionId: string): void { state.interproceduralFlows.push({ id: hash(`interprocedural:${callId}:${kind}:${sourceDefinitionId}:${targetDefinitionId}`), callId, kind, sourceDefinitionId, targetDefinitionId }); }
   private transferTaint(node: ASTNode, targetDefinitionId: string, scope: Scope, filePath: string, state: FlowState): void {
     if (sanitized(node)) return;
-    if (node.type === "CallExpression") return;
+    if (node.type === "CallExpression") {
+      const callee = node.children.find((child) => child.role === "callee");
+      const directSourceId = this.source(node, filePath) ?? (callee !== undefined ? this.source(callee, filePath) : undefined);
+      if (directSourceId !== undefined) {
+        this.setTaintPath(state, targetDefinitionId, directSourceId, [directSourceId, targetDefinitionId]);
+        return;
+      }
+      const name = memberPath(callee) ?? identifierName(callee);
+      const proven = node.location === undefined ? undefined : state.provenTargets.get(callLocationKey(filePath, node.location.start));
+      const resolved = state.hasSemanticResolution ? (proven === undefined ? undefined : state.functionsBySymbolId.get(proven.targetSymbolId)) : resolveFunction(name, state.resolvableFunctions);
+      if (resolved !== undefined || proven !== undefined) return;
+      if (callee?.type === "MemberExpression") {
+        const objectNode = callee.children.find((child) => child.role === "object");
+        if (objectNode !== undefined) {
+          const objectSourceId = this.findSource(objectNode, filePath);
+          if (objectSourceId !== undefined) {
+            this.setTaintPath(state, targetDefinitionId, objectSourceId, [objectSourceId, targetDefinitionId]);
+          }
+          const objectDefinition = this.definitionFor(objectNode, scope);
+          if (objectDefinition !== undefined) {
+            state.transfers.push({ sourceDefinitionId: objectDefinition.id, targetDefinitionId });
+          }
+        }
+      }
+      const argumentNodes = node.children.filter((child) => child.role === "arguments");
+      for (const argument of argumentNodes) {
+        if (sanitized(argument)) continue;
+        const argSourceId = this.findSource(argument, filePath);
+        if (argSourceId !== undefined) {
+          this.setTaintPath(state, targetDefinitionId, argSourceId, [argSourceId, targetDefinitionId]);
+        }
+        const argDefinition = this.definitionFor(argument, scope);
+        if (argDefinition !== undefined) {
+          state.transfers.push({ sourceDefinitionId: argDefinition.id, targetDefinitionId });
+        }
+      }
+      return;
+    }
     const sourceId = this.source(node, filePath);
     if (sourceId !== undefined) { this.setTaintPath(state, targetDefinitionId, sourceId, [sourceId, targetDefinitionId]); return; }
     const sourceDefinition = this.definitionFor(node, scope);
     if (sourceDefinition !== undefined) state.transfers.push({ sourceDefinitionId: sourceDefinition.id, targetDefinitionId });
+  }
+
+  private findSource(node: ASTNode, filePath: string): string | undefined {
+    const direct = this.source(node, filePath);
+    if (direct !== undefined) return direct;
+    if (node.type === "CallExpression") {
+      const callee = node.children.find((child) => child.role === "callee");
+      if (callee !== undefined) {
+        const calleeSource = this.source(callee, filePath);
+        if (calleeSource !== undefined) return calleeSource;
+      }
+    }
+    for (const child of node.children) {
+      if (sanitized(child)) continue;
+      const found = this.findSource(child, filePath);
+      if (found !== undefined) return found;
+    }
+    return undefined;
   }
 
   private propagateTaint(state: FlowState): void {
