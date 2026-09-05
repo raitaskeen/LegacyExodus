@@ -29,12 +29,91 @@ export function mapJavaScriptNode(value: unknown): JavaScriptNodeMapping {
   return mapNode(value);
 }
 
+const CANONICAL_CHILD_KEYS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  IfStatement: Object.freeze(["test", "consequent", "alternate"]),
+  ConditionalExpression: Object.freeze(["test", "consequent", "alternate"]),
+  ForStatement: Object.freeze(["init", "test", "update", "body"]),
+  ForInStatement: Object.freeze(["left", "right", "body"]),
+  ForOfStatement: Object.freeze(["left", "right", "body"]),
+  WhileStatement: Object.freeze(["test", "body"]),
+  DoWhileStatement: Object.freeze(["body", "test"]),
+  SwitchStatement: Object.freeze(["discriminant", "cases"]),
+  SwitchCase: Object.freeze(["test", "consequent"]),
+  TryStatement: Object.freeze(["block", "handler", "finalizer"]),
+  CatchClause: Object.freeze(["param", "body"]),
+  CallExpression: Object.freeze(["callee", "arguments"]),
+  NewExpression: Object.freeze(["callee", "arguments"]),
+  MemberExpression: Object.freeze(["object", "property"]),
+  OptionalMemberExpression: Object.freeze(["object", "property"]),
+  BinaryExpression: Object.freeze(["left", "right"]),
+  LogicalExpression: Object.freeze(["left", "right"]),
+  AssignmentExpression: Object.freeze(["left", "right"]),
+  AssignmentPattern: Object.freeze(["left", "right"]),
+  FunctionDeclaration: Object.freeze(["id", "params", "body"]),
+  FunctionExpression: Object.freeze(["id", "params", "body"]),
+  ArrowFunctionExpression: Object.freeze(["params", "body"]),
+  ClassDeclaration: Object.freeze(["id", "superClass", "body"]),
+  ClassExpression: Object.freeze(["id", "superClass", "body"]),
+  ClassMethod: Object.freeze(["key", "params", "body"]),
+  ClassPrivateMethod: Object.freeze(["key", "params", "body"]),
+  ClassProperty: Object.freeze(["key", "value"]),
+  ClassPrivateProperty: Object.freeze(["key", "value"]),
+  PropertyDefinition: Object.freeze(["key", "value"]),
+  ClassAccessorProperty: Object.freeze(["key", "value"]),
+  ObjectMethod: Object.freeze(["key", "params", "body"]),
+  ObjectProperty: Object.freeze(["key", "value"]),
+  VariableDeclarator: Object.freeze(["id", "init"]),
+  LabeledStatement: Object.freeze(["label", "body"]),
+  TaggedTemplateExpression: Object.freeze(["tag", "quasi"]),
+  WithStatement: Object.freeze(["object", "body"]),
+  ReturnStatement: Object.freeze(["argument"]),
+  ThrowStatement: Object.freeze(["argument"]),
+  AwaitExpression: Object.freeze(["argument"]),
+  YieldExpression: Object.freeze(["argument"]),
+  UnaryExpression: Object.freeze(["argument"]),
+  UpdateExpression: Object.freeze(["argument"]),
+  SpreadElement: Object.freeze(["argument"]),
+  RestElement: Object.freeze(["argument"]),
+  ExportNamedDeclaration: Object.freeze(["declaration", "specifiers", "source"]),
+  ExportDefaultDeclaration: Object.freeze(["declaration"]),
+  ExportAllDeclaration: Object.freeze(["source"]),
+  ImportDeclaration: Object.freeze(["specifiers", "source"]),
+  ImportSpecifier: Object.freeze(["imported", "local"]),
+  ImportDefaultSpecifier: Object.freeze(["local"]),
+  ImportNamespaceSpecifier: Object.freeze(["local"]),
+});
+
+function getOrderedNodeKeys(node: BabelNode): readonly string[] {
+  const canonical = CANONICAL_CHILD_KEYS[node.type];
+  const allKeys = Object.keys(node);
+  if (canonical === undefined) {
+    return allKeys;
+  }
+
+  const ordered: string[] = [];
+  for (let i = 0; i < canonical.length; i++) {
+    const key = canonical[i]!;
+    if (key in node) {
+      ordered.push(key);
+    }
+  }
+
+  for (let i = 0; i < allKeys.length; i++) {
+    const key = allKeys[i]!;
+    if (!canonical.includes(key)) {
+      ordered.push(key);
+    }
+  }
+
+  return ordered;
+}
+
 function mapNode(node: BabelNode, role?: string): JavaScriptNodeMapping {
   const children: ASTNode[] = [];
   let nodeCount = 1;
   const attributes: Record<string, ASTAttribute> = {};
 
-  for (const key of Object.keys(node).sort((left, right) => left.localeCompare(right))) {
+  for (const key of getOrderedNodeKeys(node)) {
     if (key === "loc" || key === "type") {
       continue;
     }
