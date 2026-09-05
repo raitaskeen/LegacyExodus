@@ -61,16 +61,14 @@ export async function runCommand(
   }
 
   // Guard against Windows batch file execution (CVE-2024-24576 / BatBadBut mitigation)
-  if (process.platform === "win32") {
-    const lowerCmd = cmd.toLowerCase().trim();
-    if (lowerCmd.endsWith(".bat") || lowerCmd.endsWith(".cmd")) {
-      return {
-        code: 1,
-        durationMs: 0,
-        stdout: "",
-        stderr: "Execution of .bat and .cmd batch files is prohibited for subprocess isolation",
-      };
-    }
+  const lowerCmd = cmd.toLowerCase().trim();
+  if (lowerCmd.endsWith(".bat") || lowerCmd.endsWith(".cmd")) {
+    return {
+      code: 1,
+      durationMs: 0,
+      stdout: "",
+      stderr: "Execution of .bat and .cmd batch files is prohibited for subprocess isolation",
+    };
   }
 
   // Validate argument array: prohibit null byte injection
@@ -110,20 +108,41 @@ export async function runCommand(
     let stdout = "";
     let stderr = "";
     let settled = false;
+    let timedOut = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
+    let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const cleanupTimers = () => {
+      if (timer !== undefined) clearTimeout(timer);
+      if (killTimer !== undefined) clearTimeout(killTimer);
+      if (fallbackTimer !== undefined) clearTimeout(fallbackTimer);
+    };
 
     const finish = (code: number, finalStderr: string) => {
       if (settled) return;
       settled = true;
-      if (timer !== undefined) clearTimeout(timer);
+      cleanupTimers();
       const durationMs = performance.now() - startedAt;
       resolve({ code, durationMs, stdout, stderr: finalStderr });
     };
 
     if (typeof options.timeoutMs === "number" && options.timeoutMs > 0) {
       timer = setTimeout(() => {
-        child.kill("SIGTERM");
-        finish(1, `${stderr}\nCommand execution timed out after ${options.timeoutMs}ms`);
+        timedOut = true;
+        try {
+          child.kill("SIGTERM");
+        } catch {}
+
+        killTimer = setTimeout(() => {
+          try {
+            child.kill("SIGKILL");
+          } catch {}
+        }, 250);
+
+        fallbackTimer = setTimeout(() => {
+          finish(1, `${stderr}\nCommand execution timed out after ${options.timeoutMs}ms`.trim());
+        }, 1500);
       }, options.timeoutMs);
     }
 
@@ -135,10 +154,18 @@ export async function runCommand(
     });
 
     child.on("close", (code) => {
-      finish(code ?? 1, stderr);
+      if (timedOut) {
+        finish(1, `${stderr}\nCommand execution timed out after ${options.timeoutMs}ms`.trim());
+      } else {
+        finish(code ?? 1, stderr);
+      }
     });
     child.on("error", (err) => {
-      finish(1, `${stderr}\n${err.message}`);
+      if (timedOut) {
+        finish(1, `${stderr}\nCommand execution timed out after ${options.timeoutMs}ms`.trim());
+      } else {
+        finish(1, `${stderr}\n${err.message}`);
+      }
     });
   });
 }

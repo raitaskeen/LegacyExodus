@@ -124,7 +124,7 @@ export class DeterministicFlowAnalysisEngine {
     });
 
     return Object.freeze({
-      controlFlowGraphs: Object.freeze(controlFlowGraphs),
+      controlFlowGraphs: Object.freeze([...controlFlowGraphs]),
       dataFlowGraphs: Object.freeze(connected),
     });
   }

@@ -1105,6 +1105,13 @@ describe("control and data flow analysis", () => {
     expect(graph.taintFlows[0]?.state).toBe("CONFIRMED");
     expect(graph.taintFlows[0]?.path.at(-1)).toBe("child_process.exec");
   });
+
+  test("connect does not mutate or freeze caller's controlFlowGraphs array argument", () => {
+    const engine = new DeterministicFlowAnalysisEngine();
+    const callerArray: any[] = [];
+    engine.connect(callerArray, [], []);
+    expect(Object.isFrozen(callerArray)).toBe(false);
+  });
 });
 
 async function buildControlFlowGraph(id: string, source: string) {

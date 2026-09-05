@@ -67,7 +67,7 @@ export async function loadDurableEvents(
 
   const parsed = records.map((record) => durableEventPayloadSchema.parse(record.payload));
   parsed.sort((left, right) =>
-    left.sequence - right.sequence || left.event.timestamp.localeCompare(right.event.timestamp) || left.event.id.localeCompare(right.event.id),
+    left.event.timestamp.localeCompare(right.event.timestamp) || left.sequence - right.sequence || left.event.id.localeCompare(right.event.id),
   );
 
   return Object.freeze(parsed.map((entry) => deepFreeze({

@@ -557,7 +557,7 @@ function resolveNamespaceCall(
 ): string | undefined {
   const importSymbol = table.symbols.find((s) => s.kind === "import" && s.name === receiver);
   if (importSymbol?.moduleSpecifier === undefined) return undefined;
-  if (importSymbol.sourceSymbolName !== "*" && !importSymbol.defaultExport) {
+  if (importSymbol.sourceSymbolName !== "*") {
     return undefined;
   }
 

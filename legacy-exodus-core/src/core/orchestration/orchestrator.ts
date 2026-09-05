@@ -64,8 +64,9 @@ export class Orchestrator implements RuntimeService {
       const execution = await this.executeValidatedCommand(validatedCommand);
 
       const analysisRunId = validatedCommand.type === "AnalyzeProject" ? validatedCommand.id : undefined;
-      const durableEvents = execution.events.map((event, sequence) =>
-        createDurableEventRecord(event, sequence, analysisRunId),
+      const baseSequence = this.eventStore.size();
+      const durableEvents = execution.events.map((event, index) =>
+        createDurableEventRecord(event, baseSequence + index, analysisRunId),
       );
 
       // Facts and their ordered event journal are one storage commit. EventBus delivery is

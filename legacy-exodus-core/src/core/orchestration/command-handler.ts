@@ -493,10 +493,33 @@ export class AnalyzeProjectHandler {
       let allContexts: BuildContextResult[] | undefined = [];
 
       const sortedFiles = [...successfullyParsedFiles].sort((left, right) => left.path.localeCompare(right.path));
+      const completedFiles: FileArtifact[] = [];
 
       for (const file of sortedFiles) {
-        const source = await readFile(resolve(discovery.projectPath, file.path), "utf8");
-        let ast: ASTResult | undefined = await this.parserManager.parse({ file, source });
+        let source: string;
+        let ast: ASTResult | undefined;
+        try {
+          source = await readFile(resolve(discovery.projectPath, file.path), "utf8");
+          ast = await this.parserManager.parse({ file, source });
+        } catch (error: unknown) {
+          events.push(createDomainEvent({
+            type: "ParserFailure",
+            aggregateId: discovery.projectId,
+            payload: { fileId: file.id, path: file.path, code: getErrorCode(error, "PARSER_FAILURE") },
+          }));
+          continue;
+        }
+
+        if (ast.errors.length > 0) {
+          events.push(createDomainEvent({
+            type: "ParserFailure",
+            aggregateId: discovery.projectId,
+            payload: { fileId: file.id, path: file.path, code: ast.errors[0]?.code ?? "PARSER_FAILURE" },
+          }));
+          continue;
+        }
+
+        completedFiles.push(file);
 
         const fileCalls: SemanticCall[] = [];
         const fileReferences: SymbolReference[] = [];
@@ -533,7 +556,7 @@ export class AnalyzeProjectHandler {
         references: allReferences,
         symbolTables,
         dependencyGraph,
-        filePaths: sortedFiles.map((file) => file.path),
+        filePaths: completedFiles.map((file) => file.path),
         httpCalls: allHttpCalls,
       });
       allCalls = undefined;
