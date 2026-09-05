@@ -134,10 +134,24 @@ function mapNode(node: BabelNode, role?: string): JavaScriptNodeMapping {
 
     if (Array.isArray(value)) {
       for (const item of value) {
+        if (item === null && key === "elements") {
+          children.push(
+            Object.freeze({
+              type: "ArrayHole",
+              role: key,
+              attributes: Object.freeze({}),
+              children: Object.freeze([]),
+            }),
+          );
+          nodeCount += 1;
+          continue;
+        }
+
         if (isBabelNode(item)) {
           const child = mapNode(item, key);
           children.push(child.node);
           nodeCount += child.nodeCount;
+          continue;
         }
       }
     }
