@@ -9,6 +9,12 @@ and this project adheres to deterministic semantic contracts and verifiable engi
 
 ## [Unreleased]
 
+- **Control-Flow Finally Graph Bloat & Back-Edge Routing Integrity (F-14):**
+  - Eliminated speculative over-allocation and unconditional AST statement cloning of candidate finalizer landing pads (`thrownFinalizer`, `returnedFinalizer`, `brokenFinalizer`, `continuedFinalizer`, and `labeledFinalizers`) in `DeterministicControlFlowGraphBuilder.buildTry()`.
+  - Enforced demand-driven finalizer instantiation: candidate landing pads are populated with AST statements and routed to outer completion targets if and only if actual incoming transfer edges exist (`hasIncomingEdges()`), with unreached landing pads safely pruned via `removeBlock()`.
+  - Hardened scope continuation tracking in `buildStatements()`: marked `TryStatement` termination state dynamically based on whether the post-try continuation block (`after`) received any incoming edges, eliminating false fall-through edges to scope exits when try/catch/finally paths unconditionally terminate.
+  - Added isolated empty unreachable block cleanup in `FlowState.finish()`: safely pruned orphan empty blocks (blocks with zero statements, zero predecessors, and zero successors) that were speculatively allocated but unreferenced, eliminating phantom unreachable blocks and false-positive dead-code reports (`cfg.deadCodeNodeIds`) across clean `try-finally` blocks while strictly preserving genuine dead-code detection, loop back-edges, and dominator trees.
+  - Expanded test baseline to **982/982 passing tests across 110 files** (9,273 assertions, 0 failures) with zero regressions across all 4 verification dashboard gates.
 - **CI & CodeRabbit Forensic Remediation Checkpoint:**
   - **Linux CI Universal Batch Script Prohibition (`verify.ts`):** Removed platform-gated `win32` condition in `runCommand`, enforcing uniform cross-platform prohibition of `.bat` and `.cmd` batch scripts for subprocess isolation and resolving the Linux CI runner test failure.
   - **Durable Event Replay Ordering (`orchestrator.ts` & `durable-event-journal.ts`):** Enforced monotonic sequence numbering across executions within an aggregate and prioritized timestamp-first sorting (`timestamp || sequence || id`), eliminating cross-execution event interleaving during durable state replay.
