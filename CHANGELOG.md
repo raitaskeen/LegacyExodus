@@ -9,6 +9,12 @@ and this project adheres to deterministic semantic contracts and verifiable engi
 
 ## [Unreleased]
 
+- **Durable Event Commit Order & Monotonic Sequence Allocation:**
+  - Hardened durable sequence generation in `Orchestrator`: decoupled sequence allocation from volatile in-memory `eventStore.size()`, introducing `getNextDurableSequence(storage, projectId)` to query persistent storage for the aggregate's highest committed sequence number.
+  - Ensured atomic, monotonic sequence progression across commands, surviving process restarts and subscriber delivery failures without reusing sequence numbers or clobbering existing journal entries.
+  - Hardened replay ordering in `loadDurableEvents`: sorted committed events by `sequence` first (`sequence || timestamp || id`), guaranteeing deterministic event ordering even under clock skew, identical timestamps, or non-monotonic system clocks.
+  - Expanded test baseline to **990/990 passing tests across 111 files** (9,328 assertions, 0 failures) with zero regressions across all 4 verification dashboard gates.
+
 - **Semantic Call-Graph Lexical Shadowing Precision:**
   - Implemented lexical scope shadowing verification (`isLexicallyShadowed()`) in `DeterministicCallGraphBuilder`, enforcing strict ECMAScript scope precedence (`nearest lexical binding > enclosing lexical binding > file-level import > fallback/unresolved`).
   - Hardened direct call resolution in `visit()`: guarded `importsByFile` queries with `!isLexicallyShadowed(calleeName, nextContext, table)`, ensuring local parameter bindings (`function run(charge)`), local variable declarations (`const charge = ...`), local function declarations, catch clause parameters, and loop variables shadow file-level imports and correctly resolve to local symbols or remain safely `UNRESOLVED` instead of falsely resolving to imported functions.

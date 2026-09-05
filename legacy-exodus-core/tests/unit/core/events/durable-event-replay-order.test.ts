@@ -39,24 +39,24 @@ describe("Durable Event Replay Ordering", () => {
       payload: { name: "B1" },
     };
 
-    // Before fix: if sequence resets to 0 for both executions, loadDurableEvents sorts by sequence first:
-    // A0 (seq 0), A1 (seq 1), B0 (seq 0), B1 (seq 1) -> [A0, B0, A1, B1]
+    // Batch A committed with sequence 0, 1 but later timestamps:
     const durableBatchA = [
-      createDurableEventRecord(eventA0, 0),
-      createDurableEventRecord(eventA1, 1),
+      createDurableEventRecord({ ...eventA0, timestamp: new Date(baseTime + 500) }, 0),
+      createDurableEventRecord({ ...eventA1, timestamp: new Date(baseTime + 500) }, 1),
     ];
     await storage.saveBatch(durableBatchA);
 
+    // Batch B committed with sequence 2, 3 but earlier timestamps (non-monotonic / clock drift):
     const durableBatchB = [
-      createDurableEventRecord(eventB0, 0),
-      createDurableEventRecord(eventB1, 1),
+      createDurableEventRecord({ ...eventB0, timestamp: new Date(baseTime) }, 2),
+      createDurableEventRecord({ ...eventB1, timestamp: new Date(baseTime) }, 3),
     ];
     await storage.saveBatch(durableBatchB);
 
     const loaded = await loadDurableEvents(storage, projectId);
     const loadedTypes = loaded.map((e) => e.type);
 
-    // Causal expectation: Execution A events first, then Execution B events
+    // Durable commit order must prevail over non-monotonic or equal timestamps:
     expect(loadedTypes).toEqual(["EventA0", "EventA1", "EventB0", "EventB1"]);
   });
 });

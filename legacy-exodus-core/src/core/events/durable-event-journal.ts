@@ -53,6 +53,31 @@ export function createDurableEventRecord(
   });
 }
 
+/** Retrieves the next available durable sequence number for an aggregate in storage. */
+export async function getNextDurableSequence(
+  storage: StorageManager,
+  projectId: string,
+): Promise<number> {
+  const records = await storage.findScoped({
+    type: DURABLE_EVENT_RECORD_TYPE,
+    projectId,
+  });
+
+  if (records.length === 0) {
+    return 0;
+  }
+
+  let max = -1;
+  for (const record of records) {
+    const payload = record.payload as { readonly sequence?: unknown };
+    if (typeof payload.sequence === "number" && payload.sequence > max) {
+      max = payload.sequence;
+    }
+  }
+
+  return max + 1;
+}
+
 /** Loads the durable event history for one aggregate in its committed order. */
 export async function loadDurableEvents(
   storage: StorageManager,
@@ -67,7 +92,9 @@ export async function loadDurableEvents(
 
   const parsed = records.map((record) => durableEventPayloadSchema.parse(record.payload));
   parsed.sort((left, right) =>
-    left.event.timestamp.localeCompare(right.event.timestamp) || left.sequence - right.sequence || left.event.id.localeCompare(right.event.id),
+    left.sequence - right.sequence ||
+    left.event.timestamp.localeCompare(right.event.timestamp) ||
+    left.event.id.localeCompare(right.event.id),
   );
 
   return Object.freeze(parsed.map((entry) => deepFreeze({
