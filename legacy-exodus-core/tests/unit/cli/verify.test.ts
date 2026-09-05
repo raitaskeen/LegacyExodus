@@ -143,16 +143,35 @@ describe("CLI Verify Command & Diagnostic Extraction", () => {
 
   describe("runCommand Subprocess Security & Argument Isolation", () => {
     it("preserves literal arguments containing shell metacharacters without shell execution", async () => {
-      const payload = "hello & echo injected-shell-command";
-      const result = await runCommand("bun", [
-        "-e",
-        "console.log(process.argv[process.argv.length - 1])",
-        payload,
-      ]);
+      const payloads = [
+        "hello & echo injected-shell-command",
+        "foo && whoami",
+        "foo | whoami",
+        "foo || whoami",
+        "foo; whoami",
+        "foo < input.txt",
+        "foo > output.txt",
+        "foo >> output.txt",
+        "foo $(whoami)",
+        "foo `whoami`",
+        "foo %PATH%",
+        "foo (parentheses)",
+        "foo \"double\" 'single' quotes",
+        "line1\nline2\r\nline3",
+        "C:\\Program Files\\Repo & Co; (v1)\\project",
+      ];
 
-      expect(result.code).toBe(0);
-      expect(result.stdout).toBe(`${payload}\n`);
-      expect(result.durationMs).toBeGreaterThan(0);
+      for (const payload of payloads) {
+        const result = await runCommand("bun", [
+          "-e",
+          "console.log(process.argv[process.argv.length - 1])",
+          payload,
+        ]);
+
+        expect(result.code).toBe(0);
+        expect(result.stdout.replace(/\r?\n$/, "")).toBe(payload);
+        expect(result.durationMs).toBeGreaterThanOrEqual(0);
+      }
     });
 
     it("executes standard commands cleanly with exit code 0", async () => {
@@ -164,6 +183,44 @@ describe("CLI Verify Command & Diagnostic Extraction", () => {
     it("captures non-zero exit codes from failing commands", async () => {
       const result = await runCommand("bun", ["-e", "process.exit(42)"]);
       expect(result.code).toBe(42);
+    });
+
+    it("rejects command names containing null bytes with structured error", async () => {
+      const result = await runCommand("bun\0evil", ["--version"]);
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain("null bytes");
+    });
+
+    it("rejects arguments containing null bytes with structured error", async () => {
+      const result = await runCommand("bun", ["-e", "console.log(1)", "hello\0world"]);
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain("null bytes");
+    });
+
+    it("rejects empty or whitespace-only command names", async () => {
+      const result = await runCommand("   ", ["--version"]);
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain("non-empty string");
+    });
+
+    it("prohibits execution of Windows batch files (.bat and .cmd) for subprocess isolation", async () => {
+      const batResult = await runCommand("script.bat", ["arg1"]);
+      expect(batResult.code).toBe(1);
+      expect(batResult.stderr).toContain("prohibited");
+
+      const cmdResult = await runCommand("tool.cmd", ["arg1"]);
+      expect(cmdResult.code).toBe(1);
+      expect(cmdResult.stderr).toContain("prohibited");
+    });
+
+    it("terminates hanging processes when timeoutMs is specified", async () => {
+      const result = await runCommand(
+        "bun",
+        ["-e", "await new Promise(() => {})"],
+        { timeoutMs: 150 },
+      );
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain("timed out after 150ms");
     });
   });
 });

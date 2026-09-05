@@ -37,17 +37,95 @@ export function extractDiagnosticSnippet(raw: string, maxLines = 15): string {
   return lines.slice(-maxLines).join("\n");
 }
 
+export interface RunCommandOptions {
+  readonly cwd?: string;
+  readonly env?: NodeJS.ProcessEnv;
+  readonly timeoutMs?: number;
+}
+
 export async function runCommand(
   cmd: string,
   args: string[],
+  options: RunCommandOptions = {},
 ): Promise<CommandResult> {
   const startedAt = performance.now();
 
+  // Validate executable command: prohibit empty commands and null bytes
+  if (typeof cmd !== "string" || cmd.trim().length === 0 || cmd.includes("\0")) {
+    return {
+      code: 1,
+      durationMs: 0,
+      stdout: "",
+      stderr: "Invalid executable command: command must be a non-empty string without null bytes",
+    };
+  }
+
+  // Guard against Windows batch file execution (CVE-2024-24576 / BatBadBut mitigation)
+  if (process.platform === "win32") {
+    const lowerCmd = cmd.toLowerCase().trim();
+    if (lowerCmd.endsWith(".bat") || lowerCmd.endsWith(".cmd")) {
+      return {
+        code: 1,
+        durationMs: 0,
+        stdout: "",
+        stderr: "Execution of .bat and .cmd batch files is prohibited for subprocess isolation",
+      };
+    }
+  }
+
+  // Validate argument array: prohibit null byte injection
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (typeof arg !== "string" || arg.includes("\0")) {
+      return {
+        code: 1,
+        durationMs: 0,
+        stdout: "",
+        stderr: `Invalid argument at index ${i}: arguments must not contain null bytes`,
+      };
+    }
+  }
+
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { stdio: "pipe", shell: false });
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(cmd, args, {
+        ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
+        ...(options.env !== undefined ? { env: options.env } : {}),
+        stdio: "pipe",
+        shell: false,
+        windowsHide: true,
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      resolve({
+        code: 1,
+        durationMs: performance.now() - startedAt,
+        stdout: "",
+        stderr: `Failed to spawn process: ${message}`,
+      });
+      return;
+    }
 
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const finish = (code: number, finalStderr: string) => {
+      if (settled) return;
+      settled = true;
+      if (timer !== undefined) clearTimeout(timer);
+      const durationMs = performance.now() - startedAt;
+      resolve({ code, durationMs, stdout, stderr: finalStderr });
+    };
+
+    if (typeof options.timeoutMs === "number" && options.timeoutMs > 0) {
+      timer = setTimeout(() => {
+        child.kill("SIGTERM");
+        finish(1, `${stderr}\nCommand execution timed out after ${options.timeoutMs}ms`);
+      }, options.timeoutMs);
+    }
 
     child.stdout?.on("data", (chunk: Buffer) => {
       stdout += chunk.toString("utf8");
@@ -57,12 +135,10 @@ export async function runCommand(
     });
 
     child.on("close", (code) => {
-      const durationMs = performance.now() - startedAt;
-      resolve({ code: code ?? 1, durationMs, stdout, stderr });
+      finish(code ?? 1, stderr);
     });
     child.on("error", (err) => {
-      const durationMs = performance.now() - startedAt;
-      resolve({ code: 1, durationMs, stdout, stderr: `${stderr}\n${err.message}` });
+      finish(1, `${stderr}\n${err.message}`);
     });
   });
 }
