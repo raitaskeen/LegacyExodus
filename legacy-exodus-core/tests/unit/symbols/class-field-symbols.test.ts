@@ -189,8 +189,8 @@ describe("Milestone P1 — Class Field Extraction & Private Member Identifier Re
     expect(table.summary.classes).toBe(1);
     // Methods: #calc, action, regularMethod = 3
     expect(table.summary.methods).toBe(3);
-    // Variables: field, count, #key, uninit = 4
-    expect(table.summary.variables).toBe(4);
+    // Variables: field, count, #key, uninit, plus parameter x = 5
+    expect(table.summary.variables).toBe(5);
   });
 
   // ─── 9. Determinism Across Invocations ──────────────────────────────────────

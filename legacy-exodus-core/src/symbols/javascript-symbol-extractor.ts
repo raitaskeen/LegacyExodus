@@ -18,6 +18,8 @@ interface ExtractionContext {
   readonly defaultExport: boolean;
   readonly containerName?: string;
   readonly containerId?: string;
+  readonly enclosingAssignedName?: string;
+  readonly enclosingAssignedId?: string;
   readonly scopeId: string;
   readonly functionScopeId?: string;
   readonly scopeChain: readonly string[];
@@ -138,7 +140,8 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         return;
       case "FunctionDeclaration": {
         const fnScopeId = createLexicalScopeId(node.type, node.location);
-        this.addFunctionSymbol(node, ast, context, symbols);
+        const fnSymbol = this.addFunctionSymbol(node, ast, context, symbols);
+        this.extractParameterSymbols(node, ast, fnScopeId, fnSymbol.name, fnSymbol.id, symbols);
         this.visitChildren(node, ast, {
           ...context,
           scopeId: fnScopeId,
@@ -150,6 +153,16 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       case "FunctionExpression":
       case "ArrowFunctionExpression": {
         const fnScopeId = createLexicalScopeId(node.type, node.location);
+        const matchingSymbol = symbols.find(
+          (s) => (s.kind === "function" || s.kind === "method") &&
+            s.location !== undefined &&
+            node.location !== undefined &&
+            s.location.start.line === node.location.start.line &&
+            s.location.start.column === node.location.start.column,
+        );
+        const fnName = matchingSymbol?.name ?? getName(node) ?? context.enclosingAssignedName;
+        const fnId = matchingSymbol?.id ?? context.enclosingAssignedId;
+        this.extractParameterSymbols(node, ast, fnScopeId, fnName, fnId, symbols);
         this.visitChildren(node, ast, {
           ...context,
           scopeId: fnScopeId,
@@ -168,7 +181,8 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       case "ClassMethod":
       case "ClassPrivateMethod": {
         const methodScopeId = createLexicalScopeId(node.type, node.location);
-        this.addMethodSymbol(node, ast, context, symbols);
+        const methodSymbol = this.addMethodSymbol(node, ast, context, symbols);
+        this.extractParameterSymbols(node, ast, methodScopeId, methodSymbol.name, methodSymbol.id, symbols);
         this.visitChildren(node, ast, {
           ...context,
           scopeId: methodScopeId,
@@ -179,7 +193,8 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       }
       case "ObjectMethod": {
         const methodScopeId = createLexicalScopeId(node.type, node.location);
-        this.addMethodSymbol(node, ast, context, symbols);
+        const methodSymbol = this.addMethodSymbol(node, ast, context, symbols);
+        this.extractParameterSymbols(node, ast, methodScopeId, methodSymbol.name, methodSymbol.id, symbols);
         this.visitChildren(node, ast, {
           ...context,
           scopeId: methodScopeId,
@@ -363,9 +378,11 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     ast: ASTResult,
     context: ExtractionContext,
     symbols: CodeSymbol[],
-  ): void {
+  ): CodeSymbol {
     const name = getName(node) ?? "anonymous-function";
-    symbols.push(this.createSymbol("function", name, node, ast, context, { parameters: getParameters(node) }));
+    const symbol = this.createSymbol("function", name, node, ast, context, { parameters: getParameters(node) });
+    symbols.push(symbol);
+    return symbol;
   }
 
   private addMethodSymbol(
@@ -373,9 +390,41 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     ast: ASTResult,
     context: ExtractionContext,
     symbols: CodeSymbol[],
-  ): void {
+  ): CodeSymbol {
     const name = getName(node) ?? "anonymous-method";
-    symbols.push(this.createSymbol("method", name, node, ast, context, { parameters: getParameters(node) }));
+    const symbol = this.createSymbol("method", name, node, ast, context, { parameters: getParameters(node) });
+    symbols.push(symbol);
+    return symbol;
+  }
+
+  private extractParameterSymbols(
+    fnNode: ASTNode,
+    ast: ASTResult,
+    scopeId: string,
+    containerName: string | undefined,
+    containerId: string | undefined,
+    symbols: CodeSymbol[],
+  ): void {
+    const paramNodes = fnNode.children.filter((child) => child.role === "params" || child.role === "param");
+    for (const paramNode of paramNodes) {
+      const boundNodes = extractBoundIdentifierNodes(paramNode);
+      for (const idNode of boundNodes) {
+        const name = readIdentifierName(idNode);
+        if (name === undefined) continue;
+        symbols.push(
+          this.createSymbol("variable", name, idNode, ast, {
+            ...initialContext,
+            scopeId,
+            containerName,
+            containerId,
+            exported: false,
+            defaultExport: false,
+          }, {
+            declarationKind: "param",
+          }),
+        );
+      }
+    }
   }
 
   private addClassPropertySymbol(
@@ -399,12 +448,17 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     const initializer = node.children.find((child) => child.role === "value" || child.role === "init");
 
     if (initializer !== undefined && isAssignedFunction(initializer)) {
-      symbols.push(
-        this.createSymbol("method", name, node, ast, context, {
-          parameters: getParameters(initializer),
-          async: initializer.attributes.async === true,
-        }),
-      );
+      const methodSymbol = this.createSymbol("method", name, node, ast, context, {
+        parameters: getParameters(initializer),
+        async: initializer.attributes.async === true,
+      });
+      symbols.push(methodSymbol);
+      this.visitChildren(node, ast, {
+        ...context,
+        enclosingAssignedName: name,
+        enclosingAssignedId: methodSymbol.id,
+      }, symbols, pendingExports);
+      return;
     } else {
       const value = readLiteralInitializer(node);
       symbols.push(
@@ -618,6 +672,16 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     if (innermostRight) {
       if (innermostRight.type === "FunctionExpression" || innermostRight.type === "ArrowFunctionExpression") {
         const fnScopeId = createLexicalScopeId(innermostRight.type, innermostRight.location);
+        const matchingSymbol = symbols.find(
+          (s) => (s.kind === "function" || s.kind === "method") &&
+            s.location !== undefined &&
+            innermostRight.location !== undefined &&
+            s.location.start.line === innermostRight.location.start.line &&
+            s.location.start.column === innermostRight.location.start.column,
+        );
+        const fnName = matchingSymbol?.name ?? getName(innermostRight);
+        const fnId = matchingSymbol?.id;
+        this.extractParameterSymbols(innermostRight, ast, fnScopeId, fnName, fnId, symbols);
         this.visitChildren(innermostRight, ast, {
           ...context,
           scopeId: fnScopeId,
@@ -728,7 +792,7 @@ function getName(node: ASTNode): string | undefined {
 
 function getParameters(node: ASTNode): readonly string[] {
   return node.children
-    .filter((child) => child.role === "params")
+    .filter((child) => child.role === "params" || child.role === "param")
     .flatMap((child) => extractBoundNames(child));
 }
 
@@ -755,43 +819,54 @@ function findDeclaredNames(node: ASTNode): readonly string[] {
   return name === undefined ? [] : [name];
 }
 
-function extractBoundNames(node: ASTNode | undefined): readonly string[] {
+function extractBoundIdentifierNodes(node: ASTNode | undefined): readonly ASTNode[] {
   if (!node) return [];
   switch (node.type) {
     case "Identifier": {
       const name = readIdentifierName(node);
-      return name !== undefined ? [name] : [];
+      if (name === undefined || name === "this") return [];
+      return [node];
     }
     case "AssignmentPattern": {
       const left = node.children.find((c) => c.role === "left");
-      return extractBoundNames(left);
+      return extractBoundIdentifierNodes(left);
     }
     case "RestElement": {
       const argument = node.children.find((c) => c.role === "argument");
-      return extractBoundNames(argument);
+      return extractBoundIdentifierNodes(argument);
     }
     case "ObjectPattern": {
       return node.children.flatMap((child) => {
         if (child.type === "ObjectProperty" || child.role === "properties") {
           const valChild = child.children.find((c) => c.role === "value");
           if (valChild !== undefined) {
-            return extractBoundNames(valChild);
+            return extractBoundIdentifierNodes(valChild);
           }
           const keyChild = child.children.find((c) => c.role === "key") ?? child.children.find((c) => c.type === "Identifier");
-          return extractBoundNames(keyChild);
+          return extractBoundIdentifierNodes(keyChild);
         }
         if (child.type === "RestElement") {
-          return extractBoundNames(child);
+          return extractBoundIdentifierNodes(child);
         }
         return [];
       });
     }
     case "ArrayPattern": {
-      return node.children.filter((c) => c.role === "elements").flatMap(extractBoundNames);
+      return node.children.filter((c) => c.role === "elements").flatMap(extractBoundIdentifierNodes);
+    }
+    case "TSParameterProperty": {
+      const parameter = node.children.find((c) => c.role === "parameter");
+      return extractBoundIdentifierNodes(parameter);
     }
     default:
       return [];
   }
+}
+
+function extractBoundNames(node: ASTNode | undefined): readonly string[] {
+  return extractBoundIdentifierNodes(node)
+    .map((n) => readIdentifierName(n))
+    .filter((name): name is string => name !== undefined);
 }
 
 function findStringLiteral(node: ASTNode): string | undefined {
