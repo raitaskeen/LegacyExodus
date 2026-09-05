@@ -486,17 +486,17 @@ export class AnalyzeProjectHandler {
       const controlFlowBuilder = new DeterministicControlFlowGraphBuilder();
       const dataFlowBuilder = new DeterministicDataFlowGraphBuilder();
 
-      const allCalls: SemanticCall[] = [];
-      const allReferences: SymbolReference[] = [];
-      const allHttpCalls: { readonly routes: readonly ExpressRoute[]; readonly middlewareChains: readonly MiddlewareChain[] }[] = [];
+      let allCalls: SemanticCall[] | undefined = [];
+      let allReferences: SymbolReference[] | undefined = [];
+      let allHttpCalls: { readonly routes: readonly ExpressRoute[]; readonly middlewareChains: readonly MiddlewareChain[] }[] | undefined = [];
       const allControlFlowGraphs: ControlFlowGraph[] = [];
-      const allContexts: BuildContextResult[] = [];
+      let allContexts: BuildContextResult[] | undefined = [];
 
       const sortedFiles = [...successfullyParsedFiles].sort((left, right) => left.path.localeCompare(right.path));
 
       for (const file of sortedFiles) {
         const source = await readFile(resolve(discovery.projectPath, file.path), "utf8");
-        const ast = await this.parserManager.parse({ file, source });
+        let ast: ASTResult | undefined = await this.parserManager.parse({ file, source });
 
         const fileCalls: SemanticCall[] = [];
         const fileReferences: SymbolReference[] = [];
@@ -523,6 +523,8 @@ export class AnalyzeProjectHandler {
           symbolsByPath.get(file.path) ?? [],
         );
         allContexts.push(contextResult);
+
+        ast = undefined;
       }
 
       const semanticEngine = new DeterministicSemanticAnalysisEngine(callGraphBuilder);
@@ -534,6 +536,10 @@ export class AnalyzeProjectHandler {
         filePaths: sortedFiles.map((file) => file.path),
         httpCalls: allHttpCalls,
       });
+      allCalls = undefined;
+      allReferences = undefined;
+      allHttpCalls = undefined;
+
       records.push(
         createStorageRecord("semantic-analysis", {
           projectId: discovery.projectId,
@@ -552,6 +558,7 @@ export class AnalyzeProjectHandler {
 
       const flowEngine = new DeterministicFlowAnalysisEngine(controlFlowBuilder, dataFlowBuilder);
       const flow = flowEngine.connect(allControlFlowGraphs, allContexts, symbolTables);
+      allContexts = undefined;
 
       records.push(
         createStorageRecord("control-flow-analysis", {

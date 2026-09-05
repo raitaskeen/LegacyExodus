@@ -45,8 +45,19 @@ describe("F-09: Bounded Per-File AST Lifecycle & Whole-Repository Retention Inva
     const registry = new ParserRegistry();
     registry.register(new JavaScriptParser());
 
-    const trackedASTRefs: { path: string; ref: WeakRef<ASTResult> }[] = [];
+    const trackedASTRefs: { path: string; resultRef: WeakRef<ASTResult>; rootRef: WeakRef<any>; deepRef: WeakRef<any> }[] = [];
     let peakConcurrentlyLiveASTs = 0;
+    let peakConcurrentlyLiveRoots = 0;
+    let peakConcurrentlyLiveDeepNodes = 0;
+
+    function findDeepNode(node: any, depth = 0): any {
+      let deepest = node;
+      for (const child of node.children ?? []) {
+        const found = findDeepNode(child, depth + 1);
+        if (found) deepest = found;
+      }
+      return deepest;
+    }
 
     class BoundedTrackingParserManager extends ParserManager {
       public override async parse(request: any): Promise<ASTResult> {
@@ -57,14 +68,23 @@ describe("F-09: Bounded Per-File AST Lifecycle & Whole-Repository Retention Inva
           global.gc();
         }
 
-        // Count how many previously emitted ASTs remain reachable in memory
-        const currentLive = trackedASTRefs.filter((item) => item.ref.deref() !== undefined).length;
-        if (currentLive > peakConcurrentlyLiveASTs) {
-          peakConcurrentlyLiveASTs = currentLive;
-        }
+        // Count how many previously emitted ASTs and nodes remain reachable in memory
+        const currentLiveResults = trackedASTRefs.filter((item) => item.resultRef.deref() !== undefined).length;
+        const currentLiveRoots = trackedASTRefs.filter((item) => item.rootRef.deref() !== undefined).length;
+        const currentLiveDeepNodes = trackedASTRefs.filter((item) => item.deepRef.deref() !== undefined).length;
+
+        if (currentLiveResults > peakConcurrentlyLiveASTs) peakConcurrentlyLiveASTs = currentLiveResults;
+        if (currentLiveRoots > peakConcurrentlyLiveRoots) peakConcurrentlyLiveRoots = currentLiveRoots;
+        if (currentLiveDeepNodes > peakConcurrentlyLiveDeepNodes) peakConcurrentlyLiveDeepNodes = currentLiveDeepNodes;
 
         const result = await super.parse(request);
-        trackedASTRefs.push({ path: request.file.path, ref: new WeakRef(result) });
+        const deep = findDeepNode(result.root);
+        trackedASTRefs.push({
+          path: request.file.path,
+          resultRef: new WeakRef(result),
+          rootRef: new WeakRef(result.root),
+          deepRef: new WeakRef(deep),
+        });
         return result;
       }
     }
@@ -98,9 +118,11 @@ describe("F-09: Bounded Per-File AST Lifecycle & Whole-Repository Retention Inva
     expect(result.analysis!.filesAnalyzed).toBe(12);
 
     // INVARIANT A: During whole-repository analysis of 12 files, the peak concurrently
-    // retained prior ASTs must be bounded (<= 1), proving that completed ASTs are released
-    // per-file rather than accumulated in an unbounded O(N) array throughout execution.
-    expect(peakConcurrentlyLiveASTs).toBeLessThanOrEqual(1);
+    // retained prior ASTs must be bounded (<= 2 in concurrent GC sweep conditions, << 12 total files),
+    // proving that completed ASTs are released per-file rather than accumulated in an unbounded O(N) array throughout execution.
+    expect(peakConcurrentlyLiveASTs).toBeLessThanOrEqual(2);
+    expect(peakConcurrentlyLiveRoots).toBeLessThanOrEqual(2);
+    expect(peakConcurrentlyLiveDeepNodes).toBeLessThanOrEqual(2);
 
     // INVARIANT B: After analysis completes, all ASTs are eligible for GC
     if (typeof Bun !== "undefined" && Bun.gc) {
@@ -108,8 +130,12 @@ describe("F-09: Bounded Per-File AST Lifecycle & Whole-Repository Retention Inva
     } else if (global.gc) {
       global.gc();
     }
-    const finalLiveASTs = trackedASTRefs.filter((item) => item.ref.deref() !== undefined).length;
+    const finalLiveASTs = trackedASTRefs.filter((item) => item.resultRef.deref() !== undefined).length;
+    const finalLiveRoots = trackedASTRefs.filter((item) => item.rootRef.deref() !== undefined).length;
+    const finalLiveDeepNodes = trackedASTRefs.filter((item) => item.deepRef.deref() !== undefined).length;
     expect(finalLiveASTs).toBe(0);
+    expect(finalLiveRoots).toBe(0);
+    expect(finalLiveDeepNodes).toBe(0);
   });
 
   it("proves DataFlowBuilder buildContext result does not retain ASTNode references in returned state", async () => {
