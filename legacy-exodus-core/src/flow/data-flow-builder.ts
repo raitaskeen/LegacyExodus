@@ -4,7 +4,7 @@ import type { CodeSymbol } from "@symbols/index";
 import { createDataFlowGraph, createProvenCallTargets, type CallFlowBinding, type DataFlowGraph, type FunctionFlowSummary, type InterproceduralFlow, type ProvenCallTarget, type TaintFlow, type VariableDefinition, type VariableUse } from "./flow-contracts";
 
 export interface Scope { readonly parent?: Scope; readonly definitions: Map<string, VariableDefinition>; }
-export interface FunctionRecord { readonly name: string; readonly node: ASTNode; readonly parameters: VariableDefinition[][]; readonly returns: VariableDefinition[]; readonly symbolId?: string; }
+export interface FunctionRecord { readonly name: string; readonly parameters: VariableDefinition[][]; readonly returns: VariableDefinition[]; readonly symbolId?: string; }
 export interface PendingCall { readonly id: string; readonly targetSymbolId?: string; readonly callee?: FunctionRecord; readonly argumentDefinitionIds: readonly (string | undefined)[]; readonly argumentSourceIds: readonly (string | undefined)[]; readonly receiverDefinitionId?: string; }
 export interface TaintTransfer { readonly sourceDefinitionId: string; readonly targetDefinitionId: string; }
 export interface PendingSink { readonly id: string; readonly name: string; readonly argumentDefinitionIds: readonly string[]; }
@@ -62,6 +62,9 @@ export class DeterministicDataFlowGraphBuilder {
       functionSummaries: functionSummaries(state, ast.metadata.sourcePath),
       callBindings: callBindings(state),
     });
+    state.functions.clear();
+    state.resolvableFunctions.clear();
+    state.functionsBySymbolId.clear();
     return { graph, state };
   }
 
@@ -566,7 +569,7 @@ export class DeterministicDataFlowGraphBuilder {
 }
 
 function createScope(parent?: Scope): Scope { return { parent, definitions: new Map() }; }
-function collectFunctions(root: ASTNode, symbols: readonly CodeSymbol[]): Map<ASTNode, FunctionRecord> { const records = new Map<ASTNode, FunctionRecord>(); const visit = (node: ASTNode): void => { if (isFunction(node)) { const name = functionName(node); if (name !== undefined) { const symbol = symbols.filter((candidate) => (candidate.kind === "function" || candidate.kind === "method") && candidate.name === name && sameLocation(candidate.location, node.location)); records.set(node, { name, node, parameters: [], returns: [], ...(symbol.length === 1 && symbol[0] !== undefined ? { symbolId: symbol[0].id } : {}) }); } } for (const child of node.children) visit(child); }; visit(root); return records; }
+function collectFunctions(root: ASTNode, symbols: readonly CodeSymbol[]): Map<ASTNode, FunctionRecord> { const records = new Map<ASTNode, FunctionRecord>(); const visit = (node: ASTNode): void => { if (isFunction(node)) { const name = functionName(node); if (name !== undefined) { const symbol = symbols.filter((candidate) => (candidate.kind === "function" || candidate.kind === "method") && candidate.name === name && sameLocation(candidate.location, node.location)); records.set(node, { name, parameters: [], returns: [], ...(symbol.length === 1 && symbol[0] !== undefined ? { symbolId: symbol[0].id } : {}) }); } } for (const child of node.children) visit(child); }; visit(root); return records; }
 function resolveFunction(name: string | undefined, functions: ReadonlyMap<string, FunctionRecord>): FunctionRecord | undefined { if (name === undefined) return undefined; const direct = functions.get(name); if (direct !== undefined) return direct; const property = name.split(".").at(-1); return property === undefined ? undefined : functions.get(property); }
 function resolve(scope: Scope | undefined, name: string): VariableDefinition | undefined { for (let current = scope; current !== undefined; current = current.parent) { const definition = current.definitions.get(name); if (definition !== undefined) return definition; } return undefined; }
 function isFunction(node: ASTNode): boolean { return ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ObjectMethod"].includes(node.type); }

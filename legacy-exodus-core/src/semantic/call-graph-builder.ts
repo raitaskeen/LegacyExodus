@@ -16,13 +16,24 @@ export class DeterministicCallGraphBuilder {
     const references: SymbolReference[] = [];
 
     for (const ast of [...astResults].sort((left, right) => left.metadata.sourcePath.localeCompare(right.metadata.sourcePath))) {
-      const initialContext = { callerName: "module", scope: createScope("scope:module"), receiverTypes: new Map() };
-      predeclareScopeBindings(ast.root, initialContext);
-      const boundCallees = new Set<ASTNode>();
-      this.visit(ast.root, ast, initialContext, tablesByPath, importsByFile, targetByImportId, calls, references, boundCallees);
+      this.buildForFile(ast, tablesByPath, importsByFile, targetByImportId, calls, references);
     }
 
     return Object.freeze({ calls: Object.freeze(calls), references: Object.freeze(references) });
+  }
+
+  public buildForFile(
+    ast: ASTResult,
+    tablesByPath: ReadonlyMap<string, SymbolTable>,
+    importsByFile: ReadonlyMap<string, readonly { readonly id: string; readonly name: string }[]>,
+    targetByImportId: ReadonlyMap<string, string>,
+    calls: SemanticCall[],
+    references: SymbolReference[],
+  ): void {
+    const initialContext = { callerName: "module", scope: createScope("scope:module"), receiverTypes: new Map() };
+    predeclareScopeBindings(ast.root, initialContext);
+    const boundCallees = new Set<ASTNode>();
+    this.visit(ast.root, ast, initialContext, tablesByPath, importsByFile, targetByImportId, calls, references, boundCallees);
   }
 
   private visit(

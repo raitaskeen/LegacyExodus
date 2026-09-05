@@ -2,13 +2,14 @@ import type { ASTResult } from "@parser/index";
 import type { SemanticCall } from "@semantic/index";
 import type { SymbolTable } from "@symbols/index";
 import { createHash } from "node:crypto";
+import type { BuildContextResult } from "./data-flow-builder";
 import { DeterministicControlFlowGraphBuilder } from "./control-flow-builder";
 import { DeterministicDataFlowGraphBuilder } from "./data-flow-builder";
 import { createDataFlowGraph, createProvenCallTargets, type ControlFlowGraph, type DataFlowGraph, type InterproceduralFlow } from "./flow-contracts";
 
 export interface FlowAnalysisResult { readonly controlFlowGraphs: readonly ControlFlowGraph[]; readonly dataFlowGraphs: readonly DataFlowGraph[]; }
 export class DeterministicFlowAnalysisEngine {
-  public constructor(private readonly controlFlowBuilder: DeterministicControlFlowGraphBuilder = new DeterministicControlFlowGraphBuilder(), private readonly dataFlowBuilder: DeterministicDataFlowGraphBuilder = new DeterministicDataFlowGraphBuilder()) {}
+  public constructor(public readonly controlFlowBuilder: DeterministicControlFlowGraphBuilder = new DeterministicControlFlowGraphBuilder(), public readonly dataFlowBuilder: DeterministicDataFlowGraphBuilder = new DeterministicDataFlowGraphBuilder()) {}
   public analyze(astResults: readonly ASTResult[], semanticCalls?: readonly SemanticCall[], symbolTables: readonly SymbolTable[] = []): FlowAnalysisResult {
     const results = [...astResults].sort((left, right) => left.metadata.sourcePath.localeCompare(right.metadata.sourcePath));
     const symbolsByPath = new Map(symbolTables.map((table) => [table.filePath, table.symbols]));
@@ -27,6 +28,15 @@ export class DeterministicFlowAnalysisEngine {
         symbolsByPath.get(ast.metadata.sourcePath) ?? [],
       ),
     );
+    const controlFlowGraphs = results.flatMap((ast) => this.controlFlowBuilder.buildAll(ast));
+    return this.connect(controlFlowGraphs, contexts, symbolTables);
+  }
+
+  public connect(
+    controlFlowGraphs: readonly ControlFlowGraph[],
+    contexts: readonly BuildContextResult[],
+    symbolTables: readonly SymbolTable[] = [],
+  ): FlowAnalysisResult {
 
     const summaries = new Map(contexts.flatMap(({ graph }) => graph.functionSummaries.map((summary) => [summary.symbolId, summary] as const)));
     for (const table of symbolTables) {
@@ -114,7 +124,7 @@ export class DeterministicFlowAnalysisEngine {
     });
 
     return Object.freeze({
-      controlFlowGraphs: Object.freeze(results.flatMap((ast) => this.controlFlowBuilder.buildAll(ast))),
+      controlFlowGraphs: Object.freeze(controlFlowGraphs),
       dataFlowGraphs: Object.freeze(connected),
     });
   }

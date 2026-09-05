@@ -11,15 +11,15 @@ import type {
   ProjectInitialized,
 } from "@contracts/events";
 import { createDomainEvent, type DomainEvent } from "@core/events/domain-event";
-import { validateProjectDiscovery } from "@contracts/discovery";
+import { validateProjectDiscovery, type FileArtifact } from "@contracts/discovery";
 import { DiscoveryEngine, DiscoveryValidator, type DiscoveryResult } from "@discovery/index";
 import { DeterministicDependencyGraphBuilder, ModuleResolver, type ModuleResolutionOptions } from "@graph/index";
-import { DeterministicFlowAnalysisEngine } from "@flow/index";
+import { DeterministicControlFlowGraphBuilder, DeterministicDataFlowGraphBuilder, DeterministicFlowAnalysisEngine, createProvenCallTargets, type ControlFlowGraph, type BuildContextResult } from "@flow/index";
 import { DeterministicKnowledgeGraphBuilder } from "@knowledge/index";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { ParserManager, type ASTResult } from "@parser/index";
-import { DeterministicSemanticAnalysisEngine } from "@semantic/index";
+import { DeterministicCallGraphBuilder, DeterministicSemanticAnalysisEngine, findHttpCalls, type ExpressRoute, type MiddlewareChain, type SemanticCall, type SymbolReference } from "@semantic/index";
 import { createStorageRecord, type StorageRecord } from "@storage/index";
 import { JavaScriptSymbolExtractor, type SymbolTable } from "@symbols/index";
 
@@ -369,7 +369,7 @@ export class AnalyzeProjectHandler {
     const events: DomainEvent[] = [...this.discoveryEngine.createEvents(discovery)];
     const records: StorageRecord[] = [record];
     const symbolTables: SymbolTable[] = [];
-    const astResults: ASTResult[] = [];
+    const successfullyParsedFiles: FileArtifact[] = [];
 
     for (const file of discovery.files) {
       if (file.language !== "javascript" && file.language !== "typescript") {
@@ -434,7 +434,7 @@ export class AnalyzeProjectHandler {
         }));
         continue;
       }
-      astResults.push(ast);
+      successfullyParsedFiles.push(file);
       symbolTables.push(table);
       records.push(
         createStorageRecord("symbol-table", {
@@ -477,10 +477,62 @@ export class AnalyzeProjectHandler {
           cycles: dependencyGraph.cycles,
         }),
       );
-      const semantic = new DeterministicSemanticAnalysisEngine().analyze({
-        astResults,
-        dependencyGraph,
+      const tablesByPath = new Map(symbolTables.map((table) => [table.filePath, table]));
+      const symbolsByPath = new Map(symbolTables.map((table) => [table.filePath, table.symbols]));
+      const importsByFile = new Map(symbolTables.map((table) => [table.filePath, table.symbols.filter((symbol) => symbol.kind === "import")]));
+      const targetByImportId = new Map(dependencyGraph.edges.map((edge) => [edge.importSymbolId, edge.targetExportSymbolId]));
+
+      const callGraphBuilder = new DeterministicCallGraphBuilder();
+      const controlFlowBuilder = new DeterministicControlFlowGraphBuilder();
+      const dataFlowBuilder = new DeterministicDataFlowGraphBuilder();
+
+      const allCalls: SemanticCall[] = [];
+      const allReferences: SymbolReference[] = [];
+      const allHttpCalls: { readonly routes: readonly ExpressRoute[]; readonly middlewareChains: readonly MiddlewareChain[] }[] = [];
+      const allControlFlowGraphs: ControlFlowGraph[] = [];
+      const allContexts: BuildContextResult[] = [];
+
+      const sortedFiles = [...successfullyParsedFiles].sort((left, right) => left.path.localeCompare(right.path));
+
+      for (const file of sortedFiles) {
+        const source = await readFile(resolve(discovery.projectPath, file.path), "utf8");
+        const ast = await this.parserManager.parse({ file, source });
+
+        const fileCalls: SemanticCall[] = [];
+        const fileReferences: SymbolReference[] = [];
+        callGraphBuilder.buildForFile(ast, tablesByPath, importsByFile, targetByImportId, fileCalls, fileReferences);
+        allCalls.push(...fileCalls);
+        allReferences.push(...fileReferences);
+
+        const httpCalls = findHttpCalls(ast.root, file.path);
+        allHttpCalls.push(httpCalls);
+
+        const cfgs = controlFlowBuilder.buildAll(ast);
+        allControlFlowGraphs.push(...cfgs);
+
+        const provenTargets = createProvenCallTargets(
+          fileCalls.flatMap((call) =>
+            call.sourceFilePath === file.path && call.resolutionState === "RESOLVED" && call.targetSymbolId !== undefined && call.location !== undefined
+              ? [{ callId: call.id, sourceFilePath: call.sourceFilePath, location: call.location, targetSymbolId: call.targetSymbolId }]
+              : [],
+          ),
+        );
+        const contextResult = dataFlowBuilder.buildContext(
+          ast,
+          provenTargets,
+          symbolsByPath.get(file.path) ?? [],
+        );
+        allContexts.push(contextResult);
+      }
+
+      const semanticEngine = new DeterministicSemanticAnalysisEngine(callGraphBuilder);
+      const semantic = semanticEngine.synthesize({
+        calls: allCalls,
+        references: allReferences,
         symbolTables,
+        dependencyGraph,
+        filePaths: sortedFiles.map((file) => file.path),
+        httpCalls: allHttpCalls,
       });
       records.push(
         createStorageRecord("semantic-analysis", {
@@ -497,8 +549,9 @@ export class AnalyzeProjectHandler {
           middlewareChains: semantic.middlewareChains,
         }),
       );
-      const flow = new DeterministicFlowAnalysisEngine().analyze(astResults, semantic.calls, symbolTables);
-      astResults.length = 0;
+
+      const flowEngine = new DeterministicFlowAnalysisEngine(controlFlowBuilder, dataFlowBuilder);
+      const flow = flowEngine.connect(allControlFlowGraphs, allContexts, symbolTables);
 
       records.push(
         createStorageRecord("control-flow-analysis", {
@@ -587,7 +640,6 @@ export class AnalyzeProjectHandler {
         analysis: analysisSummary,
       };
     } catch (error: unknown) {
-      astResults.length = 0;
       const errorMessage = error instanceof Error ? error.message : String(error);
 
       const failedRecords: StorageRecord[] = [
