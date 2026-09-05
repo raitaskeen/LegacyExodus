@@ -9,6 +9,11 @@ and this project adheres to deterministic semantic contracts and verifiable engi
 
 ## [Unreleased]
 
+- **Semantic Call-Graph Lexical Shadowing Precision:**
+  - Implemented lexical scope shadowing verification (`isLexicallyShadowed()`) in `DeterministicCallGraphBuilder`, enforcing strict ECMAScript scope precedence (`nearest lexical binding > enclosing lexical binding > file-level import > fallback/unresolved`).
+  - Hardened direct call resolution in `visit()`: guarded `importsByFile` queries with `!isLexicallyShadowed(calleeName, nextContext, table)`, ensuring local parameter bindings (`function run(charge)`), local variable declarations (`const charge = ...`), local function declarations, catch clause parameters, and loop variables shadow file-level imports and correctly resolve to local symbols or remain safely `UNRESOLVED` instead of falsely resolving to imported functions.
+  - Hardened member receiver call resolution in `resolveLocalCall()`: guarded imported namespace receiver resolution (`resolveNamespaceCall()`) with `!isLexicallyShadowed(receiver, context, table)`, ensuring shadowed namespace receivers (`function run(billing) { billing.charge(); }`) are not routed to namespace exports.
+  - Expanded test baseline to **989/989 passing tests across 111 files** (9,324 assertions, 0 failures) with zero regressions across all 4 verification dashboard gates.
 - **Control-Flow Finally Graph Bloat & Back-Edge Routing Integrity (F-14):**
   - Eliminated speculative over-allocation and unconditional AST statement cloning of candidate finalizer landing pads (`thrownFinalizer`, `returnedFinalizer`, `brokenFinalizer`, `continuedFinalizer`, and `labeledFinalizers`) in `DeterministicControlFlowGraphBuilder.buildTry()`.
   - Enforced demand-driven finalizer instantiation: candidate landing pads are populated with AST statements and routed to outer completion targets if and only if actual incoming transfer edges exist (`hasIncomingEdges()`), with unreached landing pads safely pruned via `removeBlock()`.

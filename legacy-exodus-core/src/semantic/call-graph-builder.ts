@@ -83,7 +83,10 @@ export class DeterministicCallGraphBuilder {
       if (!boundCallees.has(node)) {
         const calleeName = callName(node, nextContext, boundCallees);
         if (calleeName !== undefined) {
-          const imported = importsByFile.get(canonicalSourcePath)?.find((symbol) => symbol.name === calleeName);
+          const isShadowed = isLexicallyShadowed(calleeName, nextContext, table);
+          const imported = isShadowed
+            ? undefined
+            : importsByFile.get(canonicalSourcePath)?.find((symbol) => symbol.name === calleeName);
           const targetSymbolId = imported === undefined
             ? resolveLocalCall(table, calleeName, nextContext, tablesByPath, this.resolver)
             : targetByImportId.get(imported.id);
@@ -642,7 +645,7 @@ function resolveLocalCall(
   }
 
   // 4. Imported namespace receiver (e.g. import * as api from "./api"; api.ping() or api["ping"]())
-  if (receiver !== "this" && tablesByPath !== undefined && resolver !== undefined) {
+  if (receiver !== "this" && tablesByPath !== undefined && resolver !== undefined && !isLexicallyShadowed(receiver, context, table)) {
     const namespaceTarget = resolveNamespaceCall(table, receiver, methodName, tablesByPath, resolver);
     if (namespaceTarget !== undefined) return namespaceTarget;
   }
@@ -661,6 +664,24 @@ function nearestScoped(symbols: readonly CodeSymbol[], name: string, context: Re
     if (context.receiverTypes.has(receiverKey(current, name))) return undefined;
   }
   return undefined;
+}
+
+function isLexicallyShadowed(name: string, context: ResolutionContext, table?: SymbolTable): boolean {
+  for (let current: ScopeFrame | undefined = context.scope; current !== undefined; current = current.parent) {
+    if (current.id === "scope:module") {
+      break;
+    }
+    if (context.receiverTypes.has(receiverKey(current, name))) {
+      return true;
+    }
+    if (context.constantBindings.has(bindingKey(current, name))) {
+      return true;
+    }
+    if (table?.symbols.some((s) => s.name === name && s.scopeId === current.id)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function isInScope(symbol: CodeSymbol, scope: ScopeFrame): boolean {
