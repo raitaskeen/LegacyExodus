@@ -11,8 +11,8 @@ export class DeterministicCallGraphBuilder {
   private readonly resolver = new ModuleResolver();
 
   public build(astResults: readonly ASTResult[], symbolTables: readonly SymbolTable[], dependencyGraph: DependencyGraph): { readonly calls: readonly SemanticCall[]; readonly references: readonly SymbolReference[] } {
-    const tablesByPath = new Map(symbolTables.map((table) => [table.filePath, table]));
-    const importsByFile = new Map(symbolTables.map((table) => [table.filePath, table.symbols.filter((symbol) => symbol.kind === "import")]));
+    const tablesByPath = new Map(symbolTables.map((table) => [canonicalizePath(table.filePath), table]));
+    const importsByFile = new Map(symbolTables.map((table) => [canonicalizePath(table.filePath), table.symbols.filter((symbol) => symbol.kind === "import")]));
     const targetByImportId = new Map(dependencyGraph.edges.map((edge) => [edge.importSymbolId, edge.targetExportSymbolId]));
     const calls: SemanticCall[] = [];
     const references: SymbolReference[] = [];
@@ -54,7 +54,8 @@ export class DeterministicCallGraphBuilder {
     references: SymbolReference[],
     boundCallees: Set<ASTNode>,
   ): void {
-    const table = tablesByPath.get(ast.metadata.sourcePath);
+    const canonicalSourcePath = canonicalizePath(ast.metadata.sourcePath);
+    const table = tablesByPath.get(canonicalSourcePath);
     const nextContext = childContext(node, context, table);
     if (nextContext.scope !== context.scope) {
       predeclareScopeBindings(node, nextContext);
@@ -82,9 +83,9 @@ export class DeterministicCallGraphBuilder {
       if (!boundCallees.has(node)) {
         const calleeName = callName(node, nextContext, boundCallees);
         if (calleeName !== undefined) {
-          const imported = importsByFile.get(ast.metadata.sourcePath)?.find((symbol) => symbol.name === calleeName);
+          const imported = importsByFile.get(canonicalSourcePath)?.find((symbol) => symbol.name === calleeName);
           const targetSymbolId = imported === undefined
-            ? resolveLocalCall(tablesByPath.get(ast.metadata.sourcePath), calleeName, nextContext, tablesByPath, this.resolver)
+            ? resolveLocalCall(table, calleeName, nextContext, tablesByPath, this.resolver)
             : targetByImportId.get(imported.id);
           const id = hash(`${ast.metadata.sourcePath}:${nextContext.callerName}:${calleeName}:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`);
           const resolutionState = targetSymbolId === undefined ? "UNRESOLVED" as const : "RESOLVED" as const;
