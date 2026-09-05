@@ -130,6 +130,10 @@ function callName(node: ASTNode): string | undefined {
 
 function memberName(node: ASTNode): string | undefined {
   if (node.type === "Identifier") return identifier(node);
+  if (node.type === "PrivateName") {
+    const name = identifier(node);
+    return name !== undefined ? `#${name}` : undefined;
+  }
   if (node.type === "ThisExpression") return "this";
   if (node.type !== "MemberExpression" && node.type !== "OptionalMemberExpression") return undefined;
   if (node.attributes.computed === true) return undefined;

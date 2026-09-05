@@ -188,6 +188,13 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         }, symbols, pendingExports);
         return;
       }
+      case "ClassProperty":
+      case "ClassPrivateProperty":
+      case "PropertyDefinition":
+      case "ClassAccessorProperty": {
+        this.addClassPropertySymbol(node, ast, context, symbols, pendingExports);
+        return;
+      }
       default:
         break;
     }
@@ -369,6 +376,45 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
   ): void {
     const name = getName(node) ?? "anonymous-method";
     symbols.push(this.createSymbol("method", name, node, ast, context, { parameters: getParameters(node) }));
+  }
+
+  private addClassPropertySymbol(
+    node: ASTNode,
+    ast: ASTResult,
+    context: ExtractionContext,
+    symbols: CodeSymbol[],
+    pendingExports: PendingExportBinding[],
+  ): void {
+    if (node.attributes.computed === true) {
+      this.visitChildren(node, ast, context, symbols, pendingExports);
+      return;
+    }
+
+    const name = getName(node);
+    if (name === undefined) {
+      this.visitChildren(node, ast, context, symbols, pendingExports);
+      return;
+    }
+
+    const initializer = node.children.find((child) => child.role === "value" || child.role === "init");
+
+    if (initializer !== undefined && isAssignedFunction(initializer)) {
+      symbols.push(
+        this.createSymbol("method", name, node, ast, context, {
+          parameters: getParameters(initializer),
+          async: initializer.attributes.async === true,
+        }),
+      );
+    } else {
+      const value = readLiteralInitializer(node);
+      symbols.push(
+        this.createSymbol("variable", name, node, ast, context, {
+          ...(value === undefined ? {} : { value }),
+        }),
+      );
+    }
+
+    this.visitChildren(node, ast, context, symbols, pendingExports);
   }
 
   private addExportSymbol(
@@ -667,11 +713,15 @@ function countSymbols(symbols: readonly CodeSymbol[], kind: SymbolKind): number 
 }
 
 function getName(node: ASTNode): string | undefined {
-  if (node.type === "Identifier") {
+  if (node.type === "Identifier" || node.type === "PrivateName") {
     return readIdentifierName(node);
   }
+  const keyChild = node.children.find((child) => child.role === "key");
+  if (keyChild?.type === "StringLiteral" && node.attributes.computed !== true) {
+    return nonEmptyString(keyChild.attributes.value);
+  }
   return readIdentifierName(node.children.find((child) => child.role === "id"))
-    ?? readIdentifierName(node.children.find((child) => child.role === "key"))
+    ?? readIdentifierName(keyChild)
     ?? readIdentifierName(node.children.find((child) => child.role === "local"))
     ?? readIdentifierName(node.children.find((child) => child.role === "exported"));
 }
@@ -776,7 +826,13 @@ function findModuleSpecifier(node: ASTNode): string | undefined {
 }
 
 function readIdentifierName(node: ASTNode | undefined): string | undefined {
-  const name = node?.attributes.name;
+  if (node === undefined) return undefined;
+  if (node.type === "PrivateName") {
+    const id = node.children.find((child) => child.role === "id");
+    const name = id?.attributes.name;
+    return typeof name === "string" ? `#${name}` : undefined;
+  }
+  const name = node.attributes.name;
 
   return typeof name === "string" ? name : undefined;
 }
@@ -800,7 +856,7 @@ function readDeclarationKind(node: ASTNode): "const" | "let" | "var" | undefined
 }
 
 function readLiteralInitializer(node: ASTNode): string | number | boolean | null | undefined {
-  const initializer = node.children.find((child) => child.role === "init");
+  const initializer = node.children.find((child) => child.role === "init" || child.role === "value");
   const value = initializer?.attributes.value;
 
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean" || value === null
