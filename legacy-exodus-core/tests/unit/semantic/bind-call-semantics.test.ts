@@ -46,7 +46,7 @@ describe("F-001: Semantic Call Semantics — .bind() vs .call() / .apply()", () 
   });
 
   // ─── Case B: Immediate invocation of bound result ────────────────────────
-  it("Case B: immediate invocation of bound result does not fabricate a direct call edge when unproven", async () => {
+  it("Case B: immediate invocation of bound result resolves to the target function", async () => {
     const source = `
       function compute(x) { return x * 2; }
       compute.bind(null, 21)();
@@ -55,9 +55,11 @@ describe("F-001: Semantic Call Semantics — .bind() vs .call() / .apply()", () 
     const targetSymbol = symbolTable.symbols.find((s) => s.kind === "function" && s.name === "compute");
     expect(targetSymbol).toBeDefined();
 
-    // Does not fabricate a false direct call edge to compute
+    // Resolves to target function compute
     const directTargetCalls = analysis.calls.filter((c) => c.targetSymbolId === targetSymbol?.id);
-    expect(directTargetCalls).toHaveLength(0);
+    expect(directTargetCalls).toHaveLength(1);
+    expect(directTargetCalls[0]?.calleeName).toBe("compute");
+    expect(directTargetCalls[0]?.resolutionState).toBe("RESOLVED");
   });
 
   // ─── Case C: .call() remains an active invocation ────────────────────────

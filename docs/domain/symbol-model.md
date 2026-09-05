@@ -64,9 +64,10 @@ Class Context      Prototype Method           Exact Container     Different / Un
    - When multiple candidates exist or the receiver is dynamic / shadowed without local declaration evidence, the call remains `UNRESOLVED`.
    - The engine never guesses or invents target edges.
 
-6. **Invocation Unwrapping (`.call()` and `.apply()` vs `.bind()`):**
+6. **Invocation Unwrapping (`.call()`, `.apply()`, and `.bind()`):**
    - **`.call(...)` and `.apply(...)`**: Direct function invocations executed immediately. Unwrapped by the semantic engine to resolve directly to the underlying function/method target symbol.
-   - **`.bind(...)`**: Value-producing operation creating a bound function value without executing the target function at that call site. The engine does **not** unwrap `.bind(...)` or emit an invocation call edge to the target function.
+   - **`.bind(...)` Invocations**: When a bound function is immediately invoked (e.g. `fn.bind(...)()`, `obj.method.bind(...)()`, `this.method.bind(...)()`, chained `fn.bind(...).bind(...)()`, or via `.call()`/`.apply()`), the engine unwraps the bound callee chain and resolves the call edge directly to the underlying target function or method symbol, without emitting duplicate `.bind` call edges.
+   - **Non-Invoked `.bind(...)`**: Value-producing operation creating a bound function value without executing the target function at that site (e.g. `const bound = fn.bind(...)`). The engine does **not** emit an invocation call edge to the underlying target function.
 
 ---
 

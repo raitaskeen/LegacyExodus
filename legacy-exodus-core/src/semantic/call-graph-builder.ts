@@ -18,7 +18,8 @@ export class DeterministicCallGraphBuilder {
     for (const ast of [...astResults].sort((left, right) => left.metadata.sourcePath.localeCompare(right.metadata.sourcePath))) {
       const initialContext = { callerName: "module", scope: createScope("scope:module"), receiverTypes: new Map() };
       predeclareScopeBindings(ast.root, initialContext);
-      this.visit(ast.root, ast, initialContext, tablesByPath, importsByFile, targetByImportId, calls, references);
+      const boundCallees = new Set<ASTNode>();
+      this.visit(ast.root, ast, initialContext, tablesByPath, importsByFile, targetByImportId, calls, references, boundCallees);
     }
 
     return Object.freeze({ calls: Object.freeze(calls), references: Object.freeze(references) });
@@ -33,6 +34,7 @@ export class DeterministicCallGraphBuilder {
     targetByImportId: ReadonlyMap<string, string>,
     calls: SemanticCall[],
     references: SymbolReference[],
+    boundCallees: Set<ASTNode>,
   ): void {
     const table = tablesByPath.get(ast.metadata.sourcePath);
     const nextContext = childContext(node, context, table);
@@ -49,22 +51,24 @@ export class DeterministicCallGraphBuilder {
       }
     }
     if (node.type === "CallExpression" || node.type === "NewExpression") {
-      const calleeName = callName(node);
-      if (calleeName !== undefined) {
-        const imported = importsByFile.get(ast.metadata.sourcePath)?.find((symbol) => symbol.name === calleeName);
-        const targetSymbolId = imported === undefined
-          ? resolveLocalCall(tablesByPath.get(ast.metadata.sourcePath), calleeName, nextContext)
-          : targetByImportId.get(imported.id);
-        const id = hash(`${ast.metadata.sourcePath}:${nextContext.callerName}:${calleeName}:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`);
-        const resolutionState = targetSymbolId === undefined ? "UNRESOLVED" as const : "RESOLVED" as const;
-        const reference: SymbolReference = { id: hash(`reference:${id}`), filePath: ast.metadata.sourcePath, name: calleeName, kind: "call", resolutionState, ...(targetSymbolId === undefined ? {} : { resolvedSymbolId: targetSymbolId }) };
-        references.push(reference);
-        calls.push({ id, sourceFilePath: ast.metadata.sourcePath, callerName: nextContext.callerName, calleeName, resolutionState, ...(targetSymbolId === undefined ? {} : { targetSymbolId }), ...(node.location === undefined ? {} : { location: node.location.start }) });
+      if (!boundCallees.has(node)) {
+        const calleeName = callName(node, boundCallees);
+        if (calleeName !== undefined) {
+          const imported = importsByFile.get(ast.metadata.sourcePath)?.find((symbol) => symbol.name === calleeName);
+          const targetSymbolId = imported === undefined
+            ? resolveLocalCall(tablesByPath.get(ast.metadata.sourcePath), calleeName, nextContext)
+            : targetByImportId.get(imported.id);
+          const id = hash(`${ast.metadata.sourcePath}:${nextContext.callerName}:${calleeName}:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`);
+          const resolutionState = targetSymbolId === undefined ? "UNRESOLVED" as const : "RESOLVED" as const;
+          const reference: SymbolReference = { id: hash(`reference:${id}`), filePath: ast.metadata.sourcePath, name: calleeName, kind: "call", resolutionState, ...(targetSymbolId === undefined ? {} : { resolvedSymbolId: targetSymbolId }) };
+          references.push(reference);
+          calls.push({ id, sourceFilePath: ast.metadata.sourcePath, callerName: nextContext.callerName, calleeName, resolutionState, ...(targetSymbolId === undefined ? {} : { targetSymbolId }), ...(node.location === undefined ? {} : { location: node.location.start }) });
+        }
       }
     }
 
     for (const child of node.children) {
-      this.visit(child, ast, nextContext, tablesByPath, importsByFile, targetByImportId, calls, references);
+      this.visit(child, ast, nextContext, tablesByPath, importsByFile, targetByImportId, calls, references, boundCallees);
     }
   }
 }
@@ -123,12 +127,36 @@ function nodeName(node: ASTNode): string | undefined {
   return identifier(node.children.find((child) => child.role === "id" || child.role === "key")) ?? identifier(node);
 }
 
-function callName(node: ASTNode): string | undefined {
+function isBoundCall(node: ASTNode): boolean {
+  if (node.type !== "CallExpression") return false;
   const callee = node.children.find((child) => child.role === "callee");
-  return callee === undefined ? undefined : memberName(callee);
+  if (callee === undefined) return false;
+  if (callee.type !== "MemberExpression" && callee.type !== "OptionalMemberExpression") return false;
+  if (callee.attributes.computed === true) return false;
+  const property = callee.children.find((child) => child.role === "property");
+  return identifier(property) === "bind";
 }
 
-function memberName(node: ASTNode): string | undefined {
+function collectBoundCalleeChain(calleeNode: ASTNode, boundCallees?: Set<ASTNode>): ASTNode {
+  let current = calleeNode;
+  while (isBoundCall(current)) {
+    boundCallees?.add(current);
+    const callee = current.children.find((child) => child.role === "callee");
+    const object = callee?.children.find((child) => child.role === "object");
+    if (object === undefined) break;
+    current = object;
+  }
+  return current;
+}
+
+function callName(node: ASTNode, boundCallees?: Set<ASTNode>): string | undefined {
+  const callee = node.children.find((child) => child.role === "callee");
+  if (callee === undefined) return undefined;
+  const effectiveCallee = collectBoundCalleeChain(callee, boundCallees);
+  return memberName(effectiveCallee, boundCallees);
+}
+
+function memberName(node: ASTNode, boundCallees?: Set<ASTNode>): string | undefined {
   if (node.type === "Identifier") return identifier(node);
   if (node.type === "PrivateName") {
     const name = identifier(node);
@@ -139,8 +167,9 @@ function memberName(node: ASTNode): string | undefined {
   if (node.attributes.computed === true) return undefined;
   const object = node.children.find((child) => child.role === "object");
   const property = node.children.find((child) => child.role === "property");
-  const objectName = object === undefined ? undefined : memberName(object);
-  const propertyName = property === undefined ? undefined : memberName(property);
+  const effectiveObject = object === undefined ? undefined : collectBoundCalleeChain(object, boundCallees);
+  const objectName = effectiveObject === undefined ? undefined : memberName(effectiveObject, boundCallees);
+  const propertyName = property === undefined ? undefined : memberName(property, boundCallees);
   if (objectName === undefined || propertyName === undefined) return undefined;
 
   // Unwrap .apply / .call invocations: e.g. server.listen.apply -> server.listen
