@@ -87,13 +87,20 @@ describe("Second-Pass Parse Failure Isolation (CodeRabbit #3)", () => {
     const eventTypes = execution.events.map((e) => e.type);
 
     // Fault isolation invariant:
-    // 1. Emits ParserFailure for the failing file in second pass
+    // 1. Emits ParserFailure for the failing file in second pass identifying file2.js
     expect(eventTypes).toContain("ParserFailure");
+    const parserFailureEvent = execution.events.find((e) => e.type === "ParserFailure");
+    expect(parserFailureEvent).toBeDefined();
+    expect((parserFailureEvent?.payload as any)?.path).toContain("file2.js");
 
     // 2. Does NOT crash the entire run into AnalysisRunFailed
     expect(eventTypes).not.toContain("AnalysisRunFailed");
 
-    // 3. Completes the analysis run for healthy files
+    // 3. Completes the analysis run for healthy files and preserves healthy file CFGs
     expect(eventTypes).toContain("AnalysisRunCompleted");
+    const cfgRecord = execution.records.find((r) => r.type === "control-flow-analysis");
+    expect(cfgRecord).toBeDefined();
+    const cfgs = (cfgRecord?.payload as any)?.graphs;
+    expect(cfgs?.some((g: any) => g.filePath.includes("file1.js"))).toBe(true);
   });
 });

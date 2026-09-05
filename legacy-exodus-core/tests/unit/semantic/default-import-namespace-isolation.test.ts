@@ -15,6 +15,7 @@ describe("Semantic Default Import vs Namespace Call Isolation", () => {
 
     const apiSource = `
       export function ping() { return "pong"; }
+      export default function defaultFn() { return "default"; }
     `;
     const clientSource = `
       import api from "./api";
@@ -38,6 +39,13 @@ describe("Semantic Default Import vs Namespace Call Isolation", () => {
       dependencyGraph: depGraph,
       symbolTables: [apiSymbols, clientSymbols],
     });
+
+    const defaultExportSymbol = apiSymbols.symbols.find((s) => s.kind === "export" && s.defaultExport);
+    expect(defaultExportSymbol).toBeDefined();
+
+    const importEdge = depGraph.edges.find((e) => e.sourceFilePath === clientFile.path);
+    expect(importEdge).toBeDefined();
+    expect(importEdge?.targetExportSymbolId).toBe(defaultExportSymbol?.id);
 
     const pingExportSymbol = apiSymbols.symbols.find((s) => s.kind === "export" && s.name === "ping");
     expect(pingExportSymbol).toBeDefined();

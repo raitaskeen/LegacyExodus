@@ -10,6 +10,7 @@ on:
       - core-foundation
       - docs-foundation
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
