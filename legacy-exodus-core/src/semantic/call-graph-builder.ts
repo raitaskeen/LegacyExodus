@@ -110,6 +110,7 @@ interface ResolutionContext {
   readonly callerName: string;
   readonly scope: ScopeFrame;
   readonly containerId?: string;
+  readonly containerName?: string;
   readonly receiverTypes: ReadonlyMap<string, string | null>;
   readonly constantBindings: ReadonlyMap<string, string | null>;
 }
@@ -118,26 +119,79 @@ function createScope(id: string, parent?: ScopeFrame): ScopeFrame {
   return Object.freeze(parent === undefined ? { id } : { id, parent });
 }
 
+function extractMemberContainerAndMethod(node: ASTNode, context: ResolutionContext): { containerName?: string; methodName?: string } {
+  const left = node.children.find((child) => child.role === "left");
+  if (left === undefined) return {};
+  if (left.type === "MemberExpression" || left.type === "OptionalMemberExpression") {
+    const obj = left.children.find((c) => c.role === "object");
+    const prop = left.children.find((c) => c.role === "property");
+    const containerName = obj === undefined ? undefined : memberName(obj, context);
+    let methodName: string | undefined;
+    if (left.attributes.computed === true) {
+      methodName = resolvePropertyKey(prop, context);
+    } else {
+      methodName = prop === undefined ? undefined : (identifier(prop) ?? memberName(prop, context));
+    }
+    return { containerName, methodName };
+  }
+  return {};
+}
+
 function childContext(node: ASTNode, context: ResolutionContext, table: SymbolTable | undefined): ResolutionContext {
   let scope = context.scope;
   let callerName = context.callerName;
   let containerId = context.containerId;
+  let containerName = context.containerName;
   if (node.type === "BlockStatement" || isCallable(node) || node.type === "CatchClause" || isLoop(node)) {
     scope = createScope(createLexicalScopeId(node.type, node.location), context.scope);
   }
   if (isCallable(node)) callerName = nodeName(node) ?? callerName;
-  if (node.type === "ClassDeclaration") containerId = findClassSymbolId(node, context.scope, table);
+  if (node.type === "ClassDeclaration" || node.type === "ClassExpression") {
+    containerId = findClassSymbolId(node, context.scope, table);
+    containerName = nodeName(node) ?? containerName;
+  }
   if (node.type === "ClassMethod" || node.type === "ClassPrivateMethod") {
     // Class members are always visited directly below their ClassDeclaration.
     containerId = context.containerId;
-  } else if (node.type === "FunctionDeclaration" || node.type === "FunctionExpression" || node.type === "ObjectMethod") {
-    // Regular functions and object methods introduce dynamic / non-class this bindings.
+    containerName = context.containerName;
+  } else if (node.type === "AssignmentExpression") {
+    const { containerName: cName, methodName: mName } = extractMemberContainerAndMethod(node, context);
+    if (cName !== undefined) {
+      containerName = cName;
+      containerId = undefined;
+    }
+    if (mName !== undefined) {
+      callerName = mName;
+    }
+  } else if (node.type === "VariableDeclarator") {
+    const binding = node.children.find((c) => c.role === "id");
+    const init = node.children.find((c) => c.role === "init");
+    if (binding?.type === "Identifier" && init?.type === "ObjectExpression") {
+      containerName = identifier(binding);
+      containerId = undefined;
+    }
+  } else if (node.type === "ObjectProperty") {
+    const key = node.children.find((c) => c.role === "key");
+    const keyName = key === undefined ? undefined : (identifier(key) ?? memberName(key, context));
+    if (keyName !== undefined) {
+      callerName = keyName;
+    }
+  } else if (node.type === "ObjectMethod") {
     containerId = undefined;
+  } else if (node.type === "FunctionDeclaration") {
+    containerId = undefined;
+    containerName = undefined;
+  } else if (node.type === "FunctionExpression") {
+    if (node.role !== "right" && node.role !== "value") {
+      containerId = undefined;
+      containerName = undefined;
+    }
   }
   return {
     callerName,
     scope,
     ...(containerId === undefined ? {} : { containerId }),
+    ...(containerName === undefined ? {} : { containerName }),
     receiverTypes: context.receiverTypes,
     constantBindings: context.constantBindings,
   };
@@ -145,9 +199,21 @@ function childContext(node: ASTNode, context: ResolutionContext, table: SymbolTa
 
 function findClassSymbolId(node: ASTNode, scope: ScopeFrame, table: SymbolTable | undefined): string | undefined {
   const className = nodeName(node);
-  if (className === undefined) return undefined;
-  const candidates = table?.symbols.filter((symbol) => symbol.kind === "class" && symbol.name === className && isInScope(symbol, scope)) ?? [];
-  return candidates.length === 1 ? candidates[0]?.id : undefined;
+  if (className !== undefined) {
+    const candidates = table?.symbols.filter((symbol) => symbol.kind === "class" && symbol.name === className && isInScope(symbol, scope)) ?? [];
+    if (candidates.length === 1) return candidates[0]?.id;
+  }
+  const loc = node.location;
+  if (loc !== undefined && table !== undefined) {
+    const candidate = table.symbols.find(
+      (symbol) => symbol.kind === "class" &&
+        symbol.location !== undefined &&
+        symbol.location.start.line === loc.start.line &&
+        symbol.location.start.column === loc.start.column,
+    );
+    if (candidate !== undefined) return candidate.id;
+  }
+  return undefined;
 }
 
 function isCallable(node: ASTNode): boolean {
@@ -520,6 +586,18 @@ function resolveNamespaceCall(
   return directSymbol?.id;
 }
 
+function containerMatches(symbolContainer: string | undefined, contextContainer: string | undefined): boolean {
+  if (symbolContainer === undefined || contextContainer === undefined) return false;
+  if (symbolContainer === contextContainer) return true;
+  if (
+    (symbolContainer === "module.exports" && contextContainer === "exports") ||
+    (symbolContainer === "exports" && contextContainer === "module.exports")
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function resolveLocalCall(
   table: SymbolTable | undefined,
   name: string,
@@ -552,11 +630,11 @@ function resolveLocalCall(
   }
 
   // 3. Prototypal / contextual this receiver (e.g. this.defaultConfiguration inside application.js, this.set inside response.js)
-  if (receiver === "this" && context.containerId === undefined) {
+  if (receiver === "this" && context.containerId === undefined && context.containerName !== undefined) {
     const candidates = table.symbols.filter(
-      (symbol) => (symbol.kind === "method" || symbol.kind === "function") &&
+      (symbol) => (symbol.kind === "method" || symbol.kind === "function" || (symbol.kind === "variable" && (symbol.containerName === "module.exports" || symbol.containerName === "exports"))) &&
         symbol.name === methodName &&
-        symbol.containerName !== undefined &&
+        containerMatches(symbol.containerName, context.containerName) &&
         symbol.containerId === undefined,
     );
     if (candidates.length === 1) return candidates[0]?.id;

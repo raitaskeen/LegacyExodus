@@ -9,6 +9,8 @@ and this project adheres to deterministic semantic contracts and verifiable engi
 
 ## [Unreleased]
 
+- **Contextual `this.method()` Call Resolution Hardening (SEM-08):** Hardened member call resolution in `DeterministicSemanticAnalysisEngine` by introducing lexical container tracking (`containerName`) in `ResolutionContext`. Enforced strict container affinity on prototypal/contextual `this.method()` calls, eliminating false-positive resolution of standalone and nested regular functions to unrelated object/prototype methods in the same file. Restored multi-container method disambiguation across sibling objects (e.g. `app.init` vs `router.handle`), and enabled source-location class symbol resolution in `findClassSymbolId` for `export default class` declarations. Expanded test baseline to 954/954 passing tests across 104 files (9,175 assertions, 0 failures) with zero regressions across all 4 verification gates.
+
 ### Planned & Upcoming (Track 4 — Enterprise Intelligence Scaling)
 - Whole-repository multi-file ground-truth scaling.
 - Template and fixture classification enhancements.
