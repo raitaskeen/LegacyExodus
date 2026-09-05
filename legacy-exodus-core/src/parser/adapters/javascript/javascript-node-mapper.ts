@@ -181,6 +181,21 @@ function mapNode(node: BabelNode, role?: string): JavaScriptNodeMapping {
     }
   }
 
+  if (node.type === "TemplateElement" && typeof node.value === "object" && node.value !== null) {
+    const raw = (node.value as { readonly raw?: unknown }).raw;
+    const cooked = (node.value as { readonly cooked?: unknown }).cooked;
+    if (typeof raw === "string") {
+      attributes.raw = raw;
+    }
+    if (typeof cooked === "string") {
+      attributes.cooked = cooked;
+    }
+    const val = cooked ?? raw;
+    if (typeof val === "string") {
+      attributes.value = val;
+    }
+  }
+
   return {
     node: {
       type: node.type,
