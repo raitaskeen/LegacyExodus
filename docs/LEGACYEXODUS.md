@@ -1,6 +1,6 @@
 <div align="center">
   <picture>
-    <img src="docs/assets/branding/banner.png" alt="LegacyExodus Banner" width="100%">
+    <img src="assets/branding/banner.png" alt="LegacyExodus Banner" width="100%">
   </picture>
 
   <h1>LegacyExodus</h1>
@@ -15,7 +15,7 @@
   <p>
     <img src="https://img.shields.io/badge/Runtime-Bun_>=1.3.0-f9f8f6?style=for-the-badge&logo=bun" alt="Bun">
     <img src="https://img.shields.io/badge/TypeScript-Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript Strict">
-    <img src="https://img.shields.io/badge/Tests-800_Passing_|_0_Regressions-success?style=for-the-badge" alt="800 Tests Passing">
+    <img src="https://img.shields.io/badge/Tests-1001_Passing_|_0_Regressions-success?style=for-the-badge" alt="1001 Tests Passing">
     <img src="https://img.shields.io/badge/Governance-10_/_10_Audits_Passed-success?style=for-the-badge" alt="10/10 Governance Passed">
     <img src="https://img.shields.io/badge/Status-Phase_3A_/_Hardened-success?style=for-the-badge" alt="Phase 3A / Hardened">
   </p>
@@ -27,9 +27,10 @@
 
 ---
 
-> **Current Implementation Reality (August 2026):**
-> * **Implemented & Verified:** Deterministic JavaScript/TypeScript multi-stage repository intelligence pipeline running natively on Bun (Discovery, Babel AST Parsing & Normalization, Scope & Symbol Extraction with `var` hoisting, Destructuring pattern extraction, Default parameter filtering, CommonJS exports & prototype methods, Module resolution & Dependency graphs, Semantic Call graphs with constructor instantiation resolution, Basic-Block CFG, Def-Use DFG with interprocedural taint flow, Streaming JSON serialization with 64KB backpressure, In-Memory and SQLite indexed storage providers, Three-Universe fidelity validator, 10-point governance self-audit, and 3-run bit-for-bit determinism across Tier 1, 2, and 3 targets).
-> * **CLI Foundation:** Comprehensive terminal interface with 3 themes (`classic`, `aurora`, `mono`), dynamic test explorer with 12 subsystem domains (`test [domain]`, `--list`, `-v, --verbose`, `--bail`), multi-gate repository verification (`verify`), width-safe rendering (F-024), and pure machine-readable JSON output (`--json`).
+> **Current Implementation Reality (September 2026):**
+> * **Implemented & Verified:** Deterministic JavaScript/TypeScript multi-stage repository intelligence pipeline running natively on Bun (Discovery, Babel AST Parsing & Normalization, Scope & Symbol Extraction with `var` hoisting, Destructuring pattern extraction, Default parameter filtering, CommonJS exports & prototype methods, Module resolution & Dependency graphs, Semantic Call graphs with constructor instantiation resolution, Do-While & Basic-Block CFG, Def-Use DFG with interprocedural taint flow, Streaming JSON serialization with 64KB backpressure, Deep-frozen In-Memory and SQLite indexed storage providers with snapshot reuse and artifact restoration, Three-Universe fidelity validator, 10-point governance self-audit, and 3-run bit-for-bit determinism across Tier 1, 2, and 3 targets — verified by 1,001 tests across 113 files).
+> * **Security & Lifecycle Hardening:** Direct Git subprocess execution (`shell: false`), discovery manifest lexical and physical boundary containment verification, `.discovery` root and `manifest.json` symlink rejection, direct consumption of in-memory validated artifact bytes eliminating TOCTOU risk, recursive immutability on SQLite deserialization, loop fall-through correction, awaitable single-flight runtime shutdown barrier with primary error preservation, SQLite storage driver auto-inference and path validation, terminal event reduction lifecycle handling with stale metadata cleanup, atomic durable event sequence reservation, Windows drive-letter path canonicalization, lexical shadowing precision, and demand-driven finally CFG instantiation.
+> * **CLI Foundation:** Comprehensive terminal interface with 3 themes (`classic`, `aurora`, `mono`), discovery options (`--refresh`, `--storage-driver`, `--storage-path`), dynamic test explorer with 12 subsystem domains (`test [domain]`, `--list`, `-v, --verbose`, `--bail`), multi-gate repository verification (`verify`), width-safe rendering (F-024), and pure machine-readable JSON output (`--json`).
 > * **Target Architecture (Future Vision):** Unified IR/SSA intermediate representation, AI Gateway proxying, ZelvoxForge multi-agent code generation swarms, VymosGate isolated compiler sandboxes, and Rust/Axum/SQLx synthesis are planned target architecture and are not present in current core implementation.
 > * **Migration Safety Verdict:** Sample-based validation across 25 representative files per target establishes 100% sample recall, but whole-repository migration safety is strictly maintained as `MIGRATION_SAFETY_NOT_YET_ESTABLISHED`.
 
@@ -61,8 +62,8 @@ flowchart TD
     end
 
     subgraph Stage2 ["Stage 2: NolaraStruct - Understanding (Implemented)"]
-        C -->|AST Extraction & Token Diet| D["Unified Intermediate Representation"]
-        D -->|Symbol Resolution & CFG/DFG| E[("SQLite Storage & Knowledge Graph")]
+        C -->|AST Parsing & Normalization| D["Normalized AST & Symbol Tables"]
+        D -->|Call Graph & CFG/DFG Flow Analysis| E[("In-Memory / SQLite Storage & Knowledge Graph")]
     end
 
     subgraph Stage3 ["Stage 3: ZelvoxForge - Transformation (Target Architecture)"]
@@ -234,7 +235,7 @@ flowchart LR
     A["Actor / Agent"] -->|Issues| B["Command"]
     B -->|Zero-Trust Policy| C["Governance Engine"]
     C -->|Validated| D["Orchestrator Committer"]
-    D -->|Append-Only| E[("Event Store .jsonl")]
+    D -->|Append-Only| E[("Event Store (InMemory / .jsonl Planned)")]
     E -->|Synchronous Reducers| F[("SQLite Projections")]
     E -->|Async Broadcast| G["WebSocket / UI Views"]
     F -->|Read-Only| H["Queries"]
@@ -303,18 +304,18 @@ flowchart TD
 
 ### Component Responsibility & Ownership Matrix
 
-| Component | Primary Ownership | Secondary Stakeholder | Core Responsibilities |
-|---|---|---|---|
-| **CLI** | Platform DX | Core Platform | Ingests user commands, parses flags, displays live progress DAGs, renders diffs, and manages exit codes. |
-| **Orchestrator** | Core Platform | Architecture Governance | Central execution brain. Manages stage progression, task queues, retries, stateful checkpoints, and OCC event commits. |
-| **Discovery Service** | Static Analysis | Core Modeling | Sandboxed directory traversal, language fingerprinting, dependency discovery, and `.discovery/*.json` projection. |
-| **Parser Service** | Language Infrastructure | Static Analysis | AST parsing, token extraction, "Token Diet" metadata stripping, and UIR generation. |
-| **Graph Service** | Core Modeling | Governance | Builds dependency graphs, call hierarchies, circularity detection, and blast-radius impact queries. |
-| **Knowledge Service** | Architecture Intelligence | Governance | Aggregates symbols, graph slices, and business rules into scoped context bundles with full provenance chains. |
-| **AI Gateway** | AI Platform & Safety | Security | Zero-Trust LLM proxy. Performs prompt assembly, secret redaction, token budgeting, model routing, and output schema validation. |
-| **Compiler Service** | Language Infrastructure | Build & Toolchain | Interfaces with native compiler toolchains (`cargo check`, `cargo test`, `clippy`) inside isolated sandboxes. |
-| **Governance Engine** | Architecture Governance | Security | Evaluates deterministic security rules, SAST policies, risk scoring, and Human-in-the-Loop approval gates. |
-| **Storage Service** | Data Platform | Reliability Engineering | System-of-record. Manages append-only `.jsonl` logs, SQLite projections, Parquet graphs, and content-addressed artifact blobs. |
+| Component | Primary Ownership | Secondary Stakeholder | Core Responsibilities | Implementation Status |
+|---|---|---|---|:---:|
+| **CLI** | Platform DX | Core Platform | Ingests user commands, parses flags, displays live progress DAGs, renders diffs, and manages exit codes. | **`IMPLEMENTED`** |
+| **Orchestrator** | Core Platform | Architecture Governance | Central execution brain. Manages stage progression, task queues, retries, stateful checkpoints, and OCC event commits. | **`IMPLEMENTED`** |
+| **Discovery Service** | Static Analysis | Core Modeling | Sandboxed directory traversal, language fingerprinting, dependency discovery, and `.discovery/*.json` projection. | **`IMPLEMENTED`** |
+| **Parser Service** | Language Infrastructure | Static Analysis | AST parsing, token mapping, "Token Diet" metadata stripping, and AST normalization (`ASTResult`). | **`IMPLEMENTED`** |
+| **Graph Service** | Core Modeling | Governance | Builds dependency graphs, call hierarchies, circularity detection, and blast-radius impact queries. | **`IMPLEMENTED`** |
+| **Knowledge Service** | Architecture Intelligence | Governance | Aggregates symbols, graph slices, and business rules into scoped context bundles with full provenance chains. | **`IMPLEMENTED`** |
+| **AI Gateway** | AI Platform & Safety | Security | Zero-Trust LLM proxy. Performs prompt assembly, secret redaction, token budgeting, model routing, and output schema validation. | **`TARGET ARCHITECTURE`** |
+| **Compiler Service** | Language Infrastructure | Build & Toolchain | Interfaces with native compiler toolchains (`cargo check`, `cargo test`, `clippy`) inside isolated sandboxes. | **`TARGET ARCHITECTURE`** |
+| **Governance Engine** | Architecture Governance | Security | Evaluates deterministic security rules, SAST policies, risk scoring, fidelity validation, and Human-in-the-Loop approval gates. | **`CORE IMPLEMENTED`** |
+| **Storage Service** | Data Platform | Reliability Engineering | System-of-record. Manages in-memory event storage, SQLite/in-memory projections, and discovery projections (`.discovery/*.json`). Append-only `.jsonl` persistence logs are planned for target architecture. | **`IMPLEMENTED`** |
 
 ---
 
@@ -352,6 +353,15 @@ COMMANDS
 ```bash
 # Switch visual theme
 legacy-exodus status --theme aurora
+
+# Analyze repository and stream discovery inventory to stdout in JSON
+legacy-exodus analyze ./my-app --json
+
+# Force fresh discovery, bypassing valid cached snapshots
+legacy-exodus analyze ./my-app --refresh
+
+# Persist analysis to SQLite database (auto-infers sqlite storage driver)
+legacy-exodus analyze ./my-app --storage-path ./workspace.db
 
 # List test domain taxonomy
 legacy-exodus test --list
@@ -513,17 +523,17 @@ flowchart LR
     A[("Legacy Repo")] --> B["VyrixScout"]
     B --> C["inventory.json"]
     C --> D["NolaraStruct"]
-    D --> E[("UIR & Knowledge Graph")]
+    D --> E[("Semantic & Knowledge Graph")]
     E --> F["ZelvoxForge"]
     F --> G["Rust Crates + Trace Map"]
     G --> H["VymosGate Sandbox"]
     H --> I[("Validated Production Rust")]
 
     subgraph DurableStores ["Durable Stores"]
-        J[("Event Store .jsonl")]
-        K[("SQLite Projections")]
-        L[("Parquet KG Store")]
-        M[("Artifact Store")]
+        J[("Event Store (InMemory / .jsonl Planned)")]
+        K[("Projections (SQLite / In-Memory)")]
+        L[("Discovery Projections .discovery/*.json")]
+        M[("Target Artifact Store (Target Architecture)")]
     end
 
     B -.-> J
@@ -533,11 +543,11 @@ flowchart LR
 ```
 
 ### Primary Storage Tiers
-1. **Event Store:** Append-only `.jsonl` files (the ground truth for all state transitions).
-2. **Artifact Store:** Content-addressed, hash-verified immutable files and code bundles.
-3. **Knowledge Graph Store:** Parquet and SQLite databases for node/edge relationship queries.
+1. **Event Store:** `InMemoryEventStore` is the active runtime event store; append-only `.jsonl` disk persistence is planned as target architecture.
+2. **Artifact Store:** Current Stage 1 discovery projections write fixed logical files (`.discovery/*.json`) with atomic temporary replacement and manifest hash recording (`manifest.json`). Content-addressed, hash-verified immutable per-run artifact storage is planned as target architecture.
+3. **Knowledge Graph Store:** In-memory and SQLite databases (with Parquet columnar exports planned as target architecture) for node/edge relationship queries.
 4. **Operational Metadata Store:** Task queues, locks, retries, and approval states.
-5. **Projection Store:** Query-optimized SQLite read models for CLI, API, and UI queries (`SqliteStorageProvider`).
+5. **Projection Store:** Query-optimized read models via SQLite or in-memory storage for CLI, API, and UI queries (`SqliteStorageProvider` / `MemoryStorageProvider`).
 
 ### Resumable Checkpoints
 Checkpoints are created atomically at:
@@ -595,8 +605,8 @@ Class XL (Monorepo) ──► Enterprise monorepos with multi-tenant namespace p
 ├────────────────────────┼────────────────────────────────────────────────────────┤
 │ Validation & Contracts │ OpenAPI + Zod (Strict runtime schema boundaries)       │
 ├────────────────────────┼────────────────────────────────────────────────────────┤
-│ Persistence Stores     │ Append-only .jsonl (Events), SQLite / Postgres         │
-│                        │ (Projections), Parquet (Knowledge Graph)               │
+│ Persistence Stores     │ InMemoryEventStore (Planned: .jsonl), SQLite /         │
+│                        │ In-Memory Projections, Discovery Projections (.json)   │
 ├────────────────────────┼────────────────────────────────────────────────────────┤
 │ Observability          │ OpenTelemetry-compatible tracing, Pino logging         │
 └────────────────────────┴────────────────────────────────────────────────────────┘
@@ -664,7 +674,7 @@ git diff --check
 All claims in LegacyExodus are grounded in reproducible automated test suites, multi-tier real-repository benchmarks, and cryptographic provenance locks.
 
 ### 17.1 Test Suite & Static Typing
-* **Full Test Suite:** `bun test` $\to$ **800 / 800 passing tests across 92 files** (8,536 assertions, 0 failures, ~30s runtime).
+* **Full Test Suite:** `bun test` $\to$ **1,001 / 1,001 passing tests across 113 files** (9,388 assertions, 0 failures, ~30s runtime).
 * **TypeScript Type Checking:** `bun run typecheck` $\to$ **0 errors**.
 * **Benchmark Governance Audit:** `bun run benchmark audit` $\to$ **10 / 10 checks passed (`PASS`)**.
 * **Repository Verification Dashboard:** `bun run verify` $\to$ **4 / 4 gates passed (`PASS`)**.
@@ -721,7 +731,7 @@ For deeper technical documentation, refer to the following canonical resources:
 * **[CHANGELOG.md](../CHANGELOG.md):** Detailed release history, verified fixes, and milestone summaries.
 * **[SUPPORT.md](../SUPPORT.md):** Technical support policies, bug reporting guidelines, and maintainers.
 * **[CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md):** Contributor Covenant community code of conduct.
-* **[.github/CODEOWNERS](../../.github/CODEOWNERS):** Repository code ownership mappings.
+* **[.github/CODEOWNERS](../.github/CODEOWNERS):** Repository code ownership mappings.
 * **[docs/PROJECT_CONTEXT.md](PROJECT_CONTEXT.md):** Foundational architecture context and pipeline specifications.
 * **[docs/DOCUMENTATION_MAP.md](DOCUMENTATION_MAP.md):** Master documentation index and knowledge routing.
 * **[docs/development/contribution-guide.md](development/contribution-guide.md):** Contributor workflows, testing standards, and Definition of Done.

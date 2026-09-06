@@ -13,7 +13,7 @@ LegacyExodus is built natively on **Bun** and requires a modern TypeScript runti
 | **Bun** | `1.3.0` | `1.3.14+` | Native JavaScript/TypeScript runtime and package manager |
 | **Node.js** *(Optional)* | `18.0.0` | `20.x LTS` | Only needed if invoking legacy external tooling |
 | **Git** | `2.40+` | Latest | Standard version control |
-| **TypeScript** | `5.0+` | `5.9.x` | Managed via `devDependencies` |
+| **TypeScript** | `7.0+` | `7.0.x` | Managed via `devDependencies` |
 
 ---
 
@@ -59,7 +59,7 @@ Run the quality gate commands to confirm your local setup:
 # 1. Type check the entire codebase
 bun run typecheck
 
-# 2. Run the test suite (800 tests across 92 files)
+# 2. Run the test suite (1,001 tests across 113 files)
 bun test
 
 # 3. Verify benchmark governance checks

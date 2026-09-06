@@ -53,6 +53,6 @@ git diff --check         # Zero whitespace or merge conflict artifacts
 
 ## 5. Pull Request Submission
 
-1. Use the provided [PR Template](.github/PULL_REQUEST_TEMPLATE.md).
+1. Use the provided [PR Template](.github/pull_request_template.md).
 2. Fill out all sections: Summary, Scope, Implementation, Tests, Benchmark Impact, Security Impact, Documentation Impact, and Checklist.
 3. Link the corresponding GitHub issue (e.g. `Closes #123`).

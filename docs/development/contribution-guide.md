@@ -9,7 +9,7 @@ LegacyExodus is a deterministic, compiler-style static analysis and modernizatio
 ## 1. Prerequisites & Environment
 
 * **Runtime:** [Bun](https://bun.sh) version `>=1.3.0` (Native execution environment)
-* **Language:** TypeScript 5.x (Strict mode enabled)
+* **Language:** TypeScript 7.x (Strict mode enabled)
 * **Version Control:** Git
 
 Verify your local environment:
