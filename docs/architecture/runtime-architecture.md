@@ -112,20 +112,20 @@ The run advances through four ordered stages:
    - output: discovery manifest
    - emits: `DiscoveryStarted`, `DiscoveryCompleted`
 
-2. **NolaraStruct (Understand)**
+2. **NolaraStruct (Understand) `[IMPLEMENTED]`**
    - parse source/assets
-   - build semantic model + dependency graph
-   - output: unified intermediate representation (UIR)
+   - build semantic model + dependency graph + CFG/DFG flow analysis
+   - output: normalized AST, symbol tables, dependency/call graphs, CFG/DFG projections (UIR is planned target architecture)
    - emits: `StructuringStarted`, `GraphBuilt`, `StructuringCompleted`
 
-3. **ZelvoxForge (Transform)**
+3. **ZelvoxForge (Transform) `[TARGET ARCHITECTURE]`**
    - generate transformation plans and modernization candidates
    - apply safe transformations in controlled batches
    - request HITL approval for high-risk deltas
    - output: transformed artifacts + rationale
    - emits: `TransformationProposed`, `TransformationApplied`, `ApprovalRequired`, `ApprovalGranted`
 
-4. **VymosGate (Validate)**
+4. **VymosGate (Validate) `[TARGET ARCHITECTURE]`**
    - run policy, security, consistency, and quality checks
    - execute equivalence/regression gates
    - output: validation report + release readiness decision

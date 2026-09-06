@@ -48,6 +48,9 @@ The LegacyExodus documentation system is designed as a layered knowledge archite
 * **[ROADMAP.md](../ROADMAP.md):** Track and milestone progress tracker distinguishing Completed, In Progress, Planned, and Target Architecture.
 * **[CHANGELOG.md](../CHANGELOG.md):** Chronological log of all version releases, verified fixes, and milestone accomplishments.
 * **[CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md):** Contributor Covenant v2.1 community code of conduct.
+* **[AGENTS.md](../AGENTS.md):** Agent working agreements, branch mapping, clean worktree rules, and prompt engineering protocols.
+* **[docs/governance/PERMANENT_CHARTER.md](governance/PERMANENT_CHARTER.md):** Constitutional repository charter, boundary invariants, anti-hallucination rules, and red-team review protocols.
+* **[docs/governance/AGENT_OPERATING_MODEL.md](governance/AGENT_OPERATING_MODEL.md):** Detailed agent workflows, 19-step forensic remediation sequence, and reporting contracts.
 
 
 #### 2. Core Context & Operational Rules (Canonical & Populated)
@@ -139,5 +142,5 @@ The LegacyExodus documentation system is designed as a layered knowledge archite
 ## 5. Maintenance & Ownership Rules
 
 1. **Reality Over Aspiration:** Never document planned features as implemented.
-2. **Single Source of Truth:** High-level metrics must point to verified test and benchmark counts (e.g. 800 tests / 92 files / 8,536 assertions).
+2. **Single Source of Truth:** High-level metrics must point to verified test and benchmark counts (e.g. 1,001 tests / 113 files / 9,388 assertions).
 3. **No Drift:** Whenever a milestone is completed, update `CHANGELOG.md`, `ROADMAP.md`, and `README.md` concurrently.

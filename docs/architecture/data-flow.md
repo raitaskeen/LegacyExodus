@@ -77,19 +77,28 @@ Validated Modernized Output
 - Domain boundaries and ownership zones are inferred
 
 **Output artifacts (Knowledge Graph package)**
+*Current Implementation:*
+- `symbol-table.json` (declarations, lexical scopes, hoisted variables, exports)
+- `dependency-graph.json` (module resolution, import/export bindings, cycles)
+- `call-graph.json` (resolved calls, constructor instantiations, dead code)
+- `control-flow.json` (basic-block CFG, branch targets, exception flow)
+- `data-flow.json` (def-use chains, variable lifetimes, interprocedural taint flow)
+- SQLite database projections and in-memory knowledge graph stores
+
+*Target Architecture (Planned):*
 - `uir.bundle` (Unified Intermediate Representation)
-- `kg.nodes.parquet` (entities: modules, services, tables, APIs, jobs)
-- `kg.edges.parquet` (depends-on, calls, reads, writes, emits, consumes)
+- `kg.nodes.parquet` (columnar entities: modules, services, tables, APIs, jobs)
+- `kg.edges.parquet` (columnar relationships: depends-on, calls, reads, writes, emits, consumes)
 - `contracts.json` (API/schema/event contracts)
 - `ownership-map.json` (team/domain ownership hints)
 - `struct-report.md`
 
 ---
 
-## 1.3 Knowledge Graph -> ZelvoxForge (Transform)
+## 1.3 Knowledge Graph -> ZelvoxForge (Transform) `[TARGET ARCHITECTURE]`
 
 **Input**
-- UIR + Knowledge Graph
+- Knowledge Graph (AST, symbols, CFG/DFG; UIR planned as target architecture)
 - Policy profile (security, compliance, coding standards)
 - Target architecture constraints (Rust runtime, async model, interface strategy)
 
