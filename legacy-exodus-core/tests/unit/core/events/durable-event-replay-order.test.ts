@@ -59,4 +59,41 @@ describe("Durable Event Replay Ordering", () => {
     // Durable commit order must prevail over non-monotonic or equal timestamps:
     expect(loadedTypes).toEqual(["EventA0", "EventA1", "EventB0", "EventB1"]);
   });
+
+  it("replays events with identical timestamps in durable sequence order (Case D)", async () => {
+    const storage = new StorageManager(new MemoryStorageProvider());
+    const projectId = "00000000-0000-4000-8000-000000000002";
+    const exactSameTime = new Date("2026-09-06T00:00:00.000Z");
+
+    const event0: DomainEvent = {
+      id: "00000000-0000-4000-8000-000000000030",
+      type: "FirstCommitted",
+      timestamp: exactSameTime,
+      aggregateId: projectId,
+      payload: {},
+    };
+    const event1: DomainEvent = {
+      id: "00000000-0000-4000-8000-000000000031",
+      type: "SecondCommitted",
+      timestamp: exactSameTime,
+      aggregateId: projectId,
+      payload: {},
+    };
+    const event2: DomainEvent = {
+      id: "00000000-0000-4000-8000-000000000032",
+      type: "ThirdCommitted",
+      timestamp: exactSameTime,
+      aggregateId: projectId,
+      payload: {},
+    };
+
+    await storage.saveBatch([
+      createDurableEventRecord(event0, 0),
+      createDurableEventRecord(event1, 1),
+      createDurableEventRecord(event2, 2),
+    ]);
+
+    const loaded = await loadDurableEvents(storage, projectId);
+    expect(loaded.map((e) => e.type)).toEqual(["FirstCommitted", "SecondCommitted", "ThirdCommitted"]);
+  });
 });

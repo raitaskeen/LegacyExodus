@@ -12,7 +12,12 @@ import {
   type StorageRecord,
   validateStorageRecord,
 } from "../storage-record";
-import type { StorageProvider, StorageQueryCriteria } from "../storage-provider";
+import type {
+  CommitBatchOptions,
+  EventBatchItem,
+  StorageProvider,
+  StorageQueryCriteria,
+} from "../storage-provider";
 
 export const SQLITE_SCHEMA_VERSION = 1;
 
@@ -38,6 +43,7 @@ export class SqliteStorageProvider implements StorageProvider {
   public readonly schemaVersion: number = SQLITE_SCHEMA_VERSION;
   private readonly db: Database;
   private readonly isInMemory: boolean;
+  private readonly maxSeqStmt: any;
 
   public constructor(options: SqliteStorageOptions = {}) {
     this.isInMemory = options.inMemory ?? (!options.databasePath || options.databasePath === ":memory:");
@@ -58,6 +64,12 @@ export class SqliteStorageProvider implements StorageProvider {
       this.db.run("PRAGMA temp_store = MEMORY;");
 
       this.initializeSchema();
+
+      this.maxSeqStmt = this.db.prepare(`
+        SELECT COALESCE(MAX(CAST(json_extract(payload, '$.sequence') AS INTEGER)), -1) as max_seq
+        FROM storage_records
+        WHERE type = 'domain-event' AND project_id = ?
+      `);
     } catch (error: unknown) {
       this.db.close();
       throw error;
@@ -90,41 +102,29 @@ export class SqliteStorageProvider implements StorageProvider {
       this.db.run(`CREATE INDEX IF NOT EXISTS idx_records_type ON storage_records(type);`);
       this.db.run(`CREATE INDEX IF NOT EXISTS idx_records_run ON storage_records(project_id, analysis_run_id);`);
       this.db.run(`CREATE INDEX IF NOT EXISTS idx_records_file ON storage_records(type, file_path);`);
+      this.db.run(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_durable_events_seq
+        ON storage_records(project_id, CAST(json_extract(payload, '$.sequence') AS INTEGER))
+        WHERE type = 'domain-event';
+      `);
 
       this.db.run(`PRAGMA user_version = ${SQLITE_SCHEMA_VERSION};`);
-    } else if (currentVersion !== SQLITE_SCHEMA_VERSION) {
+    } else if (currentVersion === SQLITE_SCHEMA_VERSION) {
+      this.db.run(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_durable_events_seq
+        ON storage_records(project_id, CAST(json_extract(payload, '$.sequence') AS INTEGER))
+        WHERE type = 'domain-event';
+      `);
+    } else {
       throw new StorageSchemaVersionMismatchError(SQLITE_SCHEMA_VERSION, currentVersion);
     }
   }
 
   public async save<Payload extends SerializedPayload>(record: StorageRecord<Payload>): Promise<void> {
-    const validatedRecord = validateStorageRecord(record);
-    const { projectId, analysisRunId, filePath } = extractRecordMetadata(validatedRecord.payload);
-    const payloadJson = JSON.stringify(validatedRecord.payload);
-
-    const stmt = this.db.prepare(`
-      INSERT INTO storage_records (id, type, project_id, analysis_run_id, file_path, payload, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        type = excluded.type,
-        project_id = excluded.project_id,
-        analysis_run_id = excluded.analysis_run_id,
-        file_path = excluded.file_path,
-        payload = excluded.payload,
-        updated_at = excluded.updated_at
-    `);
+    const stmt = this.createUpsertStatement();
 
     try {
-      stmt.run(
-        validatedRecord.id,
-        validatedRecord.type,
-        projectId,
-        analysisRunId,
-        filePath,
-        payloadJson,
-        validatedRecord.createdAt.getTime(),
-        validatedRecord.updatedAt.getTime(),
-      );
+      this.executeInsert(stmt, record);
     } finally {
       stmt.finalize();
     }
@@ -133,7 +133,59 @@ export class SqliteStorageProvider implements StorageProvider {
   public async saveBatch(records: readonly StorageRecord[]): Promise<void> {
     if (records.length === 0) return;
 
-    const stmt = this.db.prepare(`
+    const stmt = this.createUpsertStatement();
+
+    try {
+      const insertBatch = this.db.transaction((batchRecords: readonly StorageRecord[]) => {
+        for (const record of batchRecords) {
+          this.executeInsert(stmt, record);
+        }
+      });
+
+      insertBatch(records);
+    } finally {
+      stmt.finalize();
+    }
+  }
+
+  public async commitBatch(options: CommitBatchOptions): Promise<readonly StorageRecord[]> {
+    const stmt = this.createUpsertStatement();
+
+    try {
+      const executeTx = this.db.transaction((records: readonly StorageRecord[], events: readonly EventBatchItem[] = []) => {
+        const nextSeqByAgg = new Map<string, number>();
+        const durableRecords: StorageRecord[] = [];
+
+        for (const eventItem of events) {
+          let seq = nextSeqByAgg.get(eventItem.aggregateId);
+          if (seq === undefined) {
+            const row = this.maxSeqStmt.get(eventItem.aggregateId) as { max_seq: number } | null;
+            seq = (row?.max_seq ?? -1) + 1;
+          }
+          const record = eventItem.createRecord(seq);
+          durableRecords.push(record);
+          nextSeqByAgg.set(eventItem.aggregateId, seq + 1);
+        }
+
+        for (const record of records) {
+          this.executeInsert(stmt, record);
+        }
+
+        for (const record of durableRecords) {
+          this.executeInsert(stmt, record);
+        }
+
+        return durableRecords;
+      });
+
+      return executeTx.immediate(options.records, options.events ?? []);
+    } finally {
+      stmt.finalize();
+    }
+  }
+
+  private createUpsertStatement(): any {
+    return this.db.prepare(`
       INSERT INTO storage_records (id, type, project_id, analysis_run_id, file_path, payload, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
@@ -144,31 +196,23 @@ export class SqliteStorageProvider implements StorageProvider {
         payload = excluded.payload,
         updated_at = excluded.updated_at
     `);
+  }
 
-    try {
-      const insertBatch = this.db.transaction((batchRecords: readonly StorageRecord[]) => {
-        for (const record of batchRecords) {
-          const validatedRecord = validateStorageRecord(record);
-          const { projectId, analysisRunId, filePath } = extractRecordMetadata(validatedRecord.payload);
-          const payloadJson = JSON.stringify(validatedRecord.payload);
+  private executeInsert(stmt: any, record: StorageRecord): void {
+    const validatedRecord = validateStorageRecord(record);
+    const { projectId, analysisRunId, filePath } = extractRecordMetadata(validatedRecord.payload);
+    const payloadJson = JSON.stringify(validatedRecord.payload);
 
-          stmt.run(
-            validatedRecord.id,
-            validatedRecord.type,
-            projectId,
-            analysisRunId,
-            filePath,
-            payloadJson,
-            validatedRecord.createdAt.getTime(),
-            validatedRecord.updatedAt.getTime(),
-          );
-        }
-      });
-
-      insertBatch(records);
-    } finally {
-      stmt.finalize();
-    }
+    stmt.run(
+      validatedRecord.id,
+      validatedRecord.type,
+      projectId,
+      analysisRunId,
+      filePath,
+      payloadJson,
+      validatedRecord.createdAt.getTime(),
+      validatedRecord.updatedAt.getTime(),
+    );
   }
 
   public async findById<Payload extends SerializedPayload>(
@@ -251,6 +295,7 @@ export class SqliteStorageProvider implements StorageProvider {
   }
 
   public close(): void {
+    this.maxSeqStmt.finalize();
     this.db.close();
   }
 

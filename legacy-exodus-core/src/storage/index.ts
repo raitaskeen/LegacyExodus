@@ -28,4 +28,9 @@ export {
   type StorageRecord,
   type StorageRecordMetadata,
 } from "./storage-record";
-export type { StorageProvider, StorageQueryCriteria } from "./storage-provider";
+export type {
+  CommitBatchOptions,
+  EventBatchItem,
+  StorageProvider,
+  StorageQueryCriteria,
+} from "./storage-provider";

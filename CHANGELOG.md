@@ -9,11 +9,13 @@ and this project adheres to deterministic semantic contracts and verifiable engi
 
 ## [Unreleased]
 
-- **Durable Event Commit Order & Monotonic Sequence Allocation:**
-  - Hardened durable sequence generation in `Orchestrator`: decoupled sequence allocation from volatile in-memory `eventStore.size()`, introducing `getNextDurableSequence(storage, projectId)` to query persistent storage for the aggregate's highest committed sequence number.
-  - Ensured atomic, monotonic sequence progression across commands, surviving process restarts and subscriber delivery failures without reusing sequence numbers or clobbering existing journal entries.
-  - Hardened replay ordering in `loadDurableEvents`: sorted committed events by `sequence` first (`sequence || timestamp || id`), guaranteeing deterministic event ordering even under clock skew, identical timestamps, or non-monotonic system clocks.
-  - Expanded test baseline to **990/990 passing tests across 111 files** (9,328 assertions, 0 failures) with zero regressions across all 4 verification dashboard gates.
+- **Durable Event Atomic Sequence Reservation & Transactional Ordering (F-002):**
+  - Eliminated the read-modify-write concurrency window in durable event sequence allocation by introducing transactional batch commitment (`storage.commitBatch({ records, events })`) across both `SqliteStorageProvider` and `MemoryStorageProvider`.
+  - In `SqliteStorageProvider`: serialized sequence reservations and journal persistence within `BEGIN IMMEDIATE` transactions, querying the committed maximum sequence directly from storage and persisting facts and journal entries in a single atomic transaction.
+  - Enforced engine-level sequence uniqueness in SQLite via a partial unique index `idx_durable_events_seq` on `(project_id, sequence)` where `type = 'domain-event'`, physically preventing sequence collisions or duplicates across concurrent executions and multi-process writers.
+  - In `MemoryStorageProvider`: implemented synchronous per-aggregate sequence allocation and duplicate sequence checks, guaranteeing concurrency safety under asynchronous event loops.
+  - Refactored `Orchestrator.execute()` to commit execution domain records and journal events atomically via `storage.commitBatch()`, ensuring durable sequence allocation and event persistence share the exact same atomicity boundary before post-commit subscriber notification.
+  - Expanded test baseline to **993/993 passing tests across 111 files** (9,335 assertions, 0 failures) with zero regressions across all 4 verification dashboard gates.
 
 - **Semantic Call-Graph Lexical Shadowing Precision:**
   - Implemented lexical scope shadowing verification (`isLexicallyShadowed()`) in `DeterministicCallGraphBuilder`, enforcing strict ECMAScript scope precedence (`nearest lexical binding > enclosing lexical binding > file-level import > fallback/unresolved`).

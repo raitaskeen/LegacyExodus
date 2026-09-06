@@ -5,13 +5,13 @@ import {
 import { createProjectState } from "@core/state/state-factory";
 import type { ProjectState } from "@core/state/project-state";
 import { EventBus } from "@core/events/event-bus";
-import { createDurableEventRecord, getNextDurableSequence, loadDurableEvents } from "@core/events/durable-event-journal";
+import { createDurableEventRecord, loadDurableEvents } from "@core/events/durable-event-journal";
 import { reduceProjectState } from "@core/events/event-reducer";
 import { InMemoryEventStore } from "@core/events/event-store";
 import { DiscoveryEngine } from "@discovery/index";
 import { JavaScriptParser, ParserManager, ParserRegistry } from "@parser/index";
 import { LegacyExodusError } from "@shared/errors";
-import type { StorageManager, StorageRecord } from "@storage/index";
+import type { StorageManager } from "@storage/index";
 import { JavaScriptSymbolExtractor } from "@symbols/index";
 
 import type { RuntimeService } from "@runtime/application";
@@ -64,20 +64,16 @@ export class Orchestrator implements RuntimeService {
       const execution = await this.executeValidatedCommand(validatedCommand);
 
       const analysisRunId = validatedCommand.type === "AnalyzeProject" ? validatedCommand.id : undefined;
-      const nextSequenceByAggregate = new Map<string, number>();
-      const durableEvents: StorageRecord[] = [];
-      for (const event of execution.events) {
-        let seq = nextSequenceByAggregate.get(event.aggregateId);
-        if (seq === undefined) {
-          seq = await getNextDurableSequence(this.storage, event.aggregateId);
-        }
-        durableEvents.push(createDurableEventRecord(event, seq, analysisRunId));
-        nextSequenceByAggregate.set(event.aggregateId, seq + 1);
-      }
 
-      // Facts and their ordered event journal are one storage commit. EventBus delivery is
-      // deliberately post-commit and can be retried/replayed from this durable journal.
-      await this.storage.saveBatch([...execution.records, ...durableEvents]);
+      // Facts and their ordered event journal are committed in a single atomic transaction.
+      // EventBus delivery is deliberately post-commit and can be retried/replayed from this durable journal.
+      await this.storage.commitBatch({
+        records: execution.records,
+        events: execution.events.map((event) => ({
+          aggregateId: event.aggregateId,
+          createRecord: (sequence: number) => createDurableEventRecord(event, sequence, analysisRunId),
+        })),
+      });
 
       for (const event of execution.events) {
         this.eventStore.append(event);

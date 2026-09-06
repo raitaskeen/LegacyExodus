@@ -126,4 +126,76 @@ describe("durable event journal", () => {
       await rm(projectPath, { force: true, recursive: true });
     }
   });
+
+  test("concurrent executions for the same aggregate reserve unique, non-overlapping durable sequences", async (): Promise<void> => {
+    const storage = new StorageManager(new MemoryStorageProvider());
+    const projectId = "00000000-0000-4000-8000-000000000099";
+
+    const orch1 = new Orchestrator(new InMemoryEventStore(), new EventBus(), storage);
+    const orch2 = new Orchestrator(new InMemoryEventStore(), new EventBus(), storage);
+
+    const cmd1: InitializeProjectCommand = {
+      id: "00000000-0000-4000-8000-000000000001",
+      type: "InitializeProject",
+      createdAt: new Date(),
+      payload: { projectId, name: "Concurrent Project A" },
+    };
+
+    const cmd2: InitializeProjectCommand = {
+      id: "00000000-0000-4000-8000-000000000002",
+      type: "InitializeProject",
+      createdAt: new Date(),
+      payload: { projectId, name: "Concurrent Project B" },
+    };
+
+    // Trigger concurrent executions against the same storage
+    await Promise.all([orch1.execute(cmd1), orch2.execute(cmd2)]);
+
+    const records = await storage.findScoped({ type: "domain-event", projectId });
+    const sequences = records.map((r) => (r.payload as { readonly sequence: number }).sequence);
+
+    // Invariant 1: All durable sequence numbers for the aggregate must be strictly unique
+    expect(new Set(sequences).size).toBe(sequences.length);
+    expect(sequences.length).toBe(2);
+    expect(sequences.sort((a, b) => a - b)).toEqual([0, 1]);
+  });
+
+  test("concurrent executions against SQLite reserve unique, non-overlapping durable sequences", async (): Promise<void> => {
+    const tempDir = await mkdtemp(join(tmpdir(), "legacy-exodus-sqlite-concurrent-"));
+    const dbPath = join(tempDir, "concurrent.sqlite");
+    const provider = new SqliteStorageProvider({ databasePath: dbPath });
+    const storage = new StorageManager(provider);
+    const projectId = "00000000-0000-4000-8000-000000000098";
+
+    const orch1 = new Orchestrator(new InMemoryEventStore(), new EventBus(), storage);
+    const orch2 = new Orchestrator(new InMemoryEventStore(), new EventBus(), storage);
+
+    const cmd1: InitializeProjectCommand = {
+      id: "00000000-0000-4000-8000-000000000011",
+      type: "InitializeProject",
+      createdAt: new Date(),
+      payload: { projectId, name: "Concurrent Sqlite A" },
+    };
+
+    const cmd2: InitializeProjectCommand = {
+      id: "00000000-0000-4000-8000-000000000012",
+      type: "InitializeProject",
+      createdAt: new Date(),
+      payload: { projectId, name: "Concurrent Sqlite B" },
+    };
+
+    try {
+      await Promise.all([orch1.execute(cmd1), orch2.execute(cmd2)]);
+
+      const records = await storage.findScoped({ type: "domain-event", projectId });
+      const sequences = records.map((r) => (r.payload as { readonly sequence: number }).sequence);
+
+      expect(new Set(sequences).size).toBe(sequences.length);
+      expect(sequences.length).toBe(2);
+      expect(sequences.sort((a, b) => a - b)).toEqual([0, 1]);
+    } finally {
+      provider.close();
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
 });
