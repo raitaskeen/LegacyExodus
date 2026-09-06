@@ -24,11 +24,15 @@ Applies to AST parsing, symbol extraction, graph construction, data flow analysi
 
 ## 5. Operating Authority & Boundaries
 * **Strict Read-Only Mandate:** Performance Audit operates in a strictly **read-only** capacity.
+* **Workflow Preparation vs. Auditor Execution Partition:**
+  * **Workflow Preparation (Invoking Workflow / Human Maintainer Owned):** The invoking workflow or Human Maintainer MUST prepare an isolated checkout/workspace at the unchanged base commit BEFORE the performance auditor starts.
+  * **Auditor Execution (Performance Auditor Owned):** The performance auditor operates strictly against the already-prepared isolated workspace.
 * **Strict Invariants:**
-  1. **MUST NOT** modify files.
-  2. **MUST NOT** create RED regression tests.
-  3. **MUST NOT** commit.
-  4. **MUST NOT** push.
+  1. **MUST NOT** checkout branches or reset the workspace.
+  2. **MUST NOT** modify files.
+  3. **MUST NOT** create RED regression tests.
+  4. **MUST NOT** commit.
+  5. **MUST NOT** push.
 Performance auditors measure, benchmark, profile, and report evidence. They cannot remediate defects, cannot close findings, and cannot commit or push. The Builder / Remediation Agent remains the writing authority; the Human Maintainer remains the final authority.
 
 ---
@@ -47,9 +51,9 @@ Agents MUST explicitly classify memory and performance measurements into one of 
 
 ## 7. Operating Procedure
 
-### Step 1: Baseline Establishment
-* Check out the unchanged base commit.
-* Run the benchmark suite to capture the baseline performance:
+### Step 1: Baseline Establishment (Pre-Prepared Workspace)
+* **Precondition:** The invoking workflow or Human Maintainer has prepared an isolated checkout/workspace at the unchanged base commit. The auditor MUST NOT perform checkout or reset operations.
+* Run the benchmark suite against the pre-prepared base workspace to capture baseline performance:
   ```bash
   bun run benchmark audit
   bun run benchmark run express --runs 3

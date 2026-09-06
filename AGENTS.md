@@ -11,7 +11,7 @@
 
 > **EVIDENCE → FAILURE-FIRST TEST → ROOT CAUSE → SMALLEST SAFE CHANGE → STATIC TYPECHECK → FOCUSED TEST → FULL TEST → BENCHMARK AUDIT → DETERMINISM → RED TEAM → DIFF REVIEW → COMMIT → PUSH → STOP**
 
-This is the governing axiom for all LegacyExodus forensic remediation. The repository enforces a single, authoritative, non-negotiable remediation sequence. For the exact, deterministic 17-step sequence of execution, all agents MUST follow the **Canonical Forensic Remediation Sequence** in [`docs/governance/AGENT_OPERATING_MODEL.md`](docs/governance/AGENT_OPERATING_MODEL.md#41-canonical-forensic-remediation-sequence). You MUST NOT reorder, abbreviate, or bypass this sequence, nor define a competing workflow.
+This is the governing axiom for all LegacyExodus forensic remediation. The repository enforces a single, authoritative, non-negotiable remediation sequence. For the exact, deterministic 20-step sequence of execution, all agents MUST follow the **Canonical Forensic Remediation Sequence** in [`docs/governance/AGENT_OPERATING_MODEL.md`](docs/governance/AGENT_OPERATING_MODEL.md#41-canonical-forensic-remediation-sequence). You MUST NOT reorder, abbreviate, or bypass this sequence, nor define a competing workflow.
 
 For detailed constitutional standards and multi-agent roles, refer to:
 * **Constitutional Charter:** [`docs/governance/PERMANENT_CHARTER.md`](docs/governance/PERMANENT_CHARTER.md)
@@ -82,9 +82,12 @@ Remediation agents (Builders) have scoped mutation authority and MUST process ex
 2. Formulating a failure-first minimal reproduction and RED test prior to any code modification.
 3. Applying the smallest safe architectural change that addresses root cause.
 4. Passing all verification gates (focused test, static typecheck, full test suite, benchmark audit, CLI smoke test).
-5. Producing the comprehensive verification completion report invoking the 10-layer contract from `.agents/skills/legacyexodus-test-verification/`.
-6. Performing diff hygiene review, atomic commit, and remote push.
-7. Stopping immediately upon push confirmation.
+5. Undergoing adversarial Red-Team review gate (Step 13) and resolving any counter-examples by returning to Step 7.
+6. Performing diff and scope hygiene review (Step 14).
+7. Compiling draft verification report with pending operations explicitly marked PENDING (Step 15).
+8. Performing atomic conventional commit and remote push (Steps 16–17).
+9. Verifying post-push clean worktree and producing final completion report with zero PENDING placeholders (Steps 18–19).
+10. Mandatory hard stop upon push and postcondition verification (Step 20).
 
 #### 2. Review, Audit & Research Agents (`legacyexodus-code-audit`, `legacyexodus-docs-audit`, `legacyexodus-performance-audit`, `legacyexodus-red-team-review`)
 All four review and audit skills operate in a strictly **non-destructive, read-only** (or challenge-only) capacity.

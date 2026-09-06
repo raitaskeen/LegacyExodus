@@ -23,6 +23,9 @@ Applies to Pull Requests, bug remediations, architectural refactors, and externa
 
 ## 5. Operating Authority & Boundaries
 * **Strict Read-Only & Challenge-Only Mandate:** Red Team Review operates in a strictly **read-only and challenge-only** capacity.
+* **Workflow Preparation vs. Auditor Execution Partition:**
+  * Potentially mutating verification commands (e.g., `bun run verify`, which executes `bun test --coverage` writing coverage reports, and `bun run benchmark audit` deleting/writing `.discovery` cache artifacts) MUST execute ONLY in an isolated verification checkout/workspace prepared by the invoking workflow or Human Maintainer.
+  * The Red-Team reviewer workspace itself remains strictly read-only. Commands known to mutate `coverage/`, benchmark discovery artifacts (`.cache/`, `.discovery`), temporary files, or other repository state MUST NEVER execute directly within the Red-Team inspection workspace.
 * **Strict Invariants:**
   1. **MUST NOT** modify files.
   2. **MUST NOT** create RED regression tests.
@@ -75,17 +78,19 @@ The Red Team MUST systematically interrogate the candidate change against these 
 * Formulate a minimal code scenario designed to break the proposed fix:
   * Example: If the fix isolates function expressions, test curried arrow functions, method shorthands, and getter/setter methods.
 
-### Step 4: Verification Gate Audit
-* Execute the verification gate:
+### Step 4: Verification Gate Audit (Isolated Verification Environment)
+* **Precondition:** The invoking workflow or Human Maintainer executes verification within an isolated verification checkout/workspace, or provides verified execution logs from that environment.
+* Because `bun run verify` executes test suites that emit coverage output and benchmark audits that mutate cache/discovery artifacts (`.cache/`, `.discovery`), the Red-Team reviewer MUST NOT run mutating verification directly inside its read-only inspection workspace.
+* Review the verification gate execution logs from the isolated environment:
   ```bash
   bun run verify
   ```
-* Ensure that all 4 gates pass without warnings.
+* Ensure that all 4 gates pass without warnings (Static Typecheck, Test Suite, Benchmark Governance, and Git Working Tree Hygiene).
 
 ### Step 5: Verdict Generation
 Issue an explicit verdict:
-* **`RED-TEAM FAIL`**: Concrete defect, unhandled counter-example, or weakened test identified. The cycle returns to the Builder with reproduction details to execute **Step 7: Apply Smallest Safe Change** of the Canonical Forensic Remediation Sequence (in [`docs/governance/AGENT_OPERATING_MODEL.md`](../../../docs/governance/AGENT_OPERATING_MODEL.md#41-canonical-forensic-remediation-sequence)). The existing minimal reproduction and RED test remain valid and are preserved; the Builder updates the implementation to resolve the counter-example, then re-runs Step 8 (Focused Test Verification) and all downstream verification gates.
-* **`RED-TEAM PASS`**: All 11 questions answered satisfactorily, verified by evidence.
+* **`RED-TEAM FAIL`**: Concrete defect, unhandled counter-example, or weakened test identified. The cycle returns to the Builder with reproduction details to execute **Step 7: Apply Smallest Safe Change** of the Canonical Forensic Remediation Sequence (in [`docs/governance/AGENT_OPERATING_MODEL.md`](../../../docs/governance/AGENT_OPERATING_MODEL.md#41-canonical-forensic-remediation-sequence)). The existing minimal reproduction and RED test remain valid and are preserved; the Builder updates the implementation to resolve the counter-example, then re-runs Step 8 (Focused Test Verification) and all downstream verification gates (Steps 9–13).
+* **`RED-TEAM PASS`**: All 11 questions answered satisfactorily, verified by evidence. Progression to Step 14 (Diff & Scope Hygiene Review) is authorized.
 
 ---
 

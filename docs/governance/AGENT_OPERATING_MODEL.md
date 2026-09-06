@@ -121,14 +121,14 @@ flowchart TD
 ### 4.1 Canonical Forensic Remediation Sequence
 
 > **AUTHORITATIVE TRUTH NOTICE:**
-> This section is the repository's **single source of truth** for the forensic code remediation sequence. All engineering agents, copilots, and autonomous assistants MUST execute this exact 17-step sequence in strict, deterministic order. No other document, skill, or instruction may define a competing or independent remediation sequence.
+> This section is the repository's **single source of truth** for the forensic code remediation sequence. All engineering agents, copilots, and autonomous assistants MUST execute this exact 20-step sequence in strict, deterministic order. No other document, skill, or instruction may define a competing or independent remediation sequence.
 
-Every code remediation executed by an engineering agent MUST follow this 17-step pipeline within the canonical package root `legacy-exodus-core/` (as documented in [`GOVERNANCE.md`](../../GOVERNANCE.md) and [`CONTRIBUTING.md`](../../CONTRIBUTING.md)):
+Every code remediation executed by an engineering agent MUST follow this 20-step pipeline within the canonical package root `legacy-exodus-core/` (as documented in [`GOVERNANCE.md`](../../GOVERNANCE.md) and [`CONTRIBUTING.md`](../../CONTRIBUTING.md)):
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                 CANONICAL FORENSIC REMEDIATION SEQUENCE                     │
-│               Single Authoritative Truth (Steps 1 through 17)                │
+│               Single Authoritative Truth (Steps 1 through 20)               │
 └─────────────────────────────────────────────────────────────────────────────┘
   1. PRE-FLIGHT VALIDATION      ──► Clean tree, branch from origin/<base-branch>
   2. EVIDENCE COLLECTION        ──► Inspect live source, ASTs, contracts, logs
@@ -142,11 +142,14 @@ Every code remediation executed by an engineering agent MUST follow this 17-step
  10. FULL TEST SUITE            ──► bun test (100% pass across 113+ files)
  11. BENCHMARK GOVERNANCE AUDIT ──► bun run benchmark audit (10/10 pass)
  12. CLI SMOKE VERIFICATION     ──► bun run src/cli/index.ts --help (exit 0)
- 13. DIFF & HYGIENE REVIEW      ──► git diff --stat & git diff --check clean
- 14. COMPLETION REPORT          ──► 10-layer verification_report & memory state
- 15. ATOMIC COMMIT              ──► Conventional Commit with co-authorship
- 16. REMOTE PUSH & POST-CHECK   ──► Push origin <task-branch>; clean tree check
- 17. MANDATORY HARD STOP        ──► Cease execution; output report; await human
+ 13. ADVERSARIAL RED-TEAM GATE  ──► Read-only challenge; RED-TEAM PASS required
+ 14. DIFF & HYGIENE REVIEW      ──► git diff --stat & git diff --check clean
+ 15. DRAFT VERIFICATION REPORT  ──► Compile pre-commit report (commit/push PENDING)
+ 16. ATOMIC COMMIT              ──► Conventional Commit with co-authorship
+ 17. REMOTE PUSH                ──► Push to origin <task-branch>
+ 18. POST-PUSH WORKTREE CHECK   ──► git status confirms clean tree post-push
+ 19. FINAL COMPLETION REPORT    ──► Finalize report with commit SHA & push evidence
+ 20. MANDATORY HARD STOP        ──► Cease execution; output report; await human
 ```
 
 #### Detailed Step Execution Contract
@@ -181,7 +184,7 @@ Every code remediation executed by an engineering agent MUST follow this 17-step
 7. **Step 7: Apply Smallest Safe Change**
    * Apply the minimal, surgical implementation change exclusively to `legacy-exodus-core/src/`.
    * Refactoring adjacent code, renaming unrelated identifiers, or modifying untouched contracts is strictly prohibited.
-   * *Adversarial Loopback:* If a downstream Red-Team Review renders a `RED-TEAM FAIL`, the workflow returns directly to this step (**Step 7**). The existing minimal reproduction and RED test remain valid and are preserved; the Builder updates the implementation to resolve the counter-example, then re-runs Step 8 and all downstream verification gates.
+   * *Adversarial Loopback:* If a downstream Red-Team Review renders a `RED-TEAM FAIL` in Step 13, the workflow returns directly to this step (**Step 7**). The existing minimal reproduction and RED test remain valid and are preserved; the Builder updates the implementation to resolve the counter-example, then re-runs Step 8 and all downstream verification gates (Steps 9–13).
 
 8. **Step 8: Focused Test Verification**
    * Re-execute the focused regression test:
@@ -218,7 +221,15 @@ Every code remediation executed by an engineering agent MUST follow this 17-step
       ```
     * Confirm clean help output emission and exit code 0.
 
-13. **Step 13: Diff & Scope Hygiene Review**
+13. **Step 13: Adversarial Red-Team Review Gate**
+    * Mandatory checkpoint prior to diff review and commit.
+    * The Red-Team reviewer executes the adversarial review protocol defined in [`.agents/skills/legacyexodus-red-team-review/SKILL.md`](../../.agents/skills/legacyexodus-red-team-review/SKILL.md), operating strictly under read-only/challenge-only authority against an isolated verification environment.
+    * Red-Team evaluates the change against the 11 probing questions and issues a formal verdict:
+      * **`RED-TEAM PASS`**: All 11 questions answered satisfactorily; proceed to Step 14.
+      * **`RED-TEAM FAIL`**: Defect, unhandled counter-example, or weakened test detected. Cycle returns directly to **Step 7: Apply Smallest Safe Change**. The original minimal reproduction and RED test remain preserved; the Builder resolves the defect, then re-runs Step 8 and downstream gates (Steps 9–13).
+    * The Red-Team agent itself NEVER modifies source code or tests.
+
+14. **Step 14: Diff & Scope Hygiene Review**
     * Run diff checks:
       ```bash
       git diff --stat
@@ -226,35 +237,44 @@ Every code remediation executed by an engineering agent MUST follow this 17-step
       ```
     * Ensure zero trailing whitespace, zero merge conflict artifacts, and that only intended files are modified.
 
-14. **Step 14: Verification & Completion Report**
-    * Compile the standard completion report explicitly incorporating the 10-layer `verification_report` contract defined in `.agents/skills/legacyexodus-test-verification/SKILL.md`.
-    * Record total test files, passed/failed tests, total `expect()` assertion calls, all 10 verification layers with explicit results and evidence, static typecheck status, benchmark audit status, CLI smoke status, diff hygiene, memory classification status, and pre/post worktree checks.
+15. **Step 15: Draft Verification Report Compilation**
+    * Compile the draft verification report capturing all gate results, 10-layer verification evidence, test metrics, and memory status.
+    * *Draft Temporal Guard:* Future events that have not yet occurred MUST be explicitly marked `PENDING` (e.g., `COMMIT SHA: PENDING`, `REMOTE PUSH: PENDING`, `WORKTREE POSTCONDITION: PENDING`). Agents MUST NOT falsely populate commit SHAs, push confirmations, or post-push statuses prior to actual execution.
 
-15. **Step 15: Atomic Conventional Commit**
+16. **Step 16: Atomic Conventional Commit**
     * Stage exclusively the modified implementation and test files (`git add <file>`).
     * Create an atomic commit following Conventional Commits format with appropriate co-authorship trailers.
+    * Record the actual generated commit SHA and commit subject.
 
-16. **Step 16: Remote Push & Post-Check**
+17. **Step 17: Remote Push**
     * Push the task branch to origin:
       ```bash
       git push origin <task-branch>
       ```
-    * Confirm postcondition clean worktree: `git status` MUST report `nothing to commit, working tree clean`.
+    * Verify remote acceptance of the pushed commit.
 
-17. **Step 17: Mandatory Hard Stop**
+18. **Step 18: Post-Push Worktree Status Check**
+    * Execute `git status` immediately following remote push.
+    * Confirm and record that `git status` reports `nothing to commit, working tree clean`.
+
+19. **Step 19: Final Completion Report Generation**
+    * Finalize the remediation completion report by populating the recorded commit SHA, commit subject, push confirmation to `origin <task-branch>`, and clean postcondition verification.
+    * Verify that all `PENDING` placeholders are fully resolved with concrete execution evidence.
+
+20. **Step 20: Mandatory Hard Stop**
     * Stop execution immediately.
     * Output the final completion report.
     * Await human maintainer or reviewer instruction; do NOT silently proceed to another finding.
 
 ### 4.2 Adversarial Red-Team Protocol
-When a remediation is submitted for red-team review:
+When a remediation is submitted for red-team review in Step 13:
 
 1. **Premise Invalidation:** The Red Team attempts to construct an AST or runtime state where the fix fails.
 2. **Assertion Audit:** The Red Team reviews the regression test to ensure it does not use loose assertions (`toBeTruthy()`, `toBeDefined()`) where exact values are required.
 3. **Determinism Verification:** The Red Team executes the test suite multiple times to verify zero flaky behavior.
 4. **Verdict Generation:**
-   * If any defect is found: Output `RED-TEAM FAIL` with minimal reproduction code and counter-example details. The cycle returns directly to **Step 7: Apply Smallest Safe Change** in the Canonical Forensic Remediation Sequence. The existing minimal reproduction and RED test remain valid and are preserved; the Builder updates the implementation to resolve the counter-example, then re-runs Step 8 (Focused Test Verification) and all downstream verification gates (Steps 9–17).
-   * If no defects are found: Output `RED-TEAM PASS` with documented rationale.
+   * If any defect is found: Output `RED-TEAM FAIL` with minimal reproduction code and counter-example details. The cycle returns directly to **Step 7: Apply Smallest Safe Change** in the Canonical Forensic Remediation Sequence. The existing minimal reproduction and RED test remain valid and are preserved; the Builder updates the implementation to resolve the counter-example, then re-runs Step 8 (Focused Test Verification) and all downstream verification gates (Steps 9–13).
+   * If no defects are found: Output `RED-TEAM PASS` with documented rationale. Progression to Step 14 (Diff & Scope Hygiene Review) is authorized.
 
 ### 4.3 Documentation Audit & Synchronization Workflow
 When performing documentation maintenance:
@@ -308,8 +328,12 @@ To ensure seamless coordination between agents across context boundaries, all ha
 [Guidance on the smallest safe architectural change]
 ```
 
-### 5.2 Remediation Completion Report (Builder $\to$ Red Team / Human)
-Every completed remediation task MUST terminate with the standard verification and remediation report incorporating the 10-layer `verification_report` contract defined in `.agents/skills/legacyexodus-test-verification/SKILL.md`:
+### 5.2 Remediation Reporting Contracts
+
+To eliminate temporal contradictions, remediation reports are partitioned into two distinct stages:
+
+#### 5.2.1 Draft Verification Report (Step 15 — Pre-Commit)
+Prepared before commit and push. All future events MUST be marked `PENDING`:
 
 ```markdown
 1. TASK: <Task Description>
@@ -325,15 +349,45 @@ Every completed remediation task MUST terminate with the standard verification a
 11. FULL TEST SUITE: PASS | FAIL (files, tests passed/failed, assertion count, runtime: bun test)
 12. BENCHMARK AUDIT: PASS | FAIL (10/10 checks verified: bun run benchmark audit)
 13. CLI SMOKE: PASS | FAIL (exit code 0, clean help output: bun run src/cli/index.ts --help)
-14. DETERMINISM: <Determinism audit results across repeated runs>
-15. SECURITY & BOUNDARIES: <Subprocess, traversal, and memory audit confirmation>
-16. MEMORY STATUS: VERIFIED | INCONCLUSIVE | REGRESSION | IMPROVEMENT | NO MATERIAL CHANGE
-17. TEN-LAYER VERIFICATION REPORT: <Explicit YAML verification_report artifact per .agents/skills/legacyexodus-test-verification/SKILL.md covering all 10 layers>
-18. DIFF & SCOPE HYGIENE: <git diff --check and git diff --stat results>
-19. ATOMIC COMMIT: <Commit SHA and Conventional Commit message>
-20. REMOTE PUSH: <Push confirmation to origin <task-branch>>
-21. WORKTREE POSTCONDITION: PASS (clean tree confirmed after push: git status)
-22. FINAL STATUS: FULLY REMEDIATED | SAFE WITH REQUIRED FOLLOW-UP | BLOCKED
+14. RED-TEAM ADVERSARIAL GATE: RED-TEAM PASS (11/11 probes verified per .agents/skills/legacyexodus-red-team-review/SKILL.md)
+15. DETERMINISM: <Determinism audit results across repeated runs>
+16. SECURITY & BOUNDARIES: <Subprocess, traversal, and memory audit confirmation>
+17. MEMORY STATUS: VERIFIED | INCONCLUSIVE | REGRESSION | IMPROVEMENT | NO MATERIAL CHANGE
+18. TEN-LAYER VERIFICATION REPORT: <Explicit YAML verification_report artifact per .agents/skills/legacyexodus-test-verification/SKILL.md covering all 10 layers>
+19. DIFF & SCOPE HYGIENE: <git diff --check and git diff --stat results>
+20. ATOMIC COMMIT: PENDING (executed in Step 16)
+21. REMOTE PUSH: PENDING (executed in Step 17)
+22. WORKTREE POSTCONDITION: PENDING (verified in Step 18)
+23. FINAL STATUS: PENDING_COMMIT_AND_PUSH
+```
+
+#### 5.2.2 Final Remediation Completion Report (Step 19 — Post-Push Verified)
+Generated ONLY after commit succeeds, remote push succeeds, and post-push clean worktree check passes. Zero `PENDING` placeholders permitted:
+
+```markdown
+1. TASK: <Task Description>
+2. BRANCH: <Temporary Branch Name>
+3. BASE COMMIT: <Base SHA>
+4. WORKTREE PRECONDITION: PASS (clean tree confirmed before work: git status)
+5. FINDING: <Finding ID and Description>
+6. ROOT CAUSE: <Exact Technical Root Cause>
+7. FILES CHANGED: <List of changed files with diff stat>
+8. RED TEST: <Path and assertion details of failure-first test>
+9. FOCUSED VERIFICATION: <Duration and result of focused test run: bun test <test>>
+10. TYPECHECK: PASS | FAIL (exit code 0, 0 compiler errors, duration: bun run typecheck)
+11. FULL TEST SUITE: PASS | FAIL (files, tests passed/failed, assertion count, runtime: bun test)
+12. BENCHMARK AUDIT: PASS | FAIL (10/10 checks verified: bun run benchmark audit)
+13. CLI SMOKE: PASS | FAIL (exit code 0, clean help output: bun run src/cli/index.ts --help)
+14. RED-TEAM ADVERSARIAL GATE: RED-TEAM PASS (11/11 probes verified per .agents/skills/legacyexodus-red-team-review/SKILL.md)
+15. DETERMINISM: <Determinism audit results across repeated runs>
+16. SECURITY & BOUNDARIES: <Subprocess, traversal, and memory audit confirmation>
+17. MEMORY STATUS: VERIFIED | INCONCLUSIVE | REGRESSION | IMPROVEMENT | NO MATERIAL CHANGE
+18. TEN-LAYER VERIFICATION REPORT: <Explicit YAML verification_report artifact per .agents/skills/legacyexodus-test-verification/SKILL.md covering all 10 layers>
+19. DIFF & SCOPE HYGIENE: <git diff --check and git diff --stat results>
+20. ATOMIC COMMIT: <Actual Commit SHA and Conventional Commit message>
+21. REMOTE PUSH: <Push confirmation to origin <task-branch>>
+22. WORKTREE POSTCONDITION: PASS (clean tree confirmed after push: git status)
+23. FINAL STATUS: FULLY REMEDIATED | SAFE WITH REQUIRED FOLLOW-UP | BLOCKED
 ```
 
 ---
