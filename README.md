@@ -63,7 +63,7 @@ flowchart TD
 
     subgraph Stage2 ["Stage 2: NolaraStruct - Understanding (Implemented)"]
         C -->|AST Parsing & Normalization| D["Normalized AST & Symbol Tables"]
-        D -->|Call Graph & CFG/DFG Flow Analysis| E[("SQLite Storage & Knowledge Graph")]
+        D -->|Call Graph & CFG/DFG Flow Analysis| E[("In-Memory / SQLite Storage & Knowledge Graph")]
     end
 
     subgraph Stage3 ["Stage 3: ZelvoxForge - Transformation (Target Architecture)"]
@@ -235,7 +235,7 @@ flowchart LR
     A["Actor / Agent"] -->|Issues| B["Command"]
     B -->|Zero-Trust Policy| C["Governance Engine"]
     C -->|Validated| D["Orchestrator Committer"]
-    D -->|Append-Only| E[("Event Store .jsonl")]
+    D -->|Append-Only| E[("Event Store (InMemory / .jsonl Planned)")]
     E -->|Synchronous Reducers| F[("SQLite Projections")]
     E -->|Async Broadcast| G["WebSocket / UI Views"]
     F -->|Read-Only| H["Queries"]
@@ -315,7 +315,7 @@ flowchart TD
 | **AI Gateway** | AI Platform & Safety | Security | Zero-Trust LLM proxy. Performs prompt assembly, secret redaction, token budgeting, model routing, and output schema validation. | **`TARGET ARCHITECTURE`** |
 | **Compiler Service** | Language Infrastructure | Build & Toolchain | Interfaces with native compiler toolchains (`cargo check`, `cargo test`, `clippy`) inside isolated sandboxes. | **`TARGET ARCHITECTURE`** |
 | **Governance Engine** | Architecture Governance | Security | Evaluates deterministic security rules, SAST policies, risk scoring, fidelity validation, and Human-in-the-Loop approval gates. | **`CORE IMPLEMENTED`** |
-| **Storage Service** | Data Platform | Reliability Engineering | System-of-record. Manages append-only `.jsonl` logs, SQLite projections, in-memory stores, and streaming JSON projections (`.discovery/*.json`). | **`IMPLEMENTED`** |
+| **Storage Service** | Data Platform | Reliability Engineering | System-of-record. Manages in-memory event storage, SQLite/in-memory projections, and discovery projections (`.discovery/*.json`). Append-only `.jsonl` persistence logs are planned for target architecture. | **`IMPLEMENTED`** |
 
 ---
 

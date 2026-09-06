@@ -145,13 +145,13 @@ Validated Modernized Output
 
 ## 2) Artifacts
 
-Artifacts are first-class pipeline objects. They are immutable per run and versioned for traceability.
+Artifacts are first-class pipeline objects. In the **current implementation**, Stage 1 (`VyrixScout`) writes discovery projection artifacts (`.discovery/*.json`) using fixed logical filenames, atomic temporary file replacement, and cryptographic SHA-256 manifest hashing (`manifest.json`). Content-addressed, immutable per-run versioned artifact storage is designated as **target architecture**.
 
 ## 2.1 Artifact classes
 1. **Discovery artifacts** (inventory, dependencies, runtime surface)
-2. **Structural artifacts** (UIR, graph nodes/edges, contracts)
-3. **Transformation artifacts** (generated code, adapters, trace map, decisions)
-4. **Validation artifacts** (test evidence, policy outcomes, readiness status)
+2. **Structural artifacts** (normalized AST, symbol tables, graph nodes/edges, contracts; UIR/SSA planned as target architecture)
+3. **Transformation artifacts** (generated code, adapters, trace map, decisions; target architecture)
+4. **Validation artifacts** (test evidence, policy outcomes, readiness status; target architecture)
 
 ## 2.2 Artifact requirements
 - Deterministic naming by run/stage/task
@@ -204,12 +204,12 @@ Data is persisted at multiple control points to support resumability, auditabili
 
 ## 4.1 Primary storage locations
 1. **Event Store**
-   - Append-only lifecycle/domain events
-   - Source of truth for run progression
+   - `InMemoryEventStore` is the active in-memory event store in the current runtime
+   - Append-only `.jsonl` disk persistence is planned for target architecture (source of truth for run progression)
 
-2. **Artifact Store (Object Storage)**
+2. **Artifact Store (Object Storage - Target Architecture)**
    - Stage outputs and evidence bundles
-   - Immutable, content-addressed blobs
+   - Immutable, content-addressed blobs (planned; current discovery stage writes `.discovery/*.json` projection artifacts)
 
 3. **Knowledge Graph Store**
    - Node/edge datasets and query indexes
@@ -238,7 +238,7 @@ Ownership defines who is accountable for artifacts, decisions, and approvals at 
 
 ## 5.1 System ownership by stage
 - **VyrixScout** owns discovery completeness and inventory fidelity
-- **NolaraStruct** owns semantic correctness of UIR/graph construction
+- **NolaraStruct** owns semantic correctness of normalized AST, symbol tables, and graph/flow analysis (UIR/SSA construction is planned for target architecture)
 - **ZelvoxForge** owns transformation correctness and traceability
 - **VymosGate** owns validation integrity and release decision evidence
 
@@ -276,4 +276,4 @@ LegacyExodus data flow is a governed migration chain:
 - graph-driven plans are transformed by **ZelvoxForge** into a **Rust Application**
 - final output is verified by **VymosGate** into **Validated Modernized Output**
 
-Across the journey, artifacts are immutable, transformations are traceable, storage is checkpointed, and ownership is explicit.****
+Across the journey, artifact lineage is verified, transformations are traceable, storage is checkpointed, and ownership is explicit.
