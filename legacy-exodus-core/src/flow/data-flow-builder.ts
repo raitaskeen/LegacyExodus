@@ -4,7 +4,7 @@ import type { CodeSymbol } from "@symbols/index";
 import { createDataFlowGraph, createProvenCallTargets, type CallFlowBinding, type DataFlowGraph, type FunctionFlowSummary, type InterproceduralFlow, type ProvenCallTarget, type TaintFlow, type VariableDefinition, type VariableUse } from "./flow-contracts";
 
 export interface Scope { readonly parent?: Scope; readonly definitions: Map<string, VariableDefinition>; }
-export interface FunctionRecord { readonly name: string; readonly node: ASTNode; readonly parameters: VariableDefinition[][]; readonly returns: VariableDefinition[]; readonly symbolId?: string; }
+export interface FunctionRecord { readonly name: string; readonly parameters: VariableDefinition[][]; readonly returns: VariableDefinition[]; readonly symbolId?: string; }
 export interface PendingCall { readonly id: string; readonly targetSymbolId?: string; readonly callee?: FunctionRecord; readonly argumentDefinitionIds: readonly (string | undefined)[]; readonly argumentSourceIds: readonly (string | undefined)[]; readonly receiverDefinitionId?: string; }
 export interface TaintTransfer { readonly sourceDefinitionId: string; readonly targetDefinitionId: string; }
 export interface PendingSink { readonly id: string; readonly name: string; readonly argumentDefinitionIds: readonly string[]; }
@@ -17,7 +17,7 @@ export interface BuildContextResult {
 
 const sources = new Set(["process.env", "req.body", "req.params", "req.query"]);
 const sinks = new Set(["child_process.exec", "res.send", "res.json"]);
-const sanitizers = new Set(["validator.escape"]);
+const sanitizers = new Set(["validator.escape", "sanitize"]);
 
 export class DeterministicDataFlowGraphBuilder {
   public buildContext(ast: ASTResult, provenCallTargets?: readonly ProvenCallTarget[], symbols: readonly CodeSymbol[] = []): BuildContextResult {
@@ -62,6 +62,9 @@ export class DeterministicDataFlowGraphBuilder {
       functionSummaries: functionSummaries(state, ast.metadata.sourcePath),
       callBindings: callBindings(state),
     });
+    state.functions.clear();
+    state.resolvableFunctions.clear();
+    state.functionsBySymbolId.clear();
     return { graph, state };
   }
 
@@ -96,6 +99,14 @@ export class DeterministicDataFlowGraphBuilder {
     if (node.type === "AssignmentExpression") { this.assignment(node, scope, filePath, state, currentFunction); return; }
     if (node.type === "CallExpression") { this.call(node, scope, filePath, state, receiverDefinitionId); return; }
     if (node.type === "MemberExpression") { this.memberUse(node, scope, filePath, state); return; }
+    if (node.type === "ObjectProperty") {
+      const computed = node.attributes.computed === true;
+      const key = node.children.find((child) => child.role === "key");
+      if (computed && key !== undefined) this.visit(key, scope, filePath, state, currentFunction);
+      const value = node.children.find((child) => child.role === "value");
+      if (value !== undefined) this.visit(value, scope, filePath, state, currentFunction);
+      return;
+    }
     if (node.type === "Identifier") { this.use(identifierName(node), node, scope, filePath, state); return; }
     for (const child of node.children) this.visit(child, scope, filePath, state, currentFunction);
   }
@@ -107,19 +118,17 @@ export class DeterministicDataFlowGraphBuilder {
     if (boundNames.length === 0) return;
     const init = node.children.find((child) => child.role === "init");
     const initVal = singleName !== undefined ? literalValue(init) : undefined;
-    for (const name of boundNames) {
-      const definition = this.define(name, "declaration", node, scope, filePath, state, initVal);
+    if (singleName !== undefined) {
+      const definition = this.define(singleName, "declaration", node, scope, filePath, state, initVal);
       if (init !== undefined) this.transferTaint(init, definition.id, scope, filePath, state);
+    } else if (id !== undefined) {
+      this.bindDestructuringPattern(id, init, "declaration", node, scope, filePath, state);
     }
     if (init !== undefined) {
       const primaryDefId = boundNames.length === 1 ? scope.definitions.get(boundNames[0]!)?.id : undefined;
       this.visit(init, scope, filePath, state, undefined, primaryDefId);
     }
     for (const { boundNames: defaultBoundNames, defaultNode } of extractPatternDefaults(id)) {
-      for (const name of defaultBoundNames) {
-        const definition = scope.definitions.get(name);
-        if (definition !== undefined) this.transferTaint(defaultNode, definition.id, scope, filePath, state);
-      }
       const primaryDefId = defaultBoundNames.length === 1 ? scope.definitions.get(defaultBoundNames[0]!)?.id : undefined;
       this.visit(defaultNode, scope, filePath, state, undefined, primaryDefId);
     }
@@ -159,6 +168,7 @@ export class DeterministicDataFlowGraphBuilder {
     const callee = argument.children.find((child) => child.role === "callee");
     const source = argument.type === "CallExpression" && callee?.type !== "MemberExpression" ? undefined : this.definitionFor(argument, scope);
     if (source !== undefined) this.addInterproceduralFlow(state, hash(`return:${returned.id}:${source.id}`), "return-value", source.id, returned.id);
+    this.transferTaint(argument, returned.id, scope, filePath, state);
     this.visit(argument, scope, filePath, state, currentFunction, returned.id);
   }
 
@@ -169,21 +179,189 @@ export class DeterministicDataFlowGraphBuilder {
     const boundNames = singleName !== undefined ? [singleName] : extractBoundNames(left);
     if (boundNames.length === 0) return;
     const rightVal = singleName !== undefined ? literalValue(right) : undefined;
-    for (const name of boundNames) {
-      const definition = this.define(name, "assignment", node, scope, filePath, state, rightVal);
+    if (singleName !== undefined) {
+      const definition = this.define(singleName, "assignment", node, scope, filePath, state, rightVal);
       if (right !== undefined) this.transferTaint(right, definition.id, scope, filePath, state);
+    } else if (left !== undefined) {
+      this.bindDestructuringPattern(left, right, "assignment", node, scope, filePath, state);
     }
     if (right !== undefined) {
       const primaryDefId = boundNames.length === 1 ? scope.definitions.get(boundNames[0]!)?.id : undefined;
       this.visit(right, scope, filePath, state, currentFunction, primaryDefId);
     }
     for (const { boundNames: defaultBoundNames, defaultNode } of extractPatternDefaults(left)) {
-      for (const name of defaultBoundNames) {
-        const definition = scope.definitions.get(name);
-        if (definition !== undefined) this.transferTaint(defaultNode, definition.id, scope, filePath, state);
-      }
       const primaryDefId = defaultBoundNames.length === 1 ? scope.definitions.get(defaultBoundNames[0]!)?.id : undefined;
       this.visit(defaultNode, scope, filePath, state, currentFunction, primaryDefId);
+    }
+  }
+
+  private bindDestructuringPattern(
+    pattern: ASTNode,
+    init: ASTNode | undefined,
+    kind: VariableDefinition["kind"],
+    declarationOrAssignmentNode: ASTNode,
+    scope: Scope,
+    filePath: string,
+    state: FlowState,
+  ): void {
+    if (pattern.type === "Identifier") {
+      const name = identifierName(pattern);
+      if (name === undefined) return;
+      const constVal = init !== undefined && init.type !== "ArrayHole" ? literalValue(init) : undefined;
+      const definition = this.define(name, kind, declarationOrAssignmentNode, scope, filePath, state, constVal);
+      if (init !== undefined && init.type !== "ArrayHole") {
+        this.transferTaint(init, definition.id, scope, filePath, state);
+      }
+      return;
+    }
+
+    if (pattern.type === "MemberExpression") {
+      const path = memberPath(pattern);
+      if (path === undefined) return;
+      const constVal = init !== undefined && init.type !== "ArrayHole" ? literalValue(init) : undefined;
+      const definition = this.define(path, kind, declarationOrAssignmentNode, scope, filePath, state, constVal);
+      if (init !== undefined && init.type !== "ArrayHole") {
+        this.transferTaint(init, definition.id, scope, filePath, state);
+      }
+      return;
+    }
+
+    if (pattern.type === "AssignmentPattern") {
+      const left = pattern.children.find((c) => c.role === "left");
+      const right = pattern.children.find((c) => c.role === "right");
+      if (left === undefined) return;
+      if (init !== undefined && init.type !== "ArrayHole") {
+        if (isStaticallyDefinedLiteral(init)) {
+          this.bindDestructuringPattern(left, init, kind, declarationOrAssignmentNode, scope, filePath, state);
+        } else {
+          this.bindDestructuringPattern(left, init, kind, declarationOrAssignmentNode, scope, filePath, state);
+          if (right !== undefined) {
+            const boundNames = extractBoundNames(left);
+            for (const name of boundNames) {
+              const def = scope.definitions.get(name);
+              if (def !== undefined) this.transferTaint(right, def.id, scope, filePath, state);
+            }
+          }
+        }
+      } else {
+        this.bindDestructuringPattern(left, right, kind, declarationOrAssignmentNode, scope, filePath, state);
+      }
+      return;
+    }
+
+    if (pattern.type === "RestElement") {
+      const argument = pattern.children.find((c) => c.role === "argument");
+      if (argument !== undefined) {
+        this.bindDestructuringPattern(argument, init, kind, declarationOrAssignmentNode, scope, filePath, state);
+      }
+      return;
+    }
+
+    if (pattern.type === "ObjectPattern") {
+      if (init !== undefined && init.type === "ObjectExpression") {
+        const patternProps = pattern.children.filter((c) => c.type === "ObjectProperty" || c.role === "properties");
+        const restElement = pattern.children.find((c) => c.type === "RestElement");
+        const matchedKeys = new Set<string>();
+
+        for (const child of patternProps) {
+          if (child.type === "RestElement") continue;
+          const keyNode = child.children.find((c) => c.role === "key") ?? child.children.find((c) => c.type === "Identifier");
+          const propKey = identifierName(keyNode) ?? stringValue(keyNode);
+          const valNode = child.children.find((c) => c.role === "value") ?? keyNode;
+          if (propKey !== undefined) matchedKeys.add(propKey);
+
+          const matchedProp = propKey !== undefined
+            ? init.children.find((initChild) => {
+                if (initChild.type !== "ObjectProperty" && initChild.role !== "properties") return false;
+                const initKeyNode = initChild.children.find((c) => c.role === "key") ?? initChild.children.find((c) => c.type === "Identifier");
+                return (identifierName(initKeyNode) ?? stringValue(initKeyNode)) === propKey;
+              })
+            : undefined;
+
+          if (matchedProp !== undefined) {
+            const initValNode = matchedProp.children.find((c) => c.role === "value");
+            if (valNode !== undefined) {
+              this.bindDestructuringPattern(valNode, initValNode, kind, declarationOrAssignmentNode, scope, filePath, state);
+            }
+          } else {
+            const spreadChild = init.children.find((initChild) => initChild.type === "SpreadElement");
+            const spreadSource = spreadChild?.children.find((c) => c.role === "argument") ?? spreadChild;
+            if (valNode !== undefined) {
+              this.bindDestructuringPattern(valNode, spreadSource, kind, declarationOrAssignmentNode, scope, filePath, state);
+            }
+          }
+        }
+
+        if (restElement !== undefined) {
+          const restArg = restElement.children.find((c) => c.role === "argument");
+          const restName = identifierName(restArg) ?? memberPath(restArg);
+          if (restName !== undefined) {
+            const restDef = this.define(restName, kind, declarationOrAssignmentNode, scope, filePath, state, undefined);
+            for (const initChild of init.children) {
+              if (initChild.type === "ObjectProperty" || initChild.role === "properties") {
+                const initKeyNode = initChild.children.find((c) => c.role === "key") ?? initChild.children.find((c) => c.type === "Identifier");
+                const initKey = identifierName(initKeyNode) ?? stringValue(initKeyNode);
+                if (initKey === undefined || !matchedKeys.has(initKey)) {
+                  const initValNode = initChild.children.find((c) => c.role === "value");
+                  if (initValNode !== undefined) {
+                    this.transferTaint(initValNode, restDef.id, scope, filePath, state);
+                  }
+                }
+              } else if (initChild.type === "SpreadElement") {
+                const spreadArg = initChild.children.find((c) => c.role === "argument") ?? initChild;
+                this.transferTaint(spreadArg, restDef.id, scope, filePath, state);
+              }
+            }
+          }
+        }
+      } else {
+        for (const child of pattern.children) {
+          if (child.type === "ObjectProperty" || child.role === "properties") {
+            const valChild = child.children.find((c) => c.role === "value");
+            const keyChild = child.children.find((c) => c.role === "key") ?? child.children.find((c) => c.type === "Identifier");
+            const target = valChild ?? keyChild;
+            if (target !== undefined) {
+              this.bindDestructuringPattern(target, init, kind, declarationOrAssignmentNode, scope, filePath, state);
+            }
+          } else if (child.type === "RestElement") {
+            this.bindDestructuringPattern(child, init, kind, declarationOrAssignmentNode, scope, filePath, state);
+          }
+        }
+      }
+      return;
+    }
+
+    if (pattern.type === "ArrayPattern") {
+      const patternElements = pattern.children.filter((c) => c.role === "elements");
+      if (init !== undefined && init.type === "ArrayExpression") {
+        const initElements = init.children.filter((c) => c.role === "elements");
+        for (let i = 0; i < patternElements.length; i++) {
+          const elem = patternElements[i]!;
+          if (elem.type === "ArrayHole") continue;
+          if (elem.type === "RestElement") {
+            const restArg = elem.children.find((c) => c.role === "argument");
+            const restName = identifierName(restArg) ?? memberPath(restArg);
+            if (restName !== undefined) {
+              const restDef = this.define(restName, kind, declarationOrAssignmentNode, scope, filePath, state, undefined);
+              for (let j = i; j < initElements.length; j++) {
+                const initElem = initElements[j]!;
+                if (initElem.type !== "ArrayHole") {
+                  this.transferTaint(initElem, restDef.id, scope, filePath, state);
+                }
+              }
+            }
+            break;
+          }
+          const matchedInit = initElements[i];
+          this.bindDestructuringPattern(elem, matchedInit, kind, declarationOrAssignmentNode, scope, filePath, state);
+        }
+      } else {
+        for (const elem of patternElements) {
+          if (elem.type === "ArrayHole") continue;
+          this.bindDestructuringPattern(elem, init, kind, declarationOrAssignmentNode, scope, filePath, state);
+        }
+      }
+      return;
     }
   }
 
@@ -196,10 +374,26 @@ export class DeterministicDataFlowGraphBuilder {
     if (resolved !== undefined || proven !== undefined) state.pendingCalls.push({ id: proven?.callId ?? hash(`call:${filePath}:${name}:${callPosition}`), ...(proven === undefined ? {} : { targetSymbolId: proven.targetSymbolId }), ...(resolved === undefined ? {} : { callee: resolved }), argumentDefinitionIds: argumentsNodes.map((argument) => this.definitionFor(argument, scope)?.id), argumentSourceIds: argumentsNodes.map((argument) => this.source(argument, filePath)), ...(receiverDefinitionId === undefined ? {} : { receiverDefinitionId }) });
     if (name === undefined || !sinks.has(name)) return;
     const sinkPosition = node.location === undefined ? `anon-${state.sinks.length}` : `${node.location.start.line}:${node.location.start.column}`;
-    state.sinks.push({ id: hash(`sink:${filePath}:${name}:${sinkPosition}`), name, argumentDefinitionIds: argumentsNodes.flatMap((argument) => { const definition = this.definitionFor(argument, scope); return definition === undefined ? [] : [definition.id]; }) });
+    state.sinks.push({ id: hash(`sink:${filePath}:${name}:${sinkPosition}`), name, argumentDefinitionIds: argumentsNodes.flatMap((argument) => this.collectDefinitions(argument, scope, filePath, state).map((definition) => definition.id)) });
   }
 
-  private definitionFor(node: ASTNode, scope: Scope): VariableDefinition | undefined { for (const name of [identifierName(node), memberPath(node), memberBase(node)]) { if (name === undefined) continue; const definition = resolve(scope, name); if (definition !== undefined) return definition; } for (const child of node.children) { const definition = this.definitionFor(child, scope); if (definition !== undefined) return definition; } return undefined; }
+  private definitionFor(node: ASTNode, scope: Scope): VariableDefinition | undefined {
+    if (node.type === "ObjectExpression" || node.type === "ArrayExpression") return undefined;
+    if (node.type === "ObjectProperty") {
+      const value = node.children.find((child) => child.role === "value");
+      return value !== undefined ? this.definitionFor(value, scope) : undefined;
+    }
+    for (const name of [identifierName(node), memberPath(node), memberBase(node)]) {
+      if (name === undefined) continue;
+      const definition = resolve(scope, name);
+      if (definition !== undefined) return definition;
+    }
+    for (const child of node.children) {
+      const definition = this.definitionFor(child, scope);
+      if (definition !== undefined) return definition;
+    }
+    return undefined;
+  }
   private connectCalls(state: FlowState): void {
     for (const call of state.pendingCalls.sort(byId)) {
       for (const [index, argumentDefinitionId] of call.argumentDefinitionIds.entries()) {
@@ -214,16 +408,133 @@ export class DeterministicDataFlowGraphBuilder {
       }
       if (call.receiverDefinitionId !== undefined) for (const returned of call.callee?.returns ?? []) this.addInterproceduralFlow(state, call.id, "return-to-receiver", returned.id, call.receiverDefinitionId);
     }
-    for (const flow of state.interproceduralFlows) state.transfers.push({ sourceDefinitionId: flow.sourceDefinitionId, targetDefinitionId: flow.targetDefinitionId });
+    for (const flow of state.interproceduralFlows) this.addTransfer(state, flow.sourceDefinitionId, flow.targetDefinitionId);
   }
   private addInterproceduralFlow(state: FlowState, callId: string, kind: InterproceduralFlow["kind"], sourceDefinitionId: string, targetDefinitionId: string): void { state.interproceduralFlows.push({ id: hash(`interprocedural:${callId}:${kind}:${sourceDefinitionId}:${targetDefinitionId}`), callId, kind, sourceDefinitionId, targetDefinitionId }); }
+  private addTransfer(state: FlowState, sourceDefinitionId: string, targetDefinitionId: string): void {
+    if (sourceDefinitionId === targetDefinitionId) return;
+    if (state.transfers.some((transfer) => transfer.sourceDefinitionId === sourceDefinitionId && transfer.targetDefinitionId === targetDefinitionId)) return;
+    state.transfers.push({ sourceDefinitionId, targetDefinitionId });
+  }
+
   private transferTaint(node: ASTNode, targetDefinitionId: string, scope: Scope, filePath: string, state: FlowState): void {
     if (sanitized(node)) return;
-    if (node.type === "CallExpression") return;
-    const sourceId = this.source(node, filePath);
-    if (sourceId !== undefined) { this.setTaintPath(state, targetDefinitionId, sourceId, [sourceId, targetDefinitionId]); return; }
-    const sourceDefinition = this.definitionFor(node, scope);
-    if (sourceDefinition !== undefined) state.transfers.push({ sourceDefinitionId: sourceDefinition.id, targetDefinitionId });
+    const sources = this.collectSources(node, filePath, state);
+    for (const sourceId of sources) {
+      this.setTaintPath(state, targetDefinitionId, sourceId, [sourceId, targetDefinitionId]);
+    }
+    const definitions = this.collectDefinitions(node, scope, filePath, state);
+    for (const definition of definitions) {
+      this.addTransfer(state, definition.id, targetDefinitionId);
+    }
+  }
+
+  private collectSources(node: ASTNode, filePath: string, state: FlowState): readonly string[] {
+    const results: string[] = [];
+    const visit = (current: ASTNode): void => {
+      if (sanitized(current)) return;
+      const direct = this.source(current, filePath);
+      if (direct !== undefined) {
+        results.push(direct);
+        return;
+      }
+      if (current.type === "ObjectProperty") {
+        const computed = current.attributes.computed === true;
+        const key = current.children.find((child) => child.role === "key");
+        if (computed && key !== undefined) visit(key);
+        const value = current.children.find((child) => child.role === "value");
+        if (value !== undefined) visit(value);
+        return;
+      }
+      if (current.type === "CallExpression") {
+        const callee = current.children.find((child) => child.role === "callee");
+        if (callee !== undefined) {
+          const calleeSource = this.source(callee, filePath);
+          if (calleeSource !== undefined) {
+            results.push(calleeSource);
+            return;
+          }
+        }
+        const name = memberPath(callee) ?? identifierName(callee);
+        const proven = current.location === undefined ? undefined : state.provenTargets.get(callLocationKey(filePath, current.location.start));
+        const resolved = state.hasSemanticResolution ? (proven === undefined ? undefined : state.functionsBySymbolId.get(proven.targetSymbolId)) : resolveFunction(name, state.resolvableFunctions);
+        if (resolved !== undefined || proven !== undefined) {
+          return;
+        }
+        if (callee?.type === "MemberExpression") {
+          const objectNode = callee.children.find((child) => child.role === "object");
+          if (objectNode !== undefined) visit(objectNode);
+        }
+        for (const argument of current.children.filter((child) => child.role === "arguments")) {
+          visit(argument);
+        }
+        return;
+      }
+      for (const child of current.children) {
+        visit(child);
+      }
+    };
+    visit(node);
+    return Object.freeze([...new Set(results)].sort());
+  }
+
+  private collectDefinitions(node: ASTNode, scope: Scope, filePath: string, state: FlowState): readonly VariableDefinition[] {
+    const definitions: VariableDefinition[] = [];
+    const visit = (current: ASTNode): void => {
+      if (sanitized(current)) return;
+      if (this.source(current, filePath) !== undefined) return;
+      if (current.type === "ObjectProperty") {
+        const computed = current.attributes.computed === true;
+        const key = current.children.find((child) => child.role === "key");
+        if (computed && key !== undefined) visit(key);
+        const value = current.children.find((child) => child.role === "value");
+        if (value !== undefined) visit(value);
+        return;
+      }
+      if (current.type === "CallExpression") {
+        const callee = current.children.find((child) => child.role === "callee");
+        if (callee !== undefined && this.source(callee, filePath) !== undefined) return;
+        const name = memberPath(callee) ?? identifierName(callee);
+        const proven = current.location === undefined ? undefined : state.provenTargets.get(callLocationKey(filePath, current.location.start));
+        const resolved = state.hasSemanticResolution ? (proven === undefined ? undefined : state.functionsBySymbolId.get(proven.targetSymbolId)) : resolveFunction(name, state.resolvableFunctions);
+        if (resolved !== undefined || proven !== undefined) {
+          const targetRecord = state.hasSemanticResolution && proven !== undefined ? state.functionsBySymbolId.get(proven.targetSymbolId) : resolved;
+          for (const returned of targetRecord?.returns ?? []) {
+            definitions.push(returned);
+          }
+          return;
+        }
+        if (callee?.type === "MemberExpression") {
+          const objectNode = callee.children.find((child) => child.role === "object");
+          if (objectNode !== undefined) visit(objectNode);
+        }
+        for (const argument of current.children.filter((child) => child.role === "arguments")) {
+          visit(argument);
+        }
+        return;
+      }
+      for (const name of [identifierName(current), memberPath(current), memberBase(current)]) {
+        if (name === undefined) continue;
+        const definition = resolve(scope, name);
+        if (definition !== undefined) {
+          definitions.push(definition);
+          return;
+        }
+      }
+      for (const child of current.children) {
+        visit(child);
+      }
+    };
+    visit(node);
+    const seen = new Set<string>();
+    const unique: VariableDefinition[] = [];
+    for (const def of definitions) {
+      if (!seen.has(def.id)) {
+        seen.add(def.id);
+        unique.push(def);
+      }
+    }
+    return Object.freeze(unique.sort(byId));
   }
 
   private propagateTaint(state: FlowState): void {
@@ -258,7 +569,7 @@ export class DeterministicDataFlowGraphBuilder {
 }
 
 function createScope(parent?: Scope): Scope { return { parent, definitions: new Map() }; }
-function collectFunctions(root: ASTNode, symbols: readonly CodeSymbol[]): Map<ASTNode, FunctionRecord> { const records = new Map<ASTNode, FunctionRecord>(); const visit = (node: ASTNode): void => { if (isFunction(node)) { const name = functionName(node); if (name !== undefined) { const symbol = symbols.filter((candidate) => (candidate.kind === "function" || candidate.kind === "method") && candidate.name === name && sameLocation(candidate.location, node.location)); records.set(node, { name, node, parameters: [], returns: [], ...(symbol.length === 1 && symbol[0] !== undefined ? { symbolId: symbol[0].id } : {}) }); } } for (const child of node.children) visit(child); }; visit(root); return records; }
+function collectFunctions(root: ASTNode, symbols: readonly CodeSymbol[]): Map<ASTNode, FunctionRecord> { const records = new Map<ASTNode, FunctionRecord>(); const visit = (node: ASTNode): void => { if (isFunction(node)) { const name = functionName(node); if (name !== undefined) { const symbol = symbols.filter((candidate) => (candidate.kind === "function" || candidate.kind === "method") && candidate.name === name && sameLocation(candidate.location, node.location)); records.set(node, { name, parameters: [], returns: [], ...(symbol.length === 1 && symbol[0] !== undefined ? { symbolId: symbol[0].id } : {}) }); } } for (const child of node.children) visit(child); }; visit(root); return records; }
 function resolveFunction(name: string | undefined, functions: ReadonlyMap<string, FunctionRecord>): FunctionRecord | undefined { if (name === undefined) return undefined; const direct = functions.get(name); if (direct !== undefined) return direct; const property = name.split(".").at(-1); return property === undefined ? undefined : functions.get(property); }
 function resolve(scope: Scope | undefined, name: string): VariableDefinition | undefined { for (let current = scope; current !== undefined; current = current.parent) { const definition = current.definitions.get(name); if (definition !== undefined) return definition; } return undefined; }
 function isFunction(node: ASTNode): boolean { return ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ObjectMethod"].includes(node.type); }
@@ -282,6 +593,10 @@ function extractBoundNames(node: ASTNode | undefined): readonly string[] {
     case "Identifier": {
       const name = identifierName(node);
       return name !== undefined ? [name] : [];
+    }
+    case "MemberExpression": {
+      const path = memberPath(node);
+      return path !== undefined ? [path] : [];
     }
     case "AssignmentPattern": {
       const left = node.children.find((c) => c.role === "left");
@@ -371,4 +686,23 @@ function extractPatternDefaults(node: ASTNode | undefined): readonly PatternDefa
 
   visit(node);
   return results;
+}
+
+function isStaticallyDefinedLiteral(node: ASTNode | undefined): boolean {
+  if (node === undefined) return false;
+  if (node.type === "ArrayHole") return false;
+  if (node.type === "Identifier" && node.attributes.name === "undefined") return false;
+  return (
+    [
+      "StringLiteral",
+      "NumericLiteral",
+      "BooleanLiteral",
+      "NullLiteral",
+      "ObjectExpression",
+      "ArrayExpression",
+      "RegExpLiteral",
+      "TemplateLiteral",
+    ].includes(node.type) ||
+    (literalValue(node) !== undefined && literalValue(node) !== null)
+  );
 }

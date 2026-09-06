@@ -18,7 +18,14 @@ export type KnownPathLookup = readonly FileArtifact[] | ReadonlySet<string>;
 
 /** Canonicalizes a repository file path or specifier to normalized POSIX format. */
 export function canonicalizePath(path: string): string {
-  return posix.normalize(path.replaceAll("\\", "/"));
+  const normalized = posix.normalize(path.replaceAll("\\", "/"));
+  if (/^[a-zA-Z]:/.test(normalized)) {
+    return normalized.charAt(0).toLowerCase() + normalized.slice(1);
+  }
+  if (/^\/[a-zA-Z]:/.test(normalized)) {
+    return `/${normalized.charAt(1).toLowerCase()}${normalized.slice(2)}`;
+  }
+  return normalized;
 }
 
 export class ModuleResolver {

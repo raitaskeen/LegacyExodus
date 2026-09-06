@@ -65,7 +65,11 @@ class FlowState {
       if (node.type === "DoWhileStatement") { block = this.buildDoWhile(node, block, control); continue; }
       if (isLoop(node)) { block = this.buildLoop(node, block, control); continue; }
       if (node.type === "SwitchStatement") { block = this.buildSwitch(node, block, control); continue; }
-      if (node.type === "TryStatement") { block = this.buildTry(node, block, exit ?? current, control); continue; }
+      if (node.type === "TryStatement") {
+        block = this.buildTry(node, block, exit ?? current, control);
+        terminated = !this.hasIncomingEdges(block);
+        continue;
+      }
       this.addNode(block, node);
       terminated = false;
     }
@@ -143,43 +147,93 @@ class FlowState {
         }
       }
     }
-    if (finalizer !== undefined && thrownFinalizer !== undefined && returnedFinalizer !== undefined) {
+    if (finalizer !== undefined) {
       const finalizerStatements = statementChildren(finalizer);
       const finalizerControl: ControlContext = { ...control, exceptionTarget: outerExceptionTarget, returnTarget: outerReturnTarget };
-      this.addNode(normalFinalizer, finalizer);
-      this.buildStatements(finalizerStatements, normalFinalizer, after, finalizerControl);
-      this.addNode(thrownFinalizer, finalizer);
-      const thrownLast = this.buildStatements(finalizerStatements, thrownFinalizer, outerExceptionTarget, finalizerControl);
-      this.retagCompletionEdge(thrownLast, outerExceptionTarget, "next", "throw");
-      this.addNode(returnedFinalizer, finalizer);
-      const returnedLast = this.buildStatements(finalizerStatements, returnedFinalizer, outerReturnTarget, finalizerControl);
-      this.retagCompletionEdge(returnedLast, outerReturnTarget, "next", "return");
+
+      if (this.hasIncomingEdges(normalFinalizer)) {
+        this.addNode(normalFinalizer, finalizer);
+        this.buildStatements(finalizerStatements, normalFinalizer, after, finalizerControl);
+      } else {
+        this.removeBlock(normalFinalizer);
+      }
+
+      if (thrownFinalizer !== undefined) {
+        if (this.hasIncomingEdges(thrownFinalizer)) {
+          this.addNode(thrownFinalizer, finalizer);
+          const thrownLast = this.buildStatements(finalizerStatements, thrownFinalizer, outerExceptionTarget, finalizerControl);
+          this.retagCompletionEdge(thrownLast, outerExceptionTarget, "next", "throw");
+        } else {
+          this.removeBlock(thrownFinalizer);
+        }
+      }
+
+      if (returnedFinalizer !== undefined) {
+        if (this.hasIncomingEdges(returnedFinalizer)) {
+          this.addNode(returnedFinalizer, finalizer);
+          const returnedLast = this.buildStatements(finalizerStatements, returnedFinalizer, outerReturnTarget, finalizerControl);
+          this.retagCompletionEdge(returnedLast, outerReturnTarget, "next", "return");
+        } else {
+          this.removeBlock(returnedFinalizer);
+        }
+      }
+
       if (brokenFinalizer !== undefined && outerBreakTarget !== undefined) {
-        this.addNode(brokenFinalizer, finalizer);
-        const breakDestination = control?.breakFinalizerTarget ?? outerBreakTarget;
-        const brokenLast = this.buildStatements(finalizerStatements, brokenFinalizer, breakDestination, finalizerControl);
-        this.retagCompletionEdge(brokenLast, breakDestination, "next", "break");
+        if (this.hasIncomingEdges(brokenFinalizer)) {
+          this.addNode(brokenFinalizer, finalizer);
+          const breakDestination = control?.breakFinalizerTarget ?? outerBreakTarget;
+          const brokenLast = this.buildStatements(finalizerStatements, brokenFinalizer, breakDestination, finalizerControl);
+          this.retagCompletionEdge(brokenLast, breakDestination, "next", "break");
+        } else {
+          this.removeBlock(brokenFinalizer);
+        }
       }
+
       if (continuedFinalizer !== undefined && outerContinueTarget !== undefined) {
-        this.addNode(continuedFinalizer, finalizer);
-        const continueDestination = control?.continueFinalizerTarget ?? outerContinueTarget;
-        const continuedLast = this.buildStatements(finalizerStatements, continuedFinalizer, continueDestination, finalizerControl);
-        this.retagCompletionEdge(continuedLast, continueDestination, "next", "continue");
-      }
-      for (const pending of labeledFinalizers) {
-        this.addNode(pending.breakFinalizer as string, finalizer);
-        const breakDestination = pending.target.breakFinalizerTarget ?? pending.target.breakTarget;
-        const brokenLast = this.buildStatements(finalizerStatements, pending.breakFinalizer as string, breakDestination, finalizerControl);
-        this.retagCompletionEdge(brokenLast, breakDestination, "next", "break");
-        if (pending.continueFinalizer !== undefined && pending.target.continueTarget !== undefined) {
-          this.addNode(pending.continueFinalizer, finalizer);
-          const continueDestination = pending.target.continueFinalizerTarget ?? pending.target.continueTarget;
-          const continuedLast = this.buildStatements(finalizerStatements, pending.continueFinalizer, continueDestination, finalizerControl);
+        if (this.hasIncomingEdges(continuedFinalizer)) {
+          this.addNode(continuedFinalizer, finalizer);
+          const continueDestination = control?.continueFinalizerTarget ?? outerContinueTarget;
+          const continuedLast = this.buildStatements(finalizerStatements, continuedFinalizer, continueDestination, finalizerControl);
           this.retagCompletionEdge(continuedLast, continueDestination, "next", "continue");
+        } else {
+          this.removeBlock(continuedFinalizer);
+        }
+      }
+
+      for (const pending of labeledFinalizers) {
+        if (this.hasIncomingEdges(pending.breakFinalizer)) {
+          this.addNode(pending.breakFinalizer as string, finalizer);
+          const breakDestination = pending.target.breakFinalizerTarget ?? pending.target.breakTarget;
+          const brokenLast = this.buildStatements(finalizerStatements, pending.breakFinalizer as string, breakDestination, finalizerControl);
+          this.retagCompletionEdge(brokenLast, breakDestination, "next", "break");
+        } else {
+          this.removeBlock(pending.breakFinalizer);
+        }
+
+        if (pending.continueFinalizer !== undefined && pending.target.continueTarget !== undefined) {
+          if (this.hasIncomingEdges(pending.continueFinalizer)) {
+            this.addNode(pending.continueFinalizer, finalizer);
+            const continueDestination = pending.target.continueFinalizerTarget ?? pending.target.continueTarget;
+            const continuedLast = this.buildStatements(finalizerStatements, pending.continueFinalizer, continueDestination, finalizerControl);
+            this.retagCompletionEdge(continuedLast, continueDestination, "next", "continue");
+          } else {
+            this.removeBlock(pending.continueFinalizer);
+          }
         }
       }
     }
     return after;
+  }
+  private removeBlock(id: string | undefined): void {
+    if (id === undefined) return;
+    const index = this.blocks.findIndex((candidate) => candidate.id === id);
+    if (index >= 0) {
+      this.blocks.splice(index, 1);
+    }
+  }
+  private hasIncomingEdges(toBlockId: string | undefined): boolean {
+    if (toBlockId === undefined) return false;
+    return this.edges.some((candidate) => candidate.toBlockId === toBlockId);
   }
   private addNode(blockId: string, node: ASTNode): void {
     const position = node.location === undefined
@@ -207,20 +261,55 @@ class FlowState {
     }
 
     const reachable = reachableBlocks(entry, successorsByBlock);
-    const blocks: BasicBlock[] = this.blocks.map((block) => ({
+
+    const emptyUnreachable = new Set<string>();
+    for (const block of this.blocks) {
+      if (
+        block.id !== entry &&
+        block.id !== exit &&
+        !reachable.has(block.id) &&
+        block.statements.length === 0 &&
+        (successorsByBlock.get(block.id)?.length ?? 0) === 0
+      ) {
+        emptyUnreachable.add(block.id);
+      }
+    }
+
+    const activeBlocks = emptyUnreachable.size === 0
+      ? this.blocks
+      : this.blocks.filter((b) => !emptyUnreachable.has(b.id));
+
+    const activeEdges = emptyUnreachable.size === 0
+      ? this.edges
+      : this.edges.filter((e) => !emptyUnreachable.has(e.fromBlockId) && !emptyUnreachable.has(e.toBlockId));
+
+    if (emptyUnreachable.size > 0) {
+      for (const removedId of emptyUnreachable) {
+        predecessorsByBlock.delete(removedId);
+        successorsByBlock.delete(removedId);
+      }
+      for (const [id, preds] of predecessorsByBlock.entries()) {
+        predecessorsByBlock.set(id, preds.filter((p) => !emptyUnreachable.has(p)));
+      }
+      for (const [id, succs] of successorsByBlock.entries()) {
+        successorsByBlock.set(id, succs.filter((s) => !emptyUnreachable.has(s)));
+      }
+    }
+
+    const blocks: BasicBlock[] = activeBlocks.map((block) => ({
       id: block.id,
       statements: block.statements,
       predecessorIds: (predecessorsByBlock.get(block.id) ?? []).sort(),
       successorIds: (successorsByBlock.get(block.id) ?? []).sort(),
       ...(block.terminator === undefined ? {} : { terminator: block.terminator }),
     }));
-    const dominators = calculateDominators(entry, blocks, this.edges);
+    const dominators = calculateDominators(entry, blocks, activeEdges);
     const idomMap = new Map<string, string | undefined>();
     for (const d of dominators) {
       idomMap.set(d.blockId, d.immediateDominatorId);
     }
     const loopHeaders = new Map<string, Set<string>>();
-    for (const edge of this.edges) {
+    for (const edge of activeEdges) {
       if (
         edge.kind === "loop-back" ||
         (isDominator(idomMap, edge.toBlockId, edge.fromBlockId) && (edge.kind === "continue" || edge.kind === "true"))
@@ -251,7 +340,7 @@ class FlowState {
       entryBlockId: entry,
       exitBlockId: exit,
       blocks: blocks.sort((left, right) => left.id.localeCompare(right.id)),
-      edges: this.edges.sort((left, right) => left.id.localeCompare(right.id)),
+      edges: activeEdges.sort((left, right) => left.id.localeCompare(right.id)),
       dominators,
       loops,
       unreachableBlockIds,

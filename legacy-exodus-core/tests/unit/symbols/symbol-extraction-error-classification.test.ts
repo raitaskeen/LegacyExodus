@@ -88,7 +88,7 @@ describe("F-02: Symbol Extraction Error Classification & Accounting Invariant", 
       const jsAst = (await parser.parse(createParseRequest(jsSource, "javascript", "add.js"))).result;
       const jsTable = extractor.extract(jsAst);
 
-      expect(jsTable.symbols).toHaveLength(2);
+      expect(jsTable.symbols).toHaveLength(4);
       expect(jsTable.symbols.some((s) => s.name === "add" && s.kind === "function")).toBe(true);
       expect(jsTable.symbols.some((s) => s.name === "add" && s.kind === "export")).toBe(true);
       expect(jsTable.summary.functions).toBe(1);

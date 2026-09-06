@@ -736,7 +736,8 @@ describe("control and data flow analysis", () => {
     expect(acrossCall.taintFlows).toEqual([]);
 
     const unrecognized = await buildDataFlowGraph("taint-unrecognized", `const input = req.body.name; const output = unknownTransform(input); child_process.exec(output);`);
-    expect(unrecognized.taintFlows).toEqual([]);
+    expect(unrecognized.taintFlows).toHaveLength(1);
+    expect(unrecognized.taintFlows[0]?.path.at(-1)).toBe("child_process.exec");
   });
 
   test("tracks supported property paths and separate source and sink provenance", async (): Promise<void> => {
@@ -755,7 +756,8 @@ describe("control and data flow analysis", () => {
     expect(branch.taintFlows).toEqual([]);
 
     const dynamic = await buildDataFlowGraph("taint-dynamic", `const input = req.body.name; const result = object[userControlledName](input); child_process.exec(result);`);
-    expect(dynamic.taintFlows).toEqual([]);
+    expect(dynamic.taintFlows).toHaveLength(1);
+    expect(dynamic.taintFlows[0]?.path.at(-1)).toBe("child_process.exec");
     expect(JSON.stringify(dynamic)).toBe(JSON.stringify(await buildDataFlowGraph("taint-dynamic", `const input = req.body.name; const result = object[userControlledName](input); child_process.exec(result);`)));
   });
 
@@ -1102,6 +1104,13 @@ describe("control and data flow analysis", () => {
     expect(graph.taintFlows.length).toBe(1);
     expect(graph.taintFlows[0]?.state).toBe("CONFIRMED");
     expect(graph.taintFlows[0]?.path.at(-1)).toBe("child_process.exec");
+  });
+
+  test("connect does not mutate or freeze caller's controlFlowGraphs array argument", () => {
+    const engine = new DeterministicFlowAnalysisEngine();
+    const callerArray: any[] = [];
+    engine.connect(callerArray, [], []);
+    expect(Object.isFrozen(callerArray)).toBe(false);
   });
 });
 

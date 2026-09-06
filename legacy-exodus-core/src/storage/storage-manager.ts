@@ -1,5 +1,5 @@
 import type { SerializedPayload, StorageRecord } from "./storage-record";
-import type { StorageProvider, StorageQueryCriteria } from "./storage-provider";
+import type { CommitBatchOptions, StorageProvider, StorageQueryCriteria } from "./storage-provider";
 
 export class StorageManager {
   public constructor(private readonly provider: StorageProvider) {}
@@ -16,6 +16,37 @@ export class StorageManager {
         await this.provider.save(record);
       }
     }
+  }
+
+  public async commitBatch(options: CommitBatchOptions): Promise<readonly StorageRecord[]> {
+    if (this.provider.commitBatch) {
+      return this.provider.commitBatch(options);
+    }
+
+    const events = options.events ?? [];
+    const nextSeqByAgg = new Map<string, number>();
+    const durableRecords: StorageRecord[] = [];
+
+    for (const eventItem of events) {
+      let seq = nextSeqByAgg.get(eventItem.aggregateId);
+      if (seq === undefined) {
+        const records = await this.findScoped({ type: "domain-event", projectId: eventItem.aggregateId });
+        let max = -1;
+        for (const record of records) {
+          const payload = record.payload as { readonly sequence?: unknown };
+          if (typeof payload.sequence === "number" && payload.sequence > max) {
+            max = payload.sequence;
+          }
+        }
+        seq = max + 1;
+      }
+      const record = eventItem.createRecord(seq);
+      durableRecords.push(record);
+      nextSeqByAgg.set(eventItem.aggregateId, seq + 1);
+    }
+
+    await this.saveBatch([...options.records, ...durableRecords]);
+    return durableRecords;
   }
 
   public findById<Payload extends SerializedPayload>(

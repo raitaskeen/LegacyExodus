@@ -34,7 +34,7 @@ describe("JavaScriptSymbolExtractor", () => {
       functions: 1,
       imports: 1,
       methods: 1,
-      variables: 1,
+      variables: 3,
     });
     expect(table.symbols.find((symbol) => symbol.kind === "import")?.moduleSpecifier).toBe("express");
     expect(table.symbols.find((symbol) => symbol.kind === "variable" && symbol.name === "DATABASE_URL")?.declarationKind).toBe("const");

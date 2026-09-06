@@ -2,34 +2,55 @@ import { createHash } from "node:crypto";
 
 import type { ASTNode } from "@parser/index";
 
+import type { DependencyGraph } from "@graph/index";
+import type { SymbolTable } from "@symbols/index";
+
 import { DeterministicCallGraphBuilder } from "./call-graph-builder";
-import { createSemanticAnalysis, type DeadCodeFinding, type ExpressRoute, type MiddlewareChain, type ScopeAnalysis, type SemanticAnalysis, type SemanticEntryPoint } from "./semantic-contracts";
+import { createSemanticAnalysis, type DeadCodeFinding, type ExpressRoute, type MiddlewareChain, type ScopeAnalysis, type SemanticAnalysis, type SemanticCall, type SemanticEntryPoint, type SymbolReference } from "./semantic-contracts";
 import type { SemanticContext } from "./semantic-context";
 
 export class DeterministicSemanticAnalysisEngine {
-  public constructor(private readonly callGraphBuilder: DeterministicCallGraphBuilder = new DeterministicCallGraphBuilder()) {}
+  public constructor(public readonly callGraphBuilder: DeterministicCallGraphBuilder = new DeterministicCallGraphBuilder()) {}
 
   public analyze(context: SemanticContext): SemanticAnalysis {
     const callGraph = this.callGraphBuilder.build(context.astResults, context.symbolTables, context.dependencyGraph);
-    const referencedSymbolIds = new Set(callGraph.references.flatMap((reference) => reference.resolvedSymbolId === undefined ? [] : [reference.resolvedSymbolId]));
-    const importedIds = new Set(context.dependencyGraph.edges.map((edge) => edge.importSymbolId));
-    const exportedIds = new Set(context.dependencyGraph.edges.map((edge) => edge.targetExportSymbolId));
-    const scopes = context.symbolTables.map((table) => createScope(table.filePath, table.symbols.map((symbol) => symbol.name), callGraph.references.filter((reference) => reference.filePath === table.filePath).map((reference) => reference.name)));
-    const unusedImports = context.symbolTables.flatMap((table) => table.symbols.filter((symbol) => symbol.kind === "import" && !importedIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unused-import")));
-    const unusedExports = context.symbolTables.flatMap((table) => table.symbols.filter((symbol) => symbol.kind === "export" && !exportedIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unused-export")));
-    const deadCode = context.symbolTables.flatMap((table) => table.symbols.filter((symbol) => ["function", "method", "class", "variable"].includes(symbol.kind) && !symbol.exported && !referencedSymbolIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unreferenced-local-symbol")));
     const httpCalls = context.astResults.map((ast) => findHttpCalls(ast.root, ast.metadata.sourcePath));
-
-    return createSemanticAnalysis({
+    return this.synthesize({
       calls: callGraph.calls,
       references: callGraph.references,
+      symbolTables: context.symbolTables,
+      dependencyGraph: context.dependencyGraph,
+      filePaths: context.astResults.map((ast) => ast.metadata.sourcePath),
+      httpCalls,
+    });
+  }
+
+  public synthesize(params: {
+    readonly calls: readonly SemanticCall[];
+    readonly references: readonly SymbolReference[];
+    readonly symbolTables: readonly SymbolTable[];
+    readonly dependencyGraph: DependencyGraph;
+    readonly filePaths: readonly string[];
+    readonly httpCalls: readonly { readonly routes: readonly ExpressRoute[]; readonly middlewareChains: readonly MiddlewareChain[] }[];
+  }): SemanticAnalysis {
+    const referencedSymbolIds = new Set(params.references.flatMap((reference) => reference.resolvedSymbolId === undefined ? [] : [reference.resolvedSymbolId]));
+    const importedIds = new Set(params.dependencyGraph.edges.map((edge) => edge.importSymbolId));
+    const exportedIds = new Set(params.dependencyGraph.edges.map((edge) => edge.targetExportSymbolId));
+    const scopes = params.symbolTables.map((table) => createScope(table.filePath, table.symbols.map((symbol) => symbol.name), params.references.filter((reference) => reference.filePath === table.filePath).map((reference) => reference.name)));
+    const unusedImports = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => symbol.kind === "import" && !importedIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unused-import")));
+    const unusedExports = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => symbol.kind === "export" && !exportedIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unused-export")));
+    const deadCode = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => ["function", "method", "class", "variable"].includes(symbol.kind) && !symbol.exported && !referencedSymbolIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unreferenced-local-symbol")));
+
+    return createSemanticAnalysis({
+      calls: params.calls,
+      references: params.references,
       scopes,
       deadCode,
       unusedImports,
       unusedExports,
-      entryPoints: entryPoints(context.astResults.map((ast) => ast.metadata.sourcePath), callGraph.calls),
-      routes: httpCalls.flatMap((analysis) => analysis.routes),
-      middlewareChains: httpCalls.flatMap((analysis) => analysis.middlewareChains),
+      entryPoints: entryPoints(params.filePaths, params.calls),
+      routes: params.httpCalls.flatMap((analysis) => analysis.routes),
+      middlewareChains: params.httpCalls.flatMap((analysis) => analysis.middlewareChains),
     });
   }
 }
@@ -48,7 +69,7 @@ function entryPoints(paths: readonly string[], calls: readonly { readonly source
   return uniqueByKey([...conventional, ...listeners], (entry) => `${entry.filePath}:${entry.reason}`);
 }
 
-function findHttpCalls(root: ASTNode, filePath: string): { readonly routes: readonly ExpressRoute[]; readonly middlewareChains: readonly MiddlewareChain[] } {
+export function findHttpCalls(root: ASTNode, filePath: string): { readonly routes: readonly ExpressRoute[]; readonly middlewareChains: readonly MiddlewareChain[] } {
   const receivers = expressReceivers(root);
   const middleware: string[] = [];
   const routes: ExpressRoute[] = [];

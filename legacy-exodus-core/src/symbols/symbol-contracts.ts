@@ -17,7 +17,7 @@ export interface CodeSymbol {
   readonly anonymous: boolean;
   readonly visibility: "public";
   readonly parameters: readonly string[];
-  readonly declarationKind?: "const" | "let" | "var";
+  readonly declarationKind?: "const" | "let" | "var" | "param";
   readonly value?: string | number | boolean | null;
   readonly moduleSpecifier?: string;
   /** Original exported name when this symbol is a named re-export. */
@@ -64,7 +64,7 @@ const codeSymbolSchema = z.object({
   anonymous: z.boolean(),
   visibility: z.literal("public"),
   parameters: z.array(z.string().min(1)),
-  declarationKind: z.enum(["const", "let", "var"]).optional(),
+  declarationKind: z.enum(["const", "let", "var", "param"]).optional(),
   value: z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
   moduleSpecifier: z.string().min(1).optional(),
   sourceSymbolName: z.string().min(1).optional(),

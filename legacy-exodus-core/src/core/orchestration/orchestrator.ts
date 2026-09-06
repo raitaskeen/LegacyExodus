@@ -5,6 +5,7 @@ import {
 import { createProjectState } from "@core/state/state-factory";
 import type { ProjectState } from "@core/state/project-state";
 import { EventBus } from "@core/events/event-bus";
+import { createDurableEventRecord, loadDurableEvents } from "@core/events/durable-event-journal";
 import { reduceProjectState } from "@core/events/event-reducer";
 import { InMemoryEventStore } from "@core/events/event-store";
 import { DiscoveryEngine } from "@discovery/index";
@@ -62,7 +63,17 @@ export class Orchestrator implements RuntimeService {
       const validatedCommand = validateCommand(command);
       const execution = await this.executeValidatedCommand(validatedCommand);
 
-      await this.storage.saveBatch(execution.records);
+      const analysisRunId = validatedCommand.type === "AnalyzeProject" ? validatedCommand.id : undefined;
+
+      // Facts and their ordered event journal are committed in a single atomic transaction.
+      // EventBus delivery is deliberately post-commit and can be retried/replayed from this durable journal.
+      await this.storage.commitBatch({
+        records: execution.records,
+        events: execution.events.map((event) => ({
+          aggregateId: event.aggregateId,
+          createRecord: (sequence: number) => createDurableEventRecord(event, sequence, analysisRunId),
+        })),
+      });
 
       for (const event of execution.events) {
         this.eventStore.append(event);
@@ -95,6 +106,11 @@ export class Orchestrator implements RuntimeService {
 
   public replay(): ProjectState {
     return reduceProjectState(this.initialState, this.eventStore.getAll());
+  }
+
+  /** Reconstructs state after a process restart from the durable event journal. */
+  public async replayDurable(projectId: string, analysisRunId?: string): Promise<ProjectState> {
+    return reduceProjectState(this.initialState, await loadDurableEvents(this.storage, projectId, analysisRunId));
   }
 
   public getStatus(): OrchestratorStatus {
