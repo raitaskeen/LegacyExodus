@@ -9,6 +9,13 @@ and this project adheres to deterministic semantic contracts and verifiable engi
 
 ## [Unreleased]
 
+- **Lookup-Map Key Path Canonicalization in Orchestration Pipeline (CodeRabbit #3941957284):**
+  - Canonicalized key indexing for `tablesByPath`, `symbolsByPath`, and `importsByFile` in `command-handler.ts` using `canonicalizePath(table.filePath)`.
+  - Canonicalized lookup keys when resolving symbols in `symbolsByPath.get(canonicalizePath(file.path))` and filtering call source file paths in `canonicalizePath(call.sourceFilePath) === canonicalizePath(file.path)` during data-flow context construction and proven call target extraction.
+  - Eliminated cross-file call resolution failures (`UNRESOLVED`) and dropped data-flow call bindings when project discovery produces paths with non-canonical segments (`./src/file.js`), redundant separators, or platform-specific Windows backslashes (`src\file.js`).
+  - Added dedicated regression test suite (`lookup-map-canonicalization.test.ts`) covering cross-file call resolution and data-flow bindings across non-canonical path representations and Windows backslashes.
+  - Expanded test baseline to **995/995 passing tests across 112 files** (9,351 assertions, 0 failures) with zero regressions across all 4 verification dashboard gates.
+
 - **Durable Event Atomic Sequence Reservation & Transactional Ordering (F-002):**
   - Eliminated the read-modify-write concurrency window in durable event sequence allocation by introducing transactional batch commitment (`storage.commitBatch({ records, events })`) across both `SqliteStorageProvider` and `MemoryStorageProvider`.
   - In `SqliteStorageProvider`: serialized sequence reservations and journal persistence within `BEGIN IMMEDIATE` transactions, querying the committed maximum sequence directly from storage and persisting facts and journal entries in a single atomic transaction.

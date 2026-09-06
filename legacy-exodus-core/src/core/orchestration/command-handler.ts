@@ -13,7 +13,7 @@ import type {
 import { createDomainEvent, type DomainEvent } from "@core/events/domain-event";
 import { validateProjectDiscovery, type FileArtifact } from "@contracts/discovery";
 import { DiscoveryEngine, DiscoveryValidator, type DiscoveryResult } from "@discovery/index";
-import { DeterministicDependencyGraphBuilder, ModuleResolver, type ModuleResolutionOptions } from "@graph/index";
+import { DeterministicDependencyGraphBuilder, ModuleResolver, canonicalizePath, type ModuleResolutionOptions } from "@graph/index";
 import { DeterministicControlFlowGraphBuilder, DeterministicDataFlowGraphBuilder, DeterministicFlowAnalysisEngine, createProvenCallTargets, type ControlFlowGraph, type BuildContextResult } from "@flow/index";
 import { DeterministicKnowledgeGraphBuilder } from "@knowledge/index";
 import { readFile } from "node:fs/promises";
@@ -477,9 +477,9 @@ export class AnalyzeProjectHandler {
           cycles: dependencyGraph.cycles,
         }),
       );
-      const tablesByPath = new Map(symbolTables.map((table) => [table.filePath, table]));
-      const symbolsByPath = new Map(symbolTables.map((table) => [table.filePath, table.symbols]));
-      const importsByFile = new Map(symbolTables.map((table) => [table.filePath, table.symbols.filter((symbol) => symbol.kind === "import")]));
+      const tablesByPath = new Map(symbolTables.map((table) => [canonicalizePath(table.filePath), table]));
+      const symbolsByPath = new Map(symbolTables.map((table) => [canonicalizePath(table.filePath), table.symbols]));
+      const importsByFile = new Map(symbolTables.map((table) => [canonicalizePath(table.filePath), table.symbols.filter((symbol) => symbol.kind === "import")]));
       const targetByImportId = new Map(dependencyGraph.edges.map((edge) => [edge.importSymbolId, edge.targetExportSymbolId]));
 
       const callGraphBuilder = new DeterministicCallGraphBuilder();
@@ -535,7 +535,7 @@ export class AnalyzeProjectHandler {
 
         const provenTargets = createProvenCallTargets(
           fileCalls.flatMap((call) =>
-            call.sourceFilePath === file.path && call.resolutionState === "RESOLVED" && call.targetSymbolId !== undefined && call.location !== undefined
+            canonicalizePath(call.sourceFilePath) === canonicalizePath(file.path) && call.resolutionState === "RESOLVED" && call.targetSymbolId !== undefined && call.location !== undefined
               ? [{ callId: call.id, sourceFilePath: call.sourceFilePath, location: call.location, targetSymbolId: call.targetSymbolId }]
               : [],
           ),
@@ -543,7 +543,7 @@ export class AnalyzeProjectHandler {
         const contextResult = dataFlowBuilder.buildContext(
           ast,
           provenTargets,
-          symbolsByPath.get(file.path) ?? [],
+          symbolsByPath.get(canonicalizePath(file.path)) ?? [],
         );
         allContexts.push(contextResult);
 
