@@ -29,97 +29,56 @@ Applies to all bug fixes, security patches, CodeRabbit/linter remediations, sema
 * Bun runtime $\ge 1.3.0$ installed locally.
 * Full alignment with the rules in [Permanent Charter](../../../docs/governance/PERMANENT_CHARTER.md).
 
-## 6. Canonical Operating Procedure
-Agents MUST execute the following 13-step sequence in strict order without omitting or reordering steps:
+## 6. Canonical Operating Procedure & Phase Requirements
+
+> **CANONICAL SEQUENCE NOTICE:**
+> For the mandatory remediation order, all agents MUST follow the **Canonical Forensic Remediation Sequence** (Steps 1 through 17) defined in [`docs/governance/AGENT_OPERATING_MODEL.md`](../../../docs/governance/AGENT_OPERATING_MODEL.md#41-canonical-forensic-remediation-sequence). This skill provides phase-specific technical requirements and execution constraints, and does NOT define an independent or competing sequence.
+
+The canonical 17-step remediation pipeline is structured into six functional phases:
 
 ```text
-EVIDENCE ──► REPRODUCTION ──► ROOT CAUSE ──► RED TEST ──► SMALLEST FIX
+Phase 1: Pre-Flight & Evidence Gathering (Steps 1–3)
    │
-   ▼
-FOCUSED TEST ──► FULL TEST ──► TYPECHECK ──► BENCHMARK ──► DIFF REVIEW ──► COMMIT ──► PUSH ──► STOP
+Phase 2: Defect Isolation & RED Test Creation (Steps 4–6)
+   │
+Phase 3: Surgical Remediation & Focused Verification (Steps 7–8)
+   │
+Phase 4: Full Pipeline Verification Gates (Steps 9–12)
+   │
+Phase 5: Diff Hygiene & Verification Report (Steps 13–14)
+   │
+Phase 6: Commit, Push & Hard Stop (Steps 15–17)
 ```
 
-### Step 1: Evidence Gathering
-* Inspect current source code, contracts, and relevant test files.
-* Do NOT assume external finding text is accurate; verify the issue against live code.
-* Identify the exact file, symbol, and line numbers involved.
+### Phase 1: Pre-Flight & Evidence Gathering (Steps 1–3)
+* **Pre-Flight Validation (Step 1):** Verify that the working tree is pristine (`git status` reports `nothing to commit, working tree clean`) and that you are on a dedicated task branch created from `origin/<base-branch>`.
+* **Evidence Gathering (Step 2):** Inspect current source code, AST node mappers, flow analyzers, and live execution logs. Never assume external report text is accurate; verify the issue directly against live code.
+* **Finding Confirmation (Step 3):** Confirm the defect against current implementation code on `core-foundation:legacy-exodus-core/src/`. Formulate a minimal code reproduction or CLI command.
 
-### Step 2: Reproduction
-* Reproduce the failure via a minimal script or focused CLI command.
-* If the defect cannot be reproduced, halt and mark the finding `NOT_REPRODUCED`.
+### Phase 2: Defect Isolation & RED Test Creation (Steps 4–6)
+* **Smallest Safe Change Definition (Step 4):** Pinpoint the structural/semantic root cause and define the minimal architectural fix that resolves it.
+* **Author RED Regression Test (Step 5):** Create a dedicated regression test file in `legacy-exodus-core/tests/` isolating the failure. Loose assertions (`toBeTruthy()`, `toBeDefined()`) are strictly forbidden where exact values or AST contracts can be asserted.
+* **RED Test Failure Verification (Step 6):** Execute `bun test <path-to-test>`. The test **MUST demonstrably FAIL** before any source code is changed. Record the failure output and assertion details.
 
-### Step 3: Root Cause Analysis
-* Distinguish symptoms from root causes.
-* Trace the flaw to the fundamental AST node handling, lexical scope resolution, or state machine transition.
+### Phase 3: Surgical Remediation & Focused Verification (Steps 7–8)
+* **Apply Smallest Safe Remediation (Step 7):** Modify exclusively the source files in `legacy-exodus-core/src/` needed to correct the root cause. Do NOT refactor adjacent methods, reformat untouched code, or modify unrelated contracts.
+  * *Red-Team Loopback:* If a Red-Team review emits `RED-TEAM FAIL`, the workflow returns directly to Step 7. The minimal reproduction is preserved, the fix is adjusted, and the workflow re-enters Step 8.
+* **Focused Test Verification (Step 8):** Re-run the regression test (`bun test <path-to-test>`). Confirm that it now **PASSES** cleanly.
 
-### Step 4: Author Red (Failure-First) Regression Test
-* Author a dedicated, automated regression test in the relevant test directory (`tests/unit/...` or `tests/integration/...`).
-* Execute the test:
-  ```bash
-  bun test tests/path/to/regression.test.ts
-  ```
-* **Verify that the test demonstrably FAILS against the current code.**
-* Record the exact failure message and assertion error.
+### Phase 4: Full Pipeline Verification Gates (Steps 9–12)
+* **Static Typecheck (Step 9):** Run `bun run typecheck` in `legacy-exodus-core/`. Must exit with code 0 and zero compiler errors.
+* **Full Test Suite Verification (Step 10):** Run `bun test` in `legacy-exodus-core/` across all 113+ test files. Must achieve 100% pass rate with zero failures.
+* **Benchmark Governance Audit (Step 11):** Run `bun run benchmark audit` in `legacy-exodus-core/`. All 10/10 audit checks must pass.
+* **CLI Smoke Verification (Step 12):** Run `bun run src/cli/index.ts --help` in `legacy-exodus-core/`. Must exit with code 0 and valid help output.
 
-### Step 5: Smallest Safe Remediation
-* Apply the minimal necessary code change to `legacy-exodus-core/src/` to resolve the root cause.
-* Prohibit refactoring adjacent methods, renaming unrelated variables, or modifying untouched contracts.
+### Phase 5: Diff Hygiene & Verification Report (Steps 13–14)
+* **Git Diff & Hygiene Review (Step 13):** Run `git diff --stat` and `git diff --check`. Verify zero trailing whitespace, zero extraneous files, and strictly scoped changes.
+* **Mandatory Verification Report (Step 14):** Generate the complete remediation report incorporating the 10-layer `verification_report` schema from [`legacyexodus-test-verification`](../legacyexodus-test-verification/SKILL.md).
 
-### Step 6: Focused Test Verification
-* Re-run the red regression test:
-  ```bash
-  bun test tests/path/to/regression.test.ts
-  ```
-* Confirm that the test now PASSES cleanly.
-
-### Step 7: Full Test Suite Verification
-* Run the complete test suite across all 113+ test files:
-  ```bash
-  bun test
-  ```
-* Confirm 100% test pass rate with zero failures across all test files.
-
-### Step 8: Static Typecheck Verification
-* Execute TypeScript compiler verification in canonical package root `legacy-exodus-core/`:
-  ```bash
-  bun run typecheck
-  ```
-* Confirm that compilation exits with code 0 and zero compiler errors. Recorded evidence of typecheck completion is mandatory.
-
-### Step 9: Benchmark & Determinism Verification
-* Execute the benchmark governance audit:
-  ```bash
-  bun run benchmark audit
-  ```
-* Confirm `Verdict: PASS` across all 10/10 checks.
-
-### Step 10: Git Diff & Hygiene Review
-* Before staging, verify diff hygiene and changed file scope:
-  ```bash
-  git diff --stat
-  git diff --check
-  ```
-* Ensure no trailing whitespace, debug statements, or temporary files remain.
-
-### Step 11: Atomic Conventional Commit
-* Stage strictly the remediated file(s) and regression test(s):
-  ```bash
-  git commit -m "fix(<subsystem>): <concise summary>" \
-             -m "- Address root cause: <explanation>" \
-             -m "- Add regression coverage in <test-path>" \
-             -m "- Remediate finding <finding-id>"
-  ```
-
-### Step 12: Remote Push
-* Push the atomic commit to the remote task branch:
-  ```bash
-  git push origin <task-branch>
-  ```
-* Post-push working tree verification: Confirm that `git status` reports `nothing to commit, working tree clean`.
-
-### Step 13: Mandatory Stop
-* **HARD STOP.** Do NOT proceed to the next finding.
-* Output the standard remediation completion report.
+### Phase 6: Commit, Push & Hard Stop (Steps 15–17)
+* **Atomic Conventional Commit (Step 15):** Stage only remediated files and test files. Commit with Conventional Commit message and co-authorship.
+* **Remote Push & Postcondition (Step 16):** Push to `origin <task-branch>`. Confirm `git status` reports `nothing to commit, working tree clean`.
+* **Mandatory Hard Stop (Step 17):** Halt execution immediately. Await human maintainer review.
 
 ---
 
@@ -128,11 +87,20 @@ FOCUSED TEST ──► FULL TEST ──► TYPECHECK ──► BENCHMARK ──�
 * **Resolution Evidence:** Recorded passing log of the regression test after the fix.
 * **Non-Regression Evidence:** Full test suite execution log (`bun test`) showing 100% passing tests.
 
-## 8. Verification Requirements
-* `bun run typecheck`: 0 errors.
-* `bun test`: 100% passed (0 failed).
-* `bun run benchmark audit`: 10/10 checks passed.
-* `git diff --check`: 0 whitespace/diff warnings.
+## 8. Mandatory Verification Report & Downstream Evidence Contract
+Every completed forensic remediation MUST explicitly invoke and incorporate the standard `verification_report` contract defined in [`legacyexodus-test-verification`](../legacyexodus-test-verification/SKILL.md).
+
+Merely stating "tests passed" is strictly forbidden and constitutes false closure. The completion report MUST document:
+1. **Test Metrics:** Total test files, total tests passed, total tests failed (must be 0), and total `expect()` assertion calls across the full test suite.
+2. **Ten Verification Layers:** Complete structured results (`PASS | FAIL | SKIPPED`) and recorded evidence for all ten verification layers (L01 through L10) as defined in `.agents/skills/legacyexodus-test-verification/SKILL.md`.
+3. **Static Typecheck:** Exit code (0) and 0 compiler errors from `bun run typecheck`.
+4. **Benchmark Governance Audit:** Explicit pass verdict and confirmation of 10/10 checks passed from `bun run benchmark audit`.
+5. **CLI Smoke Verification:** Exit code (0) and confirmation of clean help output from `bun run src/cli/index.ts --help`.
+6. **Diff & Scope Hygiene:** Output of `git diff --check` and `git diff --stat`.
+7. **Memory Scalability Status:** Exactly one of the 5 allowed statuses (`VERIFIED`, `INCONCLUSIVE`, `REGRESSION`, `IMPROVEMENT`, `NO MATERIAL CHANGE`) per `.agents/skills/legacyexodus-performance-audit/SKILL.md`.
+8. **Worktree Status:** Precondition clean check and postcondition clean check (`nothing to commit, working tree clean`).
+
+The downstream verification report is mandatory evidence required to certify finding completion.
 
 ## 9. Failure Handling
 * If the red test does not fail before the fix: The test does not properly isolate the defect. Refine the test before touching source code.
@@ -154,4 +122,4 @@ A finding is classified as `FULLY REMEDIATED` if and only if:
 * Never continue to another task without stopping.
 
 ## 12. Expected Output Format
-Terminates with the standard 17-point remediation report specified in [Agent Operating Model](../../../docs/governance/AGENT_OPERATING_MODEL.md).
+Terminates with the standard verification and remediation completion report specified in [Agent Operating Model §5.2](../../../docs/governance/AGENT_OPERATING_MODEL.md#52-remediation-completion-report-builder--red-team--human), incorporating the complete 10-layer `verification_report` artifact.

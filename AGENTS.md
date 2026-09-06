@@ -9,9 +9,9 @@
 
 ## 1. The Governing Axiom
 
-> **EVIDENCE → SMALLEST SAFE CHANGE → FOCUSED TEST → FULL TEST → BENCHMARK → DIFF REVIEW → COMMIT → PUSH → STOP**
+> **EVIDENCE → FAILURE-FIRST TEST → ROOT CAUSE → SMALLEST SAFE CHANGE → STATIC TYPECHECK → FOCUSED TEST → FULL TEST → BENCHMARK AUDIT → DETERMINISM → RED TEAM → DIFF REVIEW → COMMIT → PUSH → STOP**
 
-This is the canonical forensic remediation sequence. You MUST NOT reorder, abbreviate, or bypass this sequence.
+This is the governing axiom for all LegacyExodus forensic remediation. The repository enforces a single, authoritative, non-negotiable remediation sequence. For the exact, deterministic 17-step sequence of execution, all agents MUST follow the **Canonical Forensic Remediation Sequence** in [`docs/governance/AGENT_OPERATING_MODEL.md`](docs/governance/AGENT_OPERATING_MODEL.md#41-canonical-forensic-remediation-sequence). You MUST NOT reorder, abbreviate, or bypass this sequence, nor define a competing workflow.
 
 For detailed constitutional standards and multi-agent roles, refer to:
 * **Constitutional Charter:** [`docs/governance/PERMANENT_CHARTER.md`](docs/governance/PERMANENT_CHARTER.md)
@@ -37,11 +37,25 @@ When resolving discrepancies, enforce this strict precedence order:
 
 If documentation states a feature exists but no working code is integrated into `legacy-exodus-core/src/`, the feature is **NOT IMPLEMENTED**.
 
-**Documentation Truth Rule:** For documentation work, agents MUST resolve implementation truth directly from the core trunk via:
-```bash
-git show core-foundation:<path>
-```
-Agents are strictly prohibited from treating the stale snapshot at `docs-foundation/legacy-exodus-core/` as current implementation truth.
+**Documentation Truth Rule:** For documentation work, agents MUST resolve implementation and test truth directly from the core trunk via branch-qualified Git commands:
+* **Implementation Source Code:**
+  ```bash
+  git show core-foundation:legacy-exodus-core/src/<path>
+  ```
+* **Automated Test Suites & Regression Proofs:**
+  ```bash
+  git show core-foundation:legacy-exodus-core/tests/<path>
+  ```
+
+Agents are strictly prohibited from treating the stale snapshot at `docs-foundation/legacy-exodus-core/` as current truth. This prohibition applies equally to:
+* Implementation source code (`legacy-exodus-core/src/`)
+* Automated test suites and regression fixtures (`legacy-exodus-core/tests/`)
+* Benchmark harnesses, configurations, and test data
+
+Under no circumstances should tests or source from the stale snapshot inside `docs-foundation` be treated as authoritative evidence. The truth hierarchy is strictly:
+$$\text{Current } \texttt{core-foundation} \text{ implementation} \longrightarrow \text{Current } \texttt{core-foundation} \text{ tests/evidence} \longrightarrow \text{Current documentation}$$
+
+When documentation verification requires source or test inspection, agents MUST use branch-qualified commands (`git show core-foundation:<path>`) consistently. NEVER copy the current core into `docs-foundation` or merge `main` into `docs-foundation` merely to synchronize the stale snapshot.
 
 ---
 
@@ -63,29 +77,36 @@ Every architecture claim, subsystem description, and PR summary MUST classify fe
 ### C. AGENT ROLES & FINDING DISCIPLINE
 
 #### 1. Remediation Agents (`legacyexodus-forensic-remediation`)
-Remediation agents have scoped mutation authority and MUST process exactly **one finding at a time**:
-1. **Identify** the finding from live source code.
-2. **Reproduce** the defect with a minimal scenario.
-3. **Establish Root Cause** (address the fundamental structural flaw, not symptoms).
-4. **Define Smallest Safe Change** (minimal blast radius).
-5. **Create Focused Red Regression Test** (verify it demonstrably fails first).
-6. **Run Focused Verification** (verify the red test passes).
-7. **Run Full Verification** (`bun test` across 113+ files).
-8. **Run Static Typecheck** (`bun run typecheck` for zero compiler errors).
-9. **Run Benchmark Governance** (`bun run benchmark audit` for 10/10 pass).
-10. **Review Diff & Hygiene** (`git diff --stat` and `git diff --check`).
-11. **Commit Atomically** (Conventional Commit format).
-12. **Push to Remote Task Branch** (`origin <task-branch>`).
-13. **HARD STOP.** Do NOT silently move to another finding.
+Remediation agents (Builders) have scoped mutation authority and MUST process exactly **one finding at a time**, executing the single **Canonical Forensic Remediation Sequence** defined in [`docs/governance/AGENT_OPERATING_MODEL.md`](docs/governance/AGENT_OPERATING_MODEL.md#41-canonical-forensic-remediation-sequence). They do NOT define an independent or competing sequence. Key responsibilities include:
+1. Validating clean worktree preconditions before starting.
+2. Formulating a failure-first minimal reproduction and RED test prior to any code modification.
+3. Applying the smallest safe architectural change that addresses root cause.
+4. Passing all verification gates (focused test, static typecheck, full test suite, benchmark audit, CLI smoke test).
+5. Producing the comprehensive verification completion report invoking the 10-layer contract from `.agents/skills/legacyexodus-test-verification/`.
+6. Performing diff hygiene review, atomic commit, and remote push.
+7. Stopping immediately upon push confirmation.
 
-#### 2. Audit & Research Agents (`legacyexodus-code-audit`, `legacyexodus-docs-audit`)
-Audit agents operate in a strictly **non-destructive, read-only** capacity. They MUST NOT modify files, create red tests, commit, or push. Their workflow is:
-1. **Inspect Authoritative Source** (`core-foundation` or live code).
-2. **Gather Evidence** (trace ASTs, call graphs, contracts, CLI commands).
-3. **Validate / Reproduce Conceptually** using read-only inspection commands.
-4. **Identify Findings** and classify severity (`P0`–`P3`) and confidence.
-5. **Report Findings** using the standardized finding report schema.
-6. **STOP.** Do NOT attempt to remediate findings during an audit.
+#### 2. Review, Audit & Research Agents (`legacyexodus-code-audit`, `legacyexodus-docs-audit`, `legacyexodus-performance-audit`, `legacyexodus-red-team-review`)
+All four review and audit skills operate in a strictly **non-destructive, read-only** (or challenge-only) capacity.
+
+ALL FOUR review/audit skills:
+1. **MUST NOT** modify files.
+2. **MUST NOT** create RED regression tests.
+3. **MUST NOT** commit.
+4. **MUST NOT** push.
+
+Role boundaries are strictly partitioned:
+* **`legacyexodus-code-audit` (Code Audit):** Strictly read-only inspection of source code, AST contracts, and execution logic.
+* **`legacyexodus-docs-audit` (Docs Audit):** Strictly read-only comparison of documentation claims against executable truth.
+* **`legacyexodus-performance-audit` (Performance Audit):** Strictly read-only measurement and profiling of runtime speed, memory scalability, and benchmarks.
+* **`legacyexodus-red-team-review` (Red Team Review):** Strictly read-only and challenge-only adversarial probing of candidate diffs and regression evidence.
+
+They can inspect, measure, challenge, report, and provide evidence.
+They cannot remediate.
+They cannot close findings.
+They cannot commit or push.
+The Builder / Remediation Agent remains the writing authority.
+The Human Maintainer remains the final authority.
 
 ---
 

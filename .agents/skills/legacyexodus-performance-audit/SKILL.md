@@ -20,8 +20,20 @@ Applies to AST parsing, symbol extraction, graph construction, data flow analysi
 ## 4. When NOT to Use
 * Standard functional bug fixing without performance impact (use `legacyexodus-forensic-remediation`).
 * General code audits (use `legacyexodus-code-audit`).
+* Modifying production code, creating red regression tests, or committing changes (use `legacyexodus-forensic-remediation`).
 
-## 5. Critical Memory Disclosure Rule
+## 5. Operating Authority & Boundaries
+* **Strict Read-Only Mandate:** Performance Audit operates in a strictly **read-only** capacity.
+* **Strict Invariants:**
+  1. **MUST NOT** modify files.
+  2. **MUST NOT** create RED regression tests.
+  3. **MUST NOT** commit.
+  4. **MUST NOT** push.
+Performance auditors measure, benchmark, profile, and report evidence. They cannot remediate defects, cannot close findings, and cannot commit or push. The Builder / Remediation Agent remains the writing authority; the Human Maintainer remains the final authority.
+
+---
+
+## 6. Critical Memory Disclosure Rule
 > **"A tiny instantaneous RSS reading does NOT constitute proof of OOM safety. Memory safety is established ONLY by demonstrating bounded working set scaling under heavy workloads."**
 
 Agents MUST explicitly classify memory and performance measurements into one of five states:
@@ -33,7 +45,7 @@ Agents MUST explicitly classify memory and performance measurements into one of 
 
 ---
 
-## 6. Operating Procedure
+## 7. Operating Procedure
 
 ### Step 1: Baseline Establishment
 * Check out the unchanged base commit.
@@ -85,7 +97,7 @@ Every delta interval is deterministically classified with zero gaps and zero ove
 
 ---
 
-## 7. Memory Retention Audit ($O(\text{window})$ Invariant)
+## 8. Memory Retention Audit ($O(\text{window})$ Invariant)
 To verify that memory does not leak across analyzed files:
 1. Analyze a corpus with $>10$ files.
 2. Verify that prior AST results and nodes are garbage-collected as analysis moves to subsequent files:
@@ -96,7 +108,7 @@ To verify that memory does not leak across analyzed files:
 
 ---
 
-## 8. Expected Benchmark Report Schema
+## 9. Expected Benchmark Report Schema
 Every performance evaluation MUST terminate with this structured report:
 
 ```markdown
@@ -121,7 +133,7 @@ Every performance evaluation MUST terminate with this structured report:
 
 ---
 
-## 9. Prohibited Behavior
+## 10. Prohibited Behavior
 * Never claim "infinite scalability" or "zero memory overhead" without full corpus proof.
 * Never cite a single run as evidence; always report repeated runs and variance.
 * Never alter benchmark targets or corpus files to pass failing thresholds.

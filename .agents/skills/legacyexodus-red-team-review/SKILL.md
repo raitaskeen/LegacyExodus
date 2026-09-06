@@ -22,10 +22,16 @@ Applies to Pull Requests, bug remediations, architectural refactors, and externa
 * Running standard read-only audits without adversarial challenge (use `legacyexodus-code-audit`).
 
 ## 5. Operating Authority & Boundaries
-* **Adversarial Mandate:** The Red-Team Reviewer MUST approach the code with healthy skepticism, assuming the fix is incomplete until proven otherwise.
-* **Strict Prohibition:** The Red-Team Reviewer **MUST NOT modify production code or tests** during the review. Its role is exclusively investigative and evaluative.
+* **Strict Read-Only & Challenge-Only Mandate:** Red Team Review operates in a strictly **read-only and challenge-only** capacity.
+* **Strict Invariants:**
+  1. **MUST NOT** modify files.
+  2. **MUST NOT** create RED regression tests.
+  3. **MUST NOT** commit.
+  4. **MUST NOT** push.
+* **Adversarial Mandate:** The Red-Team Reviewer MUST approach the candidate change with healthy skepticism, assuming the fix is incomplete until proven otherwise.
 * **The External Reviewer Axiom:**
   > **"An external reviewer (such as Grok, CodeRabbit, or an adversarial subagent) can challenge or disprove a finding, but cannot close a finding."**
+  A finding is only closed when executable tests and verification gates prove remediation. The Builder / Remediation Agent remains the writing authority; the Human Maintainer remains the final authority.
 
 ---
 
@@ -78,7 +84,7 @@ The Red Team MUST systematically interrogate the candidate change against these 
 
 ### Step 5: Verdict Generation
 Issue an explicit verdict:
-* **`RED-TEAM FAIL`**: Concrete defect, unhandled counter-example, or weakened test identified. The cycle returns to the Builder with reproduction details.
+* **`RED-TEAM FAIL`**: Concrete defect, unhandled counter-example, or weakened test identified. The cycle returns to the Builder with reproduction details to execute **Step 7: Apply Smallest Safe Change** of the Canonical Forensic Remediation Sequence (in [`docs/governance/AGENT_OPERATING_MODEL.md`](../../../docs/governance/AGENT_OPERATING_MODEL.md#41-canonical-forensic-remediation-sequence)). The existing minimal reproduction and RED test remain valid and are preserved; the Builder updates the implementation to resolve the counter-example, then re-runs Step 8 (Focused Test Verification) and all downstream verification gates.
 * **`RED-TEAM PASS`**: All 11 questions answered satisfactorily, verified by evidence.
 
 ---

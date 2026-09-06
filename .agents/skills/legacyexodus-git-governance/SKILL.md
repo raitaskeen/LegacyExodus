@@ -59,17 +59,17 @@ git status
 ```
 * **Clean Worktree Precondition:** `git status` MUST report `nothing to commit, working tree clean`. Any unexpected staged, unstaged, or untracked files MUST stop the task immediately. Do not proceed until the workspace is pristine.
 
-### Step 2: Branch Creation from Authoritative Base
-Always branch from the appropriate authoritative base branch (`<base-branch>`):
+### Step 2: Branch Creation from Remote Authoritative Base
+Always branch from the fetched remote-tracking authoritative base branch (`origin/<base-branch>`):
 ```bash
-git checkout -b <type>/<task-name> <base-branch>
+git checkout -b <type>/<task-name> origin/<base-branch>
 git rev-parse HEAD
 ```
 
 **Authoritative Base Branch Mappings:**
-* **Core Implementation Work (`legacy-exodus-core/`):** `<base-branch>` = `core-foundation`
-* **Documentation Work (`docs/`, architecture, ADRs):** `<base-branch>` = `docs-foundation`
-* **Repository-Wide / Main Integration Work:** `<base-branch>` = `main` ONLY when genuinely appropriate (e.g., top-level repository governance foundation, release coordination).
+* **Core Implementation Work (`legacy-exodus-core/`):** `<base-branch>` = `core-foundation` (`origin/core-foundation`)
+* **Documentation Work (`docs/`, architecture, ADRs):** `<base-branch>` = `docs-foundation` (`origin/docs-foundation`)
+* **Repository-Wide / Main Integration Work:** `<base-branch>` = `main` (`origin/main`) ONLY when genuinely appropriate (e.g., top-level repository governance foundation, release coordination).
 
 ### Step 3: Staging & Hygiene Audit
 Before staging and committing:

@@ -46,7 +46,7 @@ Executable reality always supersedes written prose. When discrepancies arise bet
 ### Precedence Rules
 1. **No Prose Supremacy:** A document or roadmap MUST NOT override executable reality. If documentation states a feature exists but no working, integrated implementation exists in `legacy-exodus-core`, the feature MUST be treated as **NOT IMPLEMENTED**.
 2. **Test as Specification:** The test suite defines the operational contract of the code. If code passes tests but violates an explicit architectural boundary defined in Rank 1–4, the test suite is incomplete.
-3. **Docs-Foundation Stale Snapshot:** The `legacy-exodus-core` snapshot residing inside the `docs-foundation` branch is historical and unverified. It MUST NOT be used as an implementation authority. Agents MUST inspect `core-foundation` or `main` for source truth.
+3. **Docs-Foundation Stale Snapshot:** The `legacy-exodus-core` snapshot residing inside the `docs-foundation` branch is historical and unverified. It MUST NOT be used as an implementation or test authority. This prohibition applies equally to source code (`src/`), automated test suites and regression fixtures (`tests/`), and benchmarks. Agents MUST query `core-foundation` via branch-qualified Git commands (`git show core-foundation:<path>`) for source and test truth.
 
 ---
 
