@@ -71,7 +71,7 @@ describe("Repository Governance & GitHub Automation Hardening", () => {
     const ciContent = readFileSync(join(workflowsDir, "ci.yml"), "utf-8");
     expect(ciContent).toContain("contents: read");
     expect(ciContent).not.toContain("contents: write");
-    expect(ciContent).toContain("bun-version: 1.3.14");
+    expect(ciContent).toContain("bun-version: 1.4.2");
     expect(ciContent).toContain("bun install --frozen-lockfile");
     expect(ciContent).toContain("bun run typecheck");
     expect(ciContent).toContain("bun test");
