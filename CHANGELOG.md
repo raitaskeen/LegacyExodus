@@ -9,6 +9,12 @@ and this project adheres to deterministic semantic contracts and verifiable engi
 
 ## [Unreleased]
 
+- **Nested Function Assigned-Context Isolation (CodeRabbit #3941957300):**
+  - Reset `enclosingAssignedName` and `enclosingAssignedId` to `undefined` when recursing into child function scopes (`FunctionDeclaration`, `FunctionExpression`, `ArrowFunctionExpression`) in `JavaScriptSymbolExtractor`.
+  - Prevented assigned class property identities (e.g. `handler = () => ...`) from leaking into nested anonymous callbacks (e.g. `items.map((item) => item)`), ensuring nested callback parameters are not falsely attributed to the outer assigned method.
+  - Added comprehensive regression test suite (`nested-assigned-context-isolation.test.ts`) covering assigned outer functions, nested anonymous callbacks, outer parameter attribution, nested named functions, curried arrow functions, and class methods.
+  - Expanded test baseline to **1001/1001 passing tests across 113 files** (9,388 assertions, 0 failures) with zero regressions across all 4 verification dashboard gates.
+
 - **Lookup-Map Key Path Canonicalization in Orchestration Pipeline (CodeRabbit #3941957284):**
   - Canonicalized key indexing for `tablesByPath`, `symbolsByPath`, and `importsByFile` in `command-handler.ts` using `canonicalizePath(table.filePath)`.
   - Canonicalized lookup keys when resolving symbols in `symbolsByPath.get(canonicalizePath(file.path))` and filtering call source file paths in `canonicalizePath(call.sourceFilePath) === canonicalizePath(file.path)` during data-flow context construction and proven call target extraction.

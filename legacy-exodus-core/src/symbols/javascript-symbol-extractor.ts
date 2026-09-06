@@ -144,6 +144,8 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         this.extractParameterSymbols(node, ast, fnScopeId, fnSymbol.name, fnSymbol.id, symbols);
         this.visitChildren(node, ast, {
           ...context,
+          enclosingAssignedName: undefined,
+          enclosingAssignedId: undefined,
           scopeId: fnScopeId,
           functionScopeId: fnScopeId,
           scopeChain: [fnScopeId, ...context.scopeChain],
@@ -165,6 +167,8 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         this.extractParameterSymbols(node, ast, fnScopeId, fnName, fnId, symbols);
         this.visitChildren(node, ast, {
           ...context,
+          enclosingAssignedName: undefined,
+          enclosingAssignedId: undefined,
           scopeId: fnScopeId,
           functionScopeId: fnScopeId,
           scopeChain: [fnScopeId, ...context.scopeChain],
