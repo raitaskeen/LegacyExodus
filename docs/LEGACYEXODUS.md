@@ -63,7 +63,7 @@ flowchart TD
 
     subgraph Stage2 ["Stage 2: NolaraStruct - Understanding (Implemented)"]
         C -->|AST Parsing & Normalization| D["Normalized AST & Symbol Tables"]
-        D -->|Call Graph & CFG/DFG Flow Analysis| E[("SQLite Storage & Knowledge Graph")]
+        D -->|Call Graph & CFG/DFG Flow Analysis| E[("In-Memory / SQLite Storage & Knowledge Graph")]
     end
 
     subgraph Stage3 ["Stage 3: ZelvoxForge - Transformation (Target Architecture)"]
@@ -235,7 +235,7 @@ flowchart LR
     A["Actor / Agent"] -->|Issues| B["Command"]
     B -->|Zero-Trust Policy| C["Governance Engine"]
     C -->|Validated| D["Orchestrator Committer"]
-    D -->|Append-Only| E[("Event Store .jsonl")]
+    D -->|Append-Only| E[("Event Store (InMemory / .jsonl Planned)")]
     E -->|Synchronous Reducers| F[("SQLite Projections")]
     E -->|Async Broadcast| G["WebSocket / UI Views"]
     F -->|Read-Only| H["Queries"]
@@ -315,7 +315,7 @@ flowchart TD
 | **AI Gateway** | AI Platform & Safety | Security | Zero-Trust LLM proxy. Performs prompt assembly, secret redaction, token budgeting, model routing, and output schema validation. | **`TARGET ARCHITECTURE`** |
 | **Compiler Service** | Language Infrastructure | Build & Toolchain | Interfaces with native compiler toolchains (`cargo check`, `cargo test`, `clippy`) inside isolated sandboxes. | **`TARGET ARCHITECTURE`** |
 | **Governance Engine** | Architecture Governance | Security | Evaluates deterministic security rules, SAST policies, risk scoring, fidelity validation, and Human-in-the-Loop approval gates. | **`CORE IMPLEMENTED`** |
-| **Storage Service** | Data Platform | Reliability Engineering | System-of-record. Manages append-only `.jsonl` logs, SQLite projections, in-memory stores, and streaming JSON projections (`.discovery/*.json`). | **`IMPLEMENTED`** |
+| **Storage Service** | Data Platform | Reliability Engineering | System-of-record. Manages in-memory event storage, SQLite/in-memory projections, and discovery projections (`.discovery/*.json`). Append-only `.jsonl` persistence logs are planned for target architecture. | **`IMPLEMENTED`** |
 
 ---
 
@@ -530,9 +530,9 @@ flowchart LR
     H --> I[("Validated Production Rust")]
 
     subgraph DurableStores ["Durable Stores"]
-        J[("Event Store .jsonl")]
-        K[("SQLite Projections")]
-        L[("Artifact Projections .discovery/*.json")]
+        J[("Event Store (InMemory / .jsonl Planned)")]
+        K[("Projections (SQLite / In-Memory)")]
+        L[("Discovery Projections .discovery/*.json")]
         M[("Target Artifact Store (Target Architecture)")]
     end
 
@@ -543,11 +543,11 @@ flowchart LR
 ```
 
 ### Primary Storage Tiers
-1. **Event Store:** Append-only `.jsonl` files (the ground truth for all state transitions).
-2. **Artifact Store:** Content-addressed, hash-verified immutable files and projection artifacts (`.discovery/*.json`).
-3. **Knowledge Graph Store:** SQLite and in-memory databases (with Parquet columnar exports planned as target architecture) for node/edge relationship queries.
+1. **Event Store:** `InMemoryEventStore` is the active runtime event store; append-only `.jsonl` disk persistence is planned as target architecture.
+2. **Artifact Store:** Current Stage 1 discovery projections write fixed logical files (`.discovery/*.json`) with atomic temporary replacement and manifest hash recording (`manifest.json`). Content-addressed, hash-verified immutable per-run artifact storage is planned as target architecture.
+3. **Knowledge Graph Store:** In-memory and SQLite databases (with Parquet columnar exports planned as target architecture) for node/edge relationship queries.
 4. **Operational Metadata Store:** Task queues, locks, retries, and approval states.
-5. **Projection Store:** Query-optimized SQLite read models for CLI, API, and UI queries (`SqliteStorageProvider`).
+5. **Projection Store:** Query-optimized read models via SQLite or in-memory storage for CLI, API, and UI queries (`SqliteStorageProvider` / `MemoryStorageProvider`).
 
 ### Resumable Checkpoints
 Checkpoints are created atomically at:
@@ -605,8 +605,8 @@ Class XL (Monorepo) ──► Enterprise monorepos with multi-tenant namespace p
 ├────────────────────────┼────────────────────────────────────────────────────────┤
 │ Validation & Contracts │ OpenAPI + Zod (Strict runtime schema boundaries)       │
 ├────────────────────────┼────────────────────────────────────────────────────────┤
-│ Persistence Stores     │ Append-only .jsonl (Events), SQLite / In-Memory         │
-│                        │ (Projections), Streaming JSON (.discovery/*.json)       │
+│ Persistence Stores     │ InMemoryEventStore (Planned: .jsonl), SQLite /         │
+│                        │ In-Memory Projections, Discovery Projections (.json)   │
 ├────────────────────────┼────────────────────────────────────────────────────────┤
 │ Observability          │ OpenTelemetry-compatible tracing, Pino logging         │
 └────────────────────────┴────────────────────────────────────────────────────────┘
