@@ -15,13 +15,13 @@ No single agent is permitted to discover, implement, and independently certify i
 
 ```mermaid
 flowchart TD
-    subgraph Discovery & Validation
-        R[Research / Audit Agent] -->|Identifies Defect & Root Cause| B[Builder Agent]
+    subgraph Discovery & Research
+        R[Research / Audit Agent] -->|Identifies Defect or Drift| B[Builder Agent]
     end
 
-    subgraph Implementation & Testing
+    subgraph Implementation & Verification
         B -->|Writes Red Test & Smallest Safe Change| B
-        B -->|Runs Local Verification & Benchmark| RT[Red-Team Reviewer]
+        B -->|Runs Verification in legacy-exodus-core| RT[Red-Team Reviewer]
     end
 
     subgraph Adversarial Challenge
@@ -29,8 +29,10 @@ flowchart TD
         RT -->|Passes Independent Check| H[Human Maintainer / CI]
     end
 
-    subgraph Final Authority
-        H -->|Reviews Diff & Approves PR| M[Merged into main / core-foundation]
+    subgraph Authoritative Bases & Merges
+        H -->|Core PR Approved| CF[Merged into core-foundation]
+        H -->|Docs PR Approved| DF[Merged into docs-foundation]
+        H -->|Integration Release PR| M[Merged into main]
     end
 ```
 
@@ -105,33 +107,36 @@ flowchart TD
 | **Commit to Temporary Branches** | YES | NO | NO | YES |
 | **Push to Temporary Branches** | YES | NO | NO | YES |
 | **Commit/Push Directly to `main`** | **NEVER** | **NEVER** | **NEVER** | **NEVER** |
-| **Force-Push Shared Branches** | **NEVER** | **NEVER** | **NEVER** | Maintainer Only* |
+| **Force-Push Shared Branches** | **NEVER** | **NEVER** | **NEVER** | Maintainer Emergency Only* |
 | **Issue Red-Team Challenge** | NO | YES | YES | YES |
 | **Close Finding Independently** | **NEVER** | **NEVER** | **NEVER** | YES |
 | **Final Merge Approval** | NO | NO | NO | YES |
 
-*\*Force-pushing shared branches requires documented emergency justification and consensus.*
+*\*Autonomous agents and normal workflows MUST NEVER force-push shared branches. Human maintainers may force-push ONLY as a deliberate, documented, and communicated emergency recovery operation.*
 
 ---
 
 ## 4. Canonical Collaboration Workflows
 
 ### 4.1 Forensic Remediation Workflow (The Standard Pipeline)
-Every code remediation executed by an agent MUST follow this 12-step sequence:
+Every code remediation executed by a Builder agent MUST follow this 15-step sequence, operating within the canonical package root `legacy-exodus-core/` (as documented in the repository Contribution Guide):
 
 ```text
-1. EVIDENCE        ──► Inspect live code, AST contracts, and logs to verify finding.
-2. REPRODUCTION    ──► Reproduce defect via CLI or isolated script.
-3. ROOT CAUSE      ──► Pinpoint exact architectural/semantic flaw (not symptoms).
-4. RED TEST        ──► Author minimal regression test; verify that it demonstrably fails.
-5. SMALLEST FIX    ──► Apply the smallest correct code change addressing root cause.
-6. FOCUSED TEST    ──► Verify that the red test now passes cleanly.
-7. FULL TEST       ──► Run complete test suite (bun test) to catch regressions.
-8. BENCHMARK       ──► Run benchmark governance audit (bun run benchmark audit).
-9. DIFF REVIEW     ──► Inspect git diff and git diff --check for hygiene.
-10. ATOMIC COMMIT  ──► Commit with Conventional Commit message and co-authorship.
-11. PUSH           ──► Push to temporary task branch (origin <branch>).
-12. HARD STOP      ──► Stop execution; output forensic report; await instruction.
+1. PRE-FLIGHT CHECK   ──► Verify git status: nothing to commit, working tree clean.
+2. EVIDENCE           ──► Inspect live code, AST contracts, and logs to verify finding.
+3. REPRODUCTION       ──► Reproduce defect via CLI or isolated script.
+4. ROOT CAUSE         ──► Pinpoint exact architectural/semantic flaw (not symptoms).
+5. RED TEST           ──► Author minimal regression test; verify that it demonstrably fails.
+6. SMALLEST FIX       ──► Apply smallest correct code change in legacy-exodus-core/src/.
+7. FOCUSED TEST       ──► Verify that the red test now passes cleanly.
+8. FULL TEST SUITE    ──► Run complete test suite (bun test) across all 113+ files.
+9. STATIC TYPECHECK   ──► Run bun run typecheck in legacy-exodus-core/ (0 errors).
+10. BENCHMARK AUDIT   ──► Run bun run benchmark audit (10/10 checks verified).
+11. CLI SMOKE TEST    ──► Run bun run src/cli/index.ts --help (exit code 0).
+12. DIFF REVIEW       ──► Inspect git diff --stat and git diff --check for hygiene.
+13. ATOMIC COMMIT     ──► Commit with Conventional Commit message and co-authorship.
+14. PUSH & POST-CHECK ──► Push to origin <branch> and verify git status is clean.
+15. HARD STOP         ──► Stop execution; output forensic report; await instruction.
 ```
 
 ### 4.2 Adversarial Red-Team Protocol
@@ -197,26 +202,30 @@ To ensure seamless coordination between agents across context boundaries, all ha
 ```
 
 ### 5.2 Remediation Completion Report (Builder $\to$ Red Team / Human)
-Every completed remediation task MUST terminate with the standard 17-point report:
+Every completed remediation task MUST terminate with the standard verification and remediation report:
 
 ```markdown
 1. TASK: <Task Description>
 2. BRANCH: <Temporary Branch Name>
 3. BASE COMMIT: <Base SHA>
-4. FINDING: <Finding ID and Description>
-5. ROOT CAUSE: <Exact Technical Root Cause>
-6. FILES CHANGED: <List of changed files with diff stat>
-7. RED TEST: <Path and assertion details of failure-first test>
-8. FOCUSED VERIFICATION: <Duration and result of focused test run>
-9. FULL VERIFICATION: <Files, tests passed/failed, assertion count, runtime>
-10. BENCHMARK GOVERNANCE: <Audit verdict and checks passed, e.g., 10/10>
-11. DETERMINISM: <Determinism audit results across repeated runs>
-12. SECURITY & BOUNDARIES: <Subprocess, traversal, and memory audit confirmation>
-13. MEMORY STATUS: <Explicit disclosure: VERIFIED | INCONCLUSIVE>
-14. DIFF HYGIENE: <git diff --check result>
-15. ATOMIC COMMIT: <Commit SHA and Conventional Commit message>
-16. REMOTE PUSH: <Push confirmation to origin <branch>>
-17. FINAL STATUS: FULLY REMEDIATED | SAFE WITH REQUIRED FOLLOW-UP | BLOCKED
+4. WORKTREE PRECONDITION: PASS (clean tree confirmed before work)
+5. FINDING: <Finding ID and Description>
+6. ROOT CAUSE: <Exact Technical Root Cause>
+7. FILES CHANGED: <List of changed files with diff stat>
+8. RED TEST: <Path and assertion details of failure-first test>
+9. FOCUSED VERIFICATION: <Duration and result of focused test run>
+10. TYPECHECK: PASS | FAIL (exit code 0, 0 compiler errors, duration)
+11. FULL TEST SUITE: PASS | FAIL (files, tests passed/failed, assertion count, runtime)
+12. BENCHMARK AUDIT: PASS | FAIL (10/10 checks verified)
+13. CLI SMOKE: PASS | FAIL (exit code 0, clean help output)
+14. DETERMINISM: <Determinism audit results across repeated runs>
+15. SECURITY & BOUNDARIES: <Subprocess, traversal, and memory audit confirmation>
+16. MEMORY STATUS: VERIFIED | INCONCLUSIVE | REGRESSION | IMPROVEMENT | NO MATERIAL CHANGE
+17. DIFF HYGIENE: <git diff --check result>
+18. ATOMIC COMMIT: <Commit SHA and Conventional Commit message>
+19. REMOTE PUSH: <Push confirmation to origin <branch>>
+20. WORKTREE POSTCONDITION: PASS (clean tree confirmed after push)
+21. FINAL STATUS: FULLY REMEDIATED | SAFE WITH REQUIRED FOLLOW-UP | BLOCKED
 ```
 
 ---

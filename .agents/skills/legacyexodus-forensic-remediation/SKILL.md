@@ -24,19 +24,19 @@ Applies to all bug fixes, security patches, CodeRabbit/linter remediations, sema
 * Investigating an unconfirmed anomaly (use `legacyexodus-code-audit`).
 
 ## 5. Prerequisites
-* Clean Git working tree (`git status` clean).
-* Active temporary task branch created from authoritative `main` or `core-foundation` (e.g., `fix/<finding-id>`).
+* Pre-task working tree check: `git status` MUST report a completely clean working tree (`nothing to commit, working tree clean`). Unexpected staged, unstaged, or untracked files must halt execution immediately.
+* Active temporary task branch created from authoritative `core-foundation` (e.g., `fix/<finding-id>`).
 * Bun runtime $\ge 1.3.0$ installed locally.
 * Full alignment with the rules in [Permanent Charter](../../../docs/governance/PERMANENT_CHARTER.md).
 
 ## 6. Canonical Operating Procedure
-Agents MUST execute the following 12-step sequence in strict order without omitting or reordering steps:
+Agents MUST execute the following 13-step sequence in strict order without omitting or reordering steps:
 
 ```text
 EVIDENCE ──► REPRODUCTION ──► ROOT CAUSE ──► RED TEST ──► SMALLEST FIX
    │
    ▼
-FOCUSED TEST ──► FULL TEST ──► BENCHMARK ──► DIFF REVIEW ──► COMMIT ──► PUSH ──► STOP
+FOCUSED TEST ──► FULL TEST ──► TYPECHECK ──► BENCHMARK ──► DIFF REVIEW ──► COMMIT ──► PUSH ──► STOP
 ```
 
 ### Step 1: Evidence Gathering
@@ -77,24 +77,31 @@ FOCUSED TEST ──► FULL TEST ──► BENCHMARK ──► DIFF REVIEW ─�
   ```bash
   bun test
   ```
-* Confirm 100% test pass rate with zero failures.
+* Confirm 100% test pass rate with zero failures across all test files.
 
-### Step 8: Benchmark & Determinism Verification
+### Step 8: Static Typecheck Verification
+* Execute TypeScript compiler verification in canonical package root `legacy-exodus-core/`:
+  ```bash
+  bun run typecheck
+  ```
+* Confirm that compilation exits with code 0 and zero compiler errors. Recorded evidence of typecheck completion is mandatory.
+
+### Step 9: Benchmark & Determinism Verification
 * Execute the benchmark governance audit:
   ```bash
   bun run benchmark audit
   ```
 * Confirm `Verdict: PASS` across all 10/10 checks.
 
-### Step 9: Git Diff & Hygiene Review
-* Verify that only the intended target files and test files were modified:
+### Step 10: Git Diff & Hygiene Review
+* Before staging, verify diff hygiene and changed file scope:
   ```bash
   git diff --stat
   git diff --check
   ```
 * Ensure no trailing whitespace, debug statements, or temporary files remain.
 
-### Step 10: Atomic Conventional Commit
+### Step 11: Atomic Conventional Commit
 * Stage strictly the remediated file(s) and regression test(s):
   ```bash
   git commit -m "fix(<subsystem>): <concise summary>" \
@@ -103,14 +110,14 @@ FOCUSED TEST ──► FULL TEST ──► BENCHMARK ──► DIFF REVIEW ─�
              -m "- Remediate finding <finding-id>"
   ```
 
-### Step 11: Remote Push
+### Step 12: Remote Push
 * Push the atomic commit to the remote task branch:
   ```bash
   git push origin <task-branch>
   ```
-* Confirm that `git status` reports `nothing to commit, working tree clean`.
+* Post-push working tree verification: Confirm that `git status` reports `nothing to commit, working tree clean`.
 
-### Step 12: Mandatory Stop
+### Step 13: Mandatory Stop
 * **HARD STOP.** Do NOT proceed to the next finding.
 * Output the standard remediation completion report.
 

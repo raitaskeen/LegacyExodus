@@ -24,12 +24,12 @@ Applies to AST parsing, symbol extraction, graph construction, data flow analysi
 ## 5. Critical Memory Disclosure Rule
 > **"A tiny instantaneous RSS reading does NOT constitute proof of OOM safety. Memory safety is established ONLY by demonstrating bounded working set scaling under heavy workloads."**
 
-Agents MUST explicitly classify memory measurements into one of five states:
-1. **`VERIFIED`**: Proven by heap snapshots, GC pressure tests, and stress tests on large corpus.
-2. **`INCONCLUSIVE`**: Memory was measured, but long-term or whole-repository scaling was not established.
-3. **`REGRESSION`**: Working set or wall time exceeded baseline by more than experimental variance ($> 3\%$).
-4. **`IMPROVEMENT`**: Reproducible reduction in time or memory under identical conditions.
-5. **`NO MATERIAL CHANGE`**: Variance is within normal experimental noise ($\le 3\%$).
+Agents MUST explicitly classify memory and performance measurements into one of five states:
+1. **`VERIFIED`**: Proven by heap snapshots, GC pressure tests, determinism checks, and stress tests on large corpus.
+2. **`INCONCLUSIVE`**: Measurements exhibit variance $> \pm 3.0\%$ across repetitions, environmental interference occurred, or long-term/whole-repository scaling was not established.
+3. **`REGRESSION`**: Resource consumption exceeded baseline by more than experimental noise ($\Delta\% > +3.0\%$) or throughput degraded ($\Delta\% < -3.0\%$).
+4. **`IMPROVEMENT`**: Reproducible reduction in resource consumption ($\Delta\% < -3.0\%$) or increase in throughput ($\Delta\% > +3.0\%$) under identical conditions.
+5. **`NO MATERIAL CHANGE`**: Variance is within normal experimental noise ($-3.0\% \le \Delta\% \le +3.0\%$).
 
 ---
 
@@ -63,12 +63,25 @@ Record the following parameters:
 * **Throughput:** Files analyzed per second, AST nodes processed per millisecond.
 * **Determinism Check:** Compare output artifact hashes across all runs to ensure 100% digest identity.
 
-### Step 5: Comparative Analysis & Regression Gate
+### Step 5: Comparative Analysis & Deterministic Classification Contract
 Compare candidate metrics against baseline:
 $$\Delta\% = \frac{\text{Candidate} - \text{Baseline}}{\text{Baseline}} \times 100$$
-* If $\Delta > +5\%$ in wall time or memory without architectural justification: **REGRESSION DETECTED**.
-* If $\Delta \le \pm 3\%$: **NO MATERIAL CHANGE**.
-* If $\Delta < -5\%$: **IMPROVEMENT VERIFIED**.
+
+Every delta interval is deterministically classified with zero gaps and zero overlap:
+
+#### A. Resource Consumption Metrics (Wall Time, CPU Time, Peak RSS, Allocations) — Lower is Better:
+* **`REGRESSION`**: $\Delta\% > +3.0\%$ (resource consumption increased beyond experimental noise).
+* **`NO MATERIAL CHANGE`**: $-3.0\% \le \Delta\% \le +3.0\%$ (metric variance is within experimental noise).
+* **`IMPROVEMENT`**: $\Delta\% < -3.0\%$ (resource consumption decreased beyond experimental noise).
+
+#### B. Throughput Metrics (Files Analyzed/s, AST Nodes Processed/ms) — Higher is Better:
+* **`IMPROVEMENT`**: $\Delta\% > +3.0\%$ (throughput increased beyond experimental noise).
+* **`NO MATERIAL CHANGE`**: $-3.0\% \le \Delta\% \le +3.0\%$ (throughput variance is within experimental noise).
+* **`REGRESSION`**: $\Delta\% < -3.0\%$ (throughput degraded beyond experimental noise).
+
+#### C. Whole-Run & Determinism Classifications:
+* **`VERIFIED`**: Output digests match baseline 100% ($\Delta\% = 0.0\%$), and performance meets requirements without regression.
+* **`INCONCLUSIVE`**: Inter-run variance exceeds $\pm 3.0\%$ or whole-repository memory scaling is not proven.
 
 ---
 
@@ -96,12 +109,12 @@ Every performance evaluation MUST terminate with this structured report:
 
 | Metric | Baseline | Candidate | Delta | Classification |
 | :--- | :--- | :--- | :--- | :--- |
-| **Wall Clock (Median)** | 120 ms | 115 ms | -4.1% | IMPROVEMENT |
-| **Peak Memory (RSS)**   | 85 MB  | 86 MB  | +1.1% | NO MATERIAL CHANGE |
-| **Throughput (files/s)**| 83 f/s | 87 f/s | +4.8% | IMPROVEMENT |
-| **Determinism (SHA256)**| Matches| Matches| 0%    | VERIFIED |
+| **Wall Clock (Median)** | 120 ms | 115 ms | -4.17% | IMPROVEMENT |
+| **Peak Memory (RSS)**   | 85 MB  | 86 MB  | +1.18% | NO MATERIAL CHANGE |
+| **Throughput (files/s)**| 83 f/s | 87 f/s | +4.82% | IMPROVEMENT |
+| **Determinism (SHA256)**| Matches| Matches| 0.00%  | VERIFIED |
 
-* **Memory Status Disclosure:** VERIFIED | INCONCLUSIVE
+* **Memory Status Disclosure:** VERIFIED | INCONCLUSIVE | REGRESSION | IMPROVEMENT | NO MATERIAL CHANGE
   *(Note: If whole-repo scaling was not established, include: "Memory/OOM neutrality was not established by this benchmark.")*
 * **Overall Verdict:** PASS | REGRESSION DETECTED | INCONCLUSIVE
 ```

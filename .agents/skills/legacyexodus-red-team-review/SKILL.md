@@ -48,9 +48,16 @@ The Red Team MUST systematically interrogate the candidate change against these 
 
 ## 7. Operating Procedure
 
-### Step 1: Diff & Blast Radius Inspection
-* Review the git diff: `git diff HEAD~1`.
-* Verify that only files directly related to the finding were touched.
+### Step 1: Complete PR Diff & Blast Radius Inspection Against Merge Base
+* Resolve the authoritative PR base branch (`origin/core-foundation` for core engineering, `origin/docs-foundation` for documentation, or `origin/main` for integration releases):
+  ```bash
+  BASE_BRANCH="origin/core-foundation" # resolve to target base
+  MERGE_BASE=$(git merge-base $BASE_BRANCH HEAD)
+  git diff --stat $MERGE_BASE..HEAD
+  git diff $MERGE_BASE..HEAD
+  ```
+* Inspect the complete PR diff across all candidate commits rather than only the latest commit (`HEAD~1`).
+* Verify that strictly the files in scope were touched and zero unrelated refactorings exist.
 
 ### Step 2: Test Strength Audit
 * Inspect the newly added regression test(s):
@@ -77,20 +84,73 @@ Issue an explicit verdict:
 ---
 
 ## 8. Expected Red-Team Review Report Schema
-Every red-team review MUST conclude with this standardized report:
+Every red-team review MUST conclude with this standardized report. The review is considered INCOMPLETE unless all 11 probing questions contain documented evidence or counterexamples:
 
 ```markdown
 ### RED-TEAM ADVERSARIAL REVIEW REPORT
 
 * **Candidate Commit / PR:** <Commit SHA or PR Number>
 * **Reviewed Finding:** <Finding ID & Title>
+* **Target Base Branch:** origin/core-foundation | origin/docs-foundation | origin/main
+* **Resolved Merge Base:** <Merge Base SHA>
 * **Reviewer Persona:** Red-Team Adversarial Reviewer
 
-#### 1. Adversarial Analysis & Probing Summary
-- [x] Tested boundary and negative cases.
-- [x] Verified assertions are strict and non-vacuous.
-- [x] Confirmed determinism across repeated executions.
-- [x] Verified zero scope creep and minimal diff size.
+#### 1. Adversarial Probing of the 11 Questions (Mandatory Evidence per Question)
+
+1. **What assumption could be wrong?**
+   - [ ] Probe completed
+   - Evidence / counterexample:
+   - Verdict: PASS | FAIL
+
+2. **What case was not tested?**
+   - [ ] Probe completed
+   - Evidence / counterexample:
+   - Verdict: PASS | FAIL
+
+3. **Could the test pass for the wrong reason?**
+   - [ ] Probe completed
+   - Evidence / counterexample:
+   - Verdict: PASS | FAIL
+
+4. **Did the implementation address the root cause?**
+   - [ ] Probe completed
+   - Evidence / counterexample:
+   - Verdict: PASS | FAIL
+
+5. **Did behavior change elsewhere?**
+   - [ ] Probe completed
+   - Evidence / counterexample:
+   - Verdict: PASS | FAIL
+
+6. **Did determinism change?**
+   - [ ] Probe completed
+   - Evidence / counterexample:
+   - Verdict: PASS | FAIL
+
+7. **Did memory behavior change?**
+   - [ ] Probe completed
+   - Evidence / counterexample:
+   - Verdict: PASS | FAIL
+
+8. **Did error handling change?**
+   - [ ] Probe completed
+   - Evidence / counterexample:
+   - Verdict: PASS | FAIL
+
+9. **Did the diff become larger than necessary?**
+   - [ ] Probe completed
+   - Evidence / counterexample:
+   - Verdict: PASS | FAIL
+
+10. **Is documentation now inaccurate?**
+    - [ ] Probe completed
+    - Evidence / counterexample:
+    - Verdict: PASS | FAIL
+
+11. **Is there a hidden toolchain or dependency problem?**
+    - [ ] Probe completed
+    - Evidence / counterexample:
+    - Verdict: PASS | FAIL
 
 #### 2. Counter-Examples Evaluated
 [List specific code patterns tested against the fix and their outcomes]

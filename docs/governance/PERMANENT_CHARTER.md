@@ -160,7 +160,7 @@ E0: ASSUMPTION ──────► Speculative claim without source citation o
 E1: STATIC OBSERVATION ► Static code or AST inspection without runtime execution.
 E2: REPRODUCED BEHAVIOR ► Runtime reproduction via CLI, script, or ad-hoc run.
 E3: FOCUSED TEST EVIDENCE ► Deterministic, automated, focused unit/integration test.
-E4: FULL VERIFICATION ──► Passing typecheck + 100% full test suite + benchmark audit.
+E4: FULL VERIFICATION ──► Passing static typecheck + 100% full test suite + benchmark audit + CLI smoke test.
 E5: INDEPENDENT / RED TEAM ► Independent red-team validation, invariant proof, fuzzing.
 ```
 
@@ -235,25 +235,33 @@ The engine MUST stream and process files in bounded batches. Whole-repository AS
 To maintain a clean, auditable release history, the repository enforces strict branch separation:
 
 ### Permanent Branches (Exactly Three)
-1. **`main`**: The authoritative release and integration baseline. NEVER commit directly to `main`.
-2. **`core-foundation`**: The engineering development trunk for `legacy-exodus-core` implementation, tests, and benchmarks.
-3. **`docs-foundation`**: The documentation development trunk for architectural guides, ADRs, and website content.
+1. **`main`**: The authoritative canonical integration and release baseline. NEVER commit directly to `main`; all changes land on `main` via verified Pull Requests.
+2. **`core-foundation`**: The authoritative core implementation development trunk for `legacy-exodus-core` source, unit/integration tests, benchmarks, and runtime code.
+3. **`docs-foundation`**: The authoritative documentation development trunk for architectural guides, specifications, ADRs, and website content.
 
-### Temporary Task Branches
-* All work MUST occur on temporary task branches branched from authoritative `main` or `core-foundation` as appropriate.
+### Temporary Task Branches & Authoritative Bases
+* All active engineering and documentation work MUST occur on temporary task branches created from the appropriate authoritative base:
+  * Core implementation work (`legacy-exodus-core/`) MUST branch from `core-foundation`.
+  * Documentation and architectural work (`docs/`, architecture, ADRs) MUST branch from `docs-foundation`.
+  * Repository-wide / main integration tasks MUST branch from `main` ONLY when genuinely appropriate.
 * Branch naming conventions:
   * `chore/<topic>`: Dependency, toolchain, or maintenance tasks.
   * `fix/<finding-id>`: Forensic defect remediation.
   * `feat/<feature-name>`: Verified new feature implementation.
   * `audit/<topic>`: Read-only investigative tasks.
-* Temporary branches MUST be deleted following successful merge to prevent branch sprawl.
+* Temporary branches MUST be deleted locally and remotely following successful merge to prevent branch sprawl.
 * Permanent branch sprawl (e.g., creating branches like `skills`, `agent-governance`, `skill.md`) is strictly prohibited.
 
-### Commit & Push Discipline
+### Commit Discipline & Clean-Tree Invariants
 * Every commit MUST follow Conventional Commits (`type(scope): summary`).
-* Staging hygiene: Run `git diff --check` and `git status` prior to staging. Verify zero unintended files are included.
-* Working tree cleanliness: After committing and pushing, `git status` MUST report `nothing to commit, working tree clean`.
-* Force push prohibition: Contributors MUST NOT force-push (`git push -f`) to shared branches (`main`, `core-foundation`, `docs-foundation`).
+* **Pre-Task Clean Worktree Precondition:** BEFORE beginning task execution or switching branches, `git status` MUST confirm a clean working tree (`nothing to commit, working tree clean`). Unexpected staged, unstaged, or untracked files MUST stop the task immediately.
+* **Pre-Staging Hygiene:** BEFORE staging files, run `git diff --check` and `git status` to verify zero whitespace artifacts and confirm that strictly intended files are included.
+* **Post-Push Clean Worktree Postcondition:** AFTER committing and pushing to origin, `git status` MUST confirm a clean working tree (`nothing to commit, working tree clean`).
+
+### Force-Push Policy (Deterministic Boundary)
+1. **Autonomous Agents & Contributors Prohibition:** Autonomous agents and general contributors MUST NOT force-push (`git push --force` or `--force-with-lease`) to shared branches (`main`, `core-foundation`, `docs-foundation`).
+2. **Normal Development Prohibition:** Normal day-to-day engineering and PR workflows MUST NEVER employ force-pushes on shared branches.
+3. **Human Maintainer Emergency Exception:** Human Maintainers MAY execute a force-push ONLY as a narrowly defined emergency recovery operation (e.g., rectifying accidental credential leakage or catastrophic repository history corruption). Any emergency force-push MUST be deliberate, documented, and communicated to all maintainers.
 
 ---
 

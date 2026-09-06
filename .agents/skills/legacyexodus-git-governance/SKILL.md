@@ -51,26 +51,31 @@ LegacyExodus maintains exactly **three permanent engineering branches**:
 
 ## 6. Operating Procedure
 
-### Step 1: Pre-Flight Remote Synchronization
+### Step 1: Pre-Flight Remote Synchronization & Clean Worktree Precondition
 Before starting any new work or creating a branch:
 ```bash
 git fetch --all --prune
 git status
 ```
-* Verify working tree cleanliness. Stash or discard uncommitted scratch work before switching branches.
+* **Clean Worktree Precondition:** `git status` MUST report `nothing to commit, working tree clean`. Any unexpected staged, unstaged, or untracked files MUST stop the task immediately. Do not proceed until the workspace is pristine.
 
-### Step 2: Branch Creation
-Always branch from the authoritative base branch (`main` or `core-foundation`):
+### Step 2: Branch Creation from Authoritative Base
+Always branch from the appropriate authoritative base branch (`<base-branch>`):
 ```bash
-git checkout -b <type>/<task-name> main
+git checkout -b <type>/<task-name> <base-branch>
 git rev-parse HEAD
 ```
 
+**Authoritative Base Branch Mappings:**
+* **Core Implementation Work (`legacy-exodus-core/`):** `<base-branch>` = `core-foundation`
+* **Documentation Work (`docs/`, architecture, ADRs):** `<base-branch>` = `docs-foundation`
+* **Repository-Wide / Main Integration Work:** `<base-branch>` = `main` ONLY when genuinely appropriate (e.g., top-level repository governance foundation, release coordination).
+
 ### Step 3: Staging & Hygiene Audit
-Before committing:
-1. Check modified files: `git status`.
+Before staging and committing:
+1. Check modified files: `git status`. Verify only intended files are changed.
 2. Check diff contents: `git diff`.
-3. Verify no trailing whitespace or diff corruption:
+3. Verify diff hygiene:
    ```bash
    git diff --check
    ```
@@ -93,18 +98,21 @@ Co-authored-by: pamexo <raimrazzaq12@gmail.com>
 * **Types:** `fix`, `feat`, `chore`, `docs`, `perf`, `test`, `refactor`.
 * **Scopes:** `discovery`, `parser`, `symbols`, `graph`, `semantic`, `flow`, `storage`, `runtime`, `cli`, `governance`, `toolchain`.
 
-### Step 5: Push Verification
+### Step 5: Push Verification & Clean Worktree Postcondition
 Push only to the dedicated temporary task branch on origin:
 ```bash
 git push origin <type>/<task-name>
 ```
-* Verify that `git status` reports `nothing to commit, working tree clean`.
+* **Clean Worktree Postcondition:** Confirm immediately after pushing that `git status` reports:
+  ```text
+  nothing to commit, working tree clean
+  ```
 
 ---
 
 ## 7. Prohibited Behavior (Strict Invariants)
 1. **NEVER Commit Directly to `main`:** All changes must land on `main` via verified Pull Requests.
-2. **NEVER Force-Push Shared Branches:** Force-pushing (`git push --force`) to `main`, `core-foundation`, or `docs-foundation` is prohibited.
+2. **NEVER Force-Push Shared Branches in Normal Workflows:** Autonomous agents and contributors MUST NOT force-push (`git push --force` or `--force-with-lease`) to shared branches (`main`, `core-foundation`, `docs-foundation`). Normal engineering workflows MUST NEVER force-push. Human maintainers MAY execute a force-push ONLY as a deliberate, documented, and communicated emergency recovery operation.
 3. **NEVER Merge `main` into `docs-foundation` Merely to Sync Core:** The stale `legacy-exodus-core` directory inside `docs-foundation` must remain untouched. Documentation agents must query core via `git show core-foundation:<path>`.
 4. **NEVER Copy Core Files into `docs-foundation`:** Avoid duplicating codebase trees across branches.
 5. **NEVER Commit Secrets or Credentials:** Any file containing an API token, private key, or password must be aborted and cleaned.

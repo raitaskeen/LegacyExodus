@@ -115,10 +115,51 @@ git status
 4. **Zero Type Suppression:** Introducing `@ts-ignore` or `@ts-expect-error` to pass typechecking is prohibited.
 
 ## 8. Expected Report Schema
-The test verification summary MUST document:
-* **Files Tested:** Total test file count.
-* **Pass / Fail Count:** Exact counts (e.g., 1001 pass, 0 fail).
-* **Assertion Calls:** Number of expect() calls executed (e.g., 9388).
-* **Typecheck Status:** Pass/Fail and duration.
-* **Benchmark Verdict:** Pass/Fail and checks count.
-* **Skipped Layers Justification:** Explicit reason if any layer was omitted.
+The test verification summary MUST document the aggregate summary metrics AND explicit pass/fail results with recorded evidence for ALL TEN verification layers.
+
+**Completeness Condition:** The verification report is considered INCOMPLETE and invalid if any of the ten layers is omitted. If a layer is genuinely not applicable, it must still be explicitly listed with `result: NOT APPLICABLE` and an evidenced justification.
+
+```yaml
+verification_report:
+  summary:
+    files_tested: <total test files, e.g., 113>
+    tests_passed: <total passed, e.g., 1001>
+    tests_failed: <total failed, e.g., 0>
+    assertions_count: <total expect() calls, e.g., 9388>
+    total_runtime_ms: <runtime in ms>
+
+  layers:
+    layer_1_focused_regression_test:
+      result: PASS | FAIL | NOT APPLICABLE
+      evidence: "<test file path, assertions verified, execution duration>"
+    layer_2_relevant_subsystem_suite:
+      result: PASS | FAIL | NOT APPLICABLE
+      evidence: "<subsystem test directory, files/tests passed>"
+    layer_3_full_test_suite:
+      result: PASS | FAIL
+      evidence: "bun test execution: 1001 pass, 0 fail across 113 files"
+    layer_4_static_typecheck:
+      result: PASS | FAIL
+      evidence: "bun run typecheck: exit code 0, 0 compiler errors"
+    layer_5_benchmark_audit:
+      result: PASS | FAIL
+      evidence: "bun run benchmark audit: 10/10 checks verified"
+    layer_6_determinism_audit:
+      result: PASS | FAIL | NOT APPLICABLE
+      evidence: "Multi-run SHA-256 digest comparison across repeated runs"
+    layer_7_composite_verify_gate:
+      result: PASS | FAIL
+      evidence: "bun run verify: all 4 gates pass (Typecheck, Tests, Benchmark, Diff)"
+    layer_8_cli_smoke_test:
+      result: PASS | FAIL
+      evidence: "bun run src/cli/index.ts --help: exit code 0, clean help output"
+    layer_9_git_diff_hygiene:
+      result: PASS | FAIL
+      evidence: "git diff --check: exit code 0, zero whitespace/diff artifacts"
+    layer_10_clean_tree_audit:
+      result: PASS | FAIL
+      evidence: "git status: nothing to commit, working tree clean"
+
+  overall_verdict: PASS | FAIL
+  skipped_layers_justification: "<Explicit documented justification if any layer was marked NOT APPLICABLE>"
+```
