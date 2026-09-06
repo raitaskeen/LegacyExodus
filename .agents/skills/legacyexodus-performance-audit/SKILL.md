@@ -25,11 +25,13 @@ Applies to AST parsing, symbol extraction, graph construction, data flow analysi
 ## 5. Operating Authority & Boundaries
 * **Strict Read-Only Mandate:** Performance Audit operates in a strictly **read-only** capacity.
 * **Workflow Preparation vs. Auditor Execution Partition:**
-  * **Workflow Preparation (Invoking Workflow / Human Maintainer Owned):** The invoking workflow or Human Maintainer MUST prepare an isolated checkout/workspace at the unchanged base commit BEFORE the performance auditor starts.
-  * **Auditor Execution (Performance Auditor Owned):** The performance auditor operates strictly against the already-prepared isolated workspace.
+  * **Workflow Preparation (Invoking Workflow / Human Maintainer Owned):** The invoking workflow or Human Maintainer MUST prepare BOTH isolated workspaces BEFORE the Performance Auditor starts:
+    1. **Base Workspace:** An isolated checkout at the exact, unchanged base commit (`origin/core-foundation`, `origin/docs-foundation`, or `origin/main`), ready for baseline benchmarking.
+    2. **Candidate Workspace:** An isolated checkout at the exact candidate / remediation commit being evaluated, ready for candidate benchmarking.
+  * **Auditor Execution (Performance Auditor Owned):** The performance auditor operates strictly against the pre-prepared base and candidate workspaces. The auditor obtains comparable benchmark and performance metrics from both workspaces and compares candidate metrics against the unchanged base using documented classification thresholds.
 * **Strict Invariants:**
-  1. **MUST NOT** checkout branches or reset the workspace.
-  2. **MUST NOT** modify files.
+  1. **MUST NOT** create either checkout, checkout branches, reset workspaces, merge, rebase, or otherwise change refs.
+  2. **MUST NOT** modify files or mutate either workspace.
   3. **MUST NOT** create RED regression tests.
   4. **MUST NOT** commit.
   5. **MUST NOT** push.
@@ -51,25 +53,27 @@ Agents MUST explicitly classify memory and performance measurements into one of 
 
 ## 7. Operating Procedure
 
-### Step 1: Baseline Establishment (Pre-Prepared Workspace)
-* **Precondition:** The invoking workflow or Human Maintainer has prepared an isolated checkout/workspace at the unchanged base commit. The auditor MUST NOT perform checkout or reset operations.
-* Run the benchmark suite against the pre-prepared base workspace to capture baseline performance:
+### Step 1: Baseline Establishment (Pre-Prepared Base Workspace)
+* **Precondition:** The invoking workflow or Human Maintainer has prepared both isolated workspaces (Base Workspace at unchanged base commit, Candidate Workspace at candidate commit). The auditor MUST NOT perform checkout, branch creation, ref switching, or reset operations.
+* Run the benchmark suite against the pre-prepared Base Workspace to capture baseline performance:
   ```bash
   bun run benchmark audit
   bun run benchmark run express --runs 3
   ```
-* Record median wall time, peak memory, and CPU utilization.
+* Record the exact base commit SHA / workspace path, median wall time, peak memory, and CPU utilization.
 
 ### Step 2: Controlled Environment Preparation
 * Close background processes to minimize CPU throttling and memory contention.
 * Record hardware, OS, Bun version, and CPU architecture.
 
-### Step 3: Warm-Up & Execution
+### Step 3: Warm-Up & Execution (Pre-Prepared Candidate Workspace)
+* Obtain metrics from the pre-prepared Candidate Workspace (without checking out or mutating refs).
 * Discard the first cold-start iteration to account for JIT warm-up and filesystem cache priming.
-* Execute at least three consecutive measurement runs:
+* Execute at least three consecutive measurement runs within the Candidate Workspace:
   ```bash
   bun run benchmark run <target> --runs 3
   ```
+* Record the exact candidate commit SHA / workspace path.
 
 ### Step 4: Metrics Capture
 Record the following parameters:
@@ -118,6 +122,8 @@ Every performance evaluation MUST terminate with this structured report:
 ```markdown
 ### PERFORMANCE & BENCHMARK AUDIT REPORT
 
+* **Base Workspace / Revision:** <Exact base commit SHA / workspace path>
+* **Candidate Workspace / Revision:** <Exact candidate commit SHA / workspace path>
 * **Hardware / OS:** Windows / Linux / macOS (Architecture: x64/arm64)
 * **Bun Version:** 1.3.x
 * **Target Corpus:** Express / Fastify / Synthetic
@@ -141,3 +147,5 @@ Every performance evaluation MUST terminate with this structured report:
 * Never claim "infinite scalability" or "zero memory overhead" without full corpus proof.
 * Never cite a single run as evidence; always report repeated runs and variance.
 * Never alter benchmark targets or corpus files to pass failing thresholds.
+* Never create checkouts, switch refs, reset, or mutate base or candidate workspaces.
+* Never evaluate performance without both isolated base and candidate workspaces prepared prior to measurement.

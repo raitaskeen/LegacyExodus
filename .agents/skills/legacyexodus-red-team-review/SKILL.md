@@ -73,6 +73,7 @@ The Red Team MUST systematically interrogate the candidate change against these 
   * Are assertions strict (`toBe()` / `toEqual()`) or loose (`toBeTruthy()`)?
   * Does the test verify the negative condition as well as the positive?
   * Was the test executed against the unpatched code to verify that it fails first?
+* *Assertion Audit Failure:* If the test uses loose assertions, is misleading/insufficient, or fails to provide valid failure proof, flag this as a **Test-Quality Defect (Path B)** routing to Steps 5–6. Do NOT route directly to Step 7.
 
 ### Step 3: Adversarial Counter-Example Construction
 * Formulate a minimal code scenario designed to break the proposed fix:
@@ -89,7 +90,9 @@ The Red Team MUST systematically interrogate the candidate change against these 
 
 ### Step 5: Verdict Generation
 Issue an explicit verdict:
-* **`RED-TEAM FAIL`**: Concrete defect, unhandled counter-example, or weakened test identified. The cycle returns to the Builder with reproduction details to execute **Step 7: Apply Smallest Safe Change** of the Canonical Forensic Remediation Sequence (in [`docs/governance/AGENT_OPERATING_MODEL.md`](../../../docs/governance/AGENT_OPERATING_MODEL.md#41-canonical-forensic-remediation-sequence)). The existing minimal reproduction and RED test remain valid and are preserved; the Builder updates the implementation to resolve the counter-example, then re-runs Step 8 (Focused Test Verification) and all downstream verification gates (Steps 9–13).
+* **`RED-TEAM FAIL`**: Defect, unhandled counter-example, or test-quality issue identified. The verdict MUST classify the failure into one of two explicit paths:
+  * **Path A — Implementation Defect:** Concrete defect or unhandled counter-example in runtime code. The cycle returns to the Builder with reproduction details to execute **Step 7: Apply Smallest Safe Change** of the Canonical Forensic Remediation Sequence (in [`docs/governance/AGENT_OPERATING_MODEL.md`](../../../docs/governance/AGENT_OPERATING_MODEL.md#41-canonical-forensic-remediation-sequence)). The existing valid minimal reproduction and RED test remain preserved; the Builder updates the implementation to resolve the counter-example, then re-runs Step 8 (Focused Test Verification) and all downstream verification gates (Steps 9–13).
+  * **Path B — Test-Quality Defect:** The regression test uses loose assertions (e.g. failing Assertion Audit), is misleading or insufficient, or fails to provide valid failure proof. The cycle returns to the Builder to execute **Step 5: Focused RED Regression Test Creation** and **Step 6: RED Test Failure Verification**. The invalid RED test is discarded and replaced, a valid failure proof is established, and the workflow advances to Step 7 only after valid RED evidence exists. Downstream verification gates (Steps 8–13) are preserved and must re-run.
 * **`RED-TEAM PASS`**: All 11 questions answered satisfactorily, verified by evidence. Progression to Step 14 (Diff & Scope Hygiene Review) is authorized.
 
 ---

@@ -173,6 +173,7 @@ Every code remediation executed by an engineering agent MUST follow this 20-step
 5. **Step 5: Focused RED Regression Test Creation**
    * Author a dedicated regression test in the appropriate test suite under `legacy-exodus-core/tests/`.
    * Enforce strict assertions: loose assertions (`toBeTruthy()`, `toBeDefined()`) are strictly forbidden where exact contracts can be checked.
+   * *Test-Quality Loopback (Path B):* If a downstream Red-Team Review renders a `RED-TEAM FAIL` due to a test-quality defect (e.g. failing Assertion Audit due to loose assertions, misleading assertions, wrong expectations, or invalid failure proof), the workflow returns to this step (**Step 5**) to author a valid, strict replacement test. The invalid RED test is discarded and replaced, not preserved.
 
 6. **Step 6: RED Test Failure Verification**
    * Execute the focused test before modifying implementation:
@@ -180,11 +181,13 @@ Every code remediation executed by an engineering agent MUST follow this 20-step
      bun test tests/path/to/regression.test.ts
      ```
    * Confirm and record that the test demonstrably FAILS for the expected root-cause reason.
+   * For Path B loopbacks, verify that the corrected/replaced regression test produces valid failure proof before proceeding to Step 7.
 
 7. **Step 7: Apply Smallest Safe Change**
    * Apply the minimal, surgical implementation change exclusively to `legacy-exodus-core/src/`.
    * Refactoring adjacent code, renaming unrelated identifiers, or modifying untouched contracts is strictly prohibited.
-   * *Adversarial Loopback:* If a downstream Red-Team Review renders a `RED-TEAM FAIL` in Step 13, the workflow returns directly to this step (**Step 7**). The existing minimal reproduction and RED test remain valid and are preserved; the Builder updates the implementation to resolve the counter-example, then re-runs Step 8 and all downstream verification gates (Steps 9–13).
+   * Step 7 is dedicated exclusively to resolving implementation defects.
+   * *Implementation Defect Loopback (Path A):* If a downstream Red-Team Review renders a `RED-TEAM FAIL` due to a genuine implementation defect (e.g. unhandled counter-example or edge case), the workflow returns directly to this step (**Step 7**). The existing valid minimal reproduction and RED test remain preserved; the Builder updates the implementation to resolve the counter-example, then re-runs Step 8 and all downstream verification gates (Steps 9–13).
 
 8. **Step 8: Focused Test Verification**
    * Re-execute the focused regression test:
@@ -226,7 +229,9 @@ Every code remediation executed by an engineering agent MUST follow this 20-step
     * The Red-Team reviewer executes the adversarial review protocol defined in [`.agents/skills/legacyexodus-red-team-review/SKILL.md`](../../.agents/skills/legacyexodus-red-team-review/SKILL.md), operating strictly under read-only/challenge-only authority against an isolated verification environment.
     * Red-Team evaluates the change against the 11 probing questions and issues a formal verdict:
       * **`RED-TEAM PASS`**: All 11 questions answered satisfactorily; proceed to Step 14.
-      * **`RED-TEAM FAIL`**: Defect, unhandled counter-example, or weakened test detected. Cycle returns directly to **Step 7: Apply Smallest Safe Change**. The original minimal reproduction and RED test remain preserved; the Builder resolves the defect, then re-runs Step 8 and downstream gates (Steps 9–13).
+      * **`RED-TEAM FAIL`**: Defect detected. The review MUST classify the failure into one of two explicit paths without altering canonical sequence numbering:
+        * **Path A — Implementation Defect:** The defect is structural or algorithmic in runtime code. Cycle returns directly to **Step 7: Apply Smallest Safe Change**. The existing valid minimal reproduction and RED test remain preserved; the Builder updates the implementation to resolve the counter-example, then re-runs Step 8 and all downstream verification gates (Steps 9–13).
+        * **Path B — Test-Quality Defect:** The regression test or failure proof is invalid, misleading, weak (e.g. failing Assertion Audit due to loose assertions), or flawed. Cycle returns to **Step 5: Focused RED Regression Test Creation** and **Step 6: RED Test Failure Verification**. The invalid RED test is discarded and replaced, a valid failure proof is established, and the workflow advances to Step 7 only after valid RED evidence exists. All downstream verification gates (Steps 8–13) are preserved and must re-run.
     * The Red-Team agent itself NEVER modifies source code or tests.
 
 14. **Step 14: Diff & Scope Hygiene Review**
@@ -270,10 +275,12 @@ Every code remediation executed by an engineering agent MUST follow this 20-step
 When a remediation is submitted for red-team review in Step 13:
 
 1. **Premise Invalidation:** The Red Team attempts to construct an AST or runtime state where the fix fails.
-2. **Assertion Audit:** The Red Team reviews the regression test to ensure it does not use loose assertions (`toBeTruthy()`, `toBeDefined()`) where exact values are required.
+2. **Assertion Audit:** The Red Team reviews the regression test to ensure it does not use loose assertions (`toBeTruthy()`, `toBeDefined()`) where exact values are required. If the Assertion Audit reveals loose assertions, missing negative checks, false positive proof, or misleading assertions, this is classified as a Test-Quality Defect (Path B) routing back to Steps 5–6; it MUST NOT route directly to Step 7 and invalid RED evidence MUST NOT be preserved.
 3. **Determinism Verification:** The Red Team executes the test suite multiple times to verify zero flaky behavior.
 4. **Verdict Generation:**
-   * If any defect is found: Output `RED-TEAM FAIL` with minimal reproduction code and counter-example details. The cycle returns directly to **Step 7: Apply Smallest Safe Change** in the Canonical Forensic Remediation Sequence. The existing minimal reproduction and RED test remain valid and are preserved; the Builder updates the implementation to resolve the counter-example, then re-runs Step 8 (Focused Test Verification) and all downstream verification gates (Steps 9–13).
+   * If any defect is found: Output `RED-TEAM FAIL` with minimal reproduction code, counter-example details, and failure classification:
+     * **Path A (Implementation Defect):** Counter-example or edge case in runtime code. The cycle returns directly to **Step 7: Apply Smallest Safe Change** in the Canonical Forensic Remediation Sequence. The existing valid minimal reproduction and RED test remain valid and are preserved; the Builder updates the implementation to resolve the counter-example, then re-runs Step 8 (Focused Test Verification) and all downstream verification gates (Steps 9–13).
+     * **Path B (Test-Quality Defect):** Weak assertions, invalid failure proof, or flawed regression test. The cycle returns to **Step 5: Focused RED Regression Test Creation** and **Step 6: RED Test Failure Verification**. The invalid RED test is discarded and replaced, valid failure proof is established, and the workflow proceeds to Step 7 and all downstream verification gates (Steps 8–13).
    * If no defects are found: Output `RED-TEAM PASS` with documented rationale. Progression to Step 14 (Diff & Scope Hygiene Review) is authorized.
 
 ### 4.3 Documentation Audit & Synchronization Workflow

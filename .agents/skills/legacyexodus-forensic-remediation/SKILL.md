@@ -60,11 +60,12 @@ Phase 7: Push, Post-Check, Final Report & Hard Stop (Steps 17–20)
 ### Phase 2: Defect Isolation & RED Test Creation (Steps 4–6)
 * **Smallest Safe Change Definition (Step 4):** Pinpoint the structural/semantic root cause and define the minimal architectural fix that resolves it.
 * **Author RED Regression Test (Step 5):** Create a dedicated regression test file in `legacy-exodus-core/tests/` isolating the failure. Loose assertions (`toBeTruthy()`, `toBeDefined()`) are strictly forbidden where exact values or AST contracts can be asserted.
-* **RED Test Failure Verification (Step 6):** Execute `bun test <path-to-test>`. The test **MUST demonstrably FAIL** before any source code is changed. Record the failure output and assertion details.
+  * *Test-Quality Loopback (Path B):* If Red-Team emits `RED-TEAM FAIL` for a test-quality defect in Step 13, the workflow returns to Step 5. Discard/replace the invalid test and author a strict replacement regression test.
+* **RED Test Failure Verification (Step 6):** Execute `bun test <path-to-test>`. The test **MUST demonstrably FAIL** before any source code is changed. Record the failure output and assertion details. Establish a valid failure proof before advancing to Step 7.
 
 ### Phase 3: Surgical Remediation & Focused Verification (Steps 7–8)
-* **Apply Smallest Safe Remediation (Step 7):** Modify exclusively the source files in `legacy-exodus-core/src/` needed to correct the root cause. Do NOT refactor adjacent methods, reformat untouched code, or modify unrelated contracts.
-  * *Red-Team Loopback:* If a downstream Red-Team review emits `RED-TEAM FAIL` in Step 13, the workflow returns directly to Step 7. The minimal reproduction is preserved, the fix is adjusted, and the workflow re-enters Step 8.
+* **Apply Smallest Safe Remediation (Step 7):** Modify exclusively the source files in `legacy-exodus-core/src/` needed to correct the root cause. Do NOT refactor adjacent methods, reformat untouched code, or modify unrelated contracts. Step 7 is dedicated exclusively to resolving implementation defects.
+  * *Implementation Defect Loopback (Path A):* If a downstream Red-Team review emits `RED-TEAM FAIL` for an implementation defect in Step 13, the workflow returns directly to Step 7. The existing valid minimal reproduction and RED test are preserved, the fix is adjusted, and the workflow re-enters Step 8 and downstream verification gates.
 * **Focused Test Verification (Step 8):** Re-run the regression test (`bun test <path-to-test>`). Confirm that it now **PASSES** cleanly.
 
 ### Phase 4: Full Pipeline Verification Gates (Steps 9–12)
@@ -74,7 +75,7 @@ Phase 7: Push, Post-Check, Final Report & Hard Stop (Steps 17–20)
 * **CLI Smoke Verification (Step 12):** Run `bun run src/cli/index.ts --help` in `legacy-exodus-core/`. Must exit with code 0 and valid help output.
 
 ### Phase 5: Adversarial Red-Team & Diff Hygiene (Steps 13–14)
-* **Adversarial Red-Team Review Gate (Step 13):** Mandatory checkpoint before diff review. The Red-Team reviewer executes the protocol in [`.agents/skills/legacyexodus-red-team-review/SKILL.md`](../legacyexodus-red-team-review/SKILL.md) against an isolated verification environment and renders `RED-TEAM PASS` or `RED-TEAM FAIL`. If FAIL, cycle returns directly to Step 7.
+* **Adversarial Red-Team Review Gate (Step 13):** Mandatory checkpoint before diff review. The Red-Team reviewer executes the protocol in [`.agents/skills/legacyexodus-red-team-review/SKILL.md`](../legacyexodus-red-team-review/SKILL.md) against an isolated verification environment and renders `RED-TEAM PASS` or `RED-TEAM FAIL`. If FAIL, routes via Path A (Implementation Defect $\to$ Step 7) or Path B (Test-Quality Defect $\to$ Steps 5–6).
 * **Git Diff & Hygiene Review (Step 14):** Run `git diff --stat` and `git diff --check`. Verify zero trailing whitespace, zero extraneous files, and strictly scoped changes.
 
 ### Phase 6: Draft Report & Atomic Commit (Steps 15–16)
@@ -115,7 +116,9 @@ A draft verification report is compiled in Step 15 with future operations explic
 * If the red test does not fail before the fix: The test does not properly isolate the defect. Refine the test before touching source code.
 * If full test suite fails after the fix: The change introduced a side-effect. Revert the fix and re-evaluate root cause.
 * If benchmark audit fails: The change regressed determinism, accounting, or performance. Revert and investigate.
-* If Red-Team issues `RED-TEAM FAIL`: Revert to Step 7, adjust implementation to resolve counter-example, and re-run all gates from Step 8.
+* If Red-Team issues `RED-TEAM FAIL`:
+  * **Path A (Implementation Defect):** Return to Step 7. Preserve valid RED test, adjust implementation to resolve counter-example, and re-run all gates from Step 8.
+  * **Path B (Test-Quality Defect):** Return to Steps 5–6. Discard and replace the invalid RED test, re-establish valid failure proof, and proceed through Step 7 and downstream verification gates.
 
 ## 10. Closure Criteria
 A finding is classified as `FULLY REMEDIATED` if and only if:

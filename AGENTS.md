@@ -82,7 +82,7 @@ Remediation agents (Builders) have scoped mutation authority and MUST process ex
 2. Formulating a failure-first minimal reproduction and RED test prior to any code modification.
 3. Applying the smallest safe architectural change that addresses root cause.
 4. Passing all verification gates (focused test, static typecheck, full test suite, benchmark audit, CLI smoke test).
-5. Undergoing adversarial Red-Team review gate (Step 13) and resolving any counter-examples by returning to Step 7.
+5. Undergoing adversarial Red-Team review gate (Step 13) and resolving any defects by routing via Path A to Step 7 (Implementation Defect) or Path B to Steps 5–6 (Test-Quality Defect).
 6. Performing diff and scope hygiene review (Step 14).
 7. Compiling draft verification report with pending operations explicitly marked PENDING (Step 15).
 8. Performing atomic conventional commit and remote push (Steps 16–17).
