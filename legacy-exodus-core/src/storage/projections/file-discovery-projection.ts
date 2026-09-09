@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { lstat, mkdir, readFile, realpath } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-import type { DiscoveryProjection } from "@contracts/discovery-projection";
+import { createDiscoveryProjection, type DiscoveryProjection } from "@contracts/discovery-projection";
 import { computeWorkspaceDigest } from "@discovery/index";
 import { LegacyExodusError } from "@shared/errors";
 import { StreamingJsonWriter } from "./streaming-json-writer";
@@ -68,13 +68,14 @@ export class FileDiscoveryProjectionAdapter {
    * write interleaving and file corruption when projections for the same directory overlap.
    */
   public async write(projection: DiscoveryProjection): Promise<void> {
-    const discoveryDirectory = join(resolve(projection.projectPath), ".discovery");
+    const validatedProjection = createDiscoveryProjection(projection);
+    const discoveryDirectory = join(resolve(validatedProjection.projectPath), ".discovery");
 
     const previous = this.directoryQueues.get(discoveryDirectory) ?? Promise.resolve();
 
     const currentTask = (async () => {
       await previous.catch(() => {});
-      await this.writeArtifacts(discoveryDirectory, projection);
+      await this.writeArtifacts(discoveryDirectory, validatedProjection);
     })();
 
     this.directoryQueues.set(discoveryDirectory, currentTask);

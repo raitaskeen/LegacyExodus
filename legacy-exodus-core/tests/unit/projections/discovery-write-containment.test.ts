@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { createDiscoveryProjection } from "@contracts/discovery-projection";
+import { createDiscoveryProjection, type DiscoveryProjection } from "@contracts/discovery-projection";
 import { FileDiscoveryProjectionAdapter } from "@storage/index";
 
 const temporaryRoots: string[] = [];
@@ -71,6 +71,36 @@ describe("SEC-001 discovery projection write containment", () => {
     } finally {
       await removeRedirect(discoveryPath);
     }
+  });
+
+  test("rejects a runtime-invalid traversal artifact before constructing its destination", async (): Promise<void> => {
+    const root = await createTemporaryRoot();
+    const projectPath = join(root, "project");
+    const discoveryPath = join(projectPath, ".discovery");
+    const outsidePath = join(projectPath, "outside.json");
+    const sentinelPath = join(projectPath, "sentinel.txt");
+    const safeArtifactPath = join(discoveryPath, "project.json");
+
+    await mkdir(discoveryPath, { recursive: true });
+    await writeFile(sentinelPath, "external-sentinel", "utf8");
+    await writeFile(safeArtifactPath, "existing-safe-artifact", "utf8");
+
+    const runtimeInvalidProjection = {
+      projectPath,
+      artifacts: [{ name: "../outside.json", payload: { escaped: true } }],
+    } as unknown as DiscoveryProjection;
+
+    let rejection: unknown;
+    try {
+      await new FileDiscoveryProjectionAdapter().write(runtimeInvalidProjection);
+    } catch (error: unknown) {
+      rejection = error;
+    }
+
+    expect(existsSync(outsidePath)).toBe(false);
+    expect(await readFile(sentinelPath, "utf8")).toBe("external-sentinel");
+    expect(await readFile(safeArtifactPath, "utf8")).toBe("existing-safe-artifact");
+    expect(rejection).toMatchObject({ code: "DISCOVERY_PROJECTION_INVALID" });
   });
 
   test("rejects a redirected child artifact before modifying its external target", async (): Promise<void> => {
