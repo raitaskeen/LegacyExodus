@@ -1,10 +1,34 @@
 import { spawnSync } from "node:child_process";
-import { mkdir, readFile } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { lstat, mkdir, readFile, realpath } from "node:fs/promises";
+import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import type { DiscoveryProjection } from "@contracts/discovery-projection";
 import { computeWorkspaceDigest } from "@discovery/index";
+import { LegacyExodusError } from "@shared/errors";
 import { StreamingJsonWriter } from "./streaming-json-writer";
+
+const unsafeProjectionPathCode = "DISCOVERY_PROJECTION_PATH_UNSAFE";
+
+function isFileSystemError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
+}
+
+function isPhysicallyContained(parentPath: string, candidatePath: string): boolean {
+  const relation = relative(parentPath, candidatePath);
+  return relation.length > 0
+    && relation !== ".."
+    && !relation.startsWith(`..${sep}`)
+    && !isAbsolute(relation);
+}
+
+function unsafeProjectionPath(path: string, reason: string, cause?: unknown): LegacyExodusError {
+  return new LegacyExodusError({
+    code: unsafeProjectionPathCode,
+    message: "Discovery projection output path is unsafe.",
+    metadata: { path, reason },
+    ...(cause === undefined ? {} : { cause }),
+  });
+}
 
 /**
  * Resolves the git commit SHA of the given directory.
@@ -75,14 +99,25 @@ export class FileDiscoveryProjectionAdapter {
   }
 
   private async writeArtifacts(discoveryDirectory: string, projection: DiscoveryProjection): Promise<void> {
-    await mkdir(discoveryDirectory, { recursive: true });
+    await this.ensureSafeDiscoveryDirectory(projection.projectPath, discoveryDirectory);
+
+    const artifactDestinations = projection.artifacts
+      .filter((artifact) => artifact.name !== "manifest.json")
+      .map((artifact) => join(discoveryDirectory, artifact.name));
+    artifactDestinations.push(join(discoveryDirectory, "manifest.json"));
+
+    for (const destination of artifactDestinations) {
+      await this.ensureSafeArtifactDestination(projection.projectPath, discoveryDirectory, destination);
+    }
 
     const artifactHashes: Record<string, { sha256: string; bytes: number }> = {};
 
     for (const artifact of projection.artifacts) {
       if (artifact.name === "manifest.json") continue;
       const destination = join(discoveryDirectory, artifact.name);
+      await this.ensureSafeArtifactDestination(projection.projectPath, discoveryDirectory, destination);
       const { sha256, bytes } = await this.writer.writeAtomic(destination, artifact.payload);
+      await this.ensureSafeArtifactDestination(projection.projectPath, discoveryDirectory, destination);
       artifactHashes[artifact.name] = { sha256, bytes };
     }
 
@@ -138,6 +173,94 @@ export class FileDiscoveryProjectionAdapter {
       artifacts: artifactHashes,
     };
 
-    await this.writer.writeAtomic(join(discoveryDirectory, "manifest.json"), manifest);
+    const manifestPath = join(discoveryDirectory, "manifest.json");
+    await this.ensureSafeArtifactDestination(projection.projectPath, discoveryDirectory, manifestPath);
+    await this.writer.writeAtomic(manifestPath, manifest);
+    await this.ensureSafeArtifactDestination(projection.projectPath, discoveryDirectory, manifestPath);
+  }
+
+  private async ensureSafeDiscoveryDirectory(projectPath: string, discoveryDirectory: string): Promise<string> {
+    let canonicalProjectPath: string;
+    try {
+      canonicalProjectPath = await realpath(resolve(projectPath));
+    } catch (error: unknown) {
+      throw unsafeProjectionPath(projectPath, "Project directory cannot be resolved physically.", error);
+    }
+
+    let discoveryStats;
+    try {
+      discoveryStats = await lstat(discoveryDirectory);
+    } catch (error: unknown) {
+      if (!isFileSystemError(error) || error.code !== "ENOENT") {
+        throw unsafeProjectionPath(discoveryDirectory, "Discovery directory cannot be inspected.", error);
+      }
+
+      try {
+        await mkdir(discoveryDirectory);
+      } catch (mkdirError: unknown) {
+        if (!isFileSystemError(mkdirError) || mkdirError.code !== "EEXIST") {
+          throw unsafeProjectionPath(discoveryDirectory, "Discovery directory cannot be created safely.", mkdirError);
+        }
+      }
+
+      try {
+        discoveryStats = await lstat(discoveryDirectory);
+      } catch (inspectionError: unknown) {
+        throw unsafeProjectionPath(discoveryDirectory, "Created discovery directory cannot be inspected.", inspectionError);
+      }
+    }
+
+    if (discoveryStats.isSymbolicLink() || !discoveryStats.isDirectory()) {
+      throw unsafeProjectionPath(discoveryDirectory, "Discovery output must be an ordinary directory.");
+    }
+
+    let canonicalDiscoveryDirectory: string;
+    try {
+      canonicalDiscoveryDirectory = await realpath(discoveryDirectory);
+    } catch (error: unknown) {
+      throw unsafeProjectionPath(discoveryDirectory, "Discovery directory cannot be resolved physically.", error);
+    }
+
+    if (!isPhysicallyContained(canonicalProjectPath, canonicalDiscoveryDirectory)) {
+      throw unsafeProjectionPath(discoveryDirectory, "Discovery directory resolves outside the project boundary.");
+    }
+
+    return canonicalDiscoveryDirectory;
+  }
+
+  private async ensureSafeArtifactDestination(
+    projectPath: string,
+    discoveryDirectory: string,
+    destination: string,
+  ): Promise<void> {
+    const canonicalDiscoveryDirectory = await this.ensureSafeDiscoveryDirectory(projectPath, discoveryDirectory);
+
+    let destinationStats;
+    try {
+      destinationStats = await lstat(destination);
+    } catch (error: unknown) {
+      if (isFileSystemError(error) && error.code === "ENOENT") {
+        return;
+      }
+      throw unsafeProjectionPath(destination, "Artifact destination cannot be inspected.", error);
+    }
+
+    if (destinationStats.isSymbolicLink() || !destinationStats.isFile() || destinationStats.nlink !== 1) {
+      throw unsafeProjectionPath(
+        destination,
+        "Artifact destination must be absent or an ordinary single-link file.",
+      );
+    }
+
+    let canonicalDestination: string;
+    try {
+      canonicalDestination = await realpath(destination);
+    } catch (error: unknown) {
+      throw unsafeProjectionPath(destination, "Artifact destination cannot be resolved physically.", error);
+    }
+
+    if (!isPhysicallyContained(canonicalDiscoveryDirectory, canonicalDestination)) {
+      throw unsafeProjectionPath(destination, "Artifact destination resolves outside the discovery directory.");
+    }
   }
 }
