@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 
 import { createLegacyExodusEngine } from "@runtime/composition/services";
+import type { LegacyExodusEngine } from "@core/engine";
 import { DiscoveryValidator } from "@discovery/discovery-validator";
 import { DiscoveryQueryService } from "@discovery/discovery-query-service";
 import { JavaScriptParser, ParserManager, ParserRegistry } from "@parser/index";
@@ -636,31 +637,40 @@ describe("Phase 3A P0.4 — Discovery Snapshot Reuse & Invalidation", () => {
       LEGACY_EXODUS_STORAGE_DB_PATH: sqliteDbPath,
     } as const;
     let storage: StorageManager | undefined;
+    let engine1: LegacyExodusEngine | undefined;
+    let engine2: LegacyExodusEngine | undefined;
 
     try {
-      const engine1 = createLegacyExodusEngine(environment);
-      await engine1.initialize();
-      await engine1.execute({
-        id: run1Id,
-        type: "AnalyzeProject",
-        createdAt: new Date(),
-        payload: { projectId, path: testRepoDir },
-      });
-      await engine1.shutdown();
+      try {
+        engine1 = createLegacyExodusEngine(environment);
+        await engine1.initialize();
+        await engine1.execute({
+          id: run1Id,
+          type: "AnalyzeProject",
+          createdAt: new Date(),
+          payload: { projectId, path: testRepoDir },
+        });
+      } finally {
+        await engine1?.shutdown();
+      }
 
       storage = new StorageManager(new SqliteStorageProvider({ databasePath: sqliteDbPath }));
       const query = new DiscoveryQueryService(storage);
       const persistedSymbols = await query.getSymbolsForFile(projectId, "src/index.ts", run1Id);
 
-      const engine2 = createLegacyExodusEngine(environment);
-      await engine2.initialize();
-      const reusedResult = await engine2.execute({
-        id: run2Id,
-        type: "AnalyzeProject",
-        createdAt: new Date(),
-        payload: { projectId, path: testRepoDir },
-      });
-      await engine2.shutdown();
+      let reusedResult: Awaited<ReturnType<LegacyExodusEngine["execute"]>>;
+      try {
+        engine2 = createLegacyExodusEngine(environment);
+        await engine2.initialize();
+        reusedResult = await engine2.execute({
+          id: run2Id,
+          type: "AnalyzeProject",
+          createdAt: new Date(),
+          payload: { projectId, path: testRepoDir },
+        });
+      } finally {
+        await engine2?.shutdown();
+      }
 
       const reusedSymbols = await query.getSymbolsForFile(projectId, "src/index.ts", run2Id);
 
