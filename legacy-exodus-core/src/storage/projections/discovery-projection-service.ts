@@ -67,7 +67,7 @@ export class DiscoveryProjectionService implements RuntimeService {
     const controlFlow = latestPayload(controlFlowRecords, controlFlowStoragePayloadSchema, payload.projectId, payload.analysisRunId);
     const dataFlow = latestPayload(dataFlowRecords, dataFlowStoragePayloadSchema, payload.projectId, payload.analysisRunId);
     const symbols = symbolRecords
-      .flatMap((candidate) => {
+      .map((candidate) => {
         const parsed = symbolTableStoragePayloadSchema.safeParse(candidate.payload);
         if (!parsed.success) {
           throw new LegacyExodusError({
@@ -76,9 +76,11 @@ export class DiscoveryProjectionService implements RuntimeService {
             metadata: { issues: parsed.error.issues, recordId: candidate.id },
           });
         }
-        return matchesRun(parsed.data, payload.projectId, payload.analysisRunId) ? parsed.data.symbols : [];
+        return matchesRun(parsed.data, payload.projectId, payload.analysisRunId) ? parsed.data : undefined;
       })
-      .sort((left, right) => `${left.filePath}:${left.id}`.localeCompare(`${right.filePath}:${right.id}`));
+      .filter((candidate): candidate is z.infer<typeof symbolTableStoragePayloadSchema> => candidate !== undefined)
+      .sort((left, right) => left.path.localeCompare(right.path))
+      .flatMap((candidate) => candidate.symbols);
 
     const projection = createDiscoveryProjection({
       projectPath: payload.projectPath,

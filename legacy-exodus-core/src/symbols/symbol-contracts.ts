@@ -52,7 +52,7 @@ export interface SymbolTable {
 const symbolKindSchema = z.enum(["class", "export", "function", "import", "method", "variable"]);
 const positionSchema = z.object({ line: z.number().int().positive(), column: z.number().int().nonnegative() });
 
-const codeSymbolSchema = z.object({
+export const codeSymbolSchema = z.object({
   id: z.string().min(1),
   kind: symbolKindSchema,
   name: z.string().min(1),
@@ -105,6 +105,20 @@ export function validateSymbolTable(table: unknown): SymbolTable {
     symbols: Object.freeze(parsedTable.data.symbols.map(freezeCodeSymbol)),
     summary: Object.freeze({ ...parsedTable.data.summary }),
   });
+}
+
+export function validateCodeSymbols(symbols: unknown): readonly CodeSymbol[] {
+  const parsedSymbols = z.array(codeSymbolSchema).safeParse(symbols);
+
+  if (!parsedSymbols.success) {
+    throw new LegacyExodusError({
+      code: "SYMBOL_TABLE_INVALID",
+      message: "Symbol table is invalid.",
+      metadata: { issues: parsedSymbols.error.issues },
+    });
+  }
+
+  return Object.freeze(parsedSymbols.data.map(freezeCodeSymbol));
 }
 
 export function createLexicalScopeId(

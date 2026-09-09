@@ -7,8 +7,10 @@ import { randomUUID } from "node:crypto";
 import { createLegacyExodusEngine } from "@runtime/composition/services";
 import { DiscoveryValidator } from "@discovery/discovery-validator";
 import { DiscoveryQueryService } from "@discovery/discovery-query-service";
+import { JavaScriptParser, ParserManager, ParserRegistry } from "@parser/index";
 import { SqliteStorageProvider } from "@storage/adapters/sqlite-storage";
 import { StorageManager } from "@storage/storage-manager";
+import { JavaScriptSymbolExtractor, validateCodeSymbols } from "@symbols/index";
 
 describe("Phase 3A P0.4 — Discovery Snapshot Reuse & Invalidation", () => {
   let testRepoDir: string;
@@ -602,6 +604,78 @@ describe("Phase 3A P0.4 — Discovery Snapshot Reuse & Invalidation", () => {
         await rm(`${sqliteDbPath}-wal`, { force: true });
         await rm(`${sqliteDbPath}-shm`, { force: true });
       } catch {}
+    }
+  });
+
+  it("STORAGE-001: preserves canonical symbol metadata across validated snapshot reuse", async () => {
+    const sqliteDbPath = join(tmpdir(), `test-storage001-db-${randomUUID()}.sqlite`);
+    const projectId = randomUUID();
+    const run1Id = randomUUID();
+    const run2Id = randomUUID();
+    const source = [
+      "export async function example(a: string, b = 1) { const local = a; return local; }",
+      "export class Service { async execute(input: string) { return input; } }",
+    ].join("\n");
+
+    await writeFile(join(testRepoDir, "src", "index.ts"), source, "utf8");
+
+    const parserRegistry = new ParserRegistry();
+    parserRegistry.register(new JavaScriptParser());
+    const canonicalAst = await new ParserManager(parserRegistry).parse({
+      file: { id: "storage-001-fixture", path: "src/index.ts", language: "typescript", size: source.length },
+      source,
+    });
+    const canonicalSymbols = new JavaScriptSymbolExtractor().extract(canonicalAst).symbols;
+    const serializedCanonicalSymbols = validateCodeSymbols(JSON.parse(JSON.stringify(canonicalSymbols)));
+    const serializedCanonicalSymbolsJson = JSON.stringify(serializedCanonicalSymbols);
+
+    const environment = {
+      LOG_LEVEL: "silent",
+      NODE_ENV: "test",
+      LEGACY_EXODUS_STORAGE_DRIVER: "sqlite",
+      LEGACY_EXODUS_STORAGE_DB_PATH: sqliteDbPath,
+    } as const;
+    let storage: StorageManager | undefined;
+
+    try {
+      const engine1 = createLegacyExodusEngine(environment);
+      await engine1.initialize();
+      await engine1.execute({
+        id: run1Id,
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: { projectId, path: testRepoDir },
+      });
+      await engine1.shutdown();
+
+      storage = new StorageManager(new SqliteStorageProvider({ databasePath: sqliteDbPath }));
+      const query = new DiscoveryQueryService(storage);
+      const persistedSymbols = await query.getSymbolsForFile(projectId, "src/index.ts", run1Id);
+
+      const engine2 = createLegacyExodusEngine(environment);
+      await engine2.initialize();
+      const reusedResult = await engine2.execute({
+        id: run2Id,
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: { projectId, path: testRepoDir },
+      });
+      await engine2.shutdown();
+
+      const reusedSymbols = await query.getSymbolsForFile(projectId, "src/index.ts", run2Id);
+
+      expect(reusedResult.type).toBe("AnalyzeProject");
+      if (reusedResult.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject");
+      expect(reusedResult.isReused).toBe(true);
+      expect(JSON.stringify(persistedSymbols)).toBe(serializedCanonicalSymbolsJson);
+      expect(JSON.stringify(reusedSymbols)).toBe(serializedCanonicalSymbolsJson);
+      expect(reusedSymbols).toEqual(persistedSymbols);
+
+    } finally {
+      await storage?.close();
+      await rm(sqliteDbPath, { force: true });
+      await rm(`${sqliteDbPath}-wal`, { force: true });
+      await rm(`${sqliteDbPath}-shm`, { force: true });
     }
   });
 

@@ -67,7 +67,8 @@ describe("DiscoveryProjectionService", () => {
     const symbols = (analysisRunId: string, name: string) => createStorageRecord("symbol-table", {
       projectId, analysisRunId, path: "src/index.js", symbols: [{
         id: name, kind: "export", name, filePath: "src/index.js", exported: true, defaultExport: false,
-        moduleSpecifier: null, sourceSymbolName: name === "signIn" ? "login" : null,
+        language: "javascript", async: false, anonymous: false, visibility: "public", parameters: [],
+        ...(name === "signIn" ? { sourceSymbolName: "login" } : {}),
       }],
     });
     const knowledge = (analysisRunId: string, id: string) => createStorageRecord("knowledge-graph", {
@@ -86,7 +87,8 @@ describe("DiscoveryProjectionService", () => {
 
       expect(JSON.parse(await readFile(join(projectPath, ".discovery", "symbols.json"), "utf8"))).toEqual([{
         id: "signIn", kind: "export", name: "signIn", filePath: "src/index.js", exported: true, defaultExport: false,
-        moduleSpecifier: null, sourceSymbolName: "login",
+        language: "javascript", async: false, anonymous: false, visibility: "public", parameters: [],
+        sourceSymbolName: "login",
       }]);
       expect(JSON.parse(await readFile(join(projectPath, ".discovery", "knowledge.json"), "utf8"))).toEqual({
         projectId, analysisRunId: activeRunId, nodes: [{ id: "active", kind: "symbol", name: "active", filePath: "src/index.js" }], edges: [],
