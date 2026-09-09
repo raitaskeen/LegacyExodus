@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { codeSymbolSchema } from "@symbols/symbol-contracts";
+
 export const discoveryPayloadSchema = z.object({
   projectId: z.string().uuid(),
   analysisRunId: z.string().uuid().optional(),
@@ -39,18 +41,7 @@ export const symbolTablePayloadSchema = z.object({
   projectId: z.string().uuid(),
   analysisRunId: z.string().uuid().optional(),
   path: z.string(),
-  symbols: z.array(
-    z.object({
-      id: z.string(),
-      kind: z.string(),
-      name: z.string(),
-      filePath: z.string(),
-      exported: z.boolean(),
-      defaultExport: z.boolean(),
-      moduleSpecifier: z.string().nullable(),
-      sourceSymbolName: z.string().nullable(),
-    }),
-  ),
+  symbols: z.array(codeSymbolSchema),
 });
 
 export const dependencyGraphPayloadSchema = z.object({

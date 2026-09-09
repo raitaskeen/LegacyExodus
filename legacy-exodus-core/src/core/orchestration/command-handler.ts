@@ -21,7 +21,7 @@ import { resolve } from "node:path";
 import { ParserManager, type ASTResult } from "@parser/index";
 import { DeterministicCallGraphBuilder, DeterministicSemanticAnalysisEngine, findHttpCalls, type ExpressRoute, type MiddlewareChain, type SemanticCall, type SymbolReference } from "@semantic/index";
 import { createStorageRecord, type StorageRecord } from "@storage/index";
-import { JavaScriptSymbolExtractor, type SymbolTable } from "@symbols/index";
+import { JavaScriptSymbolExtractor, validateCodeSymbols, type CodeSymbol, type SymbolTable } from "@symbols/index";
 
 export interface CommandExecution {
   readonly events: readonly DomainEvent[];
@@ -179,24 +179,15 @@ export class AnalyzeProjectHandler {
           if (required.has("symbols.json")) {
             const symbolsRaw = artifacts.get("symbols.json");
             if (!symbolsRaw) throw new Error("Missing symbols.json in validated set.");
-            const symbolsJson = JSON.parse(symbolsRaw) as readonly any[];
-            const symbolsByFile = new Map<string, any[]>();
+            const symbolsJson = validateCodeSymbols(JSON.parse(symbolsRaw));
+            const symbolsByFile = new Map<string, CodeSymbol[]>();
             for (const symbol of symbolsJson) {
               let list = symbolsByFile.get(symbol.filePath);
               if (!list) {
                 list = [];
                 symbolsByFile.set(symbol.filePath, list);
               }
-              list.push({
-                id: symbol.id,
-                kind: symbol.kind,
-                name: symbol.name,
-                filePath: symbol.filePath,
-                exported: Boolean(symbol.exported),
-                defaultExport: Boolean(symbol.defaultExport),
-                moduleSpecifier: symbol.moduleSpecifier ?? null,
-                sourceSymbolName: symbol.sourceSymbolName ?? null,
-              });
+              list.push(symbol);
             }
 
             for (const file of analyzableFiles) {
@@ -447,12 +438,7 @@ export class AnalyzeProjectHandler {
           functions: table.summary.functions,
           imports: table.summary.imports,
           exports: table.summary.exports,
-          symbols: table.symbols.map((symbol) => ({
-            id: symbol.id, kind: symbol.kind, name: symbol.name, filePath: symbol.filePath,
-            exported: symbol.exported, defaultExport: symbol.defaultExport,
-            moduleSpecifier: symbol.moduleSpecifier ?? null,
-            sourceSymbolName: symbol.sourceSymbolName ?? null,
-          })),
+          symbols: table.symbols,
         }),
       );
       events.push(

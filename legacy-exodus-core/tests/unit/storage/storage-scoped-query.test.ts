@@ -171,7 +171,7 @@ describe("Storage Scoped Query Contract & Bounded Retrieval", () => {
           analysisRunId: run1,
           path: "src/app.ts",
           symbols: [
-            { id: "s1", kind: "function", name: "listen", filePath: "src/app.ts", exported: true, defaultExport: false, moduleSpecifier: null, sourceSymbolName: null },
+            { id: "s1", kind: "function", name: "listen", filePath: "src/app.ts", language: "typescript", exported: true, defaultExport: false, async: false, anonymous: false, visibility: "public", parameters: [] },
           ],
         });
 
@@ -278,10 +278,13 @@ describe("Storage Scoped Query Contract & Bounded Retrieval", () => {
               kind: "function",
               name: `handler_${i}`,
               filePath: `src/module_${i}.ts`,
+              language: "typescript",
               exported: true,
               defaultExport: false,
-              moduleSpecifier: null,
-              sourceSymbolName: null,
+              async: false,
+              anonymous: false,
+              visibility: "public",
+              parameters: [],
             },
           ],
         });
