@@ -1,5 +1,5 @@
-import { access, mkdir, stat, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { lstat, mkdir, realpath, stat, writeFile } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import type { Command } from "commander";
 
@@ -31,9 +31,8 @@ export async function initializeWorkspace(path: string, version: string): Promis
   const metadataDirectory = join(workspace, ".legacy-exodus");
   const metadataPath = join(metadataDirectory, "config.json");
 
-  if (await pathExists(metadataPath)) {
-    throw new CliError("WORKSPACE_ALREADY_INITIALIZED", "This workspace is already initialized.");
-  }
+  await ensureSafeMetadataDirectory(workspace, metadataDirectory);
+  await ensureSafeConfigDestination(metadataPath);
 
   const metadata: InitializationMetadata = {
     version,
@@ -41,8 +40,16 @@ export async function initializeWorkspace(path: string, version: string): Promis
     projectState: "initialized",
   };
 
-  await mkdir(metadataDirectory, { recursive: true });
-  await writeFile(metadataPath, `${formatJsonOutput(metadata)}\n`, "utf8");
+  try {
+    await writeFile(metadataPath, `${formatJsonOutput(metadata)}\n`, { encoding: "utf8", flag: "wx" });
+  } catch (error: unknown) {
+    if (isFileSystemError(error, "EEXIST")) {
+      await ensureSafeConfigDestination(metadataPath);
+      throw new CliError("WORKSPACE_ALREADY_INITIALIZED", "This workspace is already initialized.");
+    }
+
+    throw error;
+  }
 
   return { workspace, metadataPath, metadata };
 }
@@ -74,11 +81,66 @@ async function getWorkspaceStats(path: string): Promise<Awaited<ReturnType<typeo
   }
 }
 
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
+async function ensureSafeMetadataDirectory(workspace: string, metadataDirectory: string): Promise<void> {
+  const workspaceRoot = await realpath(workspace);
+  let metadataStats = await tryLstat(metadataDirectory);
+
+  if (metadataStats === undefined) {
+    try {
+      await mkdir(metadataDirectory);
+    } catch (error: unknown) {
+      if (!isFileSystemError(error, "EEXIST")) {
+        throw error;
+      }
+    }
+
+    metadataStats = await tryLstat(metadataDirectory);
   }
+
+  if (metadataStats === undefined || metadataStats.isSymbolicLink() || !metadataStats.isDirectory()) {
+    throw unsafeMetadataPathError();
+  }
+
+  const physicalMetadataDirectory = await realpath(metadataDirectory);
+  if (!isContainedPath(workspaceRoot, physicalMetadataDirectory)) {
+    throw unsafeMetadataPathError();
+  }
+}
+
+async function ensureSafeConfigDestination(metadataPath: string): Promise<void> {
+  const metadataStats = await tryLstat(metadataPath);
+  if (metadataStats === undefined) {
+    return;
+  }
+
+  if (metadataStats.isSymbolicLink() || !metadataStats.isFile()) {
+    throw unsafeMetadataPathError();
+  }
+
+  throw new CliError("WORKSPACE_ALREADY_INITIALIZED", "This workspace is already initialized.");
+}
+
+async function tryLstat(path: string): Promise<Awaited<ReturnType<typeof lstat>> | undefined> {
+  try {
+    return await lstat(path);
+  } catch (error: unknown) {
+    if (isFileSystemError(error, "ENOENT")) {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+function isContainedPath(root: string, candidate: string): boolean {
+  const relativePath = relative(root, candidate);
+  return relativePath === "" || (!isAbsolute(relativePath) && relativePath !== ".." && !relativePath.startsWith(`..${sep}`));
+}
+
+function isFileSystemError(error: unknown, code: string): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error && error.code === code;
+}
+
+function unsafeMetadataPathError(): CliError {
+  return new CliError("WORKSPACE_METADATA_UNSAFE", "The LegacyExodus metadata path is not a safe directory.");
 }
