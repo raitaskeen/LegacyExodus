@@ -167,11 +167,23 @@ describe("DiscoveryProjectionService", () => {
       graphs: [
         {
           id: "cfg-1",
-          functionName: "login",
           filePath: "src/index.js",
-          blocks: [{ id: "b1", statements: [] }],
-          edges: [],
-          dominators: [],
+          scopeName: "login",
+          state: "RESOLVED",
+          entryBlockId: "entry",
+          exitBlockId: "exit",
+          blocks: [
+            { id: "entry", statements: [], predecessorIds: [], successorIds: ["exit"] },
+            { id: "exit", statements: [], predecessorIds: ["entry"], successorIds: [] },
+          ],
+          edges: [{ id: "edge-1", fromBlockId: "entry", toBlockId: "exit", kind: "next" }],
+          dominators: [
+            { blockId: "entry" },
+            { blockId: "exit", immediateDominatorId: "entry" },
+          ],
+          loops: [],
+          unreachableBlockIds: [],
+          deadCodeNodeIds: [],
         },
       ],
     });
@@ -188,11 +200,11 @@ describe("DiscoveryProjectionService", () => {
 
       const writtenControlFlow = JSON.parse(
         await readFile(join(projectPath, ".discovery", "control-flow.json"), "utf8"),
-      ) as { readonly projectId: string; readonly graphs: readonly { readonly functionName: string }[] };
+      ) as { readonly projectId: string; readonly graphs: readonly { readonly scopeName: string }[] };
 
       expect(writtenControlFlow.projectId).toBe(projectId);
       expect(writtenControlFlow.graphs).toHaveLength(1);
-      expect(writtenControlFlow.graphs[0]!.functionName).toBe("login");
+      expect(writtenControlFlow.graphs[0]!.scopeName).toBe("login");
     } finally {
       await rm(projectPath, { force: true, recursive: true });
     }

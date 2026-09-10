@@ -77,10 +77,10 @@ const findingSchema = z.object({ symbolId: z.string().min(1), filePath: z.string
 const entryPointSchema = z.object({ filePath: z.string().min(1), reason: z.enum(["conventional-file", "http-listener"]) });
 const routeSchema = z.object({ id: z.string().min(1), filePath: z.string().min(1), method: z.string().min(1), path: z.string().min(1), handlerName: z.string().min(1).optional(), middleware: z.array(z.string().min(1)), state: evidenceStateSchema });
 const middlewareSchema = z.object({ filePath: z.string().min(1), middleware: z.array(z.string().min(1)) });
-const semanticSchema = z.object({ calls: z.array(callSchema), references: z.array(referenceSchema), scopes: z.array(scopeSchema), deadCode: z.array(findingSchema), unusedImports: z.array(findingSchema), unusedExports: z.array(findingSchema), entryPoints: z.array(entryPointSchema), routes: z.array(routeSchema), middlewareChains: z.array(middlewareSchema) });
+export const semanticAnalysisSchema = z.object({ calls: z.array(callSchema), references: z.array(referenceSchema), scopes: z.array(scopeSchema), deadCode: z.array(findingSchema), unusedImports: z.array(findingSchema), unusedExports: z.array(findingSchema), entryPoints: z.array(entryPointSchema), routes: z.array(routeSchema), middlewareChains: z.array(middlewareSchema) });
 
 export function createSemanticAnalysis(analysis: SemanticAnalysis): SemanticAnalysis {
-  const parsed = semanticSchema.parse(analysis);
+  const parsed = semanticAnalysisSchema.parse(analysis);
   return Object.freeze({
     calls: freezeSorted(parsed.calls), references: freezeSorted(parsed.references), scopes: freezeSorted(parsed.scopes),
     deadCode: freezeSorted(parsed.deadCode), unusedImports: freezeSorted(parsed.unusedImports), unusedExports: freezeSorted(parsed.unusedExports),

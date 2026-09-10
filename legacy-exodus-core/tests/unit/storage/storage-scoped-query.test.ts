@@ -193,19 +193,64 @@ describe("Storage Scoped Query Contract & Bounded Retrieval", () => {
         const semRecord = createStorageRecord("semantic-analysis", {
           projectId: projA,
           analysisRunId: run1,
-          calls: [{ from: "s1", to: "fastify" }],
+          calls: [{
+            id: "call-1",
+            sourceFilePath: "src/app.ts",
+            callerName: "listen",
+            calleeName: "fastify",
+            resolutionState: "UNRESOLVED",
+          }],
+          references: [],
+          scopes: [],
+          deadCode: [],
+          unusedImports: [],
+          unusedExports: [],
+          entryPoints: [],
+          routes: [],
+          middlewareChains: [],
         });
 
         const cfgRecord = createStorageRecord("control-flow-analysis", {
           projectId: projA,
           analysisRunId: run1,
-          graphs: [{ id: "cfg1" }],
+          graphs: [{
+            id: "cfg1",
+            filePath: "src/app.ts",
+            scopeName: "module",
+            state: "RESOLVED",
+            entryBlockId: "entry",
+            exitBlockId: "exit",
+            blocks: [
+              { id: "entry", statements: [], predecessorIds: [], successorIds: ["exit"] },
+              { id: "exit", statements: [], predecessorIds: ["entry"], successorIds: [] },
+            ],
+            edges: [{ id: "edge1", fromBlockId: "entry", toBlockId: "exit", kind: "next" }],
+            dominators: [
+              { blockId: "entry" },
+              { blockId: "exit", immediateDominatorId: "entry" },
+            ],
+            loops: [],
+            unreachableBlockIds: [],
+            deadCodeNodeIds: [],
+          }],
         });
 
         const dfgRecord = createStorageRecord("data-flow-analysis", {
           projectId: projA,
           analysisRunId: run1,
-          graphs: [{ id: "dfg1" }],
+          graphs: [{
+            id: "dfg1",
+            filePath: "src/app.ts",
+            state: "RESOLVED",
+            definitions: [],
+            uses: [],
+            defUseChains: [],
+            lifetimes: [],
+            taintFlows: [],
+            interproceduralFlows: [],
+            functionSummaries: [],
+            callBindings: [],
+          }],
         });
 
         await manager.save(discRecord);
