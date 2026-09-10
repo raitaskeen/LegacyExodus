@@ -26,7 +26,7 @@ LegacyExodus defines 10 verification layers. Any skipped layer MUST be explicitl
 ```text
 Layer 1:  FOCUSED REGRESSION TEST  ──► Reproduces defect and proves the fix.
 Layer 2:  RELEVANT SUBSYSTEM SUITE ──► Validates direct callers and sibling components.
-Layer 3:  FULL TEST SUITE          ──► All 113+ files and 1,000+ tests (bun test).
+Layer 3:  FULL TEST SUITE          ──► All currently discovered tests (`bun test`); record live totals.
 Layer 4:  STATIC TYPECHECK         ──► Zero TypeScript errors (tsc --noEmit).
 Layer 5:  BENCHMARK AUDIT          ──► 10/10 governance checks (bun run benchmark audit).
 Layer 6:  DETERMINISM AUDIT        ──► Multi-run identical output verification (--runs 3).
@@ -122,10 +122,10 @@ The test verification summary MUST document the aggregate summary metrics AND ex
 ```yaml
 verification_report:
   summary:
-    files_tested: <total test files, e.g., 113>
-    tests_passed: <total passed, e.g., 1001>
+    files_tested: <live total test files>
+    tests_passed: <live total passed>
     tests_failed: <total failed, e.g., 0>
-    assertions_count: <total expect() calls, e.g., 9388>
+    assertions_count: <live total expect() calls>
     total_runtime_ms: <runtime in ms>
 
   layers:
@@ -137,7 +137,7 @@ verification_report:
       evidence: "<subsystem test directory, files/tests passed>"
     layer_3_full_test_suite:
       result: PASS | FAIL
-      evidence: "bun test execution: 1001 pass, 0 fail across 113 files"
+      evidence: "bun test execution: <live pass count>, 0 fail across <live file count>"
     layer_4_static_typecheck:
       result: PASS | FAIL
       evidence: "bun run typecheck: exit code 0, 0 compiler errors"

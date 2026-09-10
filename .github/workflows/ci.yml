@@ -4,13 +4,16 @@ on:
   push:
     branches:
       - main
-      - phase-2.8-hardening
-      - phase-3a-memory-scalability
-      - phase-3a-discovery-boundary-hardening
       - core-foundation
-      - docs-foundation
   pull_request:
+    branches:
+      - main
+      - core-foundation
   workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -44,6 +47,9 @@ jobs:
 
       - name: Benchmark Governance Audit
         run: bun run benchmark audit
+
+      - name: CLI smoke test
+        run: bun run src/cli/index.ts --help
 
       - name: Git diff check
         run: git diff --check

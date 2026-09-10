@@ -43,6 +43,7 @@ LegacyExodus maintains exactly **three permanent engineering branches**:
   * `fix/<finding-id>`: Forensic bug remediations.
   * `feat/<feature-name>`: Verified new feature additions.
   * `chore/<maintenance-topic>`: Dependency, toolchain, or pipeline updates.
+  * `docs/<documentation-topic>`: Documentation synchronization based on verified core truth.
   * `audit/<topic>`: Read-only investigative snapshots.
 * **Deletion Invariant:** Temporary task branches MUST be deleted locally and remotely upon successful merge to prevent repository clutter.
 * **Anti-Sprawl Invariant:** Contributors MUST NOT create permanent branches named `skills`, `skill.md`, `agent-governance`, or any variation thereof.
@@ -99,7 +100,7 @@ Co-authored-by: pamexo <raimrazzaq12@gmail.com>
 * **Scopes:** `discovery`, `parser`, `symbols`, `graph`, `semantic`, `flow`, `storage`, `runtime`, `cli`, `governance`, `toolchain`.
 
 ### Step 5: Push Verification & Clean Worktree Postcondition
-Push only to the dedicated temporary task branch on origin:
+Push only when the user or task explicitly authorizes it, and only to the dedicated temporary task branch on origin:
 ```bash
 git push origin <type>/<task-name>
 ```
@@ -107,6 +108,15 @@ git push origin <type>/<task-name>
   ```text
   nothing to commit, working tree clean
   ```
+* If pushing is not authorized, stop after the local commit and report `PUSH: NOT AUTHORIZED`. Never infer permission to publish changes.
+
+### Documentation Impact Gate
+Every core change must answer: `Does this change alter documented product truth?`
+
+* If **yes**, identify the affected README/docs and synchronize them from a temporary `docs/*` branch based on the latest `origin/docs-foundation`, using the verified `origin/core-foundation` SHA as evidence.
+* If **no**, report `Documentation impact: NONE` with a concrete reason.
+* Documentation must follow current source, tests, and verified runtime behavior. Never change production behavior merely to satisfy prose.
+* Keep engine and documentation changes in separate logical commits and branch responsibilities.
 
 ---
 
