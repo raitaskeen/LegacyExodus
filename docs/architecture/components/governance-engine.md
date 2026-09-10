@@ -1,5 +1,7 @@
 # Governance Engine (VymosGate Core)
 
+> **Status: TARGET ARCHITECTURE — NOT IMPLEMENTED AS VYMOSGATE.** Current benchmark/fidelity governance is narrower and does not approve generated migrations.
+
 ## Overview
 
 Governance Engine is the authoritative policy and validation authority for modernization acceptance decisions in LegacyExodus.

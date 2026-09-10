@@ -1,5 +1,7 @@
 # AI Gateway
 
+> **Status: TARGET ARCHITECTURE — NOT IMPLEMENTED.** No AI gateway or model-provider integration exists in the current core.
+
 ## Overview
 
 AI Gateway is the controlled boundary between LegacyExodus and AI model providers. It ensures AI is assistive, policy-governed, and never a control bypass.

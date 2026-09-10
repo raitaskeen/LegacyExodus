@@ -123,6 +123,14 @@ To guarantee that persistence requests via CLI flags or environment variables ne
 * If `--storage-path` or `LEGACY_EXODUS_STORAGE_DB_PATH` is specified without an explicit storage driver, `loadRuntimeConfig` automatically selects `"sqlite"`.
 * If `--storage-driver memory` is combined with `--storage-path`, `loadRuntimeConfig` throws an immediate, explicit `ConfigurationError`, rejecting ambiguous configurations.
 
+### 4.9 Snapshot Reuse Contract Integrity
+
+Snapshot reuse is accepted only after manifest integrity, workspace freshness, and canonical persisted payload schemas validate. Symbol tables preserve the complete canonical `CodeSymbol` representation rather than a lossy projection. Persisted semantic, CFG, and DFG payloads reuse the same nested schemas as their runtime contracts. An integrity-valid artifact with incompatible nested data is rejected and analysis falls back to a fresh run; malformed state is never treated as a completed reusable snapshot.
+
+### 4.10 Owned-Path Write Containment
+
+`FileDiscoveryProjectionAdapter` physically resolves the target project and `.discovery` directory, rejects redirected/non-directory roots, and rejects artifact destinations that are symlinks, non-files, or multiply linked. Safety checks occur before and around atomic publication. The `init` command applies the corresponding containment discipline to `.legacy-exodus/config.json`. These controls protect LegacyExodus-owned writes; they are not a general process sandbox for analyzed repositories.
+
 ---
 
 ## 5. Implementation Evidence

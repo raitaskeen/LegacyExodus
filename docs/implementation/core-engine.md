@@ -1,49 +1,37 @@
 # Core Engine Implementation
 
-This document describes the boundary, composition, and lifecycle of `LegacyExodusEngine` implemented in `src/core/engine/`.
+**State:** `IMPLEMENTED`; lifecycle and integration behavior are covered by current tests.
 
----
+`LegacyExodusEngine` in `legacy-exodus-core/src/core/engine/` is the public application boundary used by the CLI and programmatic callers.
 
-## 1. Engine Boundary & Composition
+## Composition
 
-`LegacyExodusEngine` serves as the single public entry point for CLI and programmatic callers into the deterministic core analysis pipeline.
+`createLegacyExodusEngine()` constructs an engine context containing the runtime, orchestrator, event infrastructure, storage manager/provider, projection service, plugin registry/loader, parser manager, and analysis services. Concrete composition lives in `src/runtime/composition/services.ts`.
 
-```mermaid
-flowchart TD
-    A["CLI / Caller"] -->|createLegacyExodusEngine| B["LegacyExodusEngine"]
-    B --> C["EngineContext"]
-    C --> D["Runtime Configuration & Logger"]
-    C --> E["EventBus & EventStore"]
-    C --> F["MemoryStorageProvider & StorageManager"]
-    C --> G["PluginRegistry & PluginLoader"]
-    C --> H["Orchestrator & CommandHandler"]
+The CLI does not import individual analysis implementations to execute work.
+
+## Lifecycle
+
+```text
+created -> running -> stopping -> stopped
 ```
 
----
+- `initialize()` starts the application runtime and composed services.
+- `execute()` requires a running engine and tracks in-flight commands.
+- `shutdown()` waits for in-flight work, delegates cleanup to the runtime, coalesces concurrent callers, and leaves the engine stopped.
+- A stopped engine instance cannot be restarted.
 
-## 2. Engine Lifecycle
+`status()` reports engine/runtime state and readiness for events, plugins, and storage. Readiness is lifecycle status, not a deep external-service health probe.
 
-The engine adheres to a strict state machine lifecycle:
+## Commands
 
-```mermaid
-stateDiagram-v2
-    [*] --> CREATED: new LegacyExodusEngine()
-    CREATED --> RUNNING: engine.initialize()
-    RUNNING --> STOPPED: engine.shutdown()
-    STOPPED --> [*]
-```
+Current engine execution supports system status and project analysis. Analysis is event-driven, persists run-scoped records, and projects fresh results. Valid reused snapshots can restore prior analysis state without projecting a new run.
 
-1. **`initialize()`:** Transitions from `created` to `running`. Validates runtime composition, mounts plugins, and starts the internal event bus.
-2. **`status()`:** Returns stable component health for runtime, storage, plugins, and event subsystems.
-3. **`shutdown()`:** Flushes event stores, unloads plugins, and transitions to `stopped`. A stopped engine cannot be restarted.
+## Evidence
 
----
+- Core source: `legacy-exodus-core/src/core/engine/`
+- Composition: `legacy-exodus-core/src/runtime/composition/services.ts`
+- Lifecycle: `legacy-exodus-core/src/runtime/application.ts`
+- Tests: current engine, runtime, orchestration, integration, and snapshot-reuse suites on `core-foundation`
 
-## 3. Implementation Evidence
-
-* **Source Location:** [`src/core/engine/`](../../legacy-exodus-core/src/core/engine), [`src/runtime/composition/services.ts`](../../legacy-exodus-core/src/runtime/composition/services.ts).
-* **Tests:** `engine.test.ts`, `runtime.test.ts` (100% passing tests).
-* **Related Documentation:**
-  * **[Runtime Architecture](../architecture/runtime-architecture.md):** Detailed composition model.
-  * **[Command Contracts](../api/command-contracts.md):** Engine command specifications.
-  * **[ADR-001: Project State Architecture](../adr/ADR-001-project-state-architecture.md):** State management design.
+See [Current Implementation](../CURRENT_IMPLEMENTATION.md) for the synchronized core SHA and limitations.

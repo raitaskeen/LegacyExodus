@@ -15,14 +15,14 @@ The system required an architectural decision for managing project state:
 1. **Immutable In-Memory State Snapshots:** Implement `ProjectState` as an immutable, strictly typed state aggregate validated via Zod schemas (`state-schema.ts`).
 2. **Deterministic State Transitions:** State transitions occur strictly through pure reducer logic (`event-reducer.ts`) triggered by domain events or explicit orchestrator command handlers (`command-handler.ts`).
 3. **Artifact-Anchored Identity:** Files and entities are indexed deterministically using SHA-256 relative path file hashes (`FileId`), eliminating environmental or absolute path leakage.
-4. **Current Implementation vs Target Architecture:** In-memory state snapshots with streaming JSON disk projection (`StreamingJsonWriter`) represent current verified implementation. SQLite/Parquet knowledge graph query layers are planned target architecture.
+4. **Current Implementation vs Target Architecture:** Immutable in-memory state, run-scoped memory/SQLite storage, and streaming JSON projections are current implementation. Parquet and enterprise analytics/query services remain target architecture.
 
 ## Alternatives Considered
 * **Direct Mutable Global Context:** Rejected because mutable shared state introduces race conditions, breaks determinism, and makes multi-run diff verification impossible.
 * **Direct Database Dependency (Postgres / MongoDB):** Rejected for core analysis runs to ensure zero-infrastructure standalone CLI operation on Bun.
 
 ## Consequences
-* **Positive:** Guaranteed bit-for-bit determinism across identical input repositories; strict type safety prevents runtime structure drift.
+* **Positive:** Deterministic contracts and canonical ordering support repeatable output for verified inputs; runtime schema validation limits structure drift.
 * **Positive:** Clear audit trail and reproducible pipeline replay.
 * **Tradeoff:** Large repositories require memory-conscious bounded projections, resolved via `StreamingJsonWriter` chunk backpressure.
 

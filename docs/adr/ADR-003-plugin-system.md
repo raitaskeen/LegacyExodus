@@ -9,21 +9,21 @@ LegacyExodus requires an extensibility mechanism to allow custom language analyz
 Key challenges:
 1. Providing a clean plugin interface (`LegacyExodusPlugin`).
 2. Scoping plugin access to logger, event bus, and storage (`PluginContext`).
-3. Preventing faulty plugins from destabilizing core pipeline execution.
+3. Defining lifecycle and access boundaries while acknowledging that current plugins execute in-process.
 
 ## Decision
 1. **Contract-First Plugin Interface:** Define `LegacyExodusPlugin` requiring `initialize(context)` and `shutdown()` lifecycle methods.
 2. **Controlled Context Injection:** Plugins receive a scoped `PluginContext` with access only to `Logger`, `EventBus`, and `StorageManager`.
-3. **Dynamic Plugin Registry & Loader:** Implement `PluginRegistry` and `PluginLoader` to validate plugin manifests via Zod schemas before activation.
+3. **Instance Registry & Loader:** Implement `PluginRegistry` and `PluginLoader` to validate supplied plugin manifests before registration and initialization. Filesystem/package discovery and dynamic imports are not part of the current loader.
 
 ## Alternatives Considered
 * **Direct Monkey-Patching / Subclassing:** Rejected because mutable subclassing creates tight coupling and breaks engine determinism.
 * **Process-Isolated RPC Plugins (gRPC):** Deferred for future remote plugin execution; in-process TypeScript plugins provide immediate low-overhead extensibility on Bun.
 
 ## Consequences
-* **Positive:** Extensible ecosystem for custom rules and exporters.
+* **Positive:** Stable foundation for future extension types without coupling the core to concrete plugin implementations.
 * **Positive:** Clear lifecycle management with graceful shutdown.
-* **Tradeoff:** In-process plugins run in the same memory space as the engine.
+* **Tradeoff:** In-process plugins run in the same memory space as the engine and are not a security sandbox.
 
 ## Verification / Evidence
 * **Source Implementation:** [`src/plugins/plugin.ts`](../../legacy-exodus-core/src/plugins/plugin.ts), [`src/plugins/plugin-registry.ts`](../../legacy-exodus-core/src/plugins/plugin-registry.ts), [`src/plugins/plugin-loader.ts`](../../legacy-exodus-core/src/plugins/plugin-loader.ts).

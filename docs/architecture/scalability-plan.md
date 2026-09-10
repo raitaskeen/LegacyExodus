@@ -1,5 +1,7 @@
 ## Scalability Plan
 
+> **Status: TARGET ARCHITECTURE.** Worker scaling and distributed processing are planned. Current bounded-memory behavior must be established by live benchmarks and is not universally guaranteed.
+
 This document defines how LegacyExodus scales safely and predictably as repository size, workload concurrency, and enterprise adoption increase.
 
 ### Scope

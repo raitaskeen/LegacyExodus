@@ -1,279 +1,45 @@
 # Data Flow
 
-## Migration journey through LegacyExodus
-
-This document explains how data moves through the LegacyExodus modernization pipeline—from a legacy codebase to validated, memory-safe output.
-
-The flow is stage-driven and artifact-centric: each phase produces explicit outputs that become the controlled inputs of the next phase.
-
----
-
-## High-level migration path
+## Current executable analysis flow
 
 ```text
-Legacy Repository
-      |
-      v
-VyrixScout
-      |
-      v
-Discovery Artifacts
-      |
-      v
-NolaraStruct
-      |
-      v
-Knowledge Graph
-      |
-      v
-ZelvoxForge
-      |
-      v
-Rust Application
-      |
-      v
-VymosGate
-      |
-      v
-Validated Modernized Output
+AnalyzeProject command
+  -> engine lifecycle boundary
+  -> orchestrator
+  -> repository discovery
+  -> per-file parse and normalized AST
+  -> symbol extraction
+  -> module/dependency resolution
+  -> knowledge and semantic analysis
+  -> CFG / DFG / conservative taint facts
+  -> atomic run-scoped storage
+  -> validated .discovery projection
+  -> CLI analysis summary
 ```
 
----
+### Failure behavior
 
-## 1) Stage-by-stage flow
+- Enumeration, parser, and symbol-extraction failures are categorized rather than silently disappearing.
+- Supported files continue where per-file isolation permits.
+- A terminal analysis failure is represented in events/state and rejected by the engine boundary.
+- Snapshot reuse requires workspace freshness, manifest integrity, and canonical schema validation; otherwise the engine recomputes.
 
-## 1.1 Legacy Repository -> VyrixScout (Discover)
+### Storage and projection
 
-**Input**
-- Source code (multi-language possible)
-- Build files and dependency manifests
-- Config files, scripts, infra descriptors
-- Binary/interface definitions where available
+Domain analysis does not write files directly. Records flow through `StorageManager` to the active memory or SQLite provider. `DiscoveryProjectionService` queries a single completed run and delegates contained atomic `.discovery` publication to its file adapter.
 
-**What happens**
-- Repository is scanned and fingerprinted
-- File types, frameworks, runtimes, entrypoints, and dependency surfaces are identified
-- Structural and operational metadata is extracted
+The event journal is append-only durable execution evidence. JSON projection artifacts are derived views and are not the event store.
 
-**Output artifacts (Discovery Artifacts)**
-- `inventory.json` (files, modules, languages, counts)
-- `dependency-map.json` (declared and inferred dependencies)
-- `runtime-surface.json` (services, endpoints, jobs, schedulers, I/O boundaries)
-- `risk-seeds.json` (unsafe patterns, complexity hotspots, migration blockers)
-- `discovery-report.md`
+## Target modernization flow
 
----
+```text
+verified static knowledge
+  -> language-independent IR/SSA
+  -> migration plan
+  -> controlled transformation
+  -> target-language generation
+  -> isolated compilation/testing
+  -> behavioral validation and human approval
+```
 
-## 1.2 Discovery Artifacts -> NolaraStruct (Understand)
-
-**Input**
-- Discovery artifacts from VyrixScout
-- Original repository sources for semantic parsing
-
-**What happens**
-- Parsers create AST/semantic models per language
-- Cross-module relationships are resolved
-- Control flow, data flow, and type/contract relationships are stitched into a unified model
-- Domain boundaries and ownership zones are inferred
-
-**Output artifacts (Knowledge Graph package)**
-*Current Implementation:*
-- `symbol-table.json` (declarations, lexical scopes, hoisted variables, exports)
-- `dependency-graph.json` (module resolution, import/export bindings, cycles)
-- `call-graph.json` (resolved calls, constructor instantiations, dead code)
-- `control-flow.json` (basic-block CFG, branch targets, exception flow)
-- `data-flow.json` (def-use chains, variable lifetimes, interprocedural taint flow)
-- SQLite database projections and in-memory knowledge graph stores
-
-*Target Architecture (Planned):*
-- `uir.bundle` (Unified Intermediate Representation)
-- `kg.nodes.parquet` (columnar entities: modules, services, tables, APIs, jobs)
-- `kg.edges.parquet` (columnar relationships: depends-on, calls, reads, writes, emits, consumes)
-- `contracts.json` (API/schema/event contracts)
-- `ownership-map.json` (team/domain ownership hints)
-- `struct-report.md`
-
----
-
-## 1.3 Knowledge Graph -> ZelvoxForge (Transform) `[TARGET ARCHITECTURE]`
-
-**Input**
-- Knowledge Graph (AST, symbols, CFG/DFG; UIR planned as target architecture)
-- Policy profile (security, compliance, coding standards)
-- Target architecture constraints (Rust runtime, async model, interface strategy)
-
-**What happens**
-- Transformation planner selects migration strategy by component risk and coupling
-- Candidate rewrites are generated for selected units
-- Unsafe patterns are replaced with memory-safe and concurrency-safe equivalents
-- Integration shims/adapters are generated when full cutover is not immediate
-- Human approval gates are applied for high-risk transformations
-
-**Output artifacts (Rust Application package)**
-- Rust workspace/crates structure
-- Generated Rust source modules
-- Adapter/shim layers
-- Config and manifest updates
-- Migration rationale and trace mappings:
-  - `trace-map.json` (legacy symbol -> modern symbol)
-  - `decision-log.json` (why each transform was applied)
-  - `forge-report.md`
-
----
-
-## 1.4 Rust Application -> VymosGate (Validate)
-
-**Input**
-- Generated Rust application and adapters
-- Trace map and transformation decision log
-- Validation policy set
-
-**What happens**
-- Build, lint, static checks, and policy checks execute
-- Behavioral/regression equivalence checks run against defined baselines
-- Security and compliance gates evaluate output
-- Evidence is attached to each pass/fail decision
-
-**Output artifacts (Validated Modernized Output)**
-- `validation-report.md`
-- `gate-results.json` (gate-by-gate outcomes)
-- `equivalence-report.json`
-- `sbom.spdx.json` (when enabled)
-- `release-readiness.json`
-
----
-
-## 2) Artifacts
-
-Artifacts are first-class pipeline objects. In the **current implementation**, Stage 1 (`VyrixScout`) writes discovery projection artifacts (`.discovery/*.json`) using fixed logical filenames, atomic temporary file replacement, and cryptographic SHA-256 manifest hashing (`manifest.json`). Content-addressed, immutable per-run versioned artifact storage is designated as **target architecture**.
-
-## 2.1 Artifact classes
-1. **Discovery artifacts** (inventory, dependencies, runtime surface)
-2. **Structural artifacts** (UIR, graph nodes/edges, contracts)
-3. **Transformation artifacts** (generated code, adapters, trace map, decisions)
-4. **Validation artifacts** (test evidence, policy outcomes, readiness status)
-
-## 2.2 Artifact requirements
-- Deterministic naming by run/stage/task
-- Content hashing for integrity and deduplication
-- Metadata envelope on each artifact:
-  - `run_id`
-  - `stage`
-  - `producer`
-  - `timestamp`
-  - `schema_version`
-  - `input_hashes`
-
-## 2.3 Artifact lineage
-Each artifact records:
-- parent artifacts it depended on
-- transformation step that produced it
-- downstream artifacts derived from it
-
-This enables full provenance from final Rust output back to legacy source evidence.
-
----
-
-## 3) Transformations
-
-Transformations are controlled, explainable, and policy-aware modifications from legacy semantics to modernized Rust semantics.
-
-## 3.1 Transformation units
-- Function/method level rewrites
-- Module/component extraction
-- Data model hardening (ownership/borrowing-safe redesigns)
-- Concurrency model upgrades (shared mutable state reduction)
-- Interface normalization (typed boundaries, safer error models)
-
-## 3.2 Transformation modes
-- **Advisory mode**: propose-only (no direct apply)
-- **Assisted mode**: apply low-risk automatically, gate high-risk
-- **Strict mode**: enforce approvals for all non-trivial rewrites
-
-## 3.3 Safety controls
-- Policy checks before apply
-- Idempotent apply semantics
-- Rollback via artifact version lineage
-- Mandatory trace mapping from source to generated output
-
----
-
-## 4) Storage points
-
-Data is persisted at multiple control points to support resumability, auditability, and scale.
-
-## 4.1 Primary storage locations
-1. **Event Store**
-   - `InMemoryEventStore` is the active in-memory event store in the current runtime
-   - Append-only `.jsonl` disk persistence is planned for target architecture (source of truth for run progression)
-
-2. **Artifact Store (Object Storage - Target Architecture)**
-   - Stage outputs and evidence bundles
-   - Immutable, content-addressed blobs (planned; current discovery stage writes `.discovery/*.json` projection artifacts)
-
-3. **Knowledge Graph Store**
-   - Node/edge datasets and query indexes
-   - Optimized for relationship traversal
-
-4. **Operational Metadata Store**
-   - Run metadata, task states, approvals, locks, retries
-   - Query-friendly control-plane state
-
-5. **Projection/Read Model Store**
-   - Materialized status views, dashboards, metrics
-
-## 4.2 Stage persistence checkpoints
-- Post-discovery checkpoint
-- Post-structuring checkpoint
-- Post-transformation checkpoint
-- Post-validation checkpoint
-
-These checkpoints allow restart/resume without replaying completed heavy compute steps.
-
----
-
-## 5) Ownership
-
-Ownership defines who is accountable for artifacts, decisions, and approvals at each flow segment.
-
-## 5.1 System ownership by stage
-- **VyrixScout** owns discovery completeness and inventory fidelity
-- **NolaraStruct** owns semantic correctness of normalized AST, symbol tables, and graph/flow analysis (UIR/SSA construction is planned for target architecture)
-- **ZelvoxForge** owns transformation correctness and traceability
-- **VymosGate** owns validation integrity and release decision evidence
-
-## 5.2 Human ownership (HITL)
-- Platform/operator owners approve policy exceptions
-- Domain/team owners approve high-impact behavioral rewrites
-- Security/compliance owners approve gated risk findings
-
-## 5.3 Data ownership model
-- Artifact producer owns artifact correctness at creation time
-- Orchestrator owns lifecycle truth (state transitions)
-- Governance owners own final go/no-go acceptance decision
-
----
-
-## 6) End-to-end traceability
-
-For any final Rust module, the system can answer:
-1. Which legacy files and symbols contributed to this output?
-2. Which transformations were applied, and why?
-3. Which policies/gates were evaluated?
-4. Who approved risk-bearing decisions?
-5. What validation evidence supports readiness?
-
-This is enabled by artifact lineage + event history + decision logs.
-
----
-
-## Summary
-
-LegacyExodus data flow is a governed migration chain:
-
-- **Legacy Repository** is discovered by **VyrixScout**
-- outputs become structured by **NolaraStruct** into a **Knowledge Graph**
-- graph-driven plans are transformed by **ZelvoxForge** into a **Rust Application**
-- final output is verified by **VymosGate** into **Validated Modernized Output**
-
-Across the journey, artifact lineage is verified, transformations are traceable, storage is checkpointed, and ownership is explicit.
+Everything after verified static knowledge in this target flow is `PLANNED` or `TARGET ARCHITECTURE`, not current executable behavior.
