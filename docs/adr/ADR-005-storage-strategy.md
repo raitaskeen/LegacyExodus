@@ -28,8 +28,8 @@ Key challenges:
 * **Unvalidated File Caching:** Rejected because stale or corrupted discovery files would cause false downstream migration results. `DiscoveryValidator` guarantees complete cryptographic artifact integrity before reuse.
 
 ## Consequences
-* **Positive:** Sub-millisecond discovery execution on unchanged repositories with zero AST/scanner overhead.
-* **Positive:** Flat memory profile during large repository scans (verified on Tier-2 Fastify and Tier-3 Express).
+* **Positive:** Valid snapshots can avoid fresh scanning and AST analysis when integrity, freshness, and schema checks pass.
+* **Limitation:** Universal bounded-memory scaling and performance characteristics require live comparative benchmark evidence; they are not guaranteed by streaming projection alone.
 * **Positive:** Clean abstraction allows switching between in-memory and persistent SQLite storage providers without changing analysis engines.
 * **Positive:** Independent migration processes can query persistent SQLite facts without rediscovering the target codebase.
 * **Tradeoff:** Streaming output requires careful chunk delimiter and backpressure management.

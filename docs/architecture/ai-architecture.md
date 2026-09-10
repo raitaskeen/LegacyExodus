@@ -1,5 +1,7 @@
 # AI Architecture
 
+> **Status: TARGET ARCHITECTURE — NOT IMPLEMENTED.** This document describes a future governed AI design. The current core makes no LLM calls and has no AI gateway or agent runtime.
+
 This document defines how AI is integrated into LegacyExodus as a governed capability layer, not a control authority.
 
 ## Core Question

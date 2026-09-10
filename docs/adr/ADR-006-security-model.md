@@ -14,7 +14,7 @@ Key security requirements:
 
 ## Decision
 1. **Symlink Traversal Isolation:** Ingest only regular files. `FileScanner` explicitly detects and skips symbolic links (`entry.isSymbolicLink()`), preventing directory traversal escapes and infinite directory cycles.
-2. **Relative Path Hashing & Privacy:** All artifact identities (`FileId`, `SymbolId`, `ASTNodeId`) are derived from POSIX-normalized relative paths and SHA-256 content hashes. Absolute host file paths are never serialized into emitted artifacts.
+2. **Relative Analysis Identities:** File/symbol identities use normalized repository-relative evidence where defined by their contracts. Repository metadata may still contain the configured project path and must not be described as an anonymity guarantee.
 3. **Fail-Closed Conservative Resolution:** Dynamic or ambiguous syntax (e.g. `app[dynamicKey]()`, third-party module imports) strictly resolves to `UNRESOLVED` / `null`. The engine never fabricates relationships or executes arbitrary untrusted code during static analysis.
 4. **Subprocess Invocation Hardening (SEC-01):** Git revision lookups invoke Git directly with explicit argument arrays and `shell: false` (`spawnSync`), eliminating shell interpretation risk at the investigated Git subprocess boundary.
 5. **Manifest Path Containment & Symlink Hardening (SEC-02):** Discovery manifest artifact path validation enforces lexical containment (`isPathWithinDirectory`), physical canonicalization (`realpath()`), and symlink rejection (`lstat()`).
@@ -29,8 +29,8 @@ Key security requirements:
 * **Executing Source in VM Sandbox (e.g. Node vm2):** Rejected for analysis stages because static AST parsing via Babel provides complete inspection without runtime execution hazards.
 
 ## Consequences
-* **Positive:** Zero risk of arbitrary code execution during static analysis.
-* **Positive:** Emitted artifacts can be shared safely across environments without disclosing developer file paths.
+* **Positive:** Current analysis does not intentionally execute analyzed source code; parser and subprocess boundaries remain separately auditable.
+* **Limitation:** Projection metadata can identify the analyzed project path. Artifacts require normal data-handling review before sharing.
 * **Positive:** Discovery manifest cannot escape `.discovery/` directory via relative traversal or symlink redirection.
 * **Positive:** In-memory byte consumption eliminates local filesystem TOCTOU tampering vectors.
 * **Tradeoff:** Projects relying heavily on internal repository symlinks require explicit directory root configuration.

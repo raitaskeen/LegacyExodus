@@ -1,6 +1,6 @@
 # Knowledge Graph Implementation
 
-This document describes the design and implementation of the unified knowledge graph builder in `src/knowledge/`.
+This document describes the deterministic structural knowledge graph builder in `src/knowledge/`. It is not a business-rule graph, runtime behavior model, or migration plan.
 
 ---
 
@@ -39,7 +39,7 @@ classDiagram
 
 1. **Deterministic Edge Hashing:** Every edge ID is computed via SHA-256: `sha256("${from}:${relationship}:${to}")`.
 2. **Deterministic Sort Order:** All emitted `nodes` and `edges` arrays are sorted lexicographically by `id`.
-3. **Deep Immutability:** Nodes, edges, and the top-level `KnowledgeGraph` object are deeply frozen with `Object.freeze()`.
+3. **Immutability:** Nodes, edges, their arrays, and the top-level `KnowledgeGraph` object are frozen by the contract builder.
 4. **Zod Runtime Schema Validation:** Schema validation guarantees structural integrity before freezing.
 
 ---

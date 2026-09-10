@@ -1,5 +1,7 @@
 # Compiler Service (ZelvoxForge Core)
 
+> **Status: TARGET ARCHITECTURE — NOT IMPLEMENTED.** The current core does not generate or compile target-language code.
+
 ## Overview
 
 Compiler Service is the transformation execution engine within ZelvoxForge. It converts governed transformation plans into buildable target code artifacts.

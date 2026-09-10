@@ -20,8 +20,8 @@ flowchart LR
 ## 2. Configuration & Error Recovery
 
 1. **Unambiguous Source Mode:** Parses ES Modules (`import/export`) and CommonJS (`require/module.exports`) without manual configuration.
-2. **Enabled Plugins:** `typescript`, `jsx`, `classProperties`, `dynamicImport`.
-3. **Error Recovery:** `errorRecovery: true` ensures that malformed syntax in non-standard template files does not crash the pipeline.
+2. **Enabled syntax:** The JavaScript adapter enables the Babel plugins declared by the current implementation for JavaScript/TypeScript and JSX/TSX inputs.
+3. **Failure isolation:** Parser diagnostics and per-file failure handling prevent one unsupported or malformed source file from silently terminating analysis of otherwise valid files. Error recovery does not imply that every malformed file yields a valid AST.
 
 ---
 

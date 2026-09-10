@@ -40,7 +40,8 @@ The LegacyExodus documentation system is designed as a layered knowledge archite
 ### Directory & Document Sitemap
 
 #### 1. Root Governance & Context Documents (Canonical & Populated)
-* **[README.md](../README.md):** Executive summary, core value proposition, high-level pipeline flow, verified evidence baseline, intentional boundaries, and license.
+* **[README.md](../README.md):** Concise current product boundary, setup, verification, limitations, and target direction.
+* **[docs/CURRENT_IMPLEMENTATION.md](CURRENT_IMPLEMENTATION.md):** Canonical documentation status boundary synchronized to an explicit `core-foundation` SHA.
 * **[GOVERNANCE.md](../GOVERNANCE.md):** Repository boundaries, execution invariants, Three-Universe evidence model, provenance freshness locks, and conservative semantic rules.
 * **[SUPPORT.md](../SUPPORT.md):** Support policy, bug reporting guidelines, reproduction standards, and maintainers.
 * **[LICENSE](../LICENSE):** Canonical MIT open-source license.
@@ -139,5 +140,5 @@ The LegacyExodus documentation system is designed as a layered knowledge archite
 ## 5. Maintenance & Ownership Rules
 
 1. **Reality Over Aspiration:** Never document planned features as implemented.
-2. **Single Source of Truth:** High-level metrics must point to verified test and benchmark counts (e.g. 1,001 tests / 113 files / 9,388 assertions).
+2. **Single Source of Truth:** Evergreen documentation records verification commands, not ephemeral test totals. Dated audit records may preserve exact historical evidence.
 3. **No Drift:** Whenever a milestone is completed, update `CHANGELOG.md`, `ROADMAP.md`, and `README.md` concurrently.

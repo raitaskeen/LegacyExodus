@@ -1,20 +1,19 @@
 # CLI Command Reference
 
-LegacyExodus provides a unified command-line interface featuring workflow-grouped commands, theme customization, dynamic test exploration, and multi-gate repository verification.
+LegacyExodus provides a command-line interface for runtime checks, workspace metadata initialization, deterministic repository analysis, test exploration, and repository verification.
 
 ---
 
 ## Global Options
 
-The following global options apply across the CLI router:
+The root command exposes only:
 
 | Option | Description |
 |---|---|
 | `-V, --version` | Output the version number. |
 | `-h, --help` | Display structured help for command or root CLI. |
-| `--json` | Emit pure machine-readable JSON directly to `stdout`. |
-| `--theme <name>` | Select visual theme: `classic` (default), `aurora`, `mono`. |
-| `--no-color` | Disable ANSI color sequences (equivalent to `NO_COLOR=1`). |
+
+Output and theme options are declared by the individual commands that support them; they are not universal root options.
 
 ---
 
@@ -54,12 +53,12 @@ legacy-exodus init ./app --json
 
 ## 3. `legacy-exodus analyze <path> [options]`
 
-Analyzes repository structure, ASTs, symbols, dependencies, and projections `[read-only]`.
+Analyzes repository structure, ASTs, symbols, dependencies, and projections. Source files are observed rather than rewritten, but the command writes LegacyExodus-owned `.discovery/` artifacts and may write SQLite storage when configured `[mutates analysis outputs]`.
 
 ### Options
 | Option | Description |
 |---|---|
-| `--json` | Emit complete machine-readable discovery inventory in JSON to `stdout`. |
+| `--json` | Emit a machine-readable analysis summary in JSON to `stdout`. |
 | `--theme <name>` | Visual theme: `classic` (default), `aurora`, `mono`. |
 | `--refresh` | Force fresh discovery and bypass existing snapshot reuse. |
 | `--storage-driver <driver>` | Storage driver to use (`memory`, `sqlite`). Defaults to `memory`. |

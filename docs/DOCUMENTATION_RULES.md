@@ -415,7 +415,24 @@ AI contributions should reflect the quality bar of:
 
 Before finalizing any output, ask:
 
-> Does this change move LegacyExodus toward becoming a trustworthy autonomous modernization platform?
+> Does this change accurately describe current evidence or clearly labeled target architecture?
+
+## Documentation impact gate
+
+Every core remediation must report one of:
+
+```text
+Documentation impact: REQUIRED
+```
+
+with affected README/docs and verified core evidence, or:
+
+```text
+Documentation impact: NONE
+Reason: <why documented product truth is unchanged>
+```
+
+Required documentation synchronization follows the final verified behavior and uses the relevant `core-foundation` SHA. Do not edit docs merely to create activity, and never alter production code to satisfy prose.
 
 ---
 

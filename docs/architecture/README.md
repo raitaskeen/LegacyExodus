@@ -4,14 +4,14 @@ This directory defines the architectural foundation of LegacyExodus: principles,
 
 ## What LegacyExodus Is
 
-LegacyExodus is a knowledge-driven software modernization engine designed to analyze, map, and safely transform complex legacy systems into secure, memory-safe architectures.
+LegacyExodus currently provides deterministic local JavaScript/TypeScript repository intelligence and static analysis. It is designed to evolve into a governed modernization platform; transformation and generated-system validation are target architecture.
 
 It operates through a four-stage pipeline:
 
-1. **VyrixScout** — discovery
-2. **NolaraStruct** — structural understanding
-3. **ZelvoxForge** — transformation
-4. **VymosGate** — validation and governance
+1. **VyrixScout** — discovery (`IMPLEMENTED`)
+2. **NolaraStruct** — structural understanding (`PARTIAL`)
+3. **ZelvoxForge** — transformation (`TARGET ARCHITECTURE`)
+4. **VymosGate** — validation and governance (`TARGET ARCHITECTURE`)
 
 ---
 

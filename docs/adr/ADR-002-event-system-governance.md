@@ -14,7 +14,7 @@ Key challenges:
 ## Decision
 1. **Typed Domain Events:** Define all lifecycle changes as strictly typed events implementing `DomainEvent` with unique event IDs, ISO-8601 UTC timestamps, aggregate IDs, and payload schemas.
 2. **Synchronous In-Memory Event Bus:** Utilize an in-memory, deterministic publish-subscribe `EventBus` (`event-bus.ts`) for stage coordination within single-process CLI runs.
-3. **Immutable Event Store:** Record all emitted events in an append-only `EventStore` (`event-store.ts`) to enable full audit replay.
+3. **Event Stores and Journal:** Preserve emitted events in append order for replay, with the current durable journal providing persisted execution facts at its defined commit boundary.
 4. **Pure State Reduction:** Project state is computed from events via pure reducers (`event-reducer.ts`), ensuring state reproducibility.
 
 ## Alternatives Considered
@@ -22,7 +22,7 @@ Key challenges:
 * **Asynchronous Message Broker (RabbitMQ / Kafka):** Rejected for single-process CLI runs to avoid external network dependencies and non-deterministic event arrival order.
 
 ## Consequences
-* **Positive:** Complete provenance and replayability of every analysis run.
+* **Positive:** Ordered events support deterministic state replay and audit evidence for covered lifecycle facts. This does not imply complete provenance for every derived analysis datum.
 * **Positive:** Extensible plugin system can subscribe to events without modifying core stage implementations.
 * **Tradeoff:** Minimal memory overhead for maintaining in-memory event ledgers, cleared or projected upon stage completion.
 

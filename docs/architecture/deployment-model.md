@@ -1,5 +1,7 @@
 ## Deployment Model
 
+> **Status: TARGET ARCHITECTURE.** The current product is a local Bun CLI/core package; enterprise/cloud deployment modes described here are not implemented.
+
 This document defines how LegacyExodus is executed across local, enterprise, and cloud environments, including containerization and CI/CD integration.
 
 ### Scope
