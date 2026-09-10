@@ -28,6 +28,15 @@ type:docs:
       - any-glob-to-any-file: 'docs/**'
       - any-glob-to-any-file: '*.md'
 
+area:automation:
+  - changed-files:
+      - any-glob-to-any-file: '.github/workflows/**'
+
+area:agent-governance:
+  - changed-files:
+      - any-glob-to-any-file: '.agents/**'
+      - any-glob-to-any-file: 'AGENTS.md'
+
 type:test:
   - changed-files:
       - any-glob-to-any-file: 'legacy-exodus-core/tests/**'

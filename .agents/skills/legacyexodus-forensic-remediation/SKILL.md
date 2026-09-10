@@ -26,7 +26,7 @@ Applies to all bug fixes, security patches, CodeRabbit/linter remediations, sema
 ## 5. Prerequisites
 * Pre-task working tree check: `git status` MUST report a completely clean working tree (`nothing to commit, working tree clean`). Unexpected staged, unstaged, or untracked files must halt execution immediately.
 * Active temporary task branch created from authoritative `core-foundation` (e.g., `fix/<finding-id>`).
-* Bun runtime $\ge 1.3.0$ installed locally.
+* The repository-declared Bun runtime is installed locally; verify `packageManager` and `engines` in the current `package.json` rather than relying on a copied version number.
 * Full alignment with the rules in [Permanent Charter](../../../docs/governance/PERMANENT_CHARTER.md).
 
 ## 6. Canonical Operating Procedure & Phase Requirements
@@ -70,7 +70,7 @@ Phase 7: Push, Post-Check, Final Report & Hard Stop (Steps 17–20)
 
 ### Phase 4: Full Pipeline Verification Gates (Steps 9–12)
 * **Static Typecheck (Step 9):** Run `bun run typecheck` in `legacy-exodus-core/`. Must exit with code 0 and zero compiler errors.
-* **Full Test Suite Verification (Step 10):** Run `bun test` in `legacy-exodus-core/` across all 113+ test files. Must achieve 100% pass rate with zero failures.
+* **Full Test Suite Verification (Step 10):** Run `bun test` in `legacy-exodus-core/`. Record the live file, test, assertion, skip, and failure counts; never treat historical totals as acceptance criteria. Must achieve 100% pass rate for all executed tests with zero failures.
 * **Benchmark Governance Audit (Step 11):** Run `bun run benchmark audit` in `legacy-exodus-core/`. All 10/10 audit checks must pass.
 * **CLI Smoke Verification (Step 12):** Run `bun run src/cli/index.ts --help` in `legacy-exodus-core/`. Must exit with code 0 and valid help output.
 
@@ -79,11 +79,12 @@ Phase 7: Push, Post-Check, Final Report & Hard Stop (Steps 17–20)
 * **Git Diff & Hygiene Review (Step 14):** Run `git diff --stat` and `git diff --check`. Verify zero trailing whitespace, zero extraneous files, and strictly scoped changes.
 
 ### Phase 6: Draft Report & Atomic Commit (Steps 15–16)
-* **Draft Verification Report Compilation (Step 15):** Compile the draft verification report capturing all gate results, 10-layer verification evidence, and memory status. All pending future operations MUST be marked `PENDING` (`COMMIT: PENDING`, `PUSH: PENDING`, `WORKTREE POSTCONDITION: PENDING`).
+* **Documentation Impact Assessment (before closure):** Decide whether the verified change alters behavior, commands, contracts, public architecture, storage semantics, security assumptions, configuration, supported capabilities, or documented limitations. Record `Documentation impact: REQUIRED` with affected files, or `Documentation impact: NONE` with a reason. Required docs work belongs in its documentation branch/commit and must follow verified core truth.
+* **Draft Verification Report Compilation (Step 15):** Compile the draft verification report capturing all gate results, 10-layer verification evidence, memory status, and documentation impact. All authorized-but-not-yet-completed future operations MUST be marked `PENDING`; unauthorized publication must be marked `NOT AUTHORIZED`, never `PENDING`.
 * **Atomic Conventional Commit (Step 16):** Stage only remediated files and test files. Commit with Conventional Commit message and co-authorship. Record the actual commit SHA.
 
 ### Phase 7: Push, Post-Check, Final Report & Hard Stop (Steps 17–20)
-* **Remote Push (Step 17):** Push to `origin <task-branch>`. Confirm remote acceptance.
+* **Remote Push (Step 17):** Push to `origin <task-branch>` only when explicitly authorized by the task or human maintainer. If not authorized, record `PUSH: NOT AUTHORIZED` and stop after local verification/commit.
 * **Post-Push Worktree Status Check (Step 18):** Run `git status` immediately after pushing. Confirm `nothing to commit, working tree clean`.
 * **Final Completion Report Generation (Step 19):** Finalize the report by replacing all `PENDING` placeholders with the actual commit SHA, commit subject, push confirmation, and clean postcondition status.
 * **Mandatory Hard Stop (Step 20):** Halt execution immediately. Await human maintainer review.
@@ -125,14 +126,14 @@ A finding is classified as `FULLY REMEDIATED` if and only if:
 1. Root cause is proven and corrected.
 2. Permanent automated regression test is committed.
 3. Full verification suite and Red-Team gate pass with zero errors.
-4. Git working tree is clean and branch is pushed to origin.
+4. Git working tree is clean; when publication was authorized, the task branch is pushed to origin.
 5. Final completion report is emitted with zero `PENDING` placeholders.
 
 ## 11. Prohibited Behavior
 * Never commit a fix without a failure-first test where applicable.
 * Never weaken assertions or delete tests to achieve a pass.
 * Never fix multiple unrelated findings in one commit or PR.
-* Never modify documentation or README in a core remediation commit.
+* Never modify documentation or README in a core remediation commit. Perform required synchronization as a separate documentation change based on verified core truth.
 * Never continue to another task without stopping.
 * Never populate commit SHAs or push confirmations in a draft report before they occur.
 

@@ -32,6 +32,14 @@
 - [ ] Documentation updated on `docs-foundation`
 - [ ] No documentation changes required
 
+<!-- REQUIRED: identify affected README/docs and the core SHA used as evidence, or explain why product truth is unchanged. -->
+
+**Impact:** REQUIRED / NONE
+
+**Evidence / reason:**
+
+**Docs synchronized against core-foundation:** `<SHA or N/A>`
+
 ## Breaking Changes
 
 - [ ] None (Backward-compatible)
@@ -49,3 +57,4 @@
 - [ ] Whitespace / Git diff check clean (`git diff --check`)
 - [ ] Required co-authors included in commit message
 - [ ] Targeted branch aligns with responsibility (`core-foundation` for code, `docs-foundation` for docs)
+- [ ] Current, partial, planned, and target-architecture claims are explicitly distinguished

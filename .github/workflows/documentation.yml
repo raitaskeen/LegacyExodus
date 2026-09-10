@@ -8,10 +8,18 @@ on:
     paths:
       - 'docs/**'
       - '*.md'
+      - '.agents/**'
+      - '.github/**'
   pull_request:
     paths:
       - 'docs/**'
       - '*.md'
+      - '.agents/**'
+      - '.github/**'
+
+concurrency:
+  group: docs-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

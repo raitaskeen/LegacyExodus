@@ -125,7 +125,7 @@ Every performance evaluation MUST terminate with this structured report:
 * **Base Workspace / Revision:** <Exact base commit SHA / workspace path>
 * **Candidate Workspace / Revision:** <Exact candidate commit SHA / workspace path>
 * **Hardware / OS:** Windows / Linux / macOS (Architecture: x64/arm64)
-* **Bun Version:** 1.3.x
+* **Bun Version:** <live executable version; compare with the repository declaration>
 * **Target Corpus:** Express / Fastify / Synthetic
 * **Iterations:** N runs (1 warm-up discarded)
 
