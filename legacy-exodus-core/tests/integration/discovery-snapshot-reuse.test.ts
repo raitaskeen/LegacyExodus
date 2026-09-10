@@ -2,8 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
+import { semanticAnalysisPayloadSchema } from "@contracts/discovery-storage";
 import { createLegacyExodusEngine } from "@runtime/composition/services";
 import type { LegacyExodusEngine } from "@core/engine";
 import { DiscoveryValidator } from "@discovery/discovery-validator";
@@ -686,6 +687,57 @@ describe("Phase 3A P0.4 — Discovery Snapshot Reuse & Invalidation", () => {
       await rm(sqliteDbPath, { force: true });
       await rm(`${sqliteDbPath}-wal`, { force: true });
       await rm(`${sqliteDbPath}-shm`, { force: true });
+    }
+  });
+
+  it("SCHEMA-001: invalidates an integrity-valid snapshot with malformed nested semantic state", async () => {
+    const projectId = randomUUID();
+    const engine = createLegacyExodusEngine({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+    await engine.initialize();
+
+    try {
+      const firstRun = await engine.execute({
+        id: randomUUID(),
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: { projectId, path: testRepoDir },
+      });
+      expect(firstRun.type).toBe("AnalyzeProject");
+
+      const discoveryDir = join(testRepoDir, ".discovery");
+      const semanticPath = join(discoveryDir, "semantic.json");
+      const manifestPath = join(discoveryDir, "manifest.json");
+      const semantic = JSON.parse(await readFile(semanticPath, "utf8"));
+      const malformedSemantic = `${JSON.stringify({
+        ...semantic,
+        calls: [{ id: "call-without-required-structure" }],
+      }, null, 2)}\n`;
+      await writeFile(semanticPath, malformedSemantic, "utf8");
+
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+      manifest.artifacts["semantic.json"] = {
+        sha256: createHash("sha256").update(malformedSemantic).digest("hex"),
+        bytes: Buffer.byteLength(malformedSemantic, "utf8"),
+      };
+      await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+
+      const validator = new DiscoveryValidator();
+      expect((await validator.validate({ projectPath: testRepoDir })).status).toBe("VALID");
+
+      const recoveryRun = await engine.execute({
+        id: randomUUID(),
+        type: "AnalyzeProject",
+        createdAt: new Date(),
+        payload: { projectId, path: testRepoDir },
+      });
+      expect(recoveryRun.type).toBe("AnalyzeProject");
+      if (recoveryRun.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject");
+      expect(recoveryRun.isReused).toBeUndefined();
+
+      const recoveredSemantic = JSON.parse(await readFile(semanticPath, "utf8"));
+      expect(semanticAnalysisPayloadSchema.safeParse(recoveredSemantic).success).toBe(true);
+    } finally {
+      await engine.shutdown();
     }
   });
 

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { callFlowBindingSchema, controlFlowGraphSchema, dataFlowGraphSchema } from "@flow/flow-contracts";
+import { semanticAnalysisSchema } from "@semantic/semantic-contracts";
 import { codeSymbolSchema } from "@symbols/symbol-contracts";
 
 export const discoveryPayloadSchema = z.object({
@@ -68,30 +70,28 @@ export const knowledgeGraphPayloadSchema = z.object({
   edges: z.array(z.object({ id: z.string(), from: z.string(), to: z.string(), relationship: z.string() })),
 });
 
-export const semanticAnalysisPayloadSchema = z.object({
+export const semanticAnalysisPayloadSchema = semanticAnalysisSchema.extend({
   projectId: z.string().uuid(),
   analysisRunId: z.string().uuid().optional(),
-  calls: z.array(z.unknown()).optional(),
-  references: z.array(z.unknown()).optional(),
-  scopes: z.array(z.unknown()).optional(),
-  deadCode: z.array(z.unknown()).optional(),
-  unusedImports: z.array(z.unknown()).optional(),
-  unusedExports: z.array(z.unknown()).optional(),
-  entryPoints: z.array(z.unknown()).optional(),
-  routes: z.array(z.unknown()).optional(),
-  middlewareChains: z.array(z.unknown()).optional(),
 });
 
 export const controlFlowPayloadSchema = z.object({
   projectId: z.string().uuid(),
   analysisRunId: z.string().uuid().optional(),
-  graphs: z.array(z.unknown()),
+  graphs: z.array(controlFlowGraphSchema),
+});
+
+const persistedCallFlowBindingSchema = callFlowBindingSchema.extend({
+  argumentDefinitionIds: z.array(z.string().min(1).nullable()),
+});
+const persistedDataFlowGraphSchema = dataFlowGraphSchema.extend({
+  callBindings: z.array(persistedCallFlowBindingSchema),
 });
 
 export const dataFlowPayloadSchema = z.object({
   projectId: z.string().uuid(),
   analysisRunId: z.string().uuid().optional(),
-  graphs: z.array(z.unknown()),
+  graphs: z.array(persistedDataFlowGraphSchema),
 });
 
 export const analysisRunStatusSchema = z.enum(["created", "running", "completed", "failed"]);

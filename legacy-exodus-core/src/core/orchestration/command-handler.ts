@@ -4,6 +4,11 @@ import type {
   InitializeProjectCommand,
   UpdateKnowledgeCommand,
 } from "@contracts/commands";
+import {
+  controlFlowPayloadSchema,
+  dataFlowPayloadSchema,
+  semanticAnalysisPayloadSchema,
+} from "@contracts/discovery-storage";
 import { createAnalysisSummary, type AnalysisSummary } from "@contracts/engine";
 import type {
   FileDiscovered,
@@ -228,19 +233,11 @@ export class AnalyzeProjectHandler {
             if (!semanticRaw) throw new Error("Missing semantic.json in validated set.");
             const semanticJson = JSON.parse(semanticRaw);
             records.push(
-              createStorageRecord("semantic-analysis", {
+              createStorageRecord("semantic-analysis", semanticAnalysisPayloadSchema.parse({
+                ...semanticJson,
                 projectId: discovery.projectId,
                 analysisRunId: command.id,
-                calls: semanticJson.calls ?? [],
-                references: semanticJson.references ?? [],
-                scopes: semanticJson.scopes ?? [],
-                deadCode: semanticJson.deadCode ?? [],
-                unusedImports: semanticJson.unusedImports ?? [],
-                unusedExports: semanticJson.unusedExports ?? [],
-                entryPoints: semanticJson.entryPoints ?? [],
-                routes: semanticJson.routes ?? [],
-                middlewareChains: semanticJson.middlewareChains ?? [],
-              }),
+              })),
             );
           }
 
@@ -249,11 +246,11 @@ export class AnalyzeProjectHandler {
             if (!cfgRaw) throw new Error("Missing control-flow.json in validated set.");
             const cfgJson = JSON.parse(cfgRaw);
             records.push(
-              createStorageRecord("control-flow-analysis", {
+              createStorageRecord("control-flow-analysis", controlFlowPayloadSchema.parse({
+                ...cfgJson,
                 projectId: discovery.projectId,
                 analysisRunId: command.id,
-                graphs: cfgJson.graphs ?? [],
-              }),
+              })),
             );
           }
 
@@ -262,11 +259,11 @@ export class AnalyzeProjectHandler {
             if (!dfgRaw) throw new Error("Missing data-flow.json in validated set.");
             const dfgJson = JSON.parse(dfgRaw);
             records.push(
-              createStorageRecord("data-flow-analysis", {
+              createStorageRecord("data-flow-analysis", dataFlowPayloadSchema.parse({
+                ...dfgJson,
                 projectId: discovery.projectId,
                 analysisRunId: command.id,
-                graphs: dfgJson.graphs ?? [],
-              }),
+              })),
             );
           }
 
