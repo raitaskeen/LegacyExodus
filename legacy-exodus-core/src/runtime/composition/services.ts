@@ -54,7 +54,9 @@ export function createEngineContext(
       logger.error(
         {
           aggregateId: failure.aggregateId,
-          error: failure.error,
+          ...(failure.error instanceof Error
+            ? { err: failure.error }
+            : { error: String(failure.error) }),
           eventId: failure.eventId,
           eventType: failure.eventType,
           stage: failure.stage,
