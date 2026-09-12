@@ -22,7 +22,7 @@ export class DeterministicControlFlowGraphBuilder {
   }
 
   private buildScope(filePath: string, scopeName: string, nodes: readonly ASTNode[]): ControlFlowGraph {
-    const state = new FlowState(filePath, scopeName);
+    const state = new FlowState(filePath, scopeName, hasUnsupportedExpressionControl(nodes));
     const entry = state.createBlock();
     const exit = state.createBlock();
     state.buildStatements(nodes, entry, exit, { exceptionTarget: exit, returnTarget: exit });
@@ -35,7 +35,11 @@ class FlowState {
   private readonly edges: ControlFlowEdge[] = [];
   private sequence = 0;
   private unlocatedStatementSequence = 0;
-  public constructor(private readonly filePath: string, private readonly scopeName: string) {}
+  public constructor(
+    private readonly filePath: string,
+    private readonly scopeName: string,
+    private readonly hasUnsupportedExpressionControl: boolean,
+  ) {}
   public createBlock(): string { const id = hash(`${this.filePath}:${this.scopeName}:block:${this.sequence++}`); this.blocks.push({ id, statements: [] }); return id; }
   public addEdge(fromBlockId: string, toBlockId: string, kind: ControlFlowEdgeKind): void {
     const id = hash(`${fromBlockId}:${toBlockId}:${kind}`);
@@ -336,7 +340,7 @@ class FlowState {
       id: hash(`cfg:${this.filePath}:${this.scopeName}`),
       filePath: this.filePath,
       scopeName: this.scopeName,
-      state: "RESOLVED",
+      state: this.hasUnsupportedExpressionControl ? "UNSUPPORTED" : "RESOLVED",
       entryBlockId: entry,
       exitBlockId: exit,
       blocks: blocks.sort((left, right) => left.id.localeCompare(right.id)),
@@ -378,6 +382,15 @@ function resolveContinueTarget(node: ASTNode, control: ControlContext | undefine
 function resolveBreakFinalizerTarget(node: ASTNode, control: ControlContext | undefined): string | undefined { const label = labelName(node); return label === undefined ? control?.breakFinalizerTarget : control?.labels?.get(label)?.breakFinalizerTarget; }
 function resolveContinueFinalizerTarget(node: ASTNode, control: ControlContext | undefined): string | undefined { const label = labelName(node); return label === undefined ? control?.continueFinalizerTarget : control?.labels?.get(label)?.continueFinalizerTarget; }
 function isFunction(node: ASTNode): boolean { return ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ObjectMethod"].includes(node.type); }
+function hasUnsupportedExpressionControl(nodes: readonly ASTNode[]): boolean {
+  const visit = (node: ASTNode): boolean => {
+    if (isFunction(node)) return false;
+    if (["ConditionalExpression", "LogicalExpression", "OptionalCallExpression", "OptionalMemberExpression"].includes(node.type)) return true;
+    if (node.type === "AssignmentExpression" && ["&&=", "||=", "??="].includes(String(node.attributes.operator))) return true;
+    return node.children.some(visit);
+  };
+  return nodes.some(visit);
+}
 function isTerminator(node: ASTNode): boolean { return node.type === "ReturnStatement" || node.type === "ThrowStatement"; }
 function isLoop(node: ASTNode): boolean { return ["WhileStatement", "DoWhileStatement", "ForStatement", "ForInStatement", "ForOfStatement"].includes(node.type); }
 function staticBoolean(node: ASTNode | undefined): boolean | undefined { const value = node?.attributes.value; return typeof value === "boolean" ? value : undefined; }
