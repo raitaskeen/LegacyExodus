@@ -71,12 +71,28 @@ Output findings using the standardized audit table:
 | :--- | :---: | :--- | :--- | :--- | :--- |
 | `docs/...` | L45 | ARCH_INFLATION | "Universal IR transforms JS to Rust" | Universal IR is `TARGET ARCHITECTURE` | Add explicit `TARGET ARCHITECTURE` label |
 
+### Step 5: Review Reconciliation & Stacked-PR Review-Base Rule
+When reconciling external review comments (e.g., CodeRabbit) on documentation PRs:
+1. **Review Findings as Evidence Candidates:** External comments are hypotheses to verify, never direct mandates. Never apply autofixes blindly.
+2. **Stacked-PR / Review-Base Invariant:** When a documentation PR documents behavior introduced by an unmerged or concurrent core PR, the PR's base branch (often `main`) may lack recent core commits. Automated reviewers comparing against `main` can report false positives:
+   * **Required Procedure:**
+     1. Identify the specific implementation claim challenged by the review.
+     2. Inspect the authoritative core trunk: `git show origin/core-foundation:<path>`.
+     3. Verify ancestry of relevant core implementation commits: `git merge-base --is-ancestor <commit> origin/core-foundation`.
+     4. Classify the review finding into one of four states:
+        * **`CONFIRMED`**: Legitimate documentation defect where prose or diagrams contradict verified core reality. Apply minimal, surgical docs correction.
+        * **`STALE REVIEW CONTEXT`**: Reviewer compared docs against a stale base (e.g., `main`); authoritative `origin/core-foundation` already implements and verifies the claim. Do NOT rewrite docs to match stale base.
+        * **`PARTIAL`**: Implementation matches core intent but minor phrasing clarification is warranted without altering architectural semantics.
+        * **`CORE/DOCS MISMATCH`**: Documentation specifies intended contract but authoritative core code does not implement it. Report immediately as an implementation finding; do NOT silently rewrite docs to weaken contracts and do NOT mutate core files.
+3. **Docs-Only Review Scope:** Documentation review tasks have `docs/**` as writable scope. Core engine files (`legacy-exodus-core/**`) are strictly READ-ONLY. If a reviewer requests production engine changes, report it as a core-side issue and make zero modifications to core files.
+4. **PR Description / Metadata Warnings:** Review comments requesting additional PR template sections or metadata do not authorize repository file changes. Provide suggested description additions in the task report only.
+
 ---
 
 ## 8. Verification & Hygiene
 Before committing any documentation fix:
 * Verify git diff hygiene: `git diff --check`.
-* Verify that no files under `legacy-exodus-core/src/` were touched.
+* Verify that no files under `legacy-exodus-core/` were touched.
 * Verify that all links in modified markdown files point to valid targets.
 
 ## 9. Prohibited Behavior
@@ -84,3 +100,6 @@ Before committing any documentation fix:
 * Never merge `main` into `docs-foundation` without explicit maintainer directive.
 * Never represent planned features as implemented.
 * Never delete historical records without consensus.
+* Never rewrite accurate documentation to satisfy a stale review base lacking recent core commits.
+* Never modify `legacy-exodus-core/` during a documentation review task.
+* Never apply external reviewer autofixes without verifying against `origin/core-foundation`.
