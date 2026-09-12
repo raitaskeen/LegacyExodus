@@ -14,6 +14,7 @@ describe("DeterministicSemanticAnalysisEngine", () => {
       { id: "auth", path: "src/auth.js", language: "javascript", size: 1 },
     ] as const;
     const serverSource = `
+      import express from "express";
       import { login } from "./auth";
       const unused = true;
       function handler() { return login(); }
@@ -55,6 +56,85 @@ describe("DeterministicSemanticAnalysisEngine", () => {
     const analysis = new DeterministicSemanticAnalysisEngine().analyze({ astResults: [ast], dependencyGraph: graph, symbolTables: [symbols] });
 
     expect(analysis.routes).toEqual([]);
+  });
+
+  test("does not confirm Express semantics from a locally named factory", async (): Promise<void> => {
+    const source = `
+      const express = customThing;
+      const app = express();
+      function handler(_request, response) { response.end("ok"); }
+      app.use(localMiddleware);
+      app.get("/x", handler);
+      const Router = customThing;
+      const router = Router();
+      router.post("/y", handler);
+    `;
+    const file = { id: "framework-collision", path: "src/framework-collision.js", language: "javascript", size: source.length } as const;
+    const ast = (await new JavaScriptParser().parse({ file, source })).result;
+    const symbols = new JavaScriptSymbolExtractor().extract(ast);
+    const graph = new DeterministicDependencyGraphBuilder().build([symbols], [file]);
+    const analysis = new DeterministicSemanticAnalysisEngine().analyze({ astResults: [ast], dependencyGraph: graph, symbolTables: [symbols] });
+
+    expect(analysis.routes).toEqual([]);
+    expect(analysis.middlewareChains).toEqual([]);
+  });
+
+  test("does not confirm Express semantics from a shadowed framework binding", async (): Promise<void> => {
+    const source = `
+      import express from "express";
+      function register() {
+        const express = customThing;
+        const app = express();
+        app.get("/shadowed", handler);
+      }
+    `;
+    const file = { id: "framework-shadow", path: "src/framework-shadow.js", language: "javascript", size: source.length } as const;
+    const ast = (await new JavaScriptParser().parse({ file, source })).result;
+    const symbols = new JavaScriptSymbolExtractor().extract(ast);
+    const graph = new DeterministicDependencyGraphBuilder().build([symbols], [file]);
+    const analysis = new DeterministicSemanticAnalysisEngine().analyze({ astResults: [ast], dependencyGraph: graph, symbolTables: [symbols] });
+
+    expect(analysis.routes).toEqual([]);
+    expect(analysis.middlewareChains).toEqual([]);
+  });
+
+  test("keeps genuine module provenance outside an unrelated shadowed scope", async (): Promise<void> => {
+    const source = `
+      import express from "express";
+      const app = express();
+      app.get("/real", realHandler);
+      function registerFake() {
+        const express = customThing;
+        const app = express();
+        app.get("/fake", fakeHandler);
+      }
+    `;
+    const file = { id: "framework-scope", path: "src/framework-scope.js", language: "javascript", size: source.length } as const;
+    const ast = (await new JavaScriptParser().parse({ file, source })).result;
+    const symbols = new JavaScriptSymbolExtractor().extract(ast);
+    const graph = new DeterministicDependencyGraphBuilder().build([symbols], [file]);
+    const analysis = new DeterministicSemanticAnalysisEngine().analyze({ astResults: [ast], dependencyGraph: graph, symbolTables: [symbols] });
+
+    expect(analysis.routes.map((route) => ({ path: route.path, state: route.state }))).toEqual([
+      { path: "/real", state: "CONFIRMED" },
+    ]);
+  });
+
+  test("confirms routes from a CommonJS Express binding", async (): Promise<void> => {
+    const source = `
+      const express = require("express");
+      const app = express();
+      app.get("/commonjs", handler);
+    `;
+    const file = { id: "framework-commonjs", path: "src/framework-commonjs.js", language: "javascript", size: source.length } as const;
+    const ast = (await new JavaScriptParser().parse({ file, source })).result;
+    const symbols = new JavaScriptSymbolExtractor().extract(ast);
+    const graph = new DeterministicDependencyGraphBuilder().build([symbols], [file]);
+    const analysis = new DeterministicSemanticAnalysisEngine().analyze({ astResults: [ast], dependencyGraph: graph, symbolTables: [symbols] });
+
+    expect(analysis.routes.map((route) => ({ method: route.method, path: route.path, state: route.state }))).toEqual([
+      { method: "GET", path: "/commonjs", state: "CONFIRMED" },
+    ]);
   });
 
   test("resolves nested lexical bindings by their exact scope and preserves shadowing", async (): Promise<void> => {
