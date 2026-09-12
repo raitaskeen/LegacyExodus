@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import type { ASTNode } from "@parser/index";
 
 import type { DependencyGraph } from "@graph/index";
-import type { SymbolTable } from "@symbols/index";
+import { createLexicalScopeId, type SymbolTable } from "@symbols/index";
 
 import { DeterministicCallGraphBuilder } from "./call-graph-builder";
 import { createSemanticAnalysis, type DeadCodeFinding, type ExpressRoute, type MiddlewareChain, type ScopeAnalysis, type SemanticAnalysis, type SemanticCall, type SemanticEntryPoint, type SymbolReference } from "./semantic-contracts";
@@ -14,7 +14,10 @@ export class DeterministicSemanticAnalysisEngine {
 
   public analyze(context: SemanticContext): SemanticAnalysis {
     const callGraph = this.callGraphBuilder.build(context.astResults, context.symbolTables, context.dependencyGraph);
-    const httpCalls = context.astResults.map((ast) => findHttpCalls(ast.root, ast.metadata.sourcePath));
+    const symbolTablesByPath = new Map(context.symbolTables.map((table) => [table.filePath, table]));
+    const httpCalls = context.astResults.map((ast) =>
+      findHttpCalls(ast.root, ast.metadata.sourcePath, symbolTablesByPath.get(ast.metadata.sourcePath)),
+    );
     return this.synthesize({
       calls: callGraph.calls,
       references: callGraph.references,
@@ -69,17 +72,22 @@ function entryPoints(paths: readonly string[], calls: readonly { readonly source
   return uniqueByKey([...conventional, ...listeners], (entry) => `${entry.filePath}:${entry.reason}`);
 }
 
-export function findHttpCalls(root: ASTNode, filePath: string): { readonly routes: readonly ExpressRoute[]; readonly middlewareChains: readonly MiddlewareChain[] } {
-  const receivers = expressReceivers(root);
+export function findHttpCalls(root: ASTNode, filePath: string, symbolTable: SymbolTable | undefined): { readonly routes: readonly ExpressRoute[]; readonly middlewareChains: readonly MiddlewareChain[] } {
+  const receivers = expressReceivers(root, symbolTable);
   const middleware: string[] = [];
   const routes: ExpressRoute[] = [];
-  const visit = (node: ASTNode): void => {
+  const visit = (node: ASTNode, scopeChain: readonly string[]): void => {
     if (node.type === "CallExpression") {
       const callee = readCallee(node);
       const method = callee?.split(".").at(-1)?.toLowerCase();
       const argumentsNodes = node.children.filter((child) => child.role === "arguments");
       const receiver = callee?.split(".")[0];
-      const isExpressReceiver = receiver !== undefined && receivers.has(receiver);
+      const declarationScope = receiver === undefined
+        ? undefined
+        : scopeChain.find((scopeId) => receivers.declarations.get(receiver)?.has(scopeId) === true);
+      const isExpressReceiver = receiver !== undefined
+        && declarationScope !== undefined
+        && receivers.proven.get(receiver)?.has(declarationScope) === true;
       if (method === "use" && isExpressReceiver) {
         const names = argumentsNodes.map(readName).filter((name): name is string => name !== undefined && name.trim().length > 0 && !name.startsWith("/"));
         middleware.push(...names);
@@ -90,25 +98,104 @@ export function findHttpCalls(root: ASTNode, filePath: string): { readonly route
         routes.push({ id: hash(`route:${filePath}:${method}:${path}:${node.location?.start.line ?? 0}`), filePath, method: method.toUpperCase(), path, ...(handlerName === undefined ? {} : { handlerName }), middleware: uniqueSorted(middleware), state: "CONFIRMED" });
       }
     }
-    for (const child of node.children) visit(child);
+    const nestedScope = createsLexicalScope(node)
+      ? [createLexicalScopeId(node.type, node.location), ...scopeChain]
+      : scopeChain;
+    for (const child of node.children) visit(child, nestedScope);
   };
-  visit(root);
+  visit(root, ["scope:module"]);
   return { routes, middlewareChains: middleware.length === 0 ? [] : [{ filePath, middleware: uniqueSorted(middleware) }] };
 }
 
-function expressReceivers(root: ASTNode): ReadonlySet<string> {
-  const receivers = new Set<string>();
-  const visit = (node: ASTNode): void => {
+function expressReceivers(root: ASTNode, symbolTable: SymbolTable | undefined): {
+  readonly declarations: ReadonlyMap<string, ReadonlySet<string>>;
+  readonly proven: ReadonlyMap<string, ReadonlySet<string>>;
+} {
+  const imports = symbolTable?.symbols.filter(
+    (symbol) =>
+      symbol.kind === "import"
+      && symbol.moduleSpecifier === "express",
+  ) ?? [];
+  const defaultFactories = new Set(imports.filter((symbol) => symbol.defaultExport).map((symbol) => symbol.name));
+  const routerFactories = new Set(
+    imports.filter((symbol) => symbol.sourceSymbolName === "Router").map((symbol) => symbol.name),
+  );
+  const namespaceBindings = new Set(
+    imports.filter((symbol) => symbol.sourceSymbolName === "*").map((symbol) => symbol.name),
+  );
+  const shadowingScopesByName = new Map<string, Set<string>>();
+  const declarationScopesByName = new Map<string, Set<string>>();
+  for (const symbol of symbolTable?.symbols ?? []) {
+    if (symbol.scopeId === undefined) continue;
+    const declarations = declarationScopesByName.get(symbol.name) ?? new Set<string>();
+    declarations.add(symbol.scopeId);
+    declarationScopesByName.set(symbol.name, declarations);
+    const isImportBackedBinding = symbol.kind === "variable" && imports.some(
+      (imported) =>
+        imported.name === symbol.name
+        && imported.location?.start.line === symbol.location?.start.line
+        && imported.location?.start.column === symbol.location?.start.column,
+    );
+    if (!["class", "function", "variable"].includes(symbol.kind) || isImportBackedBinding) continue;
+    const scopes = shadowingScopesByName.get(symbol.name) ?? new Set<string>();
+    scopes.add(symbol.scopeId);
+    shadowingScopesByName.set(symbol.name, scopes);
+  }
+  const receivers = new Map<string, Set<string>>();
+  const visit = (node: ASTNode, scopeChain: readonly string[]): void => {
     if (node.type === "VariableDeclarator") {
       const name = readName(node.children.find((child) => child.role === "id") ?? node);
       const init = node.children.find((child) => child.role === "init");
       const initCallee = init?.type === "CallExpression" ? readCallee(init) : undefined;
-      if (name !== undefined && (initCallee === "express" || initCallee === "Router" || initCallee === "express.Router")) receivers.add(name);
+      const [factoryReceiver, factoryMethod] = initCallee?.split(".") ?? [];
+      const factoryBinding = factoryMethod === "Router" ? factoryReceiver : initCallee;
+      const isShadowed = factoryBinding !== undefined
+        && scopeChain.some((scopeId) => shadowingScopesByName.get(factoryBinding)?.has(scopeId) === true);
+      const isProvenFactory = initCallee !== undefined && (
+        defaultFactories.has(initCallee)
+        || routerFactories.has(initCallee)
+        || (factoryMethod === "Router"
+          && factoryReceiver !== undefined
+          && (defaultFactories.has(factoryReceiver) || namespaceBindings.has(factoryReceiver)))
+      ) && !isShadowed;
+      if (name !== undefined && isProvenFactory) {
+        const declarationScope = symbolTable?.symbols.find(
+          (symbol) =>
+            symbol.kind === "variable"
+            && symbol.name === name
+            && symbol.location?.start.line === node.location?.start.line
+            && symbol.location?.start.column === node.location?.start.column,
+        )?.scopeId ?? scopeChain[0];
+        if (declarationScope !== undefined) {
+          const scopes = receivers.get(name) ?? new Set<string>();
+          scopes.add(declarationScope);
+          receivers.set(name, scopes);
+        }
+      }
     }
-    for (const child of node.children) visit(child);
+    const nestedScope = createsLexicalScope(node)
+      ? [createLexicalScopeId(node.type, node.location), ...scopeChain]
+      : scopeChain;
+    for (const child of node.children) visit(child, nestedScope);
   };
-  visit(root);
-  return receivers;
+  visit(root, ["scope:module"]);
+  return { declarations: declarationScopesByName, proven: receivers };
+}
+
+function createsLexicalScope(node: ASTNode): boolean {
+  return [
+    "ArrowFunctionExpression",
+    "BlockStatement",
+    "CatchClause",
+    "ClassMethod",
+    "ClassPrivateMethod",
+    "ForInStatement",
+    "ForOfStatement",
+    "ForStatement",
+    "FunctionDeclaration",
+    "FunctionExpression",
+    "ObjectMethod",
+  ].includes(node.type);
 }
 
 function readCallee(node: ASTNode): string | undefined {

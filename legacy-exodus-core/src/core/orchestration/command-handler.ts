@@ -510,7 +510,11 @@ export class AnalyzeProjectHandler {
         allCalls.push(...fileCalls);
         allReferences.push(...fileReferences);
 
-        const httpCalls = findHttpCalls(ast.root, file.path);
+        const httpCalls = findHttpCalls(
+          ast.root,
+          file.path,
+          tablesByPath.get(canonicalizePath(file.path)),
+        );
         allHttpCalls.push(httpCalls);
 
         const cfgs = controlFlowBuilder.buildAll(ast);
