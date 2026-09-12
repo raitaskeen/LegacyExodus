@@ -6,21 +6,32 @@ This document specifies the domain event interfaces and schemas emitted during *
 
 ## 1. Event Model & Lifecycle
 
-All lifecycle transitions within LegacyExodus are recorded as immutable `DomainEvent` objects published to the synchronous `EventBus` and stored in the `EventStore`.
+Lifecycle transitions are represented as immutable `DomainEvent` objects. The orchestrator atomically commits command facts and the durable event journal, then appends those events to the in-memory `EventStore` and attempts synchronous `EventBus` delivery.
 
 ```mermaid
 sequenceDiagram
     participant Engine as Analysis Engine
-    participant Bus as EventBus
+    participant Orchestrator
+    participant Storage as StorageManager
     participant Store as EventStore
+    participant Bus as EventBus
     participant Reducer as EventReducer
     participant State as ProjectState
 
-    Engine->>Bus: publish(FileDiscovered)
-    Bus->>Store: append(event)
-    Bus->>Reducer: reduce(currentState, event)
+    Engine->>Orchestrator: execute(command)
+    Orchestrator->>Storage: commit facts + durable events
+    Storage-->>Orchestrator: committed
+    Orchestrator->>Store: append(event)
+    Orchestrator->>Bus: publish(event)
+    Store->>Reducer: replay(events)
     Reducer->>State: return newState
 ```
+
+## 1.1 Completion and Failure Boundary
+
+Durable commit defines success for the orchestrated command. If a synchronous subscriber throws after commit, the orchestrator records the delivery failure, reports it through the composed runtime logger, continues the already-committed event sequence in the in-memory store, and returns the committed command outcome. A failure from the durable commit itself still rejects execution and prevents notification.
+
+This contract does not make `EventBus.publish` non-throwing when called directly, does not guarantee subscriber delivery or retry, and does not include discovery projection in the durable transaction.
 
 ---
 

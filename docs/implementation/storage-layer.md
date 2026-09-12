@@ -131,11 +131,34 @@ Snapshot reuse is accepted only after manifest integrity, workspace freshness, a
 
 `FileDiscoveryProjectionAdapter` physically resolves the target project and `.discovery` directory, rejects redirected/non-directory roots, and rejects artifact destinations that are symlinks, non-files, or multiply linked. Safety checks occur before and around atomic publication. The `init` command applies the corresponding containment discipline to `.legacy-exodus/config.json`. These controls protect LegacyExodus-owned writes; they are not a general process sandbox for analyzed repositories.
 
+### 4.11 Durable Commit and Projection Failure Semantics
+
+For a fresh `AnalyzeProject` execution, the current boundary is:
+
+```text
+analysis computation
+  -> atomic record + durable-event commit
+  -> post-commit event delivery
+  -> .discovery projection
+  -> caller result
+```
+
+Storage records and the durable event journal are canonical analysis state. `.discovery` is a derived, integrity-checked materialization and a required deliverable of a successful fresh `analyze` command. These two facts produce the following explicit failure contract:
+
+* A persistence failure before commit remains fatal and cannot be reported as committed analysis.
+* A projection failure after commit does not roll back or relabel the completed analysis run. `LegacyExodusEngine` rejects with `DISCOVERY_PROJECTION_FAILED_AFTER_COMMIT`, preserves the original error as its cause, and includes `analysisCommitted: true`, `projectionStatus: "failed"`, project/run identity, and the underlying cause code/message.
+* The CLI exits nonzero for that failure because its requested `.discovery` deliverable is incomplete; it does not print an ordinary successful analysis summary.
+* With SQLite, committed records and `AnalysisRunCompleted` remain queryable after close/reopen. With memory storage, the commit is valid for the active runtime but is not cross-process durable.
+* Atomicity is per artifact, not across the entire directory. The manifest is written last. A failed run may leave partial new artifacts or an older manifest, but reuse requires artifact hashes and workspace freshness to validate before consumption.
+* `DiscoveryProjectionService` can materialize from the committed discovery record. No public CLI/API projection-only retry command currently exists; ordinary re-execution may recompute analysis and must not be described as an idempotent projection repair operation.
+
+This contract is separate from post-commit event-delivery semantics: subscriber failures are recorded without failing an already committed command, whereas projection failure makes the requested filesystem deliverable incomplete and therefore remains a typed caller-visible failure.
+
 ---
 
 ## 5. Implementation Evidence
 
-* **Source Location:** [`src/storage/`](../../legacy-exodus-core/src/storage), [`src/discovery/discovery-query-service.ts`](../../legacy-exodus-core/src/discovery/discovery-query-service.ts), [`src/core/orchestration/command-handler.ts`](../../legacy-exodus-core/src/core/orchestration/command-handler.ts), [`src/storage/projections/`](../../legacy-exodus-core/src/storage/projections).
-* **Tests:** `memory-storage.test.ts`, `storage-manager.test.ts`, `storage-scoped-query.test.ts`, `schema-drift-integrity.test.ts`, `streaming-json-writer.test.ts`, `projection-manifest-integrity.test.ts`, `analysis-run-atomicity.test.ts`, `concurrent-projection-safety.test.ts`, `storage-schema-versioning.test.ts`, `sqlite-storage.test.ts`.
+* **Source Location:** [`src/storage/`](../../legacy-exodus-core/src/storage), [`src/discovery/discovery-query-service.ts`](../../legacy-exodus-core/src/discovery/discovery-query-service.ts), [`src/core/engine/engine.ts`](../../legacy-exodus-core/src/core/engine/engine.ts), [`src/core/orchestration/command-handler.ts`](../../legacy-exodus-core/src/core/orchestration/command-handler.ts), [`src/storage/projections/`](../../legacy-exodus-core/src/storage/projections).
+* **Tests:** `memory-storage.test.ts`, `storage-manager.test.ts`, `storage-scoped-query.test.ts`, `schema-drift-integrity.test.ts`, `streaming-json-writer.test.ts`, `projection-manifest-integrity.test.ts`, `projection-failure-semantics.test.ts`, `analysis-run-atomicity.test.ts`, `concurrent-projection-safety.test.ts`, `storage-schema-versioning.test.ts`, `sqlite-storage.test.ts`.
 * **Related ADR:** **[ADR-005: Storage Strategy](../adr/ADR-005-storage-strategy.md)**.
 * **Architecture Spec:** **[Storage Service Architecture](../architecture/components/storage-service.md)**.

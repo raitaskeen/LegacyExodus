@@ -2,21 +2,21 @@
 
 **Documentation state:** `CURRENT`
 
-**Synchronized against `core-foundation`:** `8f5e93d4715642b1f1542a8349093455375dcd0c`
+**Synchronized against verified core task commit:** `b9afef3489f5374d2f7745a07ef9005368d0528b`
 
 This page is the concise status boundary for LegacyExodus. Implementation source, executable tests, and verified runtime behavior remain authoritative if this page drifts.
 
 ## Verified current core
 
 - Bun runtime and strict TypeScript contracts.
-- Engine facade, runtime lifecycle, command/orchestrator boundary, event bus/store, and durable event journal.
+- Engine facade, runtime lifecycle, command/orchestrator boundary, event bus/store, and durable event journal. Durable command commit defines success; post-commit synchronous notification failures are separately recorded and logged without implying rollback.
 - Repository discovery with deterministic inventory, source/non-source classification, package/framework signals, and isolated enumeration failures.
 - Babel-based JavaScript/TypeScript/JSX/TSX parsing into normalized immutable AST contracts.
 - Lexical symbol extraction, selected ESM/CommonJS modeling, module resolution, dependency cycles, and deterministic knowledge graphs.
 - Conservative semantic call/reference analysis, Express route and middleware facts for supported patterns.
 - Function/control-flow and data-flow models, interprocedural transfer for proven targets, and conservative taint facts.
 - In-memory and SQLite storage providers, run-scoped queries, analysis-run atomicity, validated snapshot reuse, and deep persisted-contract validation.
-- Contained, atomic `.discovery` projections with integrity manifests.
+- Contained `.discovery` projections with atomic per-file replacement and integrity manifests. Durable analysis records are canonical; `.discovery` is a derived command deliverable. If fresh-run projection fails after commit, the engine rejects with `DISCOVERY_PROJECTION_FAILED_AFTER_COMMIT` and explicitly reports that the selected storage provider already committed the analysis.
 - CLI commands: `status`, `init`, `analyze`, `test`, `verify`, and `plugins list`.
 - Plugin contracts, registry, loader, and scoped context foundation.
 
@@ -28,6 +28,7 @@ This page is the concise status boundary for LegacyExodus. Implementation source
 - Knowledge, semantic, and flow artifacts are static evidence, not business-rule or behavioral-equivalence certification.
 - Fidelity evidence is sample-based and does not establish whole-repository migration safety.
 - Whole-repository bounded-memory scaling has not been universally established.
+- Multi-artifact `.discovery` publication is not one filesystem transaction. A failed projection can leave a partial or previously valid directory; manifest and workspace validation determine whether it is reusable. No public projection-only retry command is implemented.
 - Plugins are in-process instances; marketplace loading and security sandboxing are not implemented.
 
 ## Not implemented
