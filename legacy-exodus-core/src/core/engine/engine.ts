@@ -113,7 +113,25 @@ export class LegacyExodusEngine {
           }
 
           if (!execution.isReused) {
-            await this.context.discoveryProjection.project(discoveryRecord.id);
+            try {
+              await this.context.discoveryProjection.project(discoveryRecord.id);
+            } catch (error: unknown) {
+              throw new LegacyExodusError({
+                code: "DISCOVERY_PROJECTION_FAILED_AFTER_COMMIT",
+                message: "Analysis was committed, but discovery artifact projection failed.",
+                metadata: {
+                  context: "Discovery Projection",
+                  projectId: command.payload.projectId,
+                  analysisRunId: command.id,
+                  projectPath: execution.discovery.projectPath,
+                  analysisCommitted: true,
+                  projectionStatus: "failed",
+                  causeCode: error instanceof LegacyExodusError ? error.code : "UNKNOWN_PROJECTION_FAILURE",
+                  error: error instanceof Error ? error.message : String(error),
+                },
+                cause: error,
+              });
+            }
           }
 
           if (execution.analysis === undefined) {

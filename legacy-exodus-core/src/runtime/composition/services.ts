@@ -50,6 +50,20 @@ export function createEngineContext(
     undefined,
     parserManager,
     new JavaScriptSymbolExtractor(),
+    (failure) => {
+      logger.error(
+        {
+          aggregateId: failure.aggregateId,
+          ...(failure.error instanceof Error
+            ? { err: failure.error }
+            : { error: String(failure.error) }),
+          eventId: failure.eventId,
+          eventType: failure.eventType,
+          stage: failure.stage,
+        },
+        "Post-commit event delivery failed",
+      );
+    },
   );
   runtime.registerService(orchestrator);
 
