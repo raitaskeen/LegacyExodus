@@ -10,11 +10,11 @@ This document describes the design and implementation of the synchronous event b
 flowchart LR
     A[Command Handler] -->|events and facts| B[Orchestrator]
     B -->|atomic facts and journal commit| C[StorageManager]
-    C -->|commit succeeds| D[In-Memory EventStore]
-    D -->|append| E[EventBus]
-    E -->|post-commit notify| F[Event Handlers & Plugins]
+    C -->|commit succeeds| B
+    B -->|append| D[In-Memory EventStore]
+    B -->|post-commit publish| E[EventBus]
+    E -->|notify| F[Event Handlers & Plugins]
     D -->|replay| G[EventReducer]
-    C -->|durable replay| G
     G --> H[New ProjectState]
 ```
 
@@ -22,6 +22,9 @@ flowchart LR
 * **`EventStore` (`event-store.ts`):** Append-only in-memory ledger storing all events in chronological order.
 * **Durable event journal (`durable-event-journal.ts`):** Persists ordered domain events in the same storage transaction as command facts.
 * **`EventReducer` (`event-reducer.ts`):** Pure reducer applying event payloads to update `ProjectState`.
+
+> [!NOTE]
+> The durable journal persists event evidence, but the current runtime does not hydrate `InMemoryEventStore` from that journal on startup. `Orchestrator.replay()` therefore replays the current in-memory event store rather than providing process-restart durable replay. State reconstruction after process restart is available via `Orchestrator.replayDurable(projectId, analysisRunId)`.
 
 ---
 

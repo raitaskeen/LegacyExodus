@@ -2,7 +2,7 @@
 
 **Documentation state:** `CURRENT`
 
-**Synchronized against verified core task commit:** `ee7b057906ea4b29bcf8c95338f6209f0252f4ae`
+**Synchronized against verified core task commit:** `b9afef3489f5374d2f7745a07ef9005368d0528b`
 
 This page is the concise status boundary for LegacyExodus. Implementation source, executable tests, and verified runtime behavior remain authoritative if this page drifts.
 
