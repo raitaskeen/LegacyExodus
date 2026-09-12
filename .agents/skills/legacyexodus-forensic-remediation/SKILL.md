@@ -113,13 +113,32 @@ Merely stating "tests passed" is strictly forbidden and constitutes false closur
 ### Draft vs. Final Report Temporal Invariant
 A draft verification report is compiled in Step 15 with future operations explicitly marked `PENDING`. Agents MUST NOT falsely claim a commit SHA, push confirmation, or post-push clean worktree in the draft report before those operations succeed. The final remediation completion report is generated in Step 19 ONLY after commit, push, and post-push clean tree checks are verified by live command evidence.
 
-## 9. Failure Handling
+## 9. Failure Handling & Review Follow-Up
 * If the red test does not fail before the fix: The test does not properly isolate the defect. Refine the test before touching source code.
 * If full test suite fails after the fix: The change introduced a side-effect. Revert the fix and re-evaluate root cause.
 * If benchmark audit fails: The change regressed determinism, accounting, or performance. Revert and investigate.
 * If Red-Team issues `RED-TEAM FAIL`:
   * **Path A (Implementation Defect):** Return to Step 7. Preserve valid RED test, adjust implementation to resolve counter-example, and re-run all gates from Step 8.
   * **Path B (Test-Quality Defect):** Return to Steps 5–6. Discard and replace the invalid RED test, re-establish valid failure proof, and proceed through Step 7 and downstream verification gates.
+
+### Review Follow-Up Discipline
+When addressing external review feedback (e.g., CodeRabbit) on an already-verified finding:
+```text
+validate review comment
+        ↓
+minimal change
+        ↓
+focused regression
+        ↓
+required global verification
+        ↓
+documentation impact gate
+        ↓
+small follow-up commit
+        ↓
+STOP
+```
+Do NOT automatically reopen the entire finding, discard established test baselines, or re-run the complete forensic audit sequence.
 
 ## 10. Closure Criteria
 A finding is classified as `FULLY REMEDIATED` if and only if:
@@ -128,6 +147,7 @@ A finding is classified as `FULLY REMEDIATED` if and only if:
 3. Full verification suite and Red-Team gate pass with zero errors.
 4. Git working tree is clean; when publication was authorized, the task branch is pushed to origin.
 5. Final completion report is emitted with zero `PENDING` placeholders.
+6. **Closed Finding Invariant:** A closed finding remains closed unless new executable evidence establishes a regression.
 
 ## 11. Prohibited Behavior
 * Never commit a fix without a failure-first test where applicable.

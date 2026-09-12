@@ -118,6 +118,25 @@ Every core change must answer: `Does this change alter documented product truth?
 * Documentation must follow current source, tests, and verified runtime behavior. Never change production behavior merely to satisfy prose.
 * Keep engine and documentation changes in separate logical commits and branch responsibilities.
 
+### Step 6: Review Follow-Up Discipline
+When addressing external review comments (e.g., CodeRabbit) on an already-verified task:
+```text
+validate review comment
+        ↓
+minimal change
+        ↓
+focused regression
+        ↓
+required global verification
+        ↓
+documentation impact gate
+        ↓
+small follow-up commit
+        ↓
+STOP
+```
+Do NOT automatically reopen the entire finding, discard established test baselines, or broadly re-audit unrelated subsystems.
+
 ---
 
 ## 7. Prohibited Behavior (Strict Invariants)
@@ -126,3 +145,4 @@ Every core change must answer: `Does this change alter documented product truth?
 3. **NEVER Merge `main` into `docs-foundation` Merely to Sync Core:** The stale `legacy-exodus-core` directory inside `docs-foundation` must remain untouched. Documentation agents must query core via `git show core-foundation:<path>`.
 4. **NEVER Copy Core Files into `docs-foundation`:** Avoid duplicating codebase trees across branches.
 5. **NEVER Commit Secrets or Credentials:** Any file containing an API token, private key, or password must be aborted and cleaned.
+6. **NEVER Execute Destructive Tree Shortcuts on Unsaved Work:** Destructive commands (`git reset --hard`, `git clean -fd`, `git clean -fdx`, `git restore .`, `git checkout -- .`) must never be used when user or concurrent task work may be affected. When encountering a dirty worktree: inspect files $\to$ identify ownership $\to$ preserve work $\to$ STOP and seek clarification if uncertain.

@@ -6,7 +6,7 @@ The authoritative entry point is [`AGENTS.md`](../AGENTS.md). Select only the sk
 
 - `legacyexodus-forensic-remediation`: one confirmed implementation defect, failure-first through verified remediation.
 - `legacyexodus-code-audit`: read-only code and architecture inspection.
-- `legacyexodus-docs-audit`: read-only documentation-to-core truth comparison.
+- `legacyexodus-docs-audit`: read-only documentation-to-core truth comparison and review reconciliation.
 - `legacyexodus-git-governance`: branch, commit, synchronization, and publication rules.
 - `legacyexodus-test-verification`: canonical verification layers and evidence format.
 - `legacyexodus-performance-audit`: read-only performance and memory measurement.

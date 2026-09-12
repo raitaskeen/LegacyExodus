@@ -107,3 +107,4 @@ Every discovered issue MUST be reported using this exact schema:
 * NEVER report cosmetic style preferences as functional bugs.
 * NEVER hallucinate defects based on assumptions; every finding must be backed by live code inspection.
 * NEVER dismiss an external finding without inspecting the live repository source.
+* NEVER reopen a closed finding without new executable evidence establishing a regression.
