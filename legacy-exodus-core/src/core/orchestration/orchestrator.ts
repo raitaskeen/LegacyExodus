@@ -26,6 +26,18 @@ import {
 
 export type OrchestratorStatus = "idle" | "executing" | "stopped";
 
+export interface PostCommitEventDeliveryFailure {
+  readonly stage: "delivery" | "reporting";
+  readonly eventId: string;
+  readonly eventType: string;
+  readonly aggregateId: string;
+  readonly error: unknown;
+}
+
+export type PostCommitEventDeliveryFailureReporter = (
+  failure: PostCommitEventDeliveryFailure,
+) => void;
+
 export class Orchestrator implements RuntimeService {
   public readonly name = "orchestrator";
   private status: OrchestratorStatus = "idle";
@@ -35,6 +47,7 @@ export class Orchestrator implements RuntimeService {
   private readonly updateKnowledgeHandler = new UpdateKnowledgeHandler();
   private readonly analyzeProjectHandler: AnalyzeProjectHandler;
   private readonly initialState: ProjectState;
+  private postCommitEventDeliveryFailures: PostCommitEventDeliveryFailure[] = [];
 
   public constructor(
     private readonly eventStore: InMemoryEventStore,
@@ -44,6 +57,7 @@ export class Orchestrator implements RuntimeService {
     initialState: ProjectState | undefined = undefined,
     parserManager: ParserManager = createDefaultParserManager(),
     symbolExtractor: JavaScriptSymbolExtractor = new JavaScriptSymbolExtractor(),
+    private readonly reportPostCommitEventDeliveryFailure?: PostCommitEventDeliveryFailureReporter,
   ) {
     this.initialState = initialState ?? createProjectState("Uninitialized Project");
     this.analyzeProjectHandler = new AnalyzeProjectHandler(discoveryEngine, parserManager, symbolExtractor);
@@ -58,6 +72,7 @@ export class Orchestrator implements RuntimeService {
     }
 
     this.status = "executing";
+    this.postCommitEventDeliveryFailures = [];
 
     const executionTask = (async () => {
       const validatedCommand = validateCommand(command);
@@ -77,7 +92,30 @@ export class Orchestrator implements RuntimeService {
 
       for (const event of execution.events) {
         this.eventStore.append(event);
-        this.eventBus.publish(event);
+        try {
+          this.eventBus.publish(event);
+        } catch (error: unknown) {
+          const failure = Object.freeze({
+            stage: "delivery" as const,
+            eventId: event.id,
+            eventType: event.type,
+            aggregateId: event.aggregateId,
+            error,
+          });
+          this.postCommitEventDeliveryFailures.push(failure);
+
+          try {
+            this.reportPostCommitEventDeliveryFailure?.(failure);
+          } catch (reportingError: unknown) {
+            this.postCommitEventDeliveryFailures.push(Object.freeze({
+              stage: "reporting" as const,
+              eventId: event.id,
+              eventType: event.type,
+              aggregateId: event.aggregateId,
+              error: reportingError,
+            }));
+          }
+        }
       }
 
       return execution;
@@ -115,6 +153,10 @@ export class Orchestrator implements RuntimeService {
 
   public getStatus(): OrchestratorStatus {
     return this.status;
+  }
+
+  public getPostCommitEventDeliveryFailures(): readonly PostCommitEventDeliveryFailure[] {
+    return Object.freeze([...this.postCommitEventDeliveryFailures]);
   }
 
   private async executeValidatedCommand(command: LegacyExodusCommand): Promise<CommandExecution> {
