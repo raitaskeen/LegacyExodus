@@ -2,7 +2,7 @@
 
 **Documentation state:** `CURRENT`
 
-**Synchronized against verified core task commit:** `76db0da965de6d007a636023362e11aaaf4c4915`
+**Synchronized against verified core task commit:** `ee7b057906ea4b29bcf8c95338f6209f0252f4ae`
 
 This page is the concise status boundary for LegacyExodus. Implementation source, executable tests, and verified runtime behavior remain authoritative if this page drifts.
 
@@ -16,7 +16,7 @@ This page is the concise status boundary for LegacyExodus. Implementation source
 - Conservative semantic call/reference analysis, Express route and middleware facts for supported patterns.
 - Function/control-flow and data-flow models, interprocedural transfer for proven targets, and conservative taint facts.
 - In-memory and SQLite storage providers, run-scoped queries, analysis-run atomicity, validated snapshot reuse, and deep persisted-contract validation.
-- Contained, atomic `.discovery` projections with integrity manifests.
+- Contained `.discovery` projections with atomic per-file replacement and integrity manifests. Durable analysis records are canonical; `.discovery` is a derived command deliverable. If fresh-run projection fails after commit, the engine rejects with `DISCOVERY_PROJECTION_FAILED_AFTER_COMMIT` and explicitly reports that the selected storage provider already committed the analysis.
 - CLI commands: `status`, `init`, `analyze`, `test`, `verify`, and `plugins list`.
 - Plugin contracts, registry, loader, and scoped context foundation.
 
@@ -28,6 +28,7 @@ This page is the concise status boundary for LegacyExodus. Implementation source
 - Knowledge, semantic, and flow artifacts are static evidence, not business-rule or behavioral-equivalence certification.
 - Fidelity evidence is sample-based and does not establish whole-repository migration safety.
 - Whole-repository bounded-memory scaling has not been universally established.
+- Multi-artifact `.discovery` publication is not one filesystem transaction. A failed projection can leave a partial or previously valid directory; manifest and workspace validation determine whether it is reusable. No public projection-only retry command is implemented.
 - Plugins are in-process instances; marketplace loading and security sandboxing are not implemented.
 
 ## Not implemented

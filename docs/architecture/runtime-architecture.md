@@ -23,7 +23,9 @@ CLI
 
 ### Execution
 
-Commands are validated at contract boundaries and dispatched through the engine/orchestrator. Project analysis executes discovery, per-file parser/symbol work, graph/semantic/flow construction, event publication, atomic run-scoped persistence, and projection for fresh runs. Recoverable per-file failures are categorized; terminal failures remain observable.
+Commands are validated at contract boundaries and dispatched through the engine/orchestrator. Project analysis executes discovery, per-file parser/symbol work, graph/semantic/flow construction, atomic run-scoped persistence, post-commit event publication, and `.discovery` projection for fresh runs. Recoverable per-file failures are categorized; terminal failures remain observable.
+
+The durable commit is complete before fresh-run filesystem projection begins. A projection failure cannot roll back committed storage records or their durable event journal. The engine therefore rejects with `DISCOVERY_PROJECTION_FAILED_AFTER_COMMIT`, preserving the original cause and reporting `analysisCommitted: true` plus `projectionStatus: "failed"`. This is a failed command deliverable, not a failed or rolled-back analysis commit.
 
 The current orchestrator is deterministic in-process coordination. It is not a distributed task queue and does not provide general retry scheduling, worker leases, or remote execution.
 
@@ -33,7 +35,9 @@ The event bus publishes synchronously in registration order. The in-memory event
 
 ### Storage
 
-The runtime injects either memory or SQLite storage behind `StorageManager`. SQLite configuration is local and embedded. Projection output is derived from validated completed-run records and published beneath the analyzed project's `.discovery/` directory.
+The runtime injects either memory or SQLite storage behind `StorageManager`. SQLite configuration is local and embedded. Projection output is derived from validated completed-run records and published beneath the analyzed project's `.discovery/` directory. SQLite records remain queryable after a projection failure and process restart; memory-provider records remain limited to that runtime instance.
+
+Each artifact is atomically replaced and the integrity manifest is written last, but the complete directory is not one atomic filesystem transaction. A mid-projection failure can therefore leave partial new artifacts or a prior manifest. Snapshot reuse still requires manifest hashes and workspace freshness to validate, so such output is not silently accepted as current. The internal projection service can regenerate artifacts from committed records, but the current CLI does not expose a projection-only recovery command.
 
 ### Plugins
 

@@ -81,6 +81,10 @@ legacy-exodus analyze ./repo --refresh
 legacy-exodus analyze ./repo --storage-path ./exodus.db
 ```
 
+### Projection failure after durable commit
+
+For a fresh run, analysis records commit before `.discovery` materialization. If that materialization fails, `analyze` exits nonzero and reports `DISCOVERY_PROJECTION_FAILED_AFTER_COMMIT` with the project path, run ID, and underlying cause. The error means the requested filesystem artifacts are incomplete; it does not mean the canonical analysis transaction rolled back. When SQLite is configured, the committed run remains queryable after restart. The current CLI has no projection-only retry command, so operators must correct the output-path failure before re-executing and should not assume that re-execution performs only materialization.
+
 ---
 
 ## 4. `legacy-exodus test [domain] [options]`
