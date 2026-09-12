@@ -2,14 +2,14 @@
 
 **Documentation state:** `CURRENT`
 
-**Synchronized against `core-foundation`:** `8f5e93d4715642b1f1542a8349093455375dcd0c`
+**Synchronized against verified core task commit:** `76db0da965de6d007a636023362e11aaaf4c4915`
 
 This page is the concise status boundary for LegacyExodus. Implementation source, executable tests, and verified runtime behavior remain authoritative if this page drifts.
 
 ## Verified current core
 
 - Bun runtime and strict TypeScript contracts.
-- Engine facade, runtime lifecycle, command/orchestrator boundary, event bus/store, and durable event journal.
+- Engine facade, runtime lifecycle, command/orchestrator boundary, event bus/store, and durable event journal. Durable command commit defines success; post-commit synchronous notification failures are separately recorded and logged without implying rollback.
 - Repository discovery with deterministic inventory, source/non-source classification, package/framework signals, and isolated enumeration failures.
 - Babel-based JavaScript/TypeScript/JSX/TSX parsing into normalized immutable AST contracts.
 - Lexical symbol extraction, selected ESM/CommonJS modeling, module resolution, dependency cycles, and deterministic knowledge graphs.
