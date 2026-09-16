@@ -15,3 +15,14 @@ The authoritative entry point is [`AGENTS.md`](../AGENTS.md). Select only the sk
 Use the smallest evidence surface that can answer the task. Do not re-audit unrelated subsystems, reopen closed findings without new executable evidence, or treat roadmap prose as implementation truth.
 
 For every core change, report whether documentation impact is `REQUIRED` or `NONE` and why. Documentation follows current source, tests, and verified runtime behavior; it never drives production changes.
+
+## Authority and mutation boundaries
+
+| Role | May inspect | May edit | May commit/push |
+|---|---|---|---|
+| Remediation builder | Scoped implementation and evidence | One authorized finding | Only after every governed gate |
+| Code/docs/performance auditor | Relevant evidence | No | No |
+| Red-team reviewer | Candidate diff and tests | No | No |
+| Human maintainer | Repository and external settings | As authorized | Final authority |
+
+All agents stop when the assigned task is complete, an unrelated gate fails, repository truth becomes contradictory, or tooling prevents trustworthy verification. Uncertainty must be reported as `INCONCLUSIVE`, `SAFE WITH REQUIRED FOLLOW-UP`, or `BLOCKED`; it must not be converted into closure.

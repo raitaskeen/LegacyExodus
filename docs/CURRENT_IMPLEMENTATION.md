@@ -1,8 +1,12 @@
 # Current Implementation
 
-**Documentation state:** `CURRENT`
+**Documentation state:** `VERIFIED`
 
-**Synchronized against verified core task commit:** `b9afef3489f5374d2f7745a07ef9005368d0528b`
+**Synchronized against core integration truth:** `origin/core-foundation` at `9e582388dece16ec6fd8bfc1f9aab6da4f0835c7`
+
+**Main promotion boundary:** `origin/main` at `b342e8d45ee9ae1a5e2d9fdb1968f6486e83f733`
+
+The core branch is one verified remediation ahead of main: IA-HIGH-007 corrects conservative catch reachability for potentially throwing invocations, nested protected blocks, and thrown-finalizer edge classification. It is `VERIFIED` and core-integrated, but **not main-promoted**.
 
 This page is the concise status boundary for LegacyExodus. Implementation source, executable tests, and verified runtime behavior remain authoritative if this page drifts.
 
@@ -54,3 +58,28 @@ bun run src/cli/index.ts --help
 ```
 
 Record live results rather than copying historical totals into evergreen documentation.
+
+## Verification snapshot
+
+The synchronized core checkpoint reported:
+
+- 1,049 tests passed, 1 skipped, 0 failed; 9,550 assertions.
+- Typecheck passed.
+- Benchmark governance passed 10/10.
+- Composite verification passed.
+- Three governed Express analyses produced identical results: 234 discovered, 152 analyzed, 0 failures.
+- Hosted `CI / Verify Core` and `Windows Path Smoke` checks passed.
+
+These values identify evidence for the SHA above. They must not be reused as current results after the core revision changes.
+
+## CI and security boundary
+
+Current main/core workflow truth includes immutable action SHA pins, least-privilege permissions, disabled checkout credential persistence, Bun 1.4.2, frozen installs, job timeouts, superseded-run cancellation, `CI / Verify Core`, and `Windows Path Smoke`.
+
+CodeQL and Dependency Review are unavailable under the current private-repository/account configuration. The unusable historical CodeQL workflow was intentionally removed; its absence is not evidence that application security is complete.
+
+## Historical audit queue integrity
+
+The historical unresolved queue remains separate from current capability status: `PERF-002`, `MEM-001`, `SEC-004`, `SEC-003`, `SEM-002`, `MODULE-001`, `DFG-001`, `TAINT-001`, `ARCH-002`, `ARCH-003`, `CI-001`, and `TOOL-002`.
+
+This list records identifiers, not newly validated findings or severity conclusions. `PERF-002` remains `BLOCKED` if its authoritative original definition has not been recovered; a new performance observation must not reuse that identifier. No item in this queue is closed by this documentation pass.

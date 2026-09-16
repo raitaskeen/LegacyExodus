@@ -52,7 +52,7 @@ The LegacyExodus documentation system is designed as a layered knowledge archite
 
 
 #### 2. Core Context & Operational Rules (Canonical & Populated)
-* **[docs/PROJECT_CONTEXT.md](PROJECT_CONTEXT.md):** Comprehensive engineering context, pipeline stage definitions, execution context, and Section 14 verified intelligence trace.
+* **[docs/PROJECT_CONTEXT.md](PROJECT_CONTEXT.md):** Concise current product context, pipeline boundary, stage states, repository structure, limitations, and future direction.
 * **[docs/GLOSSARY.md](GLOSSARY.md):** Ubiquitous domain terminology and architectural definitions (1,800+ lines).
 * **[docs/AI_CONTEXT.md](AI_CONTEXT.md):** Operating rules and reasoning guidelines for AI coding assistants.
 * **[docs/DOCUMENTATION_RULES.md](DOCUMENTATION_RULES.md):** Standards and constraints for editing and creating project documentation.
@@ -77,7 +77,7 @@ The LegacyExodus documentation system is designed as a layered knowledge archite
 * **[docs/architecture/component-map.md](architecture/component-map.md):** Detailed map of deterministic services, control plane, and boundaries.
 * **[docs/architecture/security-architecture.md](architecture/security-architecture.md):** Zero-Trust security model, traversal sandboxing, and trust boundaries.
 * **[docs/architecture/runtime-architecture.md](architecture/runtime-architecture.md):** Runtime composition, lifecycle, and state factory architecture.
-* **[docs/architecture/plugin-architecture.md](architecture/plugin-architecture.md):** Plugin subsystem interfaces and contracts.
+* **[docs/architecture/plugin-architecture.md](architecture/plugin-architecture.md):** Current in-process plugin foundation and explicitly separated target isolation/governance model.
 
 #### 5. Architecture Decision Records (`docs/adr/` — Populated Decisions)
 * **[ADR-001: Project State Architecture](adr/ADR-001-project-state-architecture.md):** Immutable state snapshots and deterministic reducers *(Accepted)*.
@@ -96,7 +96,7 @@ The LegacyExodus documentation system is designed as a layered knowledge archite
 * **[docs/implementation/project-state-model.md](implementation/project-state-model.md):** State aggregate and factory models.
 * **[docs/implementation/event-system.md](implementation/event-system.md):** Synchronous event bus and event store.
 * **[docs/implementation/parser-strategy.md](implementation/parser-strategy.md):** Babel parser adapter and error recovery.
-* **[docs/implementation/storage-layer.md](implementation/storage-layer.md):** Storage manager, memory adapter, and streaming JSON projections.
+* **[docs/implementation/storage-layer.md](implementation/storage-layer.md):** Storage manager, memory/SQLite adapters, and discovery projection boundary.
 * **[docs/implementation/knowledge-graph.md](implementation/knowledge-graph.md):** Deterministic knowledge graph builder and edge hashing.
 * **[docs/implementation/cli-design.md](implementation/cli-design.md):** CLI presentation layer, themes, tables, and error boundaries.
 

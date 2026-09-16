@@ -1,4 +1,8 @@
+![LegacyExodus banner](docs/assets/branding/banner.png)
+
 # LegacyExodus
+
+> Understand the Legacy. Engineer the Future.
 
 LegacyExodus is a deterministic local JavaScript/TypeScript repository-intelligence and static-analysis engine. It inventories a repository, parses supported source files, extracts symbols, resolves supported module relationships, builds dependency, knowledge, semantic, control-flow, and data-flow artifacts, and projects validated results to `.discovery/`.
 
@@ -20,6 +24,15 @@ It is intended to evolve into a governed legacy-modernization platform. Code tra
 | Rust/Axum/SQLx generation and equivalence verification | `NOT IMPLEMENTED` | Target architecture |
 
 The exact synchronized implementation boundary is recorded in [Current Implementation](docs/CURRENT_IMPLEMENTATION.md).
+
+<table>
+  <tr>
+    <td><strong>Observe</strong><br/>Inventory repositories without rewriting source.</td>
+    <td><strong>Understand</strong><br/>Build deterministic symbols and static graphs.</td>
+    <td><strong>Persist</strong><br/>Store run-scoped evidence and validated projections.</td>
+    <td><strong>Stay honest</strong><br/>Keep unknown and future capabilities explicit.</td>
+  </tr>
+</table>
 
 ## Supported inputs and limitations
 
@@ -55,22 +68,43 @@ bun run benchmark audit
 bun run src/cli/index.ts --help
 ```
 
-Live command output is the source for test and assertion totals. Evergreen documentation does not hard-code historical counts.
+### Verified checkpoint
+
+| Evidence | Result |
+|---|---|
+| Core integration truth | `origin/core-foundation` at `9e582388dece16ec6fd8bfc1f9aab6da4f0835c7` |
+| Main promotion truth | `origin/main` at `b342e8d45ee9ae1a5e2d9fdb1968f6486e83f733` |
+| Full suite | 1,049 passed, 1 skipped, 0 failed; 9,550 assertions |
+| Typecheck | Passed |
+| Benchmark governance | 10/10 passed |
+| Composite verification | Passed |
+| Express determinism | Three identical runs: 234 discovered, 152 analyzed, 0 failures |
+| Hosted CI | `CI / Verify Core` and `Windows Path Smoke` passed |
+
+These are checkpoint results, not permanent promises. Live command output remains authoritative for a new revision.
+
+## Toolchain snapshot
+
+| Component | Current core value |
+|---|---|
+| Bun | `1.4.2` package manager (`>=1.3.0` engine range) |
+| TypeScript | `7.0.2` |
+| Babel parser | `8.0.4` |
+| Zod | `4.5.4` |
+| Commander | `15.0.0` |
+| Pino | `10.3.1` |
 
 ## Architecture
 
-```text
-CLI
-  -> LegacyExodusEngine
-     -> Runtime / Orchestrator / Events
-     -> Discovery
-     -> Parser + normalized AST
-     -> Symbols + module/dependency graph
-     -> Knowledge + semantic analysis
-     -> CFG / DFG / conservative taint facts
-     -> StorageManager
-        -> memory or SQLite records
-        -> validated .discovery projections
+```mermaid
+flowchart LR
+    CLI --> Engine[LegacyExodusEngine]
+    Engine --> Discovery
+    Discovery --> Parser[Parser + normalized AST]
+    Parser --> Symbols[Symbols + module graph]
+    Symbols --> Analysis[Knowledge + semantic + flow analysis]
+    Analysis --> Storage[Memory / SQLite storage]
+    Storage --> Projection[Validated .discovery projections]
 ```
 
 Current analysis is deterministic for supported inputs and contracts. Unknown or ambiguous relationships must remain explicit rather than being fabricated.
@@ -85,6 +119,16 @@ The four-stage product direction remains:
 4. **VymosGate** — generated-system validation and approval (`TARGET ARCHITECTURE`; current benchmark governance is not this full stage).
 
 See the [documentation index](docs/README.md), [system overview](docs/architecture/system-overview.md), and [pipeline status](docs/pipeline/pipeline-overview.md).
+
+## Navigate
+
+| Need | Start here |
+|---|---|
+| Current capability boundary | [Current Implementation](docs/CURRENT_IMPLEMENTATION.md) |
+| Architecture | [System Overview](docs/architecture/system-overview.md) |
+| CLI usage | [Command Reference](docs/development/cli/commands.md) |
+| Contribution workflow | [Contributing](CONTRIBUTING.md) |
+| Complete documentation map | [Documentation Map](docs/DOCUMENTATION_MAP.md) |
 
 ## Repository governance
 

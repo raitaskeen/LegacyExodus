@@ -1,5 +1,7 @@
 # Storage Service
 
+> **Status:** `PARTIAL`. The current core implements injected in-memory and SQLite providers, a storage manager, run-scoped records, durable analysis commit, validated snapshot reuse, and contained `.discovery` projections. Enterprise databases, distributed artifact storage, retention services, multi-tenancy, and general checkpoint/resume are not implemented.
+
 ## Overview
 
 Storage Service provides durable, versioned persistence for artifacts, metadata, and project execution state across the LegacyExodus pipeline.

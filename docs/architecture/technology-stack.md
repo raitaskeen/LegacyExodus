@@ -1,176 +1,52 @@
-## Technology Stack
+# Technology Stack
 
-This document records the final technology decisions for LegacyExodus and explains why each was selected, including major alternatives and tradeoffs.
+This document separates the stack that exists in the verified core from technologies that belong only to the product target. It is not a procurement commitment.
 
-### Decision Principles
+## Status summary
 
-Technology choices were evaluated against these constraints:
+| Area | State | Current truth |
+|---|---|---|
+| Core runtime | `VERIFIED` | Bun 1.4.2 package manager and strict TypeScript |
+| Parsing | `VERIFIED` | `@babel/parser` for supported JavaScript/TypeScript/JSX/TSX syntax |
+| Contracts | `VERIFIED` | Zod validation and immutable DTO construction |
+| Logging | `VERIFIED` | Pino structured logging |
+| CLI | `VERIFIED` | Commander-based local CLI |
+| Persistence | `VERIFIED` | In-memory and local SQLite storage providers |
+| Operator web console | `NOT IMPLEMENTED` | No React/Vite/Tailwind application exists |
+| Enterprise PostgreSQL service | `NOT IMPLEMENTED` | No PostgreSQL adapter or service exists |
+| Durable distributed queue | `NOT IMPLEMENTED` | Current event delivery is local and synchronous |
+| Container/Kubernetes platform | `NOT IMPLEMENTED` | No deployment platform is integrated |
+| OpenTelemetry backend | `NOT IMPLEMENTED` | Structured logs do not constitute distributed telemetry |
+| Rust/Axum/SQLx generation | `TARGET ARCHITECTURE` | No migration generator exists |
+| AI/LLM providers | `NOT IMPLEMENTED` | No AI gateway or provider integration exists |
 
-- **Safety-first modernization** for unknown/untrusted legacy code
-- **Deterministic and auditable pipeline behavior**
-- **High developer velocity** for platform iteration
-- **Clear migration path** to memory-safe target systems
-- **Enterprise readiness** (governance, observability, scale)
+## Current core stack
 
----
+The authoritative versions live in `legacy-exodus-core/package.json` and `bun.lock` on `core-foundation`. At the synchronized checkpoint:
 
-## 1) Core Platform
+- Bun: `1.4.2` package manager, with the declared engine range in package metadata.
+- TypeScript: `7.0.2`.
+- Babel parser: `8.0.4`.
+- Zod: `4.5.4`.
+- Commander: `15.0.0`.
+- Pino: `10.3.1`.
+- SQLite: Bun's local SQLite API behind the storage-provider boundary.
 
-### Final Decision
-- **TypeScript + Bun**
+The core is a local deterministic analysis application. It does not require a database server, message broker, browser UI, container orchestrator, or cloud service.
 
-### Why Chosen
-- TypeScript improves correctness and maintainability across a complex orchestration codebase.
-- Bun provides fast startup/runtime performance and a streamlined JS/TS toolchain.
-- Shared language across orchestration, policy layers, and gateway services reduces cognitive load.
-- Strong ecosystem compatibility with schema validation, API tooling, and testing libraries.
+## Selection principles
 
-### Key Benefits
-- Fast iteration for pipeline logic and integrations
-- Good type safety for boundary contracts
-- Productive developer ergonomics
+Current and future technology choices must preserve:
 
-### Alternatives Considered
-- **Node.js + TypeScript**
-- **Go**
-- **Python**
+- deterministic and auditable behavior;
+- strict boundary validation;
+- conservative handling of unresolved program behavior;
+- repository-local operation for the supported core;
+- replaceable adapters rather than infrastructure knowledge in domain analysis;
+- evidence before capability claims.
 
-### Tradeoffs
-- Bun ecosystem maturity can lag Node in edge cases.
-- Runtime differences require compatibility checks for some packages.
-- Go may offer simpler static binaries and predictable runtime behavior.
-- Python offers rapid prototyping but weaker static guarantees at scale.
+## Target architecture
 
----
+Rust, Axum, and SQLx remain possible target technologies for generated systems. PostgreSQL, distributed work orchestration, an operator console, containers, managed secrets, and observability backends may be evaluated for future enterprise deployment. They become `IMPLEMENTED` only after code is integrated and become `VERIFIED` only after executable evidence passes.
 
-## 2) Frontend and Operator Console
-
-### Final Decision
-- **React + Vite + Tailwind CSS**
-
-### Why Chosen
-- React supports modular UI development for complex operator workflows (pipeline views, policy decisions, validation results).
-- Vite provides fast local dev feedback and optimized frontend builds.
-- Tailwind enables consistent design primitives and fast UI composition.
-
-### Key Benefits
-- Rapid dashboard/tooling development
-- Strong ecosystem for data-heavy interfaces
-- Efficient implementation of enterprise admin and audit views
-
-### Alternatives Considered
-- **Next.js**
-- **Svelte/SvelteKit**
-- **Vue**
-
-### Tradeoffs
-- React can require more architectural discipline (state management complexity).
-- Tailwind may produce utility-heavy markup if conventions are not enforced.
-- Next.js offers full-stack capabilities but may add framework overhead not required for an operator-focused UI.
-
----
-
-## 3) Target Modernization Stack (Generated/Transformed Systems)
-
-### Final Decision
-- **Rust + Axum + SQLx**
-
-### Why Chosen
-- Rust provides memory safety guarantees without garbage collection, aligning with LegacyExodus modernization goals.
-- Axum offers a modern, ergonomic async web framework with strong type integration.
-- SQLx provides compile-time checked SQL patterns and async database access, reducing runtime query errors.
-
-### Key Benefits
-- Strong safety posture for transformed services
-- High performance and predictable runtime characteristics
-- Type-driven correctness from API to persistence layer
-
-### Alternatives Considered
-- **Go + Gin/Fiber + pgx/GORM**
-- **Java + Spring Boot**
-- **C# + ASP.NET Core + EF Core**
-
-### Tradeoffs
-- Rust has a steeper learning curve and longer onboarding for some teams.
-- Compile-time guarantees can increase up-front implementation effort.
-- Java/C# ecosystems may be easier for enterprises with existing expertise, but typically provide weaker native memory-safety guarantees than Rust.
-
----
-
-## 4) Database
-
-### Final Decision
-- **PostgreSQL**
-
-### Why Chosen
-- Mature relational model for provenance, policy, and transformation metadata.
-- Strong support for transactional integrity and complex querying.
-- Reliable ecosystem for enterprise operations, backups, and observability.
-- Extensible features (JSONB, indexing strategies) fit hybrid structured/semi-structured pipeline data.
-
-### Key Benefits
-- Strong consistency for audit-critical records
-- Flexible schema evolution patterns
-- Broad hosting and tooling support
-
-### Alternatives Considered
-- **MySQL**
-- **SQLite (for limited/local scenarios)**
-- **Document stores (e.g., MongoDB)**
-- **Graph databases (selective use-case fit)**
-
-### Tradeoffs
-- Requires careful schema/index design for high-scale graph-like workloads.
-- Operational tuning is needed for very large enterprise throughput.
-- Specialized graph DBs may outperform some relationship traversals but add platform complexity.
-
----
-
-## 5) Cross-Cutting Supporting Technologies
-
-### API Contracts and Validation
-- **OpenAPI + Zod (or equivalent runtime schema validators)**
-- Rationale: enforce strict input/output contracts at trust boundaries.
-
-### Messaging / Work Orchestration
-- **Durable queue/event backbone** (implementation selected per deployment environment)
-- Rationale: resilient distributed stage execution and retry semantics.
-
-### Containers and Orchestration
-- **OCI containers + Kubernetes (enterprise/cloud)**
-- Rationale: isolation, autoscaling, policy enforcement, workload portability.
-
-### Observability
-- **OpenTelemetry-compatible tracing/metrics/logging stack**
-- Rationale: stage-by-stage latency, safety event visibility, and enterprise monitoring integration.
-
-### Secrets and Identity
-- **Managed secret store + workload identity**
-- Rationale: short-lived credentials and reduced secret sprawl.
-
----
-
-## 6) Strategic Tradeoff Summary
-
-### What We Optimize For
-- Security and correctness over raw prototyping speed
-- Deterministic, auditable behavior over ad hoc flexibility
-- Long-term maintainability and safe modernization outcomes
-
-### What We Accept
-- Higher initial complexity in strongly typed and policy-driven systems
-- Steeper learning curve for Rust target stack
-- Additional governance overhead for enterprise-grade controls
-
----
-
-## 7) Decision Review Cadence
-
-Stack decisions should be reviewed when:
-
-- Security requirements materially change
-- Throughput/SLO requirements exceed current platform capabilities
-- Enterprise deployment constraints require different operational baselines
-- Ecosystem maturity shifts significantly (tooling/runtime support)
-
-All changes must include migration impact, risk assessment, and trust-boundary implications.
+No target technology in this section changes the current product boundary described in [Current Implementation](../CURRENT_IMPLEMENTATION.md).
