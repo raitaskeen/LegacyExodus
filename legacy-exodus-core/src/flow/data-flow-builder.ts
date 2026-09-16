@@ -93,6 +93,7 @@ export class DeterministicDataFlowGraphBuilder {
   private visit(node: ASTNode, scope: Scope, filePath: string, state: FlowState, currentFunction?: FunctionRecord, receiverDefinitionId?: string): void {
     if (node.type === "Program") { for (const child of node.children) this.visit(child, scope, filePath, state, currentFunction); return; }
     if (node.type === "BlockStatement") { const childScope = createScope(scope); for (const child of node.children) this.visit(child, childScope, filePath, state, currentFunction); return; }
+    if (node.type === "ForOfStatement" || node.type === "ForInStatement") { this.iteration(node, scope, filePath, state, currentFunction); return; }
     if (node.type === "VariableDeclaration") { for (const child of node.children.filter((candidate) => candidate.role === "declarations")) this.declarator(child, scope, filePath, state); return; }
     if (isFunction(node)) { this.function(node, scope, filePath, state); return; }
     if (node.type === "ReturnStatement") { this.returnValue(node, scope, filePath, state, currentFunction); return; }
@@ -132,6 +133,42 @@ export class DeterministicDataFlowGraphBuilder {
       const primaryDefId = defaultBoundNames.length === 1 ? scope.definitions.get(defaultBoundNames[0]!)?.id : undefined;
       this.visit(defaultNode, scope, filePath, state, undefined, primaryDefId);
     }
+  }
+
+  private iteration(node: ASTNode, scope: Scope, filePath: string, state: FlowState, currentFunction: FunctionRecord | undefined): void {
+    const left = node.children.find((child) => child.role === "left");
+    const right = node.children.find((child) => child.role === "right");
+    const body = node.children.find((child) => child.role === "body");
+    const loopScope = createScope(scope);
+    const sourceIds = node.type === "ForOfStatement" && right !== undefined ? this.collectSources(right, filePath, state) : [];
+    const sourceDefinitions = node.type === "ForOfStatement" && right !== undefined ? this.collectDefinitions(right, scope, filePath, state) : [];
+
+    if (right !== undefined) this.visit(right, scope, filePath, state, currentFunction);
+
+    const targetDefinitions: VariableDefinition[] = [];
+    if (left?.type === "VariableDeclaration") {
+      for (const declarator of left.children.filter((candidate) => candidate.role === "declarations")) {
+        this.declarator(declarator, loopScope, filePath, state);
+        const id = declarator.children.find((child) => child.role === "id");
+        const name = identifierName(id);
+        const definition = name === undefined ? undefined : loopScope.definitions.get(name);
+        if (definition !== undefined) targetDefinitions.push(definition);
+      }
+    } else {
+      const name = identifierName(left) ?? memberPath(left);
+      if (name !== undefined && left !== undefined) {
+        targetDefinitions.push(this.define(name, "assignment", left, scope, filePath, state, undefined));
+      } else if (left !== undefined) {
+        this.visit(left, loopScope, filePath, state, currentFunction);
+      }
+    }
+
+    for (const target of targetDefinitions) {
+      for (const sourceId of sourceIds) this.setTaintPath(state, target.id, sourceId, [sourceId, target.id]);
+      for (const sourceDefinition of sourceDefinitions) this.addTransfer(state, sourceDefinition.id, target.id);
+    }
+
+    if (body !== undefined) this.visit(body, loopScope, filePath, state, currentFunction);
   }
 
   private function(node: ASTNode, scope: Scope, filePath: string, state: FlowState): void {
