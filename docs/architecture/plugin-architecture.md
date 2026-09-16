@@ -1,8 +1,10 @@
 # Plugin Architecture
 
+> **Status:** `PARTIAL`. The current core implements plugin manifests, contracts, registry, loader, lifecycle hooks, and a scoped in-process context. Dynamic package discovery, marketplace distribution, process sandboxing, permission enforcement, provider plugins, migration plugins, and validator plugins are `TARGET ARCHITECTURE` and are not implemented.
+
 ## Overview
 
-LegacyExodus must evolve across multiple legacy ecosystems, modernization patterns, AI providers, and enterprise validation requirements.  
+LegacyExodus is intended to evolve across multiple legacy ecosystems, modernization patterns, AI providers, and enterprise validation requirements.
 A plugin architecture enables this growth **without destabilizing the core engine**.
 
 The core problem this architecture solves is:
@@ -13,7 +15,7 @@ The answer is a **stable-core, contract-first extension model**:
 
 - The core pipeline remains minimal, deterministic, and governed.
 - New capabilities are introduced through plugins that implement explicit contracts.
-- Plugins are isolated, permissioned, and audited.
+- Future third-party plugins are intended to be isolated, permissioned, and audited; the current loader initializes supplied in-process plugin instances.
 - No plugin can bypass trust boundaries, policy enforcement, or verification gates.
 
 LegacyExodus plugin architecture is aligned to the pipeline:

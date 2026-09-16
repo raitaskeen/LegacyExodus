@@ -8,6 +8,15 @@ LegacyExodus is currently a deterministic local JavaScript/TypeScript repository
 
 Before making capability claims, read [Current Implementation](CURRENT_IMPLEMENTATION.md) and verify against current `core-foundation` source and tests. Documentation and old prompts do not override executable reality.
 
+On documentation branches, the local `legacy-exodus-core/` tree may be a stale snapshot. Query implementation truth without merging branches:
+
+```bash
+git show origin/core-foundation:legacy-exodus-core/src/<path>
+git show origin/core-foundation:legacy-exodus-core/tests/<path>
+```
+
+Use this authority order: production code, automated tests, CI gates, concrete architecture, accepted ADRs, current documentation, then historical material. Root [`AGENTS.md`](../AGENTS.md) and [`.agents/`](../.agents/) govern agent behavior; they are development controls, not runtime product features.
+
 ## Governing principles
 
 1. Understand first; transform only after sufficient evidence.

@@ -1,5 +1,7 @@
 # Graph Service
 
+> **Status:** `PARTIAL`. Deterministic dependency, knowledge, semantic call/reference, CFG, DFG, and conservative taint artifacts are implemented for supported static JS/TS evidence. A long-running graph service, general query API, percentile telemetry, complete runtime behavior, vulnerability detection, and transformation planning are not implemented.
+
 ## Overview
 
 Graph Service builds and serves structural relationship graphs derived from parsed artifacts to support architecture inference, transformation planning, and validation reasoning.
@@ -10,13 +12,13 @@ Graph Service builds and serves structural relationship graphs derived from pars
 - call graph
 - control flow graph
 - data flow graph
-- graph queries
+- deterministic projected graph artifacts
 
 ## Purpose
 
 - Convert parsed code into navigable system relationships.
 - Provide graph-backed intelligence for NolaraStruct and downstream stages.
-- Enable deterministic querying for decision support.
+- Provide deterministic artifacts for analysis and future decision support.
 
 ## Graph Types
 
@@ -48,13 +50,15 @@ Graph Extractors
 Graph Normalization
       |
       v
-Graph Store + Index
+StorageManager + projections
       |
       v
-Query API
+Validated JSON artifacts
 ```
 
-## Query Capabilities
+## Target query capabilities
+
+The following are `TARGET ARCHITECTURE`; the current CLI does not expose a general graph-query service:
 
 - Impact analysis (`what depends on X?`)
 - Reachability (`can A reach B?`)

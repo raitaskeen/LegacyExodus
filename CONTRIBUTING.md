@@ -12,6 +12,8 @@ LegacyExodus strictly partitions repository responsibilities across distinct bra
 * **`docs-foundation`**: All architectural specifications, ADRs, user guides, benchmark records, and documentation changes.
 * **`main`**: Integration and release branch. PRs from `core-foundation` and `docs-foundation` are merged into `main`. Do **not** commit directly to `main`.
 
+Work on a temporary task branch such as `fix/<finding>`, `docs/<topic>`, or `chore/<topic>`. Do not create additional permanent branches, force-push shared branches, or mix documentation reconciliation with core implementation changes.
+
 ---
 
 ## 2. Engineering Standard: One Finding, One PR
@@ -43,11 +45,15 @@ All contributions must pass the complete core verification suite before opening 
 
 ```bash
 # In legacy-exodus-core/
+bun install --frozen-lockfile
 bun run typecheck        # Zero TypeScript compilation errors
 bun test                 # Full test suite execution
 bun run benchmark audit  # 10-point governance benchmark audit
+bun run src/cli/index.ts --help
 git diff --check         # Zero whitespace or merge conflict artifacts
 ```
+
+Run the smallest relevant focused test before the full suite. Do not weaken tests, strict compiler settings, benchmark limits, or validation contracts to obtain a passing result.
 
 ---
 
@@ -56,3 +62,5 @@ git diff --check         # Zero whitespace or merge conflict artifacts
 1. Use the provided [PR Template](.github/pull_request_template.md).
 2. Fill out all sections: Summary, Scope, Implementation, Tests, Benchmark Impact, Security Impact, Documentation Impact, and Checklist.
 3. Link the corresponding GitHub issue (e.g. `Closes #123`).
+4. State `Documentation impact: REQUIRED` with affected files, or `Documentation impact: NONE — <reason>`.
+5. Confirm `package.json` and `bun.lock` remained unchanged unless dependency work was explicitly authorized.

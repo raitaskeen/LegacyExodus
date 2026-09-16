@@ -1,5 +1,7 @@
 # LegacyExodus Communication Patterns
 
+> **Status:** `PARTIAL`. The current core has typed command handlers, immutable domain events, an append-only journal, a synchronous deterministic event bus, and storage-backed projections. Distributed messaging, asynchronous brokers, multi-tenant metadata, migration commands, governance approval commands, dashboards, and cross-service CQRS read models are `TARGET ARCHITECTURE`.
+
 ## 1. Purpose
 
 This document defines how components inside LegacyExodus communicate to coordinate modernization work safely and predictably.
@@ -15,7 +17,7 @@ It answers:
 
 ## 2. Communication Model Overview
 
-LegacyExodus uses a **message-oriented, event-driven architecture** with **CQRS**:
+The current core uses a local command/event separation inspired by message-oriented and CQRS patterns:
 
 - **Commands** trigger intent to change state.
 - **Events** record facts that state changed.
@@ -25,7 +27,7 @@ This model provides:
 
 - deterministic orchestration for safety-critical flows
 - replayable evidence for governance and audit
-- loose coupling between discovery, intelligence, transformation, and governance layers
+- loose coupling among implemented discovery and analysis components
 
 ---
 
@@ -35,11 +37,11 @@ This model provides:
 
 Commands are imperative requests handled by one responsible component.
 
-Examples:
+Current and target examples (check their state before use):
 
 - `AnalyzeProjectCommand`
-- `StartMigrationCommand`
-- `ApproveMigrationCommand`
+- `StartMigrationCommand` (`NOT IMPLEMENTED`)
+- `ApproveMigrationCommand` (`NOT IMPLEMENTED`)
 
 Command characteristics:
 
@@ -106,7 +108,7 @@ Query characteristics:
 
 ## 4. Event-Driven Architecture in LegacyExodus
 
-LegacyExodus coordinates across layers through domain events:
+The current core coordinates discovery and analysis through local domain events. The following complete four-stage flow is `TARGET ARCHITECTURE`:
 
 1. Discovery emits early facts (`ProjectDiscovered`, `DependencyMapped`).
 2. Intelligence consumes discovery events and emits knowledge events (`KnowledgeCreated`).
@@ -209,3 +211,6 @@ ApproveMigrationCommand
         |
         v
 [Modern System Released]
+```
+
+Only the discovery/static-analysis portion of this diagram is currently implemented. Migration, validation, approval, and release transitions remain `TARGET ARCHITECTURE`.

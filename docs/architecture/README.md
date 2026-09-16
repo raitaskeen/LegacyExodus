@@ -2,6 +2,8 @@
 
 This directory defines the architectural foundation of LegacyExodus: principles, control boundaries, component responsibilities, deployment strategy, scalability direction, and governance model.
 
+Architecture documents contain both executable current design and future design. Every capability claim must use the state vocabulary in root `AGENTS.md`; [Current Implementation](../CURRENT_IMPLEMENTATION.md) is the concise synchronization boundary.
+
 ## What LegacyExodus Is
 
 LegacyExodus currently provides deterministic local JavaScript/TypeScript repository intelligence and static analysis. It is designed to evolve into a governed modernization platform; transformation and generated-system validation are target architecture.
@@ -20,13 +22,13 @@ It operates through a four-stage pipeline:
 If you are new to the architecture, read in this order:
 
 1. [components/orchestrator.md](./components/orchestrator.md) ⭐
-   The execution brain: lifecycle, retries, checkpoints, and stage coordination.
+   Current analysis coordination plus clearly marked target lifecycle, retry, checkpoint, and four-stage responsibilities.
 
 2. [security-architecture.md](./security-architecture.md)
    Trust boundaries and mandatory security controls.
 
 3. [ai-architecture.md](./ai-architecture.md)
-   How AI is integrated as governed intelligence without system control.
+   `TARGET ARCHITECTURE` for a governed AI boundary; AI is not integrated.
 
 4. [plugin-architecture.md](./plugin-architecture.md)
    How capabilities expand without destabilizing core behavior.
@@ -35,13 +37,13 @@ If you are new to the architecture, read in this order:
    Component map and stage-to-component relationships.
 
 6. [deployment-model.md](./deployment-model.md)
-   Local, enterprise, and cloud execution patterns.
+   Current local execution and target enterprise/cloud deployment patterns.
 
 7. [scalability-plan.md](./scalability-plan.md)
-   Worker scaling, distributed processing, and enterprise growth strategy.
+   `TARGET ARCHITECTURE` for worker scaling and distributed processing.
 
 8. [technology-stack.md](./technology-stack.md)
-   Final stack decisions, alternatives, and tradeoffs.
+   Verified current stack separated from target technology options.
 
 ---
 
@@ -71,7 +73,9 @@ If you are new to the architecture, read in this order:
 
 ---
 
-## System Control Model (High-Level)
+## Target system control model
+
+The full four-stage model below is `TARGET ARCHITECTURE`. The current core executes discovery and static analysis through `LegacyExodusEngine`; it does not execute ZelvoxForge or VymosGate.
 
 ```text
 Commands
@@ -92,11 +96,11 @@ Orchestrator
 
 ## Trust-Boundary Contract (Non-Negotiable)
 
-All architecture and implementation paths must preserve:
+The future execution architecture must preserve:
 
-**Untrusted Legacy Code → Sandbox → Parser → Knowledge Model → AI Gateway**
+**Untrusted Legacy Code → Isolated Intake → Parser → Knowledge Model → Governed AI Gateway**
 
-No component, plugin, or agent may bypass this sequence or governance gates.
+The current core applies repository path and projection containment but does not provide a general execution sandbox or AI gateway. Those controls must not be described as current until implemented and verified.
 
 ---
 

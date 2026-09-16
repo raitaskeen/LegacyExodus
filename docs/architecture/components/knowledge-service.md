@@ -1,5 +1,7 @@
 # Knowledge Service (NolaraStruct Core)
 
+> **Status:** `PARTIAL`. The current core builds deterministic knowledge and semantic artifacts from files, symbols, imports/exports, and supported calls/references. Domain inference, business-intent recovery, architectural recommendations, confidence aggregation, and AI-assisted reasoning are not implemented.
+
 ## Overview
 
 Knowledge Service is the intelligence heart of NolaraStruct. It synthesizes parsed and graph-derived signals into a governed system understanding model.

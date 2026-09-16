@@ -96,3 +96,26 @@ flowchart TD
 * **[Contribution Guide](docs/development/contribution-guide.md):** Engineering workflows and PR Definition of Done.
 * **[Security Principles](docs/security/security-principles.md):** Trust boundaries and static analysis sandbox rules.
 * **[Documentation Map](docs/DOCUMENTATION_MAP.md):** Complete navigation and document taxonomy.
+
+---
+
+## 6. Branch and Truth Governance
+
+LegacyExodus has exactly three permanent branches:
+
+- `main`: promoted integration and release truth.
+- `core-foundation`: latest verified implementation integration truth.
+- `docs-foundation`: documentation integration truth.
+
+All changes use temporary `fix/*`, `feat/*`, `test/*`, `docs/*`, `perf/*`, `refactor/*`, or `chore/*` task branches. Direct commits to `main` and force-pushes to shared branches are prohibited.
+
+For capability claims, authority descends from current production code to tests, CI gates, concrete architecture, accepted ADRs, current documentation, and then historical material. Documentation branches must query implementation evidence with branch-qualified Git commands; their local package snapshot is not implementation truth.
+
+## 7. Documentation Impact Gate
+
+Every core change must state exactly one outcome:
+
+- `Documentation impact: REQUIRED` — documented behavior, commands, contracts, architecture, configuration, security, storage semantics, capabilities, or limitations changed.
+- `Documentation impact: NONE — <reason>` — no documented boundary changed.
+
+Documentation is reconciled through the documentation branch workflow after implementation is verified. Documentation text must never be used to claim an unimplemented capability.
