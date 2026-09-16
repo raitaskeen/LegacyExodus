@@ -1,22 +1,24 @@
 # Parser Service
 
+> **Status:** `PARTIAL`. The current core provides a parser contract, registry, manager, and one Babel-based adapter for supported JavaScript/TypeScript/JSX/TSX syntax. Multi-language adapters, dynamically loaded parser packages, parser sandboxing, canonical IR, timeout isolation, and complete source-map/provenance coverage are `TARGET ARCHITECTURE` or `NOT IMPLEMENTED`.
+
 ## Overview
 
 Parser Service transforms discovered source artifacts into normalized structural representations for graph and knowledge construction.
 
 ## Scope
 
-- AST generation
-- parser plugins
-- language adapters
-- source mapping
-- syntax extraction
+- normalized AST generation for supported JS/TS syntax
+- parser contracts, registry, and manager
+- one Babel language adapter
+- source-location preservation where exposed by current contracts
+- downstream symbol extraction
 
 ## Purpose
 
-- Parse multi-language code safely and deterministically.
-- Produce canonical AST/IR outputs with source traceability.
-- Support extensibility via governed parser plugins.
+- Parse supported JavaScript/TypeScript syntax deterministically.
+- Produce normalized AST outputs with source locations.
+- Preserve a contract boundary for future governed parser adapters.
 
 ## Architecture
 

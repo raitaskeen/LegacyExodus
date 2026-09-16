@@ -2,6 +2,14 @@
 
 **Current-status authority:** [CURRENT_IMPLEMENTATION.md](CURRENT_IMPLEMENTATION.md)
 
+**Core integration truth:** `origin/core-foundation`
+
+**Main promotion truth:** `origin/main`
+
+**Documentation integration truth:** `origin/docs-foundation`
+
+Documentation work must inspect core source and tests with branch-qualified Git commands. The package snapshot present on a documentation branch is not automatically current implementation evidence.
+
 LegacyExodus is currently a deterministic local JavaScript/TypeScript repository-intelligence and static-analysis engine. Its longer-term mission is governed legacy modernization, but transformation and generated-system verification are not implemented.
 
 ## Current pipeline

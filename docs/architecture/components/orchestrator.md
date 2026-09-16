@@ -1,9 +1,11 @@
 # Orchestrator Component
 
+> **Status:** `PARTIAL`. The current orchestrator validates and coordinates implemented discovery and static-analysis commands, durable storage commit, synchronous post-commit delivery, and projection. Four-stage migration execution, policy authorization, retries, pause/resume, quarantine, distributed coordination, AI routing, and migration checkpoints are `TARGET ARCHITECTURE`.
+
 ## Overview
 
-The Orchestrator is the control brain of LegacyExodus.  
-It coordinates all modernization stages, enforces execution order, preserves governance, and ensures safe completion semantics.
+The Orchestrator is the current analysis workflow coordinator and the intended future control boundary for LegacyExodus.
+It presently coordinates implemented analysis stages and preserves their commit semantics.
 
 It is the single authoritative runtime coordinator between commands and stage execution:
 

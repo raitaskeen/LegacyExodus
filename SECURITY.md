@@ -29,4 +29,8 @@ LegacyExodus applies strict least-privilege principles across its execution pipe
 * **Storage Immutability (DAT-01):** Persistent and in-memory storage record payloads are recursively deep-frozen (`deepFreeze()`), ensuring complete payload immutability across nested objects, arrays, and matrices without identified residual risk within the investigated SQLite deserialization boundary.
 * **Bounded Projections:** Projections write atomically to `.discovery/` using random UUID temporary files and atomic file replacement with SHA-256 verification.
 * **Deterministic Storage:** Persistent SQLite storage runs with foreign keys enabled, WAL mode, transaction wrapping, and explicit schema compatibility validation.
-* **CI/CD Security:** All GitHub Actions workflows enforce `permissions: contents: read` by default, with scoped write permissions granted only when required for security artifact analysis.
+* **CI/CD Security:** Current implementation workflows use immutable action commit pins, least-privilege permissions, disabled checkout credential persistence, frozen Bun installs, job timeouts, and concurrency cancellation. The labeler alone receives `pull-requests: write` so it can apply labels; core verification and documentation jobs use `contents: read`.
+
+### Hosted Security Tooling Boundary
+
+CodeQL and Dependency Review are not available under the current private-repository/account configuration. The unusable historical CodeQL workflow was intentionally removed from current main/core workflow truth. This limitation does not weaken the reporting process above, and it must not be interpreted as proof that the codebase is vulnerability-free.
