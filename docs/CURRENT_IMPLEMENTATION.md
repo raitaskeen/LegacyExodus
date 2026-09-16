@@ -2,11 +2,11 @@
 
 **Documentation state:** `VERIFIED`
 
-**Synchronized against core integration truth:** `origin/core-foundation` at `9e582388dece16ec6fd8bfc1f9aab6da4f0835c7`
+**Synchronized against core integration truth:** `origin/core-foundation` at `ce36ea8f7bf551ca3a6a8ad8fb848af3ca378325`
 
-**Main promotion boundary:** `origin/main` at `b342e8d45ee9ae1a5e2d9fdb1968f6486e83f733`
+**Main promotion boundary:** `origin/main` at `05a83e0629899cb614790eee725336df295a01e3`
 
-The core branch is one verified remediation ahead of main: IA-HIGH-007 corrects conservative catch reachability for potentially throwing invocations, nested protected blocks, and thrown-finalizer edge classification. It is `VERIFIED` and core-integrated, but **not main-promoted**.
+The core branch contains three verified remediations that are not yet main-promoted: IA-HIGH-007 corrects conservative catch reachability for potentially throwing invocations, nested protected blocks, and thrown-finalizer edge classification; IA-HIGH-008 forwards documented CLI storage options into runtime configuration; and IA-CRIT-001 removes raw host infrastructure from the plugin initialization context. All three are `VERIFIED` and core-integrated, but **not main-promoted**.
 
 This page is the concise status boundary for LegacyExodus. Implementation source, executable tests, and verified runtime behavior remain authoritative if this page drifts.
 
@@ -22,7 +22,7 @@ This page is the concise status boundary for LegacyExodus. Implementation source
 - In-memory and SQLite storage providers, run-scoped queries, analysis-run atomicity, validated snapshot reuse, and deep persisted-contract validation.
 - Contained `.discovery` projections with atomic per-file replacement and integrity manifests. Durable analysis records are canonical; `.discovery` is a derived command deliverable. If fresh-run projection fails after commit, the engine rejects with `DISCOVERY_PROJECTION_FAILED_AFTER_COMMIT` and explicitly reports that the selected storage provider already committed the analysis.
 - CLI commands: `status`, `init`, `analyze`, `test`, `verify`, and `plugins list`.
-- Plugin contracts, registry, loader, and scoped context foundation.
+- Plugin contracts, registry, loader, and lifecycle hooks. The current in-process `PluginContext` is intentionally capability-empty and frozen; it exposes no raw Logger, EventBus, or StorageManager.
 
 ## Partial or conservative areas
 
@@ -33,7 +33,7 @@ This page is the concise status boundary for LegacyExodus. Implementation source
 - Fidelity evidence is sample-based and does not establish whole-repository migration safety.
 - Whole-repository bounded-memory scaling has not been universally established.
 - Multi-artifact `.discovery` publication is not one filesystem transaction. A failed projection can leave a partial or previously valid directory; manifest and workspace validation determine whether it is reusable. No public projection-only retry command is implemented.
-- Plugins are in-process instances; marketplace loading and security sandboxing are not implemented.
+- Plugins are in-process instances with ambient Bun/Node authority. Marketplace loading, permission manifests, process isolation, and filesystem/network sandboxing are not implemented. Future host interaction requires separately designed narrow capability facades.
 
 ## Not implemented
 
@@ -63,12 +63,11 @@ Record live results rather than copying historical totals into evergreen documen
 
 The synchronized core checkpoint reported:
 
-- 1,049 tests passed, 1 skipped, 0 failed; 9,550 assertions.
+- 1,053 tests passed, 1 skipped, 0 failed; 9,561 assertions.
 - Typecheck passed.
 - Benchmark governance passed 10/10.
 - Composite verification passed.
 - Three governed Express analyses produced identical results: 234 discovered, 152 analyzed, 0 failures.
-- Hosted `CI / Verify Core` and `Windows Path Smoke` checks passed.
 
 These values identify evidence for the SHA above. They must not be reused as current results after the core revision changes.
 

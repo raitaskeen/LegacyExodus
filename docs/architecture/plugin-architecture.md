@@ -1,6 +1,6 @@
 # Plugin Architecture
 
-> **Status:** `PARTIAL`. The current core implements plugin manifests, contracts, registry, loader, lifecycle hooks, and a scoped in-process context. Dynamic package discovery, marketplace distribution, process sandboxing, permission enforcement, provider plugins, migration plugins, and validator plugins are `TARGET ARCHITECTURE` and are not implemented.
+> **Status:** `PARTIAL`. At verified core checkpoint `ce36ea8`, the core implements plugin manifests, contracts, registry, loader, lifecycle hooks, and a frozen, capability-empty in-process `PluginContext`. IA-CRIT-001 is `VERIFIED` and core-integrated but **not main-promoted**. Dynamic package discovery, narrow host capability facades, permission manifests, marketplace distribution, process isolation, filesystem/network sandboxing, provider plugins, migration plugins, and validator plugins are `TARGET ARCHITECTURE` and are not implemented.
 
 ## Overview
 
@@ -16,7 +16,7 @@ The answer is a **stable-core, contract-first extension model**:
 - The core pipeline remains minimal, deterministic, and governed.
 - New capabilities are introduced through plugins that implement explicit contracts.
 - Future third-party plugins are intended to be isolated, permissioned, and audited; the current loader initializes supplied in-process plugin instances.
-- No plugin can bypass trust boundaries, policy enforcement, or verification gates.
+- The current initialization context is frozen and exposes no raw Logger, EventBus, StorageManager, service container, or other host capability. This containment is not a process or ambient-runtime sandbox.
 
 LegacyExodus plugin architecture is aligned to the pipeline:
 
@@ -29,23 +29,25 @@ LegacyExodus plugin architecture is aligned to the pipeline:
 
 ## 1) Plugin Philosophy
 
-### Core Principles
+### Target Principles
+
+The principles below describe the target plugin architecture. Current plugins execute in-process with a capability-empty initialization context; they are not sandboxed from ambient Bun/Node authority.
 
 1. **Stable core must remain stable**
    - Core orchestration, trust boundaries, policy engine, and audit model are not modified by plugins at runtime.
    - Core behavior changes only through controlled platform releases.
 
 2. **Extensions must be isolated**
-   - Plugins execute in controlled runtimes (sandboxed where required).
-   - Failures in plugins should degrade gracefully and never corrupt core state.
+   - Target: plugins execute in controlled runtimes with sandboxing where required.
+   - Target: failures degrade gracefully without corrupting core state.
 
 3. **Plugins communicate through contracts**
    - Typed input/output schemas define every integration point.
    - Versioned contracts prevent hidden coupling and breaking behavior.
 
 4. **Plugins cannot bypass governance**
-   - Policy checks, provenance rules, and validation gates remain mandatory.
-   - Plugins are subject to permission scopes, resource controls, and audit logging.
+   - Target: policy checks, provenance rules, and validation gates remain mandatory.
+   - Target: plugins are subject to permission scopes, resource controls, and audit logging.
 
 ### Architecture Principle
 
@@ -155,7 +157,13 @@ LegacyExodus supports official plugin categories. Each type extends capability w
 
 ## 3) Plugin Lifecycle
 
-Every plugin follows a controlled lifecycle.
+### Current verified lifecycle
+
+The current loader validates the four-field manifest, registers the supplied in-process plugin instance, and invokes `initialize()` with one shared frozen, capability-empty context. If initialization fails, registration is rolled back. Runtime shutdown invokes registered plugins' `shutdown()` hooks. Activation policy, package discovery, permissions, execution isolation, and audit retention are not implemented.
+
+### Target lifecycle
+
+The following controlled lifecycle is `TARGET ARCHITECTURE`:
 
 ```text
 Plugin Created
@@ -176,7 +184,7 @@ Plugin Executed
 Plugin Audited
 ```
 
-### Lifecycle Stages (Normative)
+### Target Lifecycle Stages
 
 1. **Plugin Created**
    - Plugin package and manifest produced.
@@ -207,7 +215,13 @@ Plugin Audited
 
 ## 4) Plugin Contract
 
-All plugins **MUST** expose a machine-readable contract with, at minimum:
+### Current verified contract
+
+The current `PluginManifest` contains only `id`, `name`, `version`, and `type`. The current `PluginContext` contains no host capability. Capability declarations, configuration schemas, input/output schemas, security permissions, runtime requirements, and contract-version negotiation are not implemented.
+
+### Target contract
+
+Future plugins are intended to expose a machine-readable contract with, at minimum:
 
 - **Metadata**
 - **Configuration**
@@ -265,7 +279,17 @@ All plugins **MUST** expose a machine-readable contract with, at minimum:
 
 Plugin security is mandatory because plugins may process unknown/untrusted legacy content or enterprise-sensitive metadata.
 
-### Security Model
+### Current verified boundary
+
+- Plugins execute in-process.
+- `PluginContext` is frozen and capability-empty.
+- Raw Logger, EventBus, and StorageManager instances are not exposed through the context.
+- Current in-repository plugins require no host capability.
+- Ambient Bun/Node authority remains available to in-process plugin code.
+- Permission manifests, process isolation, filesystem/network sandboxing, resource quotas, and external-plugin trust enforcement are not implemented.
+- Any future host interaction requires separately designed, narrow, typed capability facades; raw infrastructure must not be restored for convenience.
+
+### Target security model
 
 ```text
 External Plugin
@@ -280,7 +304,7 @@ Plugin Runtime
 LegacyExodus Core
 ```
 
-### Required Controls
+### Target Controls
 
 1. **Sandbox execution**
    - Untrusted or third-party plugins execute in isolated runtime boundaries.
@@ -303,7 +327,7 @@ LegacyExodus Core
    - Plugins cannot directly invoke protected core internals.
    - AI-provider plugins must route through the AI Gateway and policy checks.
 
-### Security Non-Negotiables
+### Target Security Non-Negotiables
 
 - No plugin may bypass provenance requirements.
 - No plugin may bypass policy decisions (`allow/deny/quarantine`).
@@ -313,20 +337,20 @@ LegacyExodus Core
 
 ## 6) Plugin Communication
 
-Plugins communicate only through approved integration channels:
+Current plugins receive no host communication capability through `PluginContext`. The following channels are `TARGET ARCHITECTURE` and require separately designed narrow facades:
 
 - **Events** (typed stage events)
 - **Contracts** (schema-defined I/O)
 - **APIs** (versioned, permission-scoped interfaces)
 
-### Explicitly Not Allowed
+### Target Prohibitions
 
 - Direct modification of core engine internals
 - Hidden dependencies on internal/private core state
 - Out-of-band side effects without audit/event emission
 - Undeclared network callbacks or uncontrolled IPC paths
 
-### Communication Design Rules
+### Target Communication Design Rules
 
 1. All plugin I/O must be schema validated.
 2. All plugin calls must include provenance context.
@@ -335,7 +359,7 @@ Plugins communicate only through approved integration channels:
 
 ---
 
-## 7) Compatibility and Versioning
+## 7) Target Compatibility and Versioning
 
 ### Versioning Strategy
 
@@ -357,9 +381,9 @@ Plugins communicate only through approved integration channels:
 
 ---
 
-## 8) Governance and Auditability
+## 8) Target Governance and Auditability
 
-Every plugin action must be attributable and reviewable.
+The target architecture requires every plugin action to be attributable and reviewable.
 
 ### Minimum Audit Data
 
@@ -387,5 +411,4 @@ Every plugin action must be attributable and reviewable.
 
 **How can LegacyExodus add new capabilities without breaking the platform?**
 
-By enforcing a **stable core + strict plugin contracts + sandboxed execution + policy-governed activation + mandatory auditing** model.  
-This allows capability expansion while preserving safety, determinism, and enterprise trust.
+The current verified foundation provides a stable core, validated manifests, deterministic registration/lifecycle behavior, and a capability-empty initialization boundary. The target model adds narrow capability facades, sandboxed execution, policy-governed activation, and mandatory auditing. Those future controls are not implemented today.
