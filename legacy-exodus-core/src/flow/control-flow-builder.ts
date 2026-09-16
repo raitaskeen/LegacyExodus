@@ -6,7 +6,16 @@ import { ControlFlowInvariantError } from "./flow-errors";
 interface MutableBlock { readonly id: string; readonly statements: ControlFlowNode[]; terminator?: string; }
 interface LabelTarget { readonly breakTarget: string; readonly continueTarget?: string; readonly breakFinalizerTarget?: string; readonly continueFinalizerTarget?: string; }
 interface PendingLabelFinalizer { readonly label: string; readonly target: LabelTarget; readonly breakFinalizer?: string; readonly continueFinalizer?: string; }
-interface ControlContext { readonly breakTarget?: string; readonly continueTarget?: string; readonly breakFinalizerTarget?: string; readonly continueFinalizerTarget?: string; readonly exceptionTarget?: string; readonly returnTarget?: string; readonly labels?: ReadonlyMap<string, LabelTarget>; }
+interface ControlContext {
+  readonly breakTarget?: string;
+  readonly continueTarget?: string;
+  readonly breakFinalizerTarget?: string;
+  readonly continueFinalizerTarget?: string;
+  readonly exceptionTarget?: string;
+  readonly potentialExceptionTarget?: string;
+  readonly returnTarget?: string;
+  readonly labels?: ReadonlyMap<string, LabelTarget>;
+}
 
 export class DeterministicControlFlowGraphBuilder {
   public build(ast: ASTResult): ControlFlowGraph {
@@ -51,6 +60,9 @@ class FlowState {
     let terminated = false;
     for (const node of nodes) {
       if (isFunction(node)) continue;
+      if (control?.potentialExceptionTarget !== undefined && hasPotentiallyThrowingEvaluation(node)) {
+        this.addEdge(block, control.potentialExceptionTarget, "exception");
+      }
       if (isTerminator(node)) {
         this.addNode(block, node);
         this.block(block).terminator = node.type;
@@ -92,6 +104,7 @@ class FlowState {
     const handler = node.children.find((child) => child.role === "handler");
     const finalizer = node.children.find((child) => child.role === "finalizer");
     const outerExceptionTarget = control?.exceptionTarget ?? exit;
+    const outerPotentialExceptionTarget = control?.potentialExceptionTarget;
     const outerReturnTarget = control?.returnTarget ?? exit;
     const outerBreakTarget = control?.breakTarget;
     const outerContinueTarget = control?.continueTarget;
@@ -116,6 +129,11 @@ class FlowState {
     const protectedControl: ControlContext = {
       ...control,
       exceptionTarget: catchBlock ?? thrownFinalizer ?? outerExceptionTarget,
+      potentialExceptionTarget: catchBlock ?? (
+        finalizer === undefined
+          ? outerPotentialExceptionTarget
+          : outerPotentialExceptionTarget === undefined ? undefined : thrownFinalizer
+      ),
       returnTarget: returnedFinalizer ?? outerReturnTarget,
       ...(protectedLabels === undefined ? {} : { labels: protectedLabels }),
       ...(brokenFinalizer === undefined ? {} : { breakFinalizerTarget: brokenFinalizer }),
@@ -125,7 +143,10 @@ class FlowState {
     const tryLast = this.buildStatements(body === undefined ? [] : statementChildren(body), tryBlock, normalFinalizer, protectedControl);
     if (finalizer !== undefined) {
       this.retagCompletionEdge(tryLast, normalFinalizer, "next", "finally");
-      if (catchBlock === undefined) this.retagIncomingEdges(thrownFinalizer, "throw", "finally");
+      if (catchBlock === undefined) {
+        this.retagIncomingEdges(thrownFinalizer, "throw", "finally");
+        this.retagIncomingEdges(thrownFinalizer, "exception", "finally");
+      }
       this.retagIncomingEdges(returnedFinalizer as string, "return", "finally");
       this.retagIncomingEdges(brokenFinalizer, "break", "finally");
       this.retagIncomingEdges(continuedFinalizer, "continue", "finally");
@@ -138,10 +159,14 @@ class FlowState {
       const catchLast = this.buildStatements(catchStatements(handler), catchBlock, normalFinalizer, {
         ...protectedControl,
         exceptionTarget: thrownFinalizer ?? outerExceptionTarget,
+        potentialExceptionTarget: finalizer === undefined
+          ? outerPotentialExceptionTarget
+          : outerPotentialExceptionTarget === undefined ? undefined : thrownFinalizer,
       });
       if (finalizer !== undefined) {
         this.retagCompletionEdge(catchLast, normalFinalizer, "next", "finally");
         this.retagIncomingEdges(thrownFinalizer as string, "throw", "finally");
+        this.retagIncomingEdges(thrownFinalizer as string, "exception", "finally");
         this.retagIncomingEdges(returnedFinalizer as string, "return", "finally");
         this.retagIncomingEdges(brokenFinalizer, "break", "finally");
         this.retagIncomingEdges(continuedFinalizer, "continue", "finally");
@@ -390,6 +415,25 @@ function hasUnsupportedExpressionControl(nodes: readonly ASTNode[]): boolean {
     return node.children.some(visit);
   };
   return nodes.some(visit);
+}
+function hasPotentiallyThrowingEvaluation(node: ASTNode): boolean {
+  if (isFunction(node) || node.type === "ThrowStatement") return false;
+  if (["CallExpression", "NewExpression", "OptionalCallExpression"].includes(node.type)) return true;
+  if (["Program", "CatchClause", "TryStatement", "LabeledStatement", "SwitchCase"].includes(node.type)) return false;
+  if (node.type === "IfStatement") {
+    return node.children.filter((child) => child.role === "test").some(hasPotentiallyThrowingEvaluation);
+  }
+  if (["WhileStatement", "DoWhileStatement", "ForStatement", "ForInStatement", "ForOfStatement"].includes(node.type)) {
+    return node.children.filter((child) => child.role !== "body").some(hasPotentiallyThrowingEvaluation);
+  }
+  if (node.type === "SwitchStatement") {
+    return node.children.some((child) => {
+      if (child.role === "discriminant") return hasPotentiallyThrowingEvaluation(child);
+      if (child.role !== "cases") return false;
+      return child.children.filter((candidate) => candidate.role === "test").some(hasPotentiallyThrowingEvaluation);
+    });
+  }
+  return node.children.some(hasPotentiallyThrowingEvaluation);
 }
 function isTerminator(node: ASTNode): boolean { return node.type === "ReturnStatement" || node.type === "ThrowStatement"; }
 function isLoop(node: ASTNode): boolean { return ["WhileStatement", "DoWhileStatement", "ForStatement", "ForInStatement", "ForOfStatement"].includes(node.type); }
