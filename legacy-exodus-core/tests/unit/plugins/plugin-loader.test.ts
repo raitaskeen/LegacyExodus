@@ -1,32 +1,16 @@
 import { describe, expect, test } from "bun:test";
 
-import { EventBus } from "@core/events/event-bus";
 import {
   InvalidPluginManifestError,
   PluginLoader,
   PluginRegistry,
   type LegacyExodusPlugin,
 } from "@plugins/index";
-import { createLogger } from "@shared/logger";
-import { MemoryStorageProvider, StorageManager } from "@storage/index";
-
-function createContext(): {
-  readonly eventBus: EventBus;
-  readonly logger: ReturnType<typeof createLogger>;
-  readonly storage: StorageManager;
-} {
-  return {
-    eventBus: new EventBus(),
-    logger: createLogger({ environment: "test", logLevel: "silent", storageDriver: "memory" }, "plugin-test"),
-    storage: new StorageManager(new MemoryStorageProvider()),
-  };
-}
 
 describe("PluginLoader", () => {
   test("validates, registers, and initializes a plugin", async (): Promise<void> => {
     const registry = new PluginRegistry();
-    const context = createContext();
-    const loader = new PluginLoader(registry, context);
+    const loader = new PluginLoader(registry);
     let receivedContext: unknown;
     const plugin: LegacyExodusPlugin = {
       id: "valid-plugin",
@@ -42,12 +26,13 @@ describe("PluginLoader", () => {
     await loader.load(plugin);
 
     expect(registry.get(plugin.id)).toBe(plugin);
-    expect(receivedContext).toBe(context);
+    expect(receivedContext).toEqual({});
+    expect(Object.isFrozen(receivedContext)).toBe(true);
   });
 
   test("rejects invalid manifests before initialization", async (): Promise<void> => {
     const registry = new PluginRegistry();
-    const loader = new PluginLoader(registry, createContext());
+    const loader = new PluginLoader(registry);
     let initialized = false;
     const plugin: LegacyExodusPlugin = {
       id: "",

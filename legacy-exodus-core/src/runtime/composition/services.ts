@@ -39,7 +39,7 @@ export function createEngineContext(
   const parserRegistry = new ParserRegistry();
   parserRegistry.register(new JavaScriptParser());
   const parserManager = new ParserManager(parserRegistry);
-  const pluginLoader = new PluginLoader(plugins, { logger, eventBus, storage });
+  const pluginLoader = new PluginLoader(plugins);
   const runtime = new ApplicationRuntime(config, logger, storage, plugins, pluginLoader);
   runtime.registerService(discoveryProjection);
   const orchestrator = new Orchestrator(
