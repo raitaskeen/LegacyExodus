@@ -37,10 +37,9 @@ export class DeterministicSemanticAnalysisEngine {
     readonly httpCalls: readonly { readonly routes: readonly ExpressRoute[]; readonly middlewareChains: readonly MiddlewareChain[] }[];
   }): SemanticAnalysis {
     const referencedSymbolIds = new Set(params.references.flatMap((reference) => reference.resolvedSymbolId === undefined ? [] : [reference.resolvedSymbolId]));
-    const importedIds = new Set(params.dependencyGraph.edges.map((edge) => edge.importSymbolId));
     const exportedIds = new Set(params.dependencyGraph.edges.map((edge) => edge.targetExportSymbolId));
     const scopes = params.symbolTables.map((table) => createScope(table.filePath, table.symbols.map((symbol) => symbol.name), params.references.filter((reference) => reference.filePath === table.filePath).map((reference) => reference.name)));
-    const unusedImports = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => symbol.kind === "import" && !importedIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unused-import")));
+    const unusedImports = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => isLexicalImportBinding(symbol) && !referencedSymbolIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unused-import")));
     const unusedExports = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => symbol.kind === "export" && !exportedIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unused-export")));
     const deadCode = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => ["function", "method", "class", "variable"].includes(symbol.kind) && !symbol.exported && !referencedSymbolIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unreferenced-local-symbol")));
 
@@ -56,6 +55,11 @@ export class DeterministicSemanticAnalysisEngine {
       middlewareChains: params.httpCalls.flatMap((analysis) => analysis.middlewareChains),
     });
   }
+}
+
+function isLexicalImportBinding(symbol: SymbolTable["symbols"][number]): boolean {
+  return symbol.kind === "import"
+    && (symbol.defaultExport || symbol.sourceSymbolName !== undefined || symbol.name !== symbol.moduleSpecifier);
 }
 
 function createScope(filePath: string, declaredSymbols: readonly string[], referencedNames: readonly string[]): ScopeAnalysis {
