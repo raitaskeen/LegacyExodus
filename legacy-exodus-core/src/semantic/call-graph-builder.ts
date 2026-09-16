@@ -40,7 +40,8 @@ export class DeterministicCallGraphBuilder {
     };
     predeclareScopeBindings(ast.root, initialContext);
     const boundCallees = new Set<ASTNode>();
-    this.visit(ast.root, ast, initialContext, tablesByPath, importsByFile, targetByImportId, calls, references, boundCallees);
+    const lexicalBindings = createLexicalBindingIndex(tablesByPath.get(canonicalizePath(ast.metadata.sourcePath)));
+    this.visit(ast.root, ast, initialContext, tablesByPath, importsByFile, targetByImportId, calls, references, boundCallees, lexicalBindings, undefined, false);
   }
 
   private visit(
@@ -53,6 +54,9 @@ export class DeterministicCallGraphBuilder {
     calls: SemanticCall[],
     references: SymbolReference[],
     boundCallees: Set<ASTNode>,
+    lexicalBindings: LexicalBindingIndex,
+    parent: ASTNode | undefined,
+    bindingPosition: boolean,
   ): void {
     const canonicalSourcePath = canonicalizePath(ast.metadata.sourcePath);
     const table = tablesByPath.get(canonicalSourcePath);
@@ -99,11 +103,42 @@ export class DeterministicCallGraphBuilder {
       }
     }
 
+    if (!bindingPosition && isLexicalReference(node, parent)) {
+      const name = identifier(node);
+      const importedBinding = name === undefined ? undefined : resolveImportBinding(lexicalBindings, name, nextContext.scope);
+      if (name !== undefined && importedBinding !== undefined) {
+        const location = node.location?.start;
+        references.push({
+          id: hash(`identifier-reference:${ast.metadata.sourcePath}:${importedBinding.id}:${location?.line ?? 0}:${location?.column ?? 0}`),
+          filePath: ast.metadata.sourcePath,
+          name,
+          kind: "identifier",
+          resolutionState: "RESOLVED",
+          resolvedSymbolId: importedBinding.id,
+        });
+      }
+    }
+
     for (const child of node.children) {
-      this.visit(child, ast, nextContext, tablesByPath, importsByFile, targetByImportId, calls, references, boundCallees);
+      this.visit(
+        child,
+        ast,
+        nextContext,
+        tablesByPath,
+        importsByFile,
+        targetByImportId,
+        calls,
+        references,
+        boundCallees,
+        lexicalBindings,
+        node,
+        isBindingPosition(node, child, bindingPosition),
+      );
     }
   }
 }
+
+type LexicalBindingIndex = ReadonlyMap<string, readonly CodeSymbol[]>;
 
 interface ScopeFrame {
   readonly id: string;
@@ -121,6 +156,68 @@ interface ResolutionContext {
 
 function createScope(id: string, parent?: ScopeFrame): ScopeFrame {
   return Object.freeze(parent === undefined ? { id } : { id, parent });
+}
+
+function createLexicalBindingIndex(table: SymbolTable | undefined): LexicalBindingIndex {
+  const bindings = new Map<string, CodeSymbol[]>();
+  for (const symbol of table?.symbols ?? []) {
+    if (symbol.scopeId === undefined || !["class", "function", "import", "variable"].includes(symbol.kind)) continue;
+    const key = lexicalBindingKey(symbol.scopeId, symbol.name);
+    const candidates = bindings.get(key) ?? [];
+    candidates.push(symbol);
+    bindings.set(key, candidates);
+  }
+  return bindings;
+}
+
+function resolveImportBinding(bindings: LexicalBindingIndex, name: string, scope: ScopeFrame): CodeSymbol | undefined {
+  for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
+    const candidates = bindings.get(lexicalBindingKey(current.id, name)) ?? [];
+    if (candidates.length === 0) continue;
+    const imports = candidates.filter((symbol) => symbol.kind === "import");
+    if (imports.length !== 1) return undefined;
+    const imported = imports[0];
+    if (imported === undefined) return undefined;
+    const conflictingDeclaration = candidates.some(
+      (symbol) => symbol.kind !== "import" && !sameDeclaration(symbol, imported),
+    );
+    return conflictingDeclaration ? undefined : imported;
+  }
+  return undefined;
+}
+
+function sameDeclaration(left: CodeSymbol, right: CodeSymbol): boolean {
+  return left.location !== undefined
+    && right.location !== undefined
+    && left.location.start.line === right.location.start.line
+    && left.location.start.column === right.location.start.column;
+}
+
+function lexicalBindingKey(scopeId: string, name: string): string {
+  return `${scopeId}\u0000${name}`;
+}
+
+function isLexicalReference(node: ASTNode, parent: ASTNode | undefined): boolean {
+  if (node.type !== "Identifier" && node.type !== "JSXIdentifier") return false;
+  if (parent === undefined) return true;
+  if (["ImportSpecifier", "ImportDefaultSpecifier", "ImportNamespaceSpecifier", "ExportSpecifier", "ExportNamespaceSpecifier"].includes(parent.type)) return false;
+  if (["LabeledStatement", "BreakStatement", "ContinueStatement", "JSXAttribute"].includes(parent.type)) return false;
+  if ((parent.type === "MemberExpression" || parent.type === "OptionalMemberExpression") && node.role === "property" && parent.attributes.computed !== true) return false;
+  if (["ClassMethod", "ClassPrivateMethod", "ObjectMethod", "ClassProperty", "ClassPrivateProperty", "PropertyDefinition", "ClassAccessorProperty", "ObjectProperty"].includes(parent.type) && node.role === "key" && parent.attributes.computed !== true) return false;
+  return true;
+}
+
+function isBindingPosition(parent: ASTNode, child: ASTNode, parentIsBinding: boolean): boolean {
+  if (["ImportSpecifier", "ImportDefaultSpecifier", "ImportNamespaceSpecifier"].includes(parent.type)) return true;
+  if (["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ClassPrivateMethod", "ObjectMethod"].includes(parent.type)) {
+    return child.role === "id" || child.role === "param" || child.role === "params";
+  }
+  if ((parent.type === "ClassDeclaration" || parent.type === "ClassExpression" || parent.type === "VariableDeclarator") && child.role === "id") return true;
+  if (parent.type === "CatchClause" && child.role === "param") return true;
+  if (!parentIsBinding) return false;
+  if (parent.type === "AssignmentPattern") return child.role === "left";
+  if (parent.type === "ObjectProperty") return child.role === "value";
+  return ["ArrayPattern", "ObjectPattern", "RestElement"].includes(parent.type);
 }
 
 function extractMemberContainerAndMethod(node: ASTNode, context: ResolutionContext): { containerName?: string; methodName?: string } {
