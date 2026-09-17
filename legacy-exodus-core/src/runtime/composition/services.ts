@@ -64,6 +64,20 @@ export function createEngineContext(
         "Post-commit event delivery failed",
       );
     },
+    undefined,
+    (failure) => {
+      logger.error(
+        {
+          analysisRunId: failure.analysisRunId,
+          ...(failure.error instanceof Error
+            ? { err: failure.error }
+            : { error: String(failure.error) }),
+          projectId: failure.projectId,
+          stage: failure.stage,
+        },
+        "Run-scoped AST cleanup failed",
+      );
+    },
   );
   runtime.registerService(orchestrator);
 

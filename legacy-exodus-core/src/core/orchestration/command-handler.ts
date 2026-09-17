@@ -27,6 +27,7 @@ import { ParserManager, type ASTResult } from "@parser/index";
 import { DeterministicCallGraphBuilder, DeterministicSemanticAnalysisEngine, findHttpCalls, type ExpressRoute, type MiddlewareChain, type SemanticCall, type SymbolReference } from "@semantic/index";
 import { createStorageRecord, type StorageRecord } from "@storage/index";
 import { JavaScriptSymbolExtractor, validateCodeSymbols, type CodeSymbol, type SymbolTable } from "@symbols/index";
+import { RunScopedAstStore, type AnalysisAstStoreFactory } from "./run-scoped-ast-store";
 
 export interface CommandExecution {
   readonly events: readonly DomainEvent[];
@@ -34,6 +35,12 @@ export interface CommandExecution {
   readonly discovery?: DiscoveryResult;
   readonly analysis?: AnalysisSummary;
   readonly isReused?: boolean;
+}
+
+export interface AstStoreCleanupFailure {
+  readonly projectId: string;
+  readonly analysisRunId: string;
+  readonly error: unknown;
 }
 
 export class InitializeProjectHandler {
@@ -82,14 +89,22 @@ export class UpdateKnowledgeHandler {
 }
 
 export class AnalyzeProjectHandler {
+  private astStoreCleanupFailures: AstStoreCleanupFailure[] = [];
+
   public constructor(
     private readonly discoveryEngine: DiscoveryEngine,
     private readonly parserManager: ParserManager,
     private readonly symbolExtractor: JavaScriptSymbolExtractor,
     private readonly discoveryValidator: DiscoveryValidator = new DiscoveryValidator(),
+    private readonly astStoreFactory: AnalysisAstStoreFactory = () => RunScopedAstStore.create(),
   ) {}
 
+  public getAstStoreCleanupFailures(): readonly AstStoreCleanupFailure[] {
+    return Object.freeze([...this.astStoreCleanupFailures]);
+  }
+
   public async handle(command: AnalyzeProjectCommand): Promise<CommandExecution> {
+    this.astStoreCleanupFailures = [];
     const startedAt = performance.now();
 
     if (!command.payload.refresh) {
@@ -358,96 +373,98 @@ export class AnalyzeProjectHandler {
     const records: StorageRecord[] = [record];
     const symbolTables: SymbolTable[] = [];
     const successfullyParsedFiles: FileArtifact[] = [];
+    const astStore = await this.astStoreFactory();
 
-    for (const file of discovery.files) {
-      if (file.language !== "javascript" && file.language !== "typescript") {
-        continue;
-      }
+    try {
+      for (const file of discovery.files) {
+        if (file.language !== "javascript" && file.language !== "typescript") {
+          continue;
+        }
 
-      let ast: ASTResult;
-      try {
-        ast = await this.parserManager.parse({
-          file,
-          source: await readFile(resolve(discovery.projectPath, file.path), "utf8"),
-        });
-      } catch (error: unknown) {
-        events.push(createDomainEvent({
-          type: "ParserFailure",
-          aggregateId: discovery.projectId,
-          payload: { fileId: file.id, path: file.path, code: getErrorCode(error, "PARSER_FAILURE") },
-        }));
-        continue;
-      }
-      if (ast.errors.length > 0) {
-        events.push(createDomainEvent({
-          type: "ParserFailure",
-          aggregateId: discovery.projectId,
-          payload: { fileId: file.id, path: file.path, code: ast.errors[0]?.code ?? "PARSER_FAILURE" },
-        }));
-        continue;
-      }
-      records.push(
-        createStorageRecord("ast-result", {
-          fileId: file.id,
-          path: file.path,
-          projectId: discovery.projectId,
-          analysisRunId: command.id,
-          parserId: ast.metadata.parserId,
-          nodeCount: ast.statistics.nodeCount,
-          errorCount: ast.errors.length,
-        }),
-      );
-      events.push(
-        createDomainEvent({
-          type: "FileParsed",
-          aggregateId: discovery.projectId,
-          payload: {
+        let ast: ASTResult;
+        try {
+          ast = await this.parserManager.parse({
+            file,
+            source: await readFile(resolve(discovery.projectPath, file.path), "utf8"),
+          });
+        } catch (error: unknown) {
+          events.push(createDomainEvent({
+            type: "ParserFailure",
+            aggregateId: discovery.projectId,
+            payload: { fileId: file.id, path: file.path, code: getErrorCode(error, "PARSER_FAILURE") },
+          }));
+          continue;
+        }
+        if (ast.errors.length > 0) {
+          events.push(createDomainEvent({
+            type: "ParserFailure",
+            aggregateId: discovery.projectId,
+            payload: { fileId: file.id, path: file.path, code: ast.errors[0]?.code ?? "PARSER_FAILURE" },
+          }));
+          continue;
+        }
+        records.push(
+          createStorageRecord("ast-result", {
             fileId: file.id,
             path: file.path,
+            projectId: discovery.projectId,
+            analysisRunId: command.id,
             parserId: ast.metadata.parserId,
             nodeCount: ast.statistics.nodeCount,
             errorCount: ast.errors.length,
-          },
-        }),
-      );
+          }),
+        );
+        events.push(
+          createDomainEvent({
+            type: "FileParsed",
+            aggregateId: discovery.projectId,
+            payload: {
+              fileId: file.id,
+              path: file.path,
+              parserId: ast.metadata.parserId,
+              nodeCount: ast.statistics.nodeCount,
+              errorCount: ast.errors.length,
+            },
+          }),
+        );
 
-      let table: SymbolTable;
-      try {
-        table = this.symbolExtractor.extract(ast);
-      } catch (error: unknown) {
-        events.push(createDomainEvent({
-          type: "SymbolsExtractionFailure",
-          aggregateId: discovery.projectId,
-          payload: { fileId: file.id, path: file.path, code: getErrorCode(error, "SYMBOL_EXTRACTION_FAILED") },
-        }));
-        continue;
+        let table: SymbolTable;
+        try {
+          table = this.symbolExtractor.extract(ast);
+        } catch (error: unknown) {
+          events.push(createDomainEvent({
+            type: "SymbolsExtractionFailure",
+            aggregateId: discovery.projectId,
+            payload: { fileId: file.id, path: file.path, code: getErrorCode(error, "SYMBOL_EXTRACTION_FAILED") },
+          }));
+          continue;
+        }
+        await astStore.write(ast);
+        successfullyParsedFiles.push(file);
+        symbolTables.push(table);
+        records.push(
+          createStorageRecord("symbol-table", {
+            fileId: file.id,
+            path: file.path,
+            projectId: discovery.projectId,
+            analysisRunId: command.id,
+            symbolCount: table.symbols.length,
+            classes: table.summary.classes,
+            functions: table.summary.functions,
+            imports: table.summary.imports,
+            exports: table.summary.exports,
+            symbols: table.symbols,
+          }),
+        );
+        events.push(
+          createDomainEvent({
+            type: "SymbolsExtracted",
+            aggregateId: discovery.projectId,
+            payload: { fileId: file.id, path: file.path, symbolCount: table.symbols.length },
+          }),
+        );
       }
-      successfullyParsedFiles.push(file);
-      symbolTables.push(table);
-      records.push(
-        createStorageRecord("symbol-table", {
-          fileId: file.id,
-          path: file.path,
-          projectId: discovery.projectId,
-          analysisRunId: command.id,
-          symbolCount: table.symbols.length,
-          classes: table.summary.classes,
-          functions: table.summary.functions,
-          imports: table.summary.imports,
-          exports: table.summary.exports,
-          symbols: table.symbols,
-        }),
-      );
-      events.push(
-        createDomainEvent({
-          type: "SymbolsExtracted",
-          aggregateId: discovery.projectId,
-          payload: { fileId: file.id, path: file.path, symbolCount: table.symbols.length },
-        }),
-      );
-    }
 
-    try {
       const dependencyGraph = new DeterministicDependencyGraphBuilder(
         new ModuleResolver(await readPathAliases(discovery.projectPath)),
       ).build(symbolTables, discovery.files);
@@ -479,11 +496,9 @@ export class AnalyzeProjectHandler {
       const completedFiles: FileArtifact[] = [];
 
       for (const file of sortedFiles) {
-        let source: string;
         let ast: ASTResult | undefined;
         try {
-          source = await readFile(resolve(discovery.projectPath, file.path), "utf8");
-          ast = await this.parserManager.parse({ file, source });
+          ast = await astStore.read(file.path);
         } catch (error: unknown) {
           events.push(createDomainEvent({
             type: "ParserFailure",
@@ -688,6 +703,16 @@ export class AnalyzeProjectHandler {
         records: Object.freeze(failedRecords),
         discovery,
       };
+    } finally {
+      try {
+        await astStore.dispose();
+      } catch (error: unknown) {
+        this.astStoreCleanupFailures.push(Object.freeze({
+          projectId: discovery.projectId,
+          analysisRunId: command.id,
+          error,
+        }));
+      }
     }
   }
 }
