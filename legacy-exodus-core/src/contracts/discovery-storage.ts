@@ -36,6 +36,15 @@ export const discoveryPayloadSchema = z.object({
       }),
     )
     .optional(),
+  manifestFailures: z
+    .array(
+      z.object({
+        path: z.literal("package.json"),
+        kind: z.enum(["manifest-read", "manifest-parse", "manifest-validation"]),
+        code: z.string().min(1),
+      }),
+    )
+    .optional(),
   discoveredAt: z.string().datetime(),
 });
 
