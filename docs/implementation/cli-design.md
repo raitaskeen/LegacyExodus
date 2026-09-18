@@ -69,20 +69,24 @@ The CLI presentation layer (`src/cli/presentation/`) provides reusable UI primit
 - Formats test execution results from Bun with domain highlights, assertion counts, execution duration, and failure diagnostic cards.
 - Supports `-v, --verbose` for detailed per-test traces without terminal flooding in default runs.
 
+### 2.5 Summary Presenter (`summaries.ts`)
+- Formats structured command summaries for `analyze`, `status`, `init`, and `plugins`.
+- Applies deterministic status classification (`isCleanAnalyzeReport`), faithfully distinguishing clean analysis success from degraded execution with isolated non-fatal faults.
+
 ---
 
 ## 3. Error Boundary Architecture
 
 The CLI wraps all command executions in error boundaries (`src/cli/errors.ts`):
-* **Domain Error Mapping:** Translates `LegacyExodusError` subclasses into structured codes and remediation guidance.
-* **Format-Aware Presentation:** Emits styled cards in interactive TTY mode and clean plain text in CI / non-TTY environments.
+* **Domain Error Mapping:** Translates `LegacyExodusError` and `CliError` subclasses into structured codes and actionable remediation hints via `extractErrorDetails` and `toCliErrorResponse`.
+* **Format-Aware Presentation:** Emits styled cards with metadata, context, target path, run ID, and hints in interactive TTY mode (`ErrorPresenter.renderError`), and clean plain text in CI / non-TTY environments.
 * **JSON Purity:** When `--json` is active, errors emit structured JSON objects with exit code `1`.
-* **Zero Stack Trace Leakage:** Internal stack traces are suppressed in production mode to prevent terminal clutter.
+* **Zero Stack Trace Leakage:** Internal stack traces are suppressed in production mode to prevent terminal clutter and avoid leaking sensitive environment paths.
 
 ---
 
 ## 4. Implementation Evidence
 
-* **Source Location:** [`src/cli/`](../../legacy-exodus-core/src/cli).
-* **Test Suites:** 14 unit test files in `tests/unit/cli/` (89 tests, 417 assertions).
+* **Source Location:** `legacy-exodus-core/src/cli/`.
+* **Test Suites:** Dedicated CLI unit and integration suites in `legacy-exodus-core/tests/unit/cli/` (covering commands, presentation primitives, terminal capabilities, error boundaries, shell layout, and analysis presentation integrity).
 * **Related Documentation:** **[CLI Commands Reference](../development/cli/commands.md)**, **[CLI Configuration](../development/cli/configuration.md)**.

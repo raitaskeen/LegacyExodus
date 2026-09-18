@@ -81,6 +81,30 @@ legacy-exodus analyze ./repo --refresh
 legacy-exodus analyze ./repo --storage-path ./exodus.db
 ```
 
+### Presentation & Output Modes
+
+The `analyze` command provides deterministic reporting across three presentation modes:
+
+1. **Interactive TTY Mode (default in interactive terminals):**
+   - Renders formatted summary cards (`Project Overview`, `Artifact Breakdown`, `Quality & Performance`) and a final status banner.
+   - **Clean Analysis Banner:** Displays `✓ Analysis and graph persistence completed successfully.` when discovery completed cleanly with zero parser failures, zero symbol extraction failures, and zero enumeration failures.
+   - **Degraded Analysis Banner:** Displays `⚠ Analysis completed with isolated non-fatal faults.` whenever non-fatal faults occur (parser failures > 0, symbol extraction failures > 0, enumeration failures > 0, or incomplete discovery).
+   - Prominently surfaces exact failure counts in the `Quality & Performance` card (`N ISOLATED` or `N FAULTS`).
+
+2. **Plain / CI Mode (non-TTY, `CI=true`, or `NO_COLOR`):**
+   - Renders a plain-text summary header: `"Discovery completed"` for clean runs, or `"Analysis completed with isolated non-fatal faults"` for degraded runs.
+   - Outputs line-by-line metrics including `Files analyzed`, `Parser failures`, `Symbol extraction failures`, `Enumeration failures`, and `Discovery complete: yes|no`.
+
+3. **JSON Mode (`--json`):**
+   - Emits an unadorned machine-readable `AnalyzeProjectReport` JSON object to `stdout`.
+   - Preserves typed counters: `parserFailures`, `symbolExtractionFailures`, `enumerationFailures`, and `discoveryComplete`.
+
+### Analysis Integrity & Classification Invariants
+
+- **Discovery Completeness vs Clean Analysis:** Discovery completeness (`discoveryComplete: true`) confirms the file scanner enumerated repository artifacts without filesystem or permission aborts. It does not imply clean analysis; an analysis run with complete discovery remains classified as degraded if non-fatal syntax parsing or symbol extraction failures occur.
+- **Manifest Degradation vs Supported Absence:** When a project manifest (such as `package.json`) exists but contains malformed JSON or invalid schema properties, the detector records manifest degradation (`discoveryComplete: false` and incremented enumeration failures). In contrast, the standard absence of a manifest (for projects without `package.json`) is supported and does not induce false degradation.
+- **Exit Code Behavior:** Completed analysis commands exit with code `0`, regardless of whether analysis was clean or degraded with isolated non-fatal faults. Exit code `1` is reserved for fatal runtime exceptions, invalid CLI options, or post-commit projection failures.
+
 ### Projection failure after durable commit
 
 For a fresh run, analysis records commit before `.discovery` materialization. If that materialization fails, `analyze` exits nonzero and reports `DISCOVERY_PROJECTION_FAILED_AFTER_COMMIT` with the project path, run ID, and underlying cause. The error means the requested filesystem artifacts are incomplete; it does not mean the canonical analysis transaction rolled back. When SQLite is configured, the committed run remains queryable after restart. The current CLI has no projection-only retry command, so operators must correct the output-path failure before re-executing and should not assume that re-execution performs only materialization.
