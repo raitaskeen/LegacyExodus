@@ -151,6 +151,7 @@ export class AnalyzeProjectHandler {
             })),
             languages: projectJson.languages ?? [],
             enumerationFailures: [],
+            manifestFailures: projectJson.manifestFailures ?? [],
             discoveredAt: new Date(validation.manifest.analysis.generatedAt),
           });
 
@@ -163,6 +164,7 @@ export class AnalyzeProjectHandler {
             frameworks: discovery.frameworks.map((framework) => ({ ...framework })),
             languages: [...discovery.languages],
             enumerationFailures: [],
+            manifestFailures: discovery.manifestFailures.map((failure) => ({ ...failure })),
             discoveredAt: discovery.discoveredAt.toISOString(),
             analysisRunId: command.id,
           });
@@ -300,7 +302,7 @@ export class AnalyzeProjectHandler {
               (file) => file.fileKind === "unknown" || file.fileKind === undefined,
             ).length,
             enumerationFailures: 0,
-            discoveryComplete: true,
+            discoveryComplete: discovery.manifestFailures.length === 0,
             durationMs,
           });
 
@@ -365,6 +367,7 @@ export class AnalyzeProjectHandler {
       frameworks: discovery.frameworks.map((framework) => ({ ...framework })),
       languages: [...discovery.languages],
       enumerationFailures: enumerationFailures.map((failure) => ({ ...failure })),
+      manifestFailures: discovery.manifestFailures.map((failure) => ({ ...failure })),
       discoveredAt: discovery.discoveredAt.toISOString(),
       analysisRunId: command.id,
     });
@@ -627,7 +630,7 @@ export class AnalyzeProjectHandler {
         nonSourceArtifacts: discovery.files.filter((file) => file.fileKind !== "source" && file.fileKind !== "unknown" && file.fileKind !== undefined).length,
         unclassifiedArtifacts: discovery.files.filter((file) => file.fileKind === "unknown" || file.fileKind === undefined).length,
         enumerationFailures: enumerationFailures.length,
-        discoveryComplete: enumerationFailures.length === 0,
+        discoveryComplete: enumerationFailures.length === 0 && discovery.manifestFailures.length === 0,
         durationMs,
       });
 

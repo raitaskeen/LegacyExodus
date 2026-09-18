@@ -85,7 +85,17 @@ export class DiscoveryProjectionService implements RuntimeService {
     const projection = createDiscoveryProjection({
       projectPath: payload.projectPath,
       artifacts: [
-        { name: "project.json", payload: { name: payload.projectName, path: payload.projectPath, languages: payload.languages } },
+        {
+          name: "project.json",
+          payload: {
+            name: payload.projectName,
+            path: payload.projectPath,
+            languages: payload.languages,
+            ...(payload.manifestFailures && payload.manifestFailures.length > 0
+              ? { manifestFailures: payload.manifestFailures }
+              : {}),
+          },
+        },
         { name: "files.json", payload: payload.files },
         { name: "dependencies.json", payload: payload.dependencies },
         { name: "frameworks.json", payload: payload.frameworks },
@@ -98,7 +108,12 @@ export class DiscoveryProjectionService implements RuntimeService {
             frameworkCount: payload.frameworks.length,
             languages: payload.languages,
             enumerationFailureCount: (payload.enumerationFailures ?? []).length,
-            discoveryComplete: (payload.enumerationFailures ?? []).length === 0,
+            ...(payload.manifestFailures && payload.manifestFailures.length > 0
+              ? { manifestFailureCount: payload.manifestFailures.length }
+              : {}),
+            discoveryComplete:
+              (payload.enumerationFailures ?? []).length === 0 &&
+              (payload.manifestFailures ?? []).length === 0,
           },
         },
         ...(payload.enumerationFailures && payload.enumerationFailures.length > 0

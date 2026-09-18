@@ -44,6 +44,12 @@ export interface DiscoveryEnumerationFailure {
   readonly code: string;
 }
 
+export interface DiscoveryManifestFailure {
+  readonly path: "package.json";
+  readonly kind: "manifest-read" | "manifest-parse" | "manifest-validation";
+  readonly code: string;
+}
+
 export interface FileScanResult {
   readonly files: readonly FileArtifact[];
   readonly enumerationFailures: readonly DiscoveryEnumerationFailure[];
@@ -58,6 +64,7 @@ export interface ProjectDiscovery {
   readonly frameworks: readonly FrameworkArtifact[];
   readonly languages: readonly string[];
   readonly enumerationFailures: readonly DiscoveryEnumerationFailure[];
+  readonly manifestFailures: readonly DiscoveryManifestFailure[];
   readonly discoveredAt: Date;
 }
 
@@ -72,6 +79,12 @@ const fileArtifactSchema = z.object({
 const discoveryEnumerationFailureSchema = z.object({
   path: z.string().min(1),
   kind: z.enum(["directory-read", "entry-stat"]),
+  code: z.string().min(1),
+});
+
+const discoveryManifestFailureSchema = z.object({
+  path: z.literal("package.json"),
+  kind: z.enum(["manifest-read", "manifest-parse", "manifest-validation"]),
   code: z.string().min(1),
 });
 
@@ -95,6 +108,7 @@ const projectDiscoverySchema = z.object({
   frameworks: z.array(frameworkArtifactSchema),
   languages: z.array(z.string().min(1)),
   enumerationFailures: z.array(discoveryEnumerationFailureSchema).optional(),
+  manifestFailures: z.array(discoveryManifestFailureSchema).optional(),
   discoveredAt: z.date(),
 });
 
@@ -121,6 +135,9 @@ export function validateProjectDiscovery(discovery: unknown): ProjectDiscovery {
     languages: Object.freeze([...parsedDiscovery.data.languages]),
     enumerationFailures: Object.freeze(
       (parsedDiscovery.data.enumerationFailures ?? []).map((failure) => Object.freeze({ ...failure })),
+    ),
+    manifestFailures: Object.freeze(
+      (parsedDiscovery.data.manifestFailures ?? []).map((failure) => Object.freeze({ ...failure })),
     ),
   });
 }
