@@ -22,11 +22,24 @@ export function formatPluginListOutput(report: PluginListReport): string {
   return ["Installed Plugins", "", ...report.plugins.map((plugin) => plugin.name)].join("\n");
 }
 
+export function isCleanAnalyzeReport(report: AnalyzeProjectReport): boolean {
+  const enumerationFailures = report.enumerationFailures ?? 0;
+  const discoveryComplete = report.discoveryComplete ?? (enumerationFailures === 0);
+
+  return discoveryComplete
+    && enumerationFailures === 0
+    && report.parserFailures === 0
+    && report.symbolExtractionFailures === 0;
+}
+
 export function formatAnalyzeOutput(report: AnalyzeProjectReport): string {
   const enumerationFailures = report.enumerationFailures ?? 0;
   const discoveryComplete = report.discoveryComplete ?? (enumerationFailures === 0);
+  const isClean = isCleanAnalyzeReport(report);
   return [
-    "Discovery completed",
+    isClean
+      ? "Discovery completed"
+      : "Analysis completed with isolated non-fatal faults",
     "",
     `Project: ${report.projectName}`,
     `Files discovered: ${report.filesDiscovered}`,
