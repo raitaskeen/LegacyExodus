@@ -129,6 +129,26 @@ describe("MemoryStorageProvider", () => {
     expect(await provider.findAll("artifact")).toEqual([]);
   });
 
+  test("clears transient records when the provider is closed", async (): Promise<void> => {
+    const provider = new MemoryStorageProvider();
+    const record = createStorageRecord("analysis-run", { projectId: "project-1" });
+    await provider.save(record);
+
+    await provider.close();
+
+    expect(await provider.findAll("analysis-run")).toEqual([]);
+  });
+
+  test("closes safely when storage is already empty", async (): Promise<void> => {
+    const provider = new MemoryStorageProvider();
+
+    await provider.clear();
+    await provider.close();
+    await provider.close();
+
+    expect(await provider.findAll("analysis-run")).toEqual([]);
+  });
+
   test("P0.4: streaming canonical hash produces deterministic content identity regardless of key order", (): void => {
     const record1 = createStorageRecord("test-type", { a: 1, b: "two", c: [true, false, null] });
     const record2 = createStorageRecord("test-type", { c: [true, false, null], b: "two", a: 1 });

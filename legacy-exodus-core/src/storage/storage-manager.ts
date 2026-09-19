@@ -85,6 +85,10 @@ export class StorageManager {
     return this.provider.clear();
   }
 
+  public clearTransient(): Promise<void> {
+    return this.isPersistent() ? Promise.resolve() : this.clear();
+  }
+
   public async close(): Promise<void> {
     await this.provider.close?.();
   }
