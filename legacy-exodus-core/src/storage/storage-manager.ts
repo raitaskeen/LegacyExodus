@@ -67,6 +67,12 @@ export class StorageManager {
     return this.provider.findScoped(criteria);
   }
 
+  public iterateScoped<Payload extends SerializedPayload>(
+    criteria: StorageQueryCriteria,
+  ): AsyncIterable<StorageRecord<Payload>> {
+    return this.provider.iterateScoped<Payload>(criteria);
+  }
+
   public delete(id: string): Promise<void> {
     return this.provider.delete(id);
   }
