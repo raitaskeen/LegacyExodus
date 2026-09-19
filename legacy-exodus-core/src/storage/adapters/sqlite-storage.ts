@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import { Database, type SQLQueryBindings } from "bun:sqlite";
 
 import {
   StorageRecordNotFoundError,
@@ -243,8 +243,37 @@ export class SqliteStorageProvider implements StorageProvider {
   public async findScoped<Payload extends SerializedPayload>(
     criteria: StorageQueryCriteria,
   ): Promise<StorageRecord<Payload>[]> {
+    const { sql, params } = this.buildScopedQuery(criteria);
+    const stmt = this.db.prepare<RawSqliteRecord, SQLQueryBindings[]>(sql);
+    try {
+      const rows = stmt.all(...params);
+      return rows.map((row) => this.deserializeRecord<Payload>(row));
+    } finally {
+      stmt.finalize();
+    }
+  }
+
+  public async *iterateScoped<Payload extends SerializedPayload>(
+    criteria: StorageQueryCriteria,
+  ): AsyncIterable<StorageRecord<Payload>> {
+    const { sql, params } = this.buildScopedQuery(criteria);
+    const stmt = this.db.prepare<RawSqliteRecord, SQLQueryBindings[]>(sql);
+
+    try {
+      for (const row of stmt.iterate(...params)) {
+        yield this.deserializeRecord<Payload>(row);
+      }
+    } finally {
+      stmt.finalize();
+    }
+  }
+
+  private buildScopedQuery(criteria: StorageQueryCriteria): {
+    readonly sql: string;
+    readonly params: SQLQueryBindings[];
+  } {
     const conditions: string[] = ["type = ?"];
-    const params: unknown[] = [criteria.type];
+    const params: SQLQueryBindings[] = [criteria.type];
 
     if (criteria.projectId !== undefined) {
       conditions.push("project_id = ?");
@@ -268,13 +297,7 @@ export class SqliteStorageProvider implements StorageProvider {
       ORDER BY created_at ASC, rowid ASC
     `;
 
-    const stmt = this.db.prepare<RawSqliteRecord, any[]>(sql);
-    try {
-      const rows = stmt.all(...params);
-      return rows.map((row) => this.deserializeRecord<Payload>(row));
-    } finally {
-      stmt.finalize();
-    }
+    return { sql, params };
   }
 
   public async delete(id: string): Promise<void> {

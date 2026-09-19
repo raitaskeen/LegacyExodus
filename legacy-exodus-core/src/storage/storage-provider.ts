@@ -25,6 +25,9 @@ export interface StorageProvider {
   findById<Payload extends SerializedPayload>(id: string): Promise<StorageRecord<Payload> | null>;
   findAll<Payload extends SerializedPayload>(type: string): Promise<StorageRecord<Payload>[]>;
   findScoped<Payload extends SerializedPayload>(criteria: StorageQueryCriteria): Promise<StorageRecord<Payload>[]>;
+  iterateScoped<Payload extends SerializedPayload>(
+    criteria: StorageQueryCriteria,
+  ): AsyncIterable<StorageRecord<Payload>>;
   delete(id: string): Promise<void>;
   clear(): Promise<void>;
   close?(): Promise<void> | void;
