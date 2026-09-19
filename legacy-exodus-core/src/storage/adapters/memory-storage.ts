@@ -126,7 +126,7 @@ export class MemoryStorageProvider implements StorageProvider {
     this.records.clear();
   }
 
-  public close(): void {
-    // In-memory storage has no external file descriptors or persistent handles to release
+  public close(): Promise<void> {
+    return this.clear();
   }
 }
