@@ -10,9 +10,15 @@ export interface TaintTransfer { readonly sourceDefinitionId: string; readonly t
 export interface PendingSink { readonly id: string; readonly name: string; readonly argumentDefinitionIds: readonly string[]; }
 export interface FlowState { readonly definitions: VariableDefinition[]; readonly uses: VariableUse[]; readonly taintPaths: Map<string, Map<string, readonly string[]>>; readonly transfers: TaintTransfer[]; readonly sinks: PendingSink[]; readonly functions: Map<ASTNode, FunctionRecord>; readonly resolvableFunctions: Map<string, FunctionRecord>; readonly functionsBySymbolId: Map<string, FunctionRecord>; readonly provenTargets: ReadonlyMap<string, ProvenCallTarget>; readonly hasSemanticResolution: boolean; readonly pendingCalls: PendingCall[]; readonly interproceduralFlows: InterproceduralFlow[]; }
 
+interface FlowConnectionState {
+  readonly transfers: readonly TaintTransfer[];
+  readonly taintPaths: ReadonlyMap<string, ReadonlyMap<string, readonly string[]>>;
+  readonly sinks: readonly PendingSink[];
+}
+
 export interface BuildContextResult {
   readonly graph: DataFlowGraph;
-  readonly state: FlowState;
+  readonly state: FlowConnectionState;
 }
 
 const sources = new Set(["process.env", "req.body", "req.params", "req.query"]);
@@ -62,17 +68,19 @@ export class DeterministicDataFlowGraphBuilder {
       functionSummaries: functionSummaries(state, ast.metadata.sourcePath),
       callBindings: callBindings(state),
     });
-    state.functions.clear();
-    state.resolvableFunctions.clear();
-    state.functionsBySymbolId.clear();
-    return { graph, state };
+    const connectionState: FlowConnectionState = Object.freeze({
+      transfers: state.transfers,
+      taintPaths: state.taintPaths,
+      sinks: state.sinks,
+    });
+    return { graph, state: connectionState };
   }
 
   public build(ast: ASTResult, provenCallTargets?: readonly ProvenCallTarget[], symbols: readonly CodeSymbol[] = []): DataFlowGraph {
     return this.buildContext(ast, provenCallTargets, symbols).graph;
   }
 
-  public computeTaintFlows(state: FlowState, taintPaths: ReadonlyMap<string, ReadonlyMap<string, readonly string[]>>): readonly TaintFlow[] {
+  public computeTaintFlows(state: Pick<FlowConnectionState, "sinks">, taintPaths: ReadonlyMap<string, ReadonlyMap<string, readonly string[]>>): readonly TaintFlow[] {
     const flows = state.sinks.flatMap((sink) =>
       sink.argumentDefinitionIds.flatMap((definitionId) =>
         [...(taintPaths.get(definitionId)?.entries() ?? [])].map(([sourceId, path]) => ({
