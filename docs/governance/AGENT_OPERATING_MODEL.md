@@ -139,8 +139,8 @@ Every code remediation executed by an engineering agent MUST follow this 20-step
   7. APPLY SMALLEST SAFE CHANGE ──► Minimal code fix in legacy-exodus-core/src/
   8. FOCUSED TEST PASS PROOF    ──► Verify regression test now PASSES cleanly
   9. STATIC TYPECHECK           ──► bun run typecheck (0 compiler errors)
- 10. FULL TEST SUITE            ──► bun test (100% pass across 113+ files)
- 11. BENCHMARK GOVERNANCE AUDIT ──► bun run benchmark audit (10/10 pass)
+ 10. FULL TEST SUITE            ──► bun test (100% pass across full test suite)
+ 11. BENCHMARK GOVERNANCE AUDIT ──► bun run benchmark audit (all checks pass)
  12. CLI SMOKE VERIFICATION     ──► bun run src/cli/index.ts --help (exit 0)
  13. ADVERSARIAL RED-TEAM GATE  ──► Read-only challenge; RED-TEAM PASS required
  14. DIFF & HYGIENE REVIEW      ──► git diff --stat & git diff --check clean
@@ -208,14 +208,14 @@ Every code remediation executed by an engineering agent MUST follow this 20-step
       ```bash
       bun test
       ```
-    * Confirm 100% test pass rate across all 113+ test files and ~9,388+ assertions.
+    * Confirm 100% test pass rate across the full test suite with zero unexpected failures.
 
 11. **Step 11: Benchmark Governance Audit**
     * Run the benchmark governance audit in `legacy-exodus-core/`:
       ```bash
       bun run benchmark audit
       ```
-    * Confirm `Verdict: PASS` with 10/10 audit checks satisfied.
+    * Confirm `Verdict: PASS` with all benchmark audit checks satisfied.
 
 12. **Step 12: CLI Smoke Verification**
     * Run the CLI smoke check:
@@ -354,9 +354,9 @@ Prepared before commit and push. All future events MUST be marked `PENDING`:
 9. FOCUSED VERIFICATION: <Duration and result of focused test run: bun test <test>>
 10. TYPECHECK: PASS | FAIL (exit code 0, 0 compiler errors, duration: bun run typecheck)
 11. FULL TEST SUITE: PASS | FAIL (files, tests passed/failed, assertion count, runtime: bun test)
-12. BENCHMARK AUDIT: PASS | FAIL (10/10 checks verified: bun run benchmark audit)
+12. BENCHMARK AUDIT: PASS | FAIL (all checks verified: bun run benchmark audit)
 13. CLI SMOKE: PASS | FAIL (exit code 0, clean help output: bun run src/cli/index.ts --help)
-14. RED-TEAM ADVERSARIAL GATE: RED-TEAM PASS (11/11 probes verified per .agents/skills/legacyexodus-red-team-review/SKILL.md)
+14. RED-TEAM ADVERSARIAL GATE: RED-TEAM PASS (all required probes verified per .agents/skills/legacyexodus-red-team-review/SKILL.md)
 15. DETERMINISM: <Determinism audit results across repeated runs>
 16. SECURITY & BOUNDARIES: <Subprocess, traversal, and memory audit confirmation>
 17. MEMORY STATUS: VERIFIED | INCONCLUSIVE | REGRESSION | IMPROVEMENT | NO MATERIAL CHANGE
@@ -383,9 +383,9 @@ Generated ONLY after commit succeeds, remote push succeeds, and post-push clean 
 9. FOCUSED VERIFICATION: <Duration and result of focused test run: bun test <test>>
 10. TYPECHECK: PASS | FAIL (exit code 0, 0 compiler errors, duration: bun run typecheck)
 11. FULL TEST SUITE: PASS | FAIL (files, tests passed/failed, assertion count, runtime: bun test)
-12. BENCHMARK AUDIT: PASS | FAIL (10/10 checks verified: bun run benchmark audit)
+12. BENCHMARK AUDIT: PASS | FAIL (all checks verified: bun run benchmark audit)
 13. CLI SMOKE: PASS | FAIL (exit code 0, clean help output: bun run src/cli/index.ts --help)
-14. RED-TEAM ADVERSARIAL GATE: RED-TEAM PASS (11/11 probes verified per .agents/skills/legacyexodus-red-team-review/SKILL.md)
+14. RED-TEAM ADVERSARIAL GATE: RED-TEAM PASS (all required probes verified per .agents/skills/legacyexodus-red-team-review/SKILL.md)
 15. DETERMINISM: <Determinism audit results across repeated runs>
 16. SECURITY & BOUNDARIES: <Subprocess, traversal, and memory audit confirmation>
 17. MEMORY STATUS: VERIFIED | INCONCLUSIVE | REGRESSION | IMPROVEMENT | NO MATERIAL CHANGE
