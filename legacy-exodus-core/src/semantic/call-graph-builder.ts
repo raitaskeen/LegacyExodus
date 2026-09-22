@@ -12,7 +12,7 @@ export class DeterministicCallGraphBuilder {
 
   public build(astResults: readonly ASTResult[], symbolTables: readonly SymbolTable[], dependencyGraph: DependencyGraph): { readonly calls: readonly SemanticCall[]; readonly references: readonly SymbolReference[] } {
     const tablesByPath = new Map(symbolTables.map((table) => [canonicalizePath(table.filePath), table]));
-    const importsByFile = new Map(symbolTables.map((table) => [canonicalizePath(table.filePath), table.symbols.filter((symbol) => symbol.kind === "import")]));
+    const importsByFile = new Map<string, readonly { readonly id: string; readonly name: string }[]>();
     const targetByImportId = new Map(dependencyGraph.edges.map((edge) => [edge.importSymbolId, edge.targetExportSymbolId]));
     const calls: SemanticCall[] = [];
     const references: SymbolReference[] = [];
@@ -40,8 +40,8 @@ export class DeterministicCallGraphBuilder {
     };
     predeclareScopeBindings(ast.root, initialContext);
     const boundCallees = new Set<ASTNode>();
-    const lexicalBindings = createLexicalBindingIndex(tablesByPath.get(canonicalizePath(ast.metadata.sourcePath)));
-    this.visit(ast.root, ast, initialContext, tablesByPath, importsByFile, targetByImportId, calls, references, boundCallees, lexicalBindings, undefined, false);
+    const fileSymbols = createFileSymbolIndex(tablesByPath.get(canonicalizePath(ast.metadata.sourcePath)));
+    this.visit(ast.root, ast, initialContext, tablesByPath, importsByFile, targetByImportId, calls, references, boundCallees, fileSymbols, undefined, false);
   }
 
   private visit(
@@ -54,13 +54,13 @@ export class DeterministicCallGraphBuilder {
     calls: SemanticCall[],
     references: SymbolReference[],
     boundCallees: Set<ASTNode>,
-    lexicalBindings: LexicalBindingIndex,
+    fileSymbols: FileSymbolIndex,
     parent: ASTNode | undefined,
     bindingPosition: boolean,
   ): void {
     const canonicalSourcePath = canonicalizePath(ast.metadata.sourcePath);
     const table = tablesByPath.get(canonicalSourcePath);
-    const nextContext = childContext(node, context, table);
+    const nextContext = childContext(node, context, fileSymbols);
     if (nextContext.scope !== context.scope) {
       predeclareScopeBindings(node, nextContext);
     }
@@ -69,12 +69,12 @@ export class DeterministicCallGraphBuilder {
       recordParamConstantBindings(node, nextContext);
     }
     if (node.type === "VariableDeclarator") {
-      recordReceiverType(node, nextContext, table);
-      recordConstantBinding(node, nextContext, table);
+      recordReceiverType(node, nextContext, fileSymbols);
+      recordConstantBinding(node, nextContext, fileSymbols);
     }
     if (node.type === "AssignmentExpression") {
-      recordAssignmentReceiverType(node, nextContext, table);
-      recordAssignmentConstantBinding(node, nextContext, table);
+      recordAssignmentReceiverType(node, nextContext, fileSymbols);
+      recordAssignmentConstantBinding(node, nextContext, fileSymbols);
     }
     if (node.type === "FunctionDeclaration" || node.type === "ClassDeclaration") {
       const declName = nodeName(node);
@@ -87,12 +87,12 @@ export class DeterministicCallGraphBuilder {
       if (!boundCallees.has(node)) {
         const calleeName = callName(node, nextContext, boundCallees);
         if (calleeName !== undefined) {
-          const isShadowed = isLexicallyShadowed(calleeName, nextContext, table);
+          const isShadowed = isLexicallyShadowed(calleeName, nextContext, fileSymbols);
           const imported = isShadowed
             ? undefined
-            : importsByFile.get(canonicalSourcePath)?.find((symbol) => symbol.name === calleeName);
+            : fileSymbols.firstImportByName.get(calleeName);
           const targetSymbolId = imported === undefined
-            ? resolveLocalCall(table, calleeName, nextContext, tablesByPath, this.resolver)
+            ? resolveLocalCall(table, fileSymbols, calleeName, nextContext, tablesByPath, this.resolver)
             : targetByImportId.get(imported.id);
           const id = hash(`${ast.metadata.sourcePath}:${nextContext.callerName}:${calleeName}:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`);
           const resolutionState = targetSymbolId === undefined ? "UNRESOLVED" as const : "RESOLVED" as const;
@@ -105,7 +105,7 @@ export class DeterministicCallGraphBuilder {
 
     if (!bindingPosition && isLexicalReference(node, parent)) {
       const name = identifier(node);
-      const importedBinding = name === undefined ? undefined : resolveImportBinding(lexicalBindings, name, nextContext.scope);
+      const importedBinding = name === undefined ? undefined : resolveImportBinding(fileSymbols, name, nextContext.scope);
       if (name !== undefined && importedBinding !== undefined) {
         const location = node.location?.start;
         references.push({
@@ -130,7 +130,7 @@ export class DeterministicCallGraphBuilder {
         calls,
         references,
         boundCallees,
-        lexicalBindings,
+        fileSymbols,
         node,
         isBindingPosition(node, child, bindingPosition),
       );
@@ -138,7 +138,12 @@ export class DeterministicCallGraphBuilder {
   }
 }
 
-type LexicalBindingIndex = ReadonlyMap<string, readonly CodeSymbol[]>;
+interface FileSymbolIndex {
+  readonly byScopeAndName: ReadonlyMap<string, readonly CodeSymbol[]>;
+  readonly byName: ReadonlyMap<string, readonly CodeSymbol[]>;
+  readonly firstImportByName: ReadonlyMap<string, CodeSymbol>;
+  readonly classByLocation: ReadonlyMap<string, CodeSymbol>;
+}
 
 interface ScopeFrame {
   readonly id: string;
@@ -158,21 +163,44 @@ function createScope(id: string, parent?: ScopeFrame): ScopeFrame {
   return Object.freeze(parent === undefined ? { id } : { id, parent });
 }
 
-function createLexicalBindingIndex(table: SymbolTable | undefined): LexicalBindingIndex {
-  const bindings = new Map<string, CodeSymbol[]>();
+function createFileSymbolIndex(table: SymbolTable | undefined): FileSymbolIndex {
+  const byScopeAndName = new Map<string, CodeSymbol[]>();
+  const byName = new Map<string, CodeSymbol[]>();
+  const firstImportByName = new Map<string, CodeSymbol>();
+  const classByLocation = new Map<string, CodeSymbol>();
+
   for (const symbol of table?.symbols ?? []) {
-    if (symbol.scopeId === undefined || !["class", "function", "import", "variable"].includes(symbol.kind)) continue;
-    const key = lexicalBindingKey(symbol.scopeId, symbol.name);
-    const candidates = bindings.get(key) ?? [];
-    candidates.push(symbol);
-    bindings.set(key, candidates);
+    const namedCandidates = byName.get(symbol.name) ?? [];
+    namedCandidates.push(symbol);
+    byName.set(symbol.name, namedCandidates);
+
+    if (symbol.scopeId !== undefined) {
+      const key = lexicalBindingKey(symbol.scopeId, symbol.name);
+      const scopedCandidates = byScopeAndName.get(key) ?? [];
+      scopedCandidates.push(symbol);
+      byScopeAndName.set(key, scopedCandidates);
+    }
+
+    if (symbol.kind === "import" && !firstImportByName.has(symbol.name)) {
+      firstImportByName.set(symbol.name, symbol);
+    }
+
+    if (symbol.kind === "class" && symbol.location !== undefined) {
+      const key = symbolLocationKey(symbol.location.start.line, symbol.location.start.column);
+      if (!classByLocation.has(key)) {
+        classByLocation.set(key, symbol);
+      }
+    }
   }
-  return bindings;
+
+  return Object.freeze({ byScopeAndName, byName, firstImportByName, classByLocation });
 }
 
-function resolveImportBinding(bindings: LexicalBindingIndex, name: string, scope: ScopeFrame): CodeSymbol | undefined {
+function resolveImportBinding(index: FileSymbolIndex, name: string, scope: ScopeFrame): CodeSymbol | undefined {
   for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
-    const candidates = bindings.get(lexicalBindingKey(current.id, name)) ?? [];
+    const candidates = (index.byScopeAndName.get(lexicalBindingKey(current.id, name)) ?? []).filter(
+      (symbol) => ["class", "function", "import", "variable"].includes(symbol.kind),
+    );
     if (candidates.length === 0) continue;
     const imports = candidates.filter((symbol) => symbol.kind === "import");
     if (imports.length !== 1) return undefined;
@@ -195,6 +223,10 @@ function sameDeclaration(left: CodeSymbol, right: CodeSymbol): boolean {
 
 function lexicalBindingKey(scopeId: string, name: string): string {
   return `${scopeId}\u0000${name}`;
+}
+
+function symbolLocationKey(line: number, column: number): string {
+  return `${line}:${column}`;
 }
 
 function isLexicalReference(node: ASTNode, parent: ASTNode | undefined): boolean {
@@ -238,7 +270,7 @@ function extractMemberContainerAndMethod(node: ASTNode, context: ResolutionConte
   return {};
 }
 
-function childContext(node: ASTNode, context: ResolutionContext, table: SymbolTable | undefined): ResolutionContext {
+function childContext(node: ASTNode, context: ResolutionContext, index: FileSymbolIndex): ResolutionContext {
   let scope = context.scope;
   let callerName = context.callerName;
   let containerId = context.containerId;
@@ -248,7 +280,7 @@ function childContext(node: ASTNode, context: ResolutionContext, table: SymbolTa
   }
   if (isCallable(node)) callerName = nodeName(node) ?? callerName;
   if (node.type === "ClassDeclaration" || node.type === "ClassExpression") {
-    containerId = findClassSymbolId(node, context.scope, table);
+    containerId = findClassSymbolId(node, context.scope, index);
     containerName = nodeName(node) ?? containerName;
   }
   if (node.type === "ClassMethod" || node.type === "ClassPrivateMethod") {
@@ -298,20 +330,17 @@ function childContext(node: ASTNode, context: ResolutionContext, table: SymbolTa
   };
 }
 
-function findClassSymbolId(node: ASTNode, scope: ScopeFrame, table: SymbolTable | undefined): string | undefined {
+function findClassSymbolId(node: ASTNode, scope: ScopeFrame, index: FileSymbolIndex): string | undefined {
   const className = nodeName(node);
   if (className !== undefined) {
-    const candidates = table?.symbols.filter((symbol) => symbol.kind === "class" && symbol.name === className && isInScope(symbol, scope)) ?? [];
+    const candidates = (index.byName.get(className) ?? []).filter(
+      (symbol) => symbol.kind === "class" && isInScope(symbol, scope),
+    );
     if (candidates.length === 1) return candidates[0]?.id;
   }
   const loc = node.location;
-  if (loc !== undefined && table !== undefined) {
-    const candidate = table.symbols.find(
-      (symbol) => symbol.kind === "class" &&
-        symbol.location !== undefined &&
-        symbol.location.start.line === loc.start.line &&
-        symbol.location.start.column === loc.start.column,
-    );
+  if (loc !== undefined) {
+    const candidate = index.classByLocation.get(symbolLocationKey(loc.start.line, loc.start.column));
     if (candidate !== undefined) return candidate.id;
   }
   return undefined;
@@ -441,28 +470,26 @@ function extractBoundNames(node: ASTNode | undefined): string[] {
   return [];
 }
 
-function targetScopeForDeclaration(node: ASTNode, name: string, scope: ScopeFrame, table: SymbolTable | undefined): ScopeFrame {
-  if (table !== undefined) {
-    const symbol = table.symbols.find(
-      (s) => s.name === name && (
-        (node.location !== undefined && s.location !== undefined &&
-         s.location.start.line === node.location.start.line &&
-         s.location.start.column === node.location.start.column) ||
-        (s.scopeId === scope.id)
-      ),
-    );
-    if (symbol !== undefined && symbol.declarationKind === "var") {
-      for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
-        if (current.id === symbol.scopeId) {
-          return current;
-        }
+function targetScopeForDeclaration(node: ASTNode, name: string, scope: ScopeFrame, index: FileSymbolIndex): ScopeFrame {
+  const symbol = (index.byName.get(name) ?? []).find(
+    (s) => s.name === name && (
+      (node.location !== undefined && s.location !== undefined &&
+       s.location.start.line === node.location.start.line &&
+       s.location.start.column === node.location.start.column) ||
+      (s.scopeId === scope.id)
+    ),
+  );
+  if (symbol !== undefined && symbol.declarationKind === "var") {
+    for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
+      if (current.id === symbol.scopeId) {
+        return current;
       }
     }
   }
   return scope;
 }
 
-function recordReceiverType(node: ASTNode, context: ResolutionContext, table: SymbolTable | undefined): void {
+function recordReceiverType(node: ASTNode, context: ResolutionContext, index: FileSymbolIndex): void {
   const binding = node.children.find((child) => child.role === "id");
   const initializer = node.children.find((child) => child.role === "init");
   const boundNames = extractBoundNames(binding);
@@ -472,9 +499,11 @@ function recordReceiverType(node: ASTNode, context: ResolutionContext, table: Sy
     const callee = initializer.children.find((child) => child.role === "callee");
     const className = callee === undefined ? undefined : identifier(callee);
     if (className !== undefined) {
-      const candidates = table?.symbols.filter((symbol) => symbol.kind === "class" && symbol.name === className && isInScope(symbol, context.scope)) ?? [];
+      const candidates = (index.byName.get(className) ?? []).filter(
+        (symbol) => symbol.kind === "class" && isInScope(symbol, context.scope),
+      );
       if (candidates.length === 1 && candidates[0] !== undefined) {
-        const targetScope = targetScopeForDeclaration(node, boundNames[0]!, context.scope, table);
+        const targetScope = targetScopeForDeclaration(node, boundNames[0]!, context.scope, index);
         (context.receiverTypes as Map<string, string | null>).set(receiverKey(targetScope, boundNames[0]!), candidates[0].id);
         return;
       }
@@ -482,24 +511,22 @@ function recordReceiverType(node: ASTNode, context: ResolutionContext, table: Sy
   }
 
   for (const name of boundNames) {
-    const targetScope = targetScopeForDeclaration(node, name, context.scope, table);
+    const targetScope = targetScopeForDeclaration(node, name, context.scope, index);
     (context.receiverTypes as Map<string, string | null>).set(receiverKey(targetScope, name), null);
   }
 }
 
-function targetScopeForAssignment(name: string, scope: ScopeFrame, table: SymbolTable | undefined): ScopeFrame {
-  if (table !== undefined) {
-    for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
-      const symbol = table.symbols.find((s) => s.name === name && s.scopeId === current?.id);
-      if (symbol !== undefined) {
-        return current;
-      }
+function targetScopeForAssignment(name: string, scope: ScopeFrame, index: FileSymbolIndex): ScopeFrame {
+  for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
+    const candidates = index.byScopeAndName.get(lexicalBindingKey(current.id, name)) ?? [];
+    if (candidates.length > 0) {
+      return current;
     }
   }
   return scope;
 }
 
-function recordAssignmentReceiverType(node: ASTNode, context: ResolutionContext, table: SymbolTable | undefined): void {
+function recordAssignmentReceiverType(node: ASTNode, context: ResolutionContext, index: FileSymbolIndex): void {
   const left = node.children.find((child) => child.role === "left");
   const right = node.children.find((child) => child.role === "right");
   const boundNames = extractBoundNames(left);
@@ -510,9 +537,11 @@ function recordAssignmentReceiverType(node: ASTNode, context: ResolutionContext,
     const callee = right.children.find((child) => child.role === "callee");
     const className = callee === undefined ? undefined : identifier(callee);
     if (className !== undefined) {
-      const candidates = table?.symbols.filter((symbol) => symbol.kind === "class" && symbol.name === className && isInScope(symbol, context.scope)) ?? [];
+      const candidates = (index.byName.get(className) ?? []).filter(
+        (symbol) => symbol.kind === "class" && isInScope(symbol, context.scope),
+      );
       if (candidates.length === 1 && candidates[0] !== undefined) {
-        const targetScope = targetScopeForAssignment(boundNames[0]!, context.scope, table);
+        const targetScope = targetScopeForAssignment(boundNames[0]!, context.scope, index);
         (context.receiverTypes as Map<string, string | null>).set(receiverKey(targetScope, boundNames[0]!), candidates[0].id);
         return;
       }
@@ -520,7 +549,7 @@ function recordAssignmentReceiverType(node: ASTNode, context: ResolutionContext,
   }
 
   for (const name of boundNames) {
-    const targetScope = targetScopeForAssignment(name, context.scope, table);
+    const targetScope = targetScopeForAssignment(name, context.scope, index);
     (context.receiverTypes as Map<string, string | null>).set(receiverKey(targetScope, name), null);
   }
 }
@@ -555,15 +584,15 @@ function recordParamConstantBindings(node: ASTNode, context: ResolutionContext):
   }
 }
 
-function recordConstantBinding(node: ASTNode, context: ResolutionContext, table: SymbolTable | undefined): void {
+function recordConstantBinding(node: ASTNode, context: ResolutionContext, index: FileSymbolIndex): void {
   const binding = node.children.find((child) => child.role === "id");
   const initializer = node.children.find((child) => child.role === "init");
   const boundNames = extractBoundNames(binding);
   if (boundNames.length === 0) return;
 
   let isConst = false;
-  if (table !== undefined && boundNames.length === 1) {
-    const symbol = table.symbols.find(
+  if (boundNames.length === 1) {
+    const symbol = (index.byName.get(boundNames[0]!) ?? []).find(
       (s) => s.name === boundNames[0] && (
         (node.location !== undefined && s.location !== undefined &&
          s.location.start.line === node.location.start.line &&
@@ -578,7 +607,7 @@ function recordConstantBinding(node: ASTNode, context: ResolutionContext, table:
 
   if (isConst && boundNames.length === 1 && binding?.type === "Identifier") {
     const stringVal = extractStaticString(initializer);
-    const targetScope = targetScopeForDeclaration(node, boundNames[0]!, context.scope, table);
+    const targetScope = targetScopeForDeclaration(node, boundNames[0]!, context.scope, index);
     (context.constantBindings as Map<string, string | null>).set(
       bindingKey(targetScope, boundNames[0]!),
       stringVal ?? null,
@@ -587,16 +616,16 @@ function recordConstantBinding(node: ASTNode, context: ResolutionContext, table:
   }
 
   for (const name of boundNames) {
-    const targetScope = targetScopeForDeclaration(node, name, context.scope, table);
+    const targetScope = targetScopeForDeclaration(node, name, context.scope, index);
     (context.constantBindings as Map<string, string | null>).set(bindingKey(targetScope, name), null);
   }
 }
 
-function recordAssignmentConstantBinding(node: ASTNode, context: ResolutionContext, table: SymbolTable | undefined): void {
+function recordAssignmentConstantBinding(node: ASTNode, context: ResolutionContext, index: FileSymbolIndex): void {
   const left = node.children.find((child) => child.role === "left");
   const boundNames = extractBoundNames(left);
   for (const name of boundNames) {
-    const targetScope = targetScopeForAssignment(name, context.scope, table);
+    const targetScope = targetScopeForAssignment(name, context.scope, index);
     (context.constantBindings as Map<string, string | null>).set(bindingKey(targetScope, name), null);
   }
 }
@@ -650,12 +679,13 @@ function bindingKey(scope: ScopeFrame, name: string): string {
 
 function resolveNamespaceCall(
   table: SymbolTable,
+  index: FileSymbolIndex,
   receiver: string,
   methodName: string,
   tablesByPath: ReadonlyMap<string, SymbolTable>,
   resolver: ModuleResolver,
 ): string | undefined {
-  const importSymbol = table.symbols.find((s) => s.kind === "import" && s.name === receiver);
+  const importSymbol = index.firstImportByName.get(receiver);
   if (importSymbol?.moduleSpecifier === undefined) return undefined;
   if (importSymbol.sourceSymbolName !== "*") {
     return undefined;
@@ -701,6 +731,7 @@ function containerMatches(symbolContainer: string | undefined, contextContainer:
 
 function resolveLocalCall(
   table: SymbolTable | undefined,
+  index: FileSymbolIndex,
   name: string,
   context: ResolutionContext,
   tablesByPath?: ReadonlyMap<string, SymbolTable>,
@@ -708,7 +739,7 @@ function resolveLocalCall(
 ): string | undefined {
   if (table === undefined) return undefined;
   const pieces = name.split(".");
-  if (pieces.length === 1) return nearestScoped(table.symbols, name, context)?.id;
+  if (pieces.length === 1) return nearestScoped(index, name, context)?.id;
   if (pieces.length !== 2) return undefined;
   const [receiver, methodName] = pieces;
   if (receiver === undefined || methodName === undefined) return undefined;
@@ -716,15 +747,16 @@ function resolveLocalCall(
   // 1. Class instance / constructor receiver
   const classId = receiver === "this" ? context.containerId : receiverType(context.receiverTypes, context.scope, receiver);
   if (classId !== undefined) {
-    const candidates = table.symbols.filter((symbol) => symbol.kind === "method" && symbol.name === methodName && symbol.containerId === classId);
+    const candidates = (index.byName.get(methodName) ?? []).filter(
+      (symbol) => symbol.kind === "method" && symbol.containerId === classId,
+    );
     if (candidates.length === 1) return candidates[0]?.id;
   }
 
   // 2. Exact receiver-matched method / property on object (e.g. app.init when app.init is declared, proto.handle when proto.handle is declared)
   if (receiver !== "this") {
-    const candidates = table.symbols.filter(
+    const candidates = (index.byName.get(methodName) ?? []).filter(
       (symbol) => (symbol.kind === "method" || symbol.kind === "function") &&
-        symbol.name === methodName &&
         symbol.containerName === receiver,
     );
     if (candidates.length === 1) return candidates[0]?.id;
@@ -732,9 +764,8 @@ function resolveLocalCall(
 
   // 3. Prototypal / contextual this receiver (e.g. this.defaultConfiguration inside application.js, this.set inside response.js)
   if (receiver === "this" && context.containerId === undefined && context.containerName !== undefined) {
-    const candidates = table.symbols.filter(
+    const candidates = (index.byName.get(methodName) ?? []).filter(
       (symbol) => (symbol.kind === "method" || symbol.kind === "function" || (symbol.kind === "variable" && (symbol.containerName === "module.exports" || symbol.containerName === "exports"))) &&
-        symbol.name === methodName &&
         containerMatches(symbol.containerName, context.containerName) &&
         symbol.containerId === undefined,
     );
@@ -742,17 +773,17 @@ function resolveLocalCall(
   }
 
   // 4. Imported namespace receiver (e.g. import * as api from "./api"; api.ping() or api["ping"]())
-  if (receiver !== "this" && tablesByPath !== undefined && resolver !== undefined && !isLexicallyShadowed(receiver, context, table)) {
-    const namespaceTarget = resolveNamespaceCall(table, receiver, methodName, tablesByPath, resolver);
+  if (receiver !== "this" && tablesByPath !== undefined && resolver !== undefined && !isLexicallyShadowed(receiver, context, index)) {
+    const namespaceTarget = resolveNamespaceCall(table, index, receiver, methodName, tablesByPath, resolver);
     if (namespaceTarget !== undefined) return namespaceTarget;
   }
 
   return undefined;
 }
 
-function nearestScoped(symbols: readonly CodeSymbol[], name: string, context: ResolutionContext): CodeSymbol | undefined {
+function nearestScoped(index: FileSymbolIndex, name: string, context: ResolutionContext): CodeSymbol | undefined {
   for (let current: ScopeFrame | undefined = context.scope; current !== undefined; current = current.parent) {
-    const matchingSymbols = symbols.filter((symbol) => symbol.name === name && symbol.scopeId === current.id);
+    const matchingSymbols = index.byScopeAndName.get(lexicalBindingKey(current.id, name)) ?? [];
     const callableSymbols = matchingSymbols.filter((symbol) => symbol.kind === "function" || symbol.kind === "class");
     const nonCallableSymbols = matchingSymbols.filter((symbol) => symbol.kind !== "function" && symbol.kind !== "class");
     if (callableSymbols.length === 1) return callableSymbols[0];
@@ -763,7 +794,7 @@ function nearestScoped(symbols: readonly CodeSymbol[], name: string, context: Re
   return undefined;
 }
 
-function isLexicallyShadowed(name: string, context: ResolutionContext, table?: SymbolTable): boolean {
+function isLexicallyShadowed(name: string, context: ResolutionContext, index: FileSymbolIndex): boolean {
   for (let current: ScopeFrame | undefined = context.scope; current !== undefined; current = current.parent) {
     if (current.id === "scope:module") {
       break;
@@ -774,7 +805,7 @@ function isLexicallyShadowed(name: string, context: ResolutionContext, table?: S
     if (context.constantBindings.has(bindingKey(current, name))) {
       return true;
     }
-    if (table?.symbols.some((s) => s.name === name && s.scopeId === current.id)) {
+    if ((index.byScopeAndName.get(lexicalBindingKey(current.id, name)) ?? []).length > 0) {
       return true;
     }
   }

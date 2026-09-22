@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
+import { Statement } from "bun:sqlite";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -9,7 +10,9 @@ import {
   MemoryStorageProvider,
   SqliteStorageProvider,
   StorageManager,
+  type SerializedPayload,
   type StorageProvider,
+  type StorageRecord,
 } from "@storage/index";
 import { DiscoveryQueryService } from "@discovery/discovery-query-service";
 
@@ -18,6 +21,16 @@ describe("Storage Scoped Query Contract & Bounded Retrieval", () => {
   const projB = "bbbbbbbb-0000-4000-8000-000000000002";
   const run1 = "11111111-0000-4000-8000-000000000001";
   const run2 = "22222222-0000-4000-8000-000000000002";
+
+  async function collectScoped<Payload extends SerializedPayload>(
+    records: AsyncIterable<StorageRecord<Payload>>,
+  ): Promise<StorageRecord<Payload>[]> {
+    const collected: StorageRecord<Payload>[] = [];
+    for await (const record of records) {
+      collected.push(record);
+    }
+    return collected;
+  }
 
   function runMatrixTests(createProvider: () => { provider: StorageProvider; cleanup?: () => Promise<void> | void }) {
     let provider: StorageProvider;
@@ -118,6 +131,58 @@ describe("Storage Scoped Query Contract & Bounded Retrieval", () => {
       const retrieved = await provider.findScoped({ type: "ordered-type", projectId: projA });
       expect(retrieved.map((r) => r.id)).toEqual([rec1.id, rec2.id, rec3.id]);
     });
+
+    it("streams matching records incrementally with findScoped-equivalent filters and natural order", async () => {
+      const first = createStorageRecord("streamed-type", {
+        projectId: projA,
+        analysisRunId: run1,
+        path: "src/target.ts",
+        sequence: 1,
+      });
+      const second = createStorageRecord("streamed-type", {
+        projectId: projA,
+        analysisRunId: run1,
+        path: "src/target.ts",
+        sequence: 2,
+      });
+      const wrongType = createStorageRecord("other-type", {
+        projectId: projA,
+        analysisRunId: run1,
+        path: "src/target.ts",
+      });
+      const wrongProject = createStorageRecord("streamed-type", {
+        projectId: projB,
+        analysisRunId: run1,
+        path: "src/target.ts",
+      });
+      const wrongRun = createStorageRecord("streamed-type", {
+        projectId: projA,
+        analysisRunId: run2,
+        path: "src/target.ts",
+      });
+      const wrongFile = createStorageRecord("streamed-type", {
+        projectId: projA,
+        analysisRunId: run1,
+        path: "src/other.ts",
+      });
+
+      for (const record of [first, wrongType, wrongProject, second, wrongRun, wrongFile]) {
+        await provider.save(record);
+      }
+
+      const stream = provider.iterateScoped({
+        type: "streamed-type",
+        projectId: projA,
+        analysisRunId: run1,
+        filePath: "src/target.ts",
+      });
+
+      expect(Array.isArray(stream)).toBe(false);
+      expect(typeof stream[Symbol.asyncIterator]).toBe("function");
+      const streamed = await collectScoped(stream);
+      expect(streamed.map((record) => record.id)).toEqual([first.id, second.id]);
+      expect(streamed.map((record) => record.payload)).toEqual([first.payload, second.payload]);
+    });
   }
 
   describe("MemoryStorageProvider Scoped Retrieval", () => {
@@ -142,6 +207,64 @@ describe("Storage Scoped Query Contract & Bounded Retrieval", () => {
           } catch {}
         },
       };
+    });
+  });
+
+  describe("SQLite scoped iterator lifecycle", () => {
+    it("finalizes its prepared statement when a consumer breaks early", async () => {
+      const provider = new SqliteStorageProvider({ inMemory: true });
+      const first = createStorageRecord("stream-lifecycle", { projectId: projA, sequence: 1 });
+      const second = createStorageRecord("stream-lifecycle", { projectId: projA, sequence: 2 });
+      await provider.save(first);
+      await provider.save(second);
+
+      const finalizeSpy = spyOn(Statement.prototype, "finalize");
+      const callsBeforeIteration = finalizeSpy.mock.calls.length;
+
+      try {
+        const consumed: string[] = [];
+        for await (const record of provider.iterateScoped({
+          type: "stream-lifecycle",
+          projectId: projA,
+        })) {
+          consumed.push(record.id);
+          break;
+        }
+
+        expect(consumed).toEqual([first.id]);
+        expect(finalizeSpy.mock.calls.length).toBe(callsBeforeIteration + 1);
+      } finally {
+        finalizeSpy.mockRestore();
+        provider.close();
+      }
+    });
+
+    it("finalizes its prepared statement when consumer code throws", async () => {
+      const provider = new SqliteStorageProvider({ inMemory: true });
+      const record = createStorageRecord("stream-lifecycle", { projectId: projA, sequence: 1 });
+      await provider.save(record);
+
+      const finalizeSpy = spyOn(Statement.prototype, "finalize");
+      const callsBeforeIteration = finalizeSpy.mock.calls.length;
+      const consumerFailure = new Error("consumer stopped");
+
+      try {
+        try {
+          for await (const _record of provider.iterateScoped({
+            type: "stream-lifecycle",
+            projectId: projA,
+          })) {
+            throw consumerFailure;
+          }
+        } catch (error: unknown) {
+          expect(error).toBe(consumerFailure);
+        }
+
+        expect(finalizeSpy.mock.calls.length).toBe(callsBeforeIteration + 1);
+      } finally {
+        finalizeSpy.mockRestore();
+        provider.close();
+      }
     });
   });
 

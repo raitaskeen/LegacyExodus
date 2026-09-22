@@ -28,6 +28,7 @@ export class DiscoveryEngine {
       frameworks: detection.frameworks,
       languages: detection.languages,
       enumerationFailures,
+      manifestFailures: detection.manifestFailures,
       discoveredAt: new Date(),
     });
   }

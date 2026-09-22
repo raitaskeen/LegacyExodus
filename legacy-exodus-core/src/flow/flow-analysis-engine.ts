@@ -98,15 +98,48 @@ export class DeterministicFlowAnalysisEngine {
       ...allCrossFileTransfers,
     ].sort((left, right) => `${left.sourceDefinitionId}:${left.targetDefinitionId}`.localeCompare(`${right.sourceDefinitionId}:${right.targetDefinitionId}`));
 
-    for (let changed = true; changed;) {
-      changed = false;
-      for (const transfer of allTransfers) {
-        const sourcePaths = globalTaintPaths.get(transfer.sourceDefinitionId);
-        if (sourcePaths === undefined) continue;
-        for (const [sourceId, path] of sourcePaths) {
-          if (setGlobalTaintPath(globalTaintPaths, transfer.targetDefinitionId, sourceId, [...path, transfer.targetDefinitionId])) {
-            changed = true;
-          }
+    const transferIndexesBySource = new Map<string, number[]>();
+    let currentQueue: number[] = [];
+    let currentQueued = new Set<number>();
+    let nextQueue: number[] = [];
+    let nextQueued = new Set<number>();
+
+    for (const [index, transfer] of allTransfers.entries()) {
+      const dependents = transferIndexesBySource.get(transfer.sourceDefinitionId) ?? [];
+      dependents.push(index);
+      transferIndexesBySource.set(transfer.sourceDefinitionId, dependents);
+      if (globalTaintPaths.has(transfer.sourceDefinitionId)) {
+        enqueueTransferIndex(currentQueue, currentQueued, index);
+      }
+    }
+
+    while (currentQueue.length > 0 || nextQueue.length > 0) {
+      if (currentQueue.length === 0) {
+        currentQueue = nextQueue;
+        currentQueued = nextQueued;
+        nextQueue = [];
+        nextQueued = new Set<number>();
+      }
+
+      const transferIndex = dequeueTransferIndex(currentQueue, currentQueued);
+      const transfer = allTransfers[transferIndex];
+      if (transfer === undefined) continue;
+      const sourcePaths = globalTaintPaths.get(transfer.sourceDefinitionId);
+      if (sourcePaths === undefined) continue;
+
+      let targetChanged = false;
+      for (const [sourceId, path] of sourcePaths) {
+        if (setGlobalTaintPath(globalTaintPaths, transfer.targetDefinitionId, sourceId, [...path, transfer.targetDefinitionId])) {
+          targetChanged = true;
+        }
+      }
+      if (!targetChanged) continue;
+
+      for (const dependentIndex of transferIndexesBySource.get(transfer.targetDefinitionId) ?? []) {
+        if (dependentIndex > transferIndex) {
+          enqueueTransferIndex(currentQueue, currentQueued, dependentIndex);
+        } else {
+          enqueueTransferIndex(nextQueue, nextQueued, dependentIndex);
         }
       }
     }
@@ -128,6 +161,47 @@ export class DeterministicFlowAnalysisEngine {
       dataFlowGraphs: Object.freeze(connected),
     });
   }
+}
+
+function enqueueTransferIndex(queue: number[], queued: Set<number>, index: number): void {
+  if (queued.has(index)) return;
+  queued.add(index);
+  queue.push(index);
+  for (let child = queue.length - 1; child > 0;) {
+    const parent = Math.floor((child - 1) / 2);
+    const childValue = queue[child];
+    const parentValue = queue[parent];
+    if (childValue === undefined || parentValue === undefined || parentValue <= childValue) break;
+    queue[parent] = childValue;
+    queue[child] = parentValue;
+    child = parent;
+  }
+}
+
+function dequeueTransferIndex(queue: number[], queued: Set<number>): number {
+  const first = queue[0];
+  if (first === undefined) throw new Error("Transfer worklist is unexpectedly empty.");
+  const last = queue.pop();
+  queued.delete(first);
+  if (queue.length === 0 || last === undefined) return first;
+  queue[0] = last;
+
+  for (let parent = 0;;) {
+    const left = parent * 2 + 1;
+    const right = left + 1;
+    let smallest = parent;
+    if (queue[left] !== undefined && queue[smallest] !== undefined && queue[left]! < queue[smallest]!) smallest = left;
+    if (queue[right] !== undefined && queue[smallest] !== undefined && queue[right]! < queue[smallest]!) smallest = right;
+    if (smallest === parent) break;
+    const parentValue = queue[parent];
+    const childValue = queue[smallest];
+    if (parentValue === undefined || childValue === undefined) break;
+    queue[parent] = childValue;
+    queue[smallest] = parentValue;
+    parent = smallest;
+  }
+
+  return first;
 }
 
 function setGlobalTaintPath(

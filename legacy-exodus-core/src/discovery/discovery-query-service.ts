@@ -36,43 +36,117 @@ export class DiscoveryQueryService {
   public constructor(private readonly storage: StorageManager) {}
 
   public async getLatestCompletedRunId(projectId: string): Promise<string | null> {
-    const runRecords = await this.storage.findScoped({
+    let hasRuns = false;
+    let latestCompleted: {
+      readonly payload: AnalysisRunPayload;
+      readonly updatedAt: number;
+      readonly index: number;
+    } | null = null;
+    let runIndex = 0;
+
+    for await (const record of this.storage.iterateScoped({
       type: "analysis-run",
       projectId,
-    });
-
-    if (runRecords.length > 0) {
-      const completed = runRecords
-        .map((r) => {
-          const parsed = analysisRunPayloadSchema.safeParse(r.payload);
-          return parsed.success && parsed.data.status === "completed" && parsed.data.projectId === projectId
-            ? { payload: parsed.data, updatedAt: r.updatedAt.getTime() }
-            : null;
-        })
-        .filter((item): item is NonNullable<typeof item> => item !== null)
-        .sort((a, b) => a.updatedAt - b.updatedAt);
-
-      return completed.at(-1)?.payload.analysisRunId ?? null;
+    })) {
+      hasRuns = true;
+      const parsed = analysisRunPayloadSchema.safeParse(record.payload);
+      if (parsed.success && parsed.data.status === "completed" && parsed.data.projectId === projectId) {
+        const updatedAt = record.updatedAt.getTime();
+        if (
+          latestCompleted === null ||
+          updatedAt > latestCompleted.updatedAt ||
+          (updatedAt === latestCompleted.updatedAt && runIndex > latestCompleted.index)
+        ) {
+          latestCompleted = { payload: parsed.data, updatedAt, index: runIndex };
+        }
+      }
+      runIndex++;
     }
 
-    const discoveryRecords = await this.storage.findScoped({
+    if (latestCompleted !== null) {
+      return latestCompleted.payload.analysisRunId;
+    }
+
+    if (hasRuns) {
+      return null;
+    }
+
+    let latestDiscovery: {
+      readonly payload: ProjectDiscoveryPayload;
+      readonly updatedAt: number;
+      readonly index: number;
+    } | null = null;
+    let discoveryIndex = 0;
+
+    for await (const record of this.storage.iterateScoped({
       type: "project-discovery",
       projectId,
-    });
-    const latest = this.findLatestRecord(discoveryRecords, discoveryPayloadSchema, projectId, undefined);
-    return latest?.analysisRunId ?? null;
+    })) {
+      const parsed = discoveryPayloadSchema.safeParse(record.payload);
+      if (!parsed.success) {
+        throw new LegacyExodusError({
+          code: "DISCOVERY_RECORD_INVALID",
+          message: `Stored ${record.type} record is invalid.`,
+          metadata: { recordId: record.id, issues: parsed.error.issues },
+        });
+      }
+      if (parsed.data.projectId === projectId) {
+        const updatedAt = record.updatedAt.getTime();
+        if (
+          latestDiscovery === null ||
+          updatedAt > latestDiscovery.updatedAt ||
+          (updatedAt === latestDiscovery.updatedAt && discoveryIndex > latestDiscovery.index)
+        ) {
+          latestDiscovery = { payload: parsed.data, updatedAt, index: discoveryIndex };
+        }
+      }
+      discoveryIndex++;
+    }
+
+    return latestDiscovery?.payload.analysisRunId ?? null;
   }
 
   public async getAnalysisRun(
     projectId: string,
     analysisRunId?: string,
   ): Promise<AnalysisRunPayload | null> {
-    const records = await this.storage.findScoped({
+    let candidate: {
+      readonly payload: AnalysisRunPayload;
+      readonly updatedAt: number;
+      readonly index: number;
+    } | null = null;
+    let index = 0;
+
+    for await (const record of this.storage.iterateScoped({
       type: "analysis-run",
       projectId,
       ...(analysisRunId !== undefined ? { analysisRunId } : {}),
-    });
-    return this.findLatestRecord(records, analysisRunPayloadSchema, projectId, analysisRunId);
+    })) {
+      const parsed = analysisRunPayloadSchema.safeParse(record.payload);
+      if (!parsed.success) {
+        throw new LegacyExodusError({
+          code: "DISCOVERY_RECORD_INVALID",
+          message: `Stored ${record.type} record is invalid.`,
+          metadata: { recordId: record.id, issues: parsed.error.issues },
+        });
+      }
+      if (
+        parsed.data.projectId === projectId &&
+        (analysisRunId === undefined || parsed.data.analysisRunId === analysisRunId)
+      ) {
+        const updatedAt = record.updatedAt.getTime();
+        if (
+          candidate === null ||
+          updatedAt > candidate.updatedAt ||
+          (updatedAt === candidate.updatedAt && index > candidate.index)
+        ) {
+          candidate = { payload: parsed.data, updatedAt, index };
+        }
+      }
+      index++;
+    }
+
+    return candidate?.payload ?? null;
   }
 
   public async listAnalysisRuns(projectId: string): Promise<readonly AnalysisRunPayload[]> {

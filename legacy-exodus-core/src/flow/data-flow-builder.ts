@@ -10,9 +10,15 @@ export interface TaintTransfer { readonly sourceDefinitionId: string; readonly t
 export interface PendingSink { readonly id: string; readonly name: string; readonly argumentDefinitionIds: readonly string[]; }
 export interface FlowState { readonly definitions: VariableDefinition[]; readonly uses: VariableUse[]; readonly taintPaths: Map<string, Map<string, readonly string[]>>; readonly transfers: TaintTransfer[]; readonly sinks: PendingSink[]; readonly functions: Map<ASTNode, FunctionRecord>; readonly resolvableFunctions: Map<string, FunctionRecord>; readonly functionsBySymbolId: Map<string, FunctionRecord>; readonly provenTargets: ReadonlyMap<string, ProvenCallTarget>; readonly hasSemanticResolution: boolean; readonly pendingCalls: PendingCall[]; readonly interproceduralFlows: InterproceduralFlow[]; }
 
+interface FlowConnectionState {
+  readonly transfers: readonly TaintTransfer[];
+  readonly taintPaths: ReadonlyMap<string, ReadonlyMap<string, readonly string[]>>;
+  readonly sinks: readonly PendingSink[];
+}
+
 export interface BuildContextResult {
   readonly graph: DataFlowGraph;
-  readonly state: FlowState;
+  readonly state: FlowConnectionState;
 }
 
 const sources = new Set(["process.env", "req.body", "req.params", "req.query"]);
@@ -62,17 +68,19 @@ export class DeterministicDataFlowGraphBuilder {
       functionSummaries: functionSummaries(state, ast.metadata.sourcePath),
       callBindings: callBindings(state),
     });
-    state.functions.clear();
-    state.resolvableFunctions.clear();
-    state.functionsBySymbolId.clear();
-    return { graph, state };
+    const connectionState: FlowConnectionState = Object.freeze({
+      transfers: state.transfers,
+      taintPaths: state.taintPaths,
+      sinks: state.sinks,
+    });
+    return { graph, state: connectionState };
   }
 
   public build(ast: ASTResult, provenCallTargets?: readonly ProvenCallTarget[], symbols: readonly CodeSymbol[] = []): DataFlowGraph {
     return this.buildContext(ast, provenCallTargets, symbols).graph;
   }
 
-  public computeTaintFlows(state: FlowState, taintPaths: ReadonlyMap<string, ReadonlyMap<string, readonly string[]>>): readonly TaintFlow[] {
+  public computeTaintFlows(state: Pick<FlowConnectionState, "sinks">, taintPaths: ReadonlyMap<string, ReadonlyMap<string, readonly string[]>>): readonly TaintFlow[] {
     const flows = state.sinks.flatMap((sink) =>
       sink.argumentDefinitionIds.flatMap((definitionId) =>
         [...(taintPaths.get(definitionId)?.entries() ?? [])].map(([sourceId, path]) => ({
@@ -93,6 +101,7 @@ export class DeterministicDataFlowGraphBuilder {
   private visit(node: ASTNode, scope: Scope, filePath: string, state: FlowState, currentFunction?: FunctionRecord, receiverDefinitionId?: string): void {
     if (node.type === "Program") { for (const child of node.children) this.visit(child, scope, filePath, state, currentFunction); return; }
     if (node.type === "BlockStatement") { const childScope = createScope(scope); for (const child of node.children) this.visit(child, childScope, filePath, state, currentFunction); return; }
+    if (node.type === "ForOfStatement" || node.type === "ForInStatement") { this.iteration(node, scope, filePath, state, currentFunction); return; }
     if (node.type === "VariableDeclaration") { for (const child of node.children.filter((candidate) => candidate.role === "declarations")) this.declarator(child, scope, filePath, state); return; }
     if (isFunction(node)) { this.function(node, scope, filePath, state); return; }
     if (node.type === "ReturnStatement") { this.returnValue(node, scope, filePath, state, currentFunction); return; }
@@ -132,6 +141,42 @@ export class DeterministicDataFlowGraphBuilder {
       const primaryDefId = defaultBoundNames.length === 1 ? scope.definitions.get(defaultBoundNames[0]!)?.id : undefined;
       this.visit(defaultNode, scope, filePath, state, undefined, primaryDefId);
     }
+  }
+
+  private iteration(node: ASTNode, scope: Scope, filePath: string, state: FlowState, currentFunction: FunctionRecord | undefined): void {
+    const left = node.children.find((child) => child.role === "left");
+    const right = node.children.find((child) => child.role === "right");
+    const body = node.children.find((child) => child.role === "body");
+    const loopScope = createScope(scope);
+    const sourceIds = node.type === "ForOfStatement" && right !== undefined ? this.collectSources(right, filePath, state) : [];
+    const sourceDefinitions = node.type === "ForOfStatement" && right !== undefined ? this.collectDefinitions(right, scope, filePath, state) : [];
+
+    if (right !== undefined) this.visit(right, scope, filePath, state, currentFunction);
+
+    const targetDefinitions: VariableDefinition[] = [];
+    if (left?.type === "VariableDeclaration") {
+      for (const declarator of left.children.filter((candidate) => candidate.role === "declarations")) {
+        this.declarator(declarator, loopScope, filePath, state);
+        const id = declarator.children.find((child) => child.role === "id");
+        const name = identifierName(id);
+        const definition = name === undefined ? undefined : loopScope.definitions.get(name);
+        if (definition !== undefined) targetDefinitions.push(definition);
+      }
+    } else {
+      const name = identifierName(left) ?? memberPath(left);
+      if (name !== undefined && left !== undefined) {
+        targetDefinitions.push(this.define(name, "assignment", left, scope, filePath, state, undefined));
+      } else if (left !== undefined) {
+        this.visit(left, loopScope, filePath, state, currentFunction);
+      }
+    }
+
+    for (const target of targetDefinitions) {
+      for (const sourceId of sourceIds) this.setTaintPath(state, target.id, sourceId, [sourceId, target.id]);
+      for (const sourceDefinition of sourceDefinitions) this.addTransfer(state, sourceDefinition.id, target.id);
+    }
+
+    if (body !== undefined) this.visit(body, loopScope, filePath, state, currentFunction);
   }
 
   private function(node: ASTNode, scope: Scope, filePath: string, state: FlowState): void {
