@@ -39,6 +39,9 @@ The exact synchronized implementation boundary is recorded in [Current Implement
 - First-class analysis targets are repository-local JavaScript and TypeScript, including JSX/TSX and supported ESM/CommonJS patterns.
 - Discovery also inventories non-source artifacts; they are not misreported as unsupported source.
 - Resolution is deliberately conservative. Dynamic dispatch, runtime metaprogramming, framework behavior, and unsupported syntax may remain unresolved.
+- Framework-specific semantics are currently narrow and Express-focused; comprehensive React, NestJS, Angular, Vue, Fastify, and other framework runtime models are future work.
+- Taint propagation uses built-in deterministic source, sink, and sanitizer rules; project-configurable or plugin-extensible policy is not implemented.
+- Module resolution covers repository-local relative modules and proven `tsconfig` aliases, not full Node, `node_modules`, package `exports`/`imports`, or npm/pnpm/Yarn workspace semantics.
 - Static graphs are evidence about source structure, not proof of runtime behavior, vulnerability absence, or migration safety.
 - Benchmark fidelity is sample-based. Whole-repository migration safety is not established.
 - Large-repository bounded-memory behavior remains an engineering concern; no claim of unlimited scale is made.
@@ -68,20 +71,15 @@ bun run benchmark audit
 bun run src/cli/index.ts --help
 ```
 
-### Verified checkpoint
+### Synchronized checkpoint
 
 | Evidence | Result |
 |---|---|
-| Core integration truth | `origin/core-foundation` at `9e582388dece16ec6fd8bfc1f9aab6da4f0835c7` |
-| Main promotion truth | `origin/main` at `b342e8d45ee9ae1a5e2d9fdb1968f6486e83f733` |
-| Full suite | 1,049 passed, 1 skipped, 0 failed; 9,550 assertions |
-| Typecheck | Passed |
-| Benchmark governance | 10/10 passed |
-| Composite verification | Passed |
-| Express determinism | Three identical runs: 234 discovered, 152 analyzed, 0 failures |
-| Hosted CI | `CI / Verify Core` and `Windows Path Smoke` passed |
+| Core integration truth | `origin/core-foundation` at `204f123ac374c3fefa4ccc0f4d5decb80a1e9b9f` |
+| Main promotion truth | `origin/main` at `6f88ec57d8275c6a367018d3106b537a26cbc2d1` |
+| Verification evidence | Run the canonical commands above for the exact revision under review; live command and hosted-CI output are authoritative. |
 
-These are checkpoint results, not permanent promises. Live command output remains authoritative for a new revision.
+The SHAs are synchronization markers, not permanent capability promises.
 
 ## Toolchain snapshot
 

@@ -44,8 +44,8 @@ Before changing any production static analysis logic:
 
 Verification totals are intentionally not hard-coded in this evergreen guide. Record the live file, test, assertion, skip, and failure counts from each canonical run.
 * **Typecheck Errors:** `0`
-* **Benchmark Governance:** `10 / 10 PASS`
-* **Verification Dashboard:** `4 / 4 PASS`
+* **Benchmark Governance:** all benchmark self-audit checks PASS
+* **Verification Dashboard:** all composite verification gates PASS
 
 ---
 

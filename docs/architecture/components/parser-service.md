@@ -14,11 +14,12 @@ Parser Service transforms discovered source artifacts into normalized structural
 - source-location preservation where exposed by current contracts
 - downstream symbol extraction
 
-## Purpose
+## Current purpose
 
 - Parse supported JavaScript/TypeScript syntax deterministically.
 - Produce normalized AST outputs with source locations.
 - Preserve a contract boundary for future governed parser adapters.
+- Accept standard JavaScript/TypeScript decorator syntax while retaining decorator nodes as syntax only; decorator semantics are not interpreted.
 
 ## Architecture
 
@@ -26,70 +27,63 @@ Parser Service transforms discovered source artifacts into normalized structural
 Discovery Artifact
       |
       v
-Language Adapter
+Parser Manager + Registry
       |
       v
-Parser Plugin
+Babel JavaScript Adapter
       |
       v
-AST + Syntax Extraction
+Normalized AST Result
       |
       v
-Source Mapper
-      |
-      v
-Parsed Artifact
+Downstream Symbol Extraction
 ```
 
 ## Key Components
 
-### Language Adapters
-- Route files to correct parser plugin.
-- Normalize parser runtime options.
-- Handle encoding/newline/platform differences.
+### Parser manager and registry
+- Select the first registered parser that supports the requested language.
+- Reject missing, duplicate, or invalid parser registrations/results with typed errors.
 
-### Parser Plugins
-- Implement language-specific parse logic.
-- Emit schema-compliant AST/IR.
-- Report diagnostics with file/line references.
+### Parser adapters
+- Implement language-specific parse logic behind the common `Parser` contract.
+- Emit validated normalized AST results with parser metadata, statistics, warnings, and errors.
+- The current runtime registers one in-process Babel-based JavaScript parser; package loading and sandboxed parser plugins are not implemented.
 
-### Source Mapper
-- Preserve mapping from AST nodes to original source locations.
-- Required for explainability, transformation lineage, and validation.
+### Source locations
+- Preserve Babel source locations on normalized nodes when the adapter exposes them.
+- Complete source-map and provenance coverage is not implemented.
 
-### Syntax Extraction
-- Extract symbols, declarations, references, imports, signatures.
-- Emit confidence/quality flags for ambiguous constructs.
+### Downstream symbol extraction
+- Symbol extraction consumes the validated normalized AST after parsing.
+- Ambiguous semantic relationships are handled conservatively by downstream symbol/graph/semantic stages.
 
 ## Contracts
 
 ### Input
-- Discovery artifact + parser configuration profile.
+- `ParseRequest` containing language, source path, and source text.
 
 ### Output
-- `ParsedArtifact`:
-  - AST/IR fragments
-  - symbol/index metadata
-  - diagnostics
-  - source maps
-  - provenance hashes
+- `ParseResponse` containing a validated immutable `ASTResult`.
+- `ASTResult` contains parser/language/source-path metadata, one normalized AST root, parser statistics, warnings, and errors.
 
-## Plugin Model
+## Target plugin model
 
-- Parser plugins must declare:
+- Future governed parser plugins would need to declare:
   - language coverage
   - plugin version
   - input/output schema version
   - runtime permissions
-- Non-compliant plugins are rejected at registration or invocation.
+- Permission declarations and out-of-process enforcement are not implemented.
 
 ## Failure Handling
 
-- Syntax errors: capture diagnostic, continue where policy allows.
-- Parser crash/timeouts: isolate and retry if transient.
-- Schema invalid output: hard fail for affected partition.
+- Syntax/parser errors are isolated per file and surfaced through deterministic parser-failure reporting while the supported analysis run continues.
+- Unsupported source languages remain unsupported; there is no fallback acquisition or dynamic plugin download.
+- Parser timeouts and automatic transient retries are not implemented.
+- Schema-invalid parser output is rejected by the parser boundary.
 
-## Quality Metrics
+## Target quality metrics
 
 - Parse success rate by language
 - AST completeness
