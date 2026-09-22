@@ -22,19 +22,19 @@ Dependency Extractor
 Discovery Artifact
 ```
 
-## Purpose
+## Current purpose
 
-- Safely inspect repository contents.
-- Detect languages/frameworks/build systems.
-- Extract dependency signals and structural metadata.
-- Produce deterministic discovery artifacts with provenance.
+- Inspect a caller-supplied local repository without rewriting source files.
+- Deterministically inventory files, classify known languages and artifact kinds, hash repository-relative paths, and record enumeration failures.
+- Parse the root `package.json` when present to collect production/development dependency signals and supported framework heuristics.
+- Produce validated discovery records and derived `.discovery` artifacts.
 
 ## Core Responsibilities
 
-1. Repository-path intake and manifest generation
-2. File scanning and classification  
-3. Language and framework detection  
-4. Package-manifest dependency extraction
+1. Local repository-path intake
+2. File scanning and classification
+3. Extension/path-based language and artifact-kind classification
+4. Root `package.json` dependency and framework-signal extraction
 5. Discovery artifact packaging for parser/graph services  
 
 ## Internal Pipeline
@@ -42,11 +42,11 @@ Discovery Artifact
 ### 1) Repository Intake
 - Resolve a user-supplied local repository path.
 - Record deterministic project and file metadata.
-- Enforce owned-path and symlink boundaries used by current scanning/projection code.
+- Reject a non-directory project path and skip symbolic-link entries during traversal.
 
 ### 2) File Scanner
 - Enumerate files/directories with filtering rules.
-- Identify binaries, generated files, vendored code.
+- Classify known source, configuration, manifest, documentation, markup, stylesheet, data, schema, container, binary, and unknown files.
 - Build file inventory index.
 
 ### 3) Language Detector
@@ -54,16 +54,12 @@ Discovery Artifact
 - Inventory multi-language repositories while parsing only supported JS/TS inputs.
 
 ### 4) Dependency Extractor
-- Parse lockfiles/manifests where available.
+- Parse the root `package.json` when it is present and valid.
+- Record typed manifest read, parse, or validation degradation instead of treating malformed metadata as a clean absence.
 - Leave source-level dependency resolution to later parser/symbol/graph stages.
 
-### 5) Discovery Artifact
-- Emit immutable artifact bundle:
-  - file inventory
-  - language profile
-  - dependency profile
-  - discovery warnings
-  - provenance metadata
+### 5) Discovery Result
+- Emit an immutable `ProjectDiscovery` containing project identity/path, file inventory, dependency and framework signals, languages, enumeration failures, manifest failures, and the discovery timestamp.
 
 ## Contracts
 
@@ -71,25 +67,21 @@ Discovery Artifact
 - Repository source reference + execution context.
 
 ### Output
-- `DiscoveryArtifact` (versioned schema) with:
-  - `artifact_id`
-  - `source_ref`
-  - `file_index`
-  - `language_profile`
-  - `dependency_profile`
-  - `warnings`
-  - `provenance`
+- Validated `ProjectDiscovery` and `FileArtifact` contracts.
+- Run-scoped storage records and derived projection artifacts produced by the storage/projection boundary.
 
 ## Failure Handling
 
-- Unsupported or unreadable repositories => fail with diagnostics.
-- Excessive size or unsafe archive patterns => quarantine.
-- Partial detection allowed only with explicit confidence markers.
+- An invalid root path fails with a typed discovery error.
+- Directory-read and entry-stat failures are retained as deterministic enumeration diagnostics so a partial inventory is not presented as complete.
+- Root-manifest read, parse, and schema failures are retained as typed manifest diagnostics.
 
-## Observability
+## Target architecture
 
-- Scan duration
-- File count and classification distribution
-- Language detection confidence
-- Dependency extraction coverage
-- Warning/error categories
+Remote cloning, archive intake/quarantine, content-signature language detection, confidence scoring, broader manifest/lockfile interpretation, and governed multi-language parser dispatch are future capabilities. They are not current discovery behavior.
+
+## Target observability
+
+- Scan duration and classification distribution
+- Language-detection confidence and dependency-extraction coverage
+- Warning/error category metrics
