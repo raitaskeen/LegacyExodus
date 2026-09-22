@@ -1,28 +1,45 @@
-# Development Agent Control Plane
+# LegacyExodus agent operating system
 
-`.agents/` contains focused operating skills for agents that work on the LegacyExodus repository. It does not configure or participate in the LegacyExodus runtime, analyze user repositories, or define product architecture.
+This controls repository engineering agents, not the product runtime or Jev.
+Start here; select one role. Do not load the entire directory.
 
-The authoritative entry point is [`AGENTS.md`](../AGENTS.md). Select only the skill needed for the current task:
+## Progressive context
 
-- `legacyexodus-forensic-remediation`: one confirmed implementation defect, failure-first through verified remediation.
-- `legacyexodus-code-audit`: read-only code and architecture inspection.
-- `legacyexodus-docs-audit`: read-only documentation-to-core truth comparison and review reconciliation.
-- `legacyexodus-git-governance`: branch, commit, synchronization, and publication rules.
-- `legacyexodus-test-verification`: canonical verification layers and evidence format.
-- `legacyexodus-performance-audit`: read-only performance and memory measurement.
-- `legacyexodus-red-team-review`: read-only adversarial challenge of a candidate change.
+- **Level 0, every task:** [kernel](core/KERNEL.md) and this router. The kernel
+  owns constitution, evidence/trust rules, authorization and common stops.
+- **Level 1, selected task:** [lifecycle](protocols/LIFECYCLE.md),
+  [roles](protocols/ROLES.md), relevant [report](templates/REPORTS.md);
+  [engine](context/ENGINE.md) only for implementation/semantic claims.
+- **Level 2:** selected skill below and only its conditional reads. Git preparation
+  and verification are explicit role transitions for writers, not reasons to
+  load every skill at intake.
 
-Use the smallest evidence surface that can answer the task. Do not re-audit unrelated subsystems, reopen closed findings without new executable evidence, or treat roadmap prose as implementation truth.
+Read dependencies flow from bootstrap -> router -> skills -> shared contracts.
+Shared contracts do not link back to skills; procedure names refer to this routing
+table. No recursively loaded policy loops. Historical governance documents do not
+reintroduce a competing execution sequence; kernel defines the precedence boundary.
 
-For every core change, report whether documentation impact is `REQUIRED` or `NONE` and why. Documentation follows current source, tests, and verified runtime behavior; it never drives production changes.
+## Task router
 
-## Authority and mutation boundaries
+All routes inherit kernel stops and lifecycle baseline checks.
 
-| Role | May inspect | May edit | May commit/push |
+| Task / skill | Mandatory additional context | Write / isolation | Reviewer -> next handoff |
 |---|---|---|---|
-| Remediation builder | Scoped implementation and evidence | One authorized finding | Only after every governed gate |
-| Code/docs/performance auditor | Relevant evidence | No | No |
-| Red-team reviewer | Candidate diff and tests | No | No |
-| Human maintainer | Repository and external settings | As authorized | Final authority |
+| [Code audit](skills/legacyexodus-code-audit/SKILL.md) | Engine, scoped source/contracts/tests | None; prepared execution copy if needed | Evidence challenge -> design or writer |
+| [Docs audit](skills/legacyexodus-docs-audit/SKILL.md) | Engine truth rules, claims and frozen source | Audit none; separately authorized docs writer uses isolated feature worktree | Independent docs verifier -> human/Git |
+| [Remediation](skills/legacyexodus-forensic-remediation/SKILL.md) | Engine, finding/contract, Git preparation and verification | Allowlisted source/tests; isolated feature worktree | Independent verification and red team -> human/Git |
+| [Git governance](skills/legacyexodus-git-governance/SKILL.md) | Live refs, scope, permissions and review evidence | Task metadata and authorized delivery | Human gates -> requested postcheck/stop |
+| [Performance audit](skills/legacyexodus-performance-audit/SKILL.md) | Engine, corpus/scripts/environment | Candidate read-only; prepared measurement copies | Evidence review -> design/writer |
+| [Red team](skills/legacyexodus-red-team-review/SKILL.md) | Exact diff, contract, RED and gate evidence | Candidate read-only; authorized external probes | PASS -> human; FAIL -> writer/design |
+| [Verification](skills/legacyexodus-test-verification/SKILL.md) | Frozen candidate, scripts and CI | Candidate read-only; isolated execution artifacts | Independent red team or writer |
+| [Design](skills/legacyexodus-architecture-design/SKILL.md) | Engine, disputed evidence and invariant | Authorized design artifact only; isolated feature worktree if writing | Human decision -> scoped implementation |
 
-All agents stop when the assigned task is complete, an unrelated gate fails, repository truth becomes contradictory, or tooling prevents trustworthy verification. Uncertainty must be reported as `INCONCLUSIVE`, `SAFE WITH REQUIRED FOLLOW-UP`, or `BLOCKED`; it must not be converted into closure.
+For governance writing use the lifecycle GOVERNANCE route with explicit file
+allowlist, Git preparation, skill design, consistency checks and scenario review.
+Do not force this through the engine bug-remediation skill.
+
+Every skill supplies use/exclusion, context manifest, inputs/authority, procedure,
+stops, output and next role. Read only related source and evidence; unrelated
+skills/roadmaps/host directories are not default context.
+Persist volatile task facts only in dated evidence/handoff reports, not policy.
+The system is model-neutral and does not itself delegate agents or grant tools.

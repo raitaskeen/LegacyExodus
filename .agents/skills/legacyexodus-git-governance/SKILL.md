@@ -1,148 +1,89 @@
 ---
 name: legacyexodus-git-governance
-description: Repository branch rules, commit discipline, synchronization protocols, and clean-tree standards for LegacyExodus.
+description: Prepare isolated task worktrees and perform only explicitly authorized Git delivery, PR, merge and cleanup operations with live evidence.
 ---
 
-# Skill: LegacyExodus Git Governance
+# legacyexodus-git-governance
 
-## 1. Purpose
-This skill defines the mandatory Git branching policies, commit standards, remote synchronization workflows, and merge safety gates for the LegacyExodus repository. It prevents permanent branch sprawl, accidental force-pushes, and cross-branch state contamination.
+## When to use
 
-## 2. Scope
-Applies to all Git operations across all local and remote branches in `LegacyExodus`.
+Prepare an isolated worktree; inspect Git state; deliver a reviewed candidate;
+verify authorized PR/merge results. Do not use to fix content or bypass review.
 
-## 3. When to Use
-* Creating new branches for engineering tasks, bug fixes, or documentation work.
-* Staging, formatting, and committing code changes.
-* Synchronizing local branches with remotes (`origin`).
-* Preparing pull requests and auditing branch cleanliness.
-* Verifying post-merge synchronization.
+## Context manifest
 
-## 4. When NOT to Use
-* Writing implementation code (use `legacyexodus-forensic-remediation`).
-* Auditing code quality (use `legacyexodus-code-audit`).
+Mandatory: [kernel](../../core/KERNEL.md),
+[lifecycle](../../protocols/LIFECYCLE.md),
+[role matrix](../../protocols/ROLES.md), and the applicable
+[report contract](../../templates/REPORTS.md).
+Mandatory: repo identity, scope, selected base and operation permissions.
+Optional: local CI configuration, current remote branch rules and existing PR
+metadata when delivering. Irrelevant by default: engine source, all skills and
+historical SHAs. No external action is implied by choosing this skill.
 
-## 5. Authoritative Branch Architecture
-LegacyExodus maintains exactly **three permanent engineering branches**:
+## Inputs and authority
 
-```text
-┌─────────────────────────────────────────────────────────────────────────┐
-│                      PERMANENT BRANCH ARCHITECTURE                      │
-├──────────────────┬──────────────────────────────────────────────────────┤
-│ Branch           │ Responsibility & Scope                               │
-├──────────────────┼──────────────────────────────────────────────────────┤
-│ main             │ Canonical integration & release trunk. Authoritative.│
-│ core-foundation  │ Implementation engineering trunk (legacy-exodus-core)│
-│ docs-foundation  │ Architecture documentation & specification trunk     │
-└──────────────────┴──────────────────────────────────────────────────────┘
-```
+Frozen source/ref, feature branch/worktree path, candidate evidence and exact
+authorized operations. Git governor owns mechanical preparation/delivery, not
+content edits. Inspection is read-only; preparation may update task Git metadata.
 
-### Temporary Task Branches
-* All work MUST occur on temporary task branches.
-* Standard prefixes:
-  * `fix/<finding-id>`: Forensic bug remediations.
-  * `feat/<feature-name>`: Verified new feature additions.
-  * `chore/<maintenance-topic>`: Dependency, toolchain, or pipeline updates.
-  * `docs/<documentation-topic>`: Documentation synchronization based on verified core truth.
-  * `audit/<topic>`: Read-only investigative snapshots.
-* **Deletion Invariant:** Temporary task branches MUST be deleted locally and remotely upon successful merge to prevent repository clutter.
-* **Anti-Sprawl Invariant:** Contributors MUST NOT create permanent branches named `skills`, `skill.md`, `agent-governance`, or any variation thereof.
+## Procedure
 
----
+### Prepare
 
-## 6. Operating Procedure
+1. Inspect git status --short, branch, HEAD, remotes and git worktree list.
+   Verify remote refs live (git ls-remote; bounded fetch when needed).
+   Compare expected and actual SHA before pinning a source. Stop if it moved.
+2. Select main for integrated/governance work, core-foundation for core work,
+   docs-foundation for docs work unless task explicitly chooses another baseline.
+   All three long-lived branches are inspection baselines, never experimental
+   workspaces. Do not create new permanent branches.
+3. Preserve dirty primary worktrees and all retained evidence. Create a clean
+   isolated worktree at the exact frozen SHA with a dedicated temporary branch:
+   git worktree add -b <task-branch> <authorized-path> <frozen-sha>.
+   Follow explicit branch naming; otherwise use platform prefix rules and a
+   descriptive temporary task name. Never switch a dirty checkout blindly.
+4. Verify worktree HEAD/branch/status and filesystem permissions before mutation.
+   Preparation is separate from read-only auditor execution.
 
-### Step 1: Pre-Flight Remote Synchronization & Clean Worktree Precondition
-Before starting any new work or creating a branch:
-```bash
-git fetch --all --prune
-git status
-```
-* **Clean Worktree Precondition:** `git status` MUST report `nothing to commit, working tree clean`. Any unexpected staged, unstaged, or untracked files MUST stop the task immediately. Do not proceed until the workspace is pristine.
+### Deliver
 
-### Step 2: Branch Creation from Remote Authoritative Base
-Always branch from the fetched remote-tracking authoritative base branch (`origin/<base-branch>`):
-```bash
-git checkout -b <type>/<task-name> origin/<base-branch>
-git rev-parse HEAD
-```
+1. Require reviewed frozen diff, all applicable gates, independent review where
+   required, scope check and documentation impact. Recheck live refs and candidate
+   identity; material changes invalidate approval/evidence for old content.
+2. Check explicit authorization separately for commit, push and PR publication.
+   If absent, report the concrete reviewable candidate and NOT_AUTHORIZED.
+   Commit permission does not imply push or PR permission.
+3. Review full tracked and untracked contents, secrets/artifacts and whitespace.
+   Stage only allowlisted paths; inspect staged diff. Use an atomic Conventional
+   Commit with truthful authorship. Preserve repository-required trailers when
+   applicable: Co-authored-by: rsexo <raitaskeen.dev@gmail.com> and
+   Co-authored-by: pamexo <raimrazzaq12@gmail.com>.
+4. Push only the authorized temporary branch. If PR publication is authorized,
+   use the correct base and verified claims; report its actual URL. Inspect CI
+   and branch rules; passing local checks does not establish remote CI.
+5. Merge requires explicit human authorization for this PR/candidate, unless
+   already specifically preauthorized, plus required CI/reviews and branch rules.
+   Never bypass protections. Verify merged target SHA, content, CI and state.
+6. Cleanup is separately authorized: inspect exact branch/worktree ownership,
+   clean state, merge proof and retained evidence before removing anything.
+   Do not delete temporary branches or evidence automatically.
+7. Verify task tree clean after authorized delivery, compare local/remote SHAs
+   where appropriate, report exact completed operations, and STOP.
 
-**Authoritative Base Branch Mappings:**
-* **Core Implementation Work (`legacy-exodus-core/`):** `<base-branch>` = `core-foundation` (`origin/core-foundation`)
-* **Documentation Work (`docs/`, architecture, ADRs):** `<base-branch>` = `docs-foundation` (`origin/docs-foundation`)
-* **Repository-Wide / Main Integration Work:** `<base-branch>` = `main` (`origin/main`) ONLY when genuinely appropriate (e.g., top-level repository governance foundation, release coordination).
+No automatic stash, reset, force-push, broad restore, clean, or evidence deletion.
+No direct commits to long-lived branches. Never copy core into docs-foundation
+or merge main merely to refresh its stale snapshot. No accidental generated
+artifacts; no blanket staging. Cleanup is not a cure for unexpected state.
 
-### Step 3: Staging & Hygiene Audit
-Before staging and committing:
-1. Check modified files: `git status`. Verify only intended files are changed.
-2. Check diff contents: `git diff`.
-3. Verify diff hygiene:
-   ```bash
-   git diff --check
-   ```
-4. Stage strictly the intended files:
-   ```bash
-   git add <target-file-1> <target-file-2>
-   ```
+## Stop conditions
 
-### Step 4: Conventional Commit Discipline
-Commits MUST follow the Conventional Commits specification:
-```text
-<type>(<scope>): <concise imperative summary>
+Kernel stops; ref drift, divergent history, unexpected files, missing operation
+authorization, failed CI, or branch-rule rejection. Preserve candidate and report
+the boundary. Tool permission does not substitute for human task authorization.
 
-- Detailed bullet point 1
-- Detailed bullet point 2
+## Output and next handoff
 
-Co-authored-by: rsexo <raitaskeen.dev@gmail.com>
-Co-authored-by: pamexo <raimrazzaq12@gmail.com>
-```
-* **Types:** `fix`, `feat`, `chore`, `docs`, `perf`, `test`, `refactor`.
-* **Scopes:** `discovery`, `parser`, `symbols`, `graph`, `semantic`, `flow`, `storage`, `runtime`, `cli`, `governance`, `toolchain`.
-
-### Step 5: Push Verification & Clean Worktree Postcondition
-Push only when the user or task explicitly authorizes it, and only to the dedicated temporary task branch on origin:
-```bash
-git push origin <type>/<task-name>
-```
-* **Clean Worktree Postcondition:** Confirm immediately after pushing that `git status` reports:
-  ```text
-  nothing to commit, working tree clean
-  ```
-* If pushing is not authorized, stop after the local commit and report `PUSH: NOT AUTHORIZED`. Never infer permission to publish changes.
-
-### Documentation Impact Gate
-Every core change must answer: `Does this change alter documented product truth?`
-
-* If **yes**, identify the affected README/docs and synchronize them from a temporary `docs/*` branch based on the latest `origin/docs-foundation`, using the verified `origin/core-foundation` SHA as evidence.
-* If **no**, report `Documentation impact: NONE` with a concrete reason.
-* Documentation must follow current source, tests, and verified runtime behavior. Never change production behavior merely to satisfy prose.
-* Keep engine and documentation changes in separate logical commits and branch responsibilities.
-
-### Step 6: Review Follow-Up Discipline
-When addressing external review comments (e.g., CodeRabbit) on an already-verified task:
-```text
-validate review comment
-        ↓
-minimal change
-        ↓
-focused regression
-        ↓
-required global verification
-        ↓
-documentation impact gate
-        ↓
-small follow-up commit
-        ↓
-STOP
-```
-Do NOT automatically reopen the entire finding, discard established test baselines, or broadly re-audit unrelated subsystems.
-
----
-
-## 7. Prohibited Behavior (Strict Invariants)
-1. **NEVER Commit Directly to `main`:** All changes must land on `main` via verified Pull Requests.
-2. **NEVER Force-Push Shared Branches in Normal Workflows:** Autonomous agents and contributors MUST NOT force-push (`git push --force` or `--force-with-lease`) to shared branches (`main`, `core-foundation`, `docs-foundation`). Normal engineering workflows MUST NEVER force-push. Human maintainers MAY execute a force-push ONLY as a deliberate, documented, and communicated emergency recovery operation.
-3. **NEVER Merge `main` into `docs-foundation` Merely to Sync Core:** The stale `legacy-exodus-core` directory inside `docs-foundation` must remain untouched. Documentation agents must query core via `git show core-foundation:<path>`.
-4. **NEVER Copy Core Files into `docs-foundation`:** Avoid duplicating codebase trees across branches.
-5. **NEVER Commit Secrets or Credentials:** Any file containing an API token, private key, or password must be aborted and cleaned.
-6. **NEVER Execute Destructive Tree Shortcuts on Unsaved Work:** Destructive commands (`git reset --hard`, `git clean -fd`, `git clean -fdx`, `git restore .`, `git checkout -- .`) must never be used when user or concurrent task work may be affected. When encountering a dirty worktree: inspect files $\to$ identify ownership $\to$ preserve work $\to$ STOP and seek clarification if uncertain.
+Baseline/candidate/target SHAs, path/branch, exact authorized operations, commands,
+CI/review evidence, final status and unperformed actions. Human for missing
+delivery decisions; assigned writer for content corrections.
