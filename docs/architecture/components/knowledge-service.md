@@ -4,88 +4,78 @@
 
 ## Overview
 
-Knowledge Service is the intelligence heart of NolaraStruct. It synthesizes parsed and graph-derived signals into a governed system understanding model.
+The current knowledge layer converts parsed and graph-derived signals into deterministic structural evidence. It does not infer business intent or enforce a policy-scoped context service.
 
-## Scope
+## Current scope
 
-- knowledge graph
-- system intelligence model
-- domain inference
-- invariants
-- context boundaries
+- deterministic knowledge graph derived from discovered files, symbols, imports, exports, and dependency edges
+- semantic calls, references, supported Express route/middleware facts, entry-point facts, and conservative unused/dead-code indicators
+- immutable validated storage/projection contracts
 
-## Purpose
+## Current purpose
 
-- Build a durable, queryable representation of legacy system intent and structure.
-- Provide contextual intelligence for architecture decisions and transformation planning.
-- Preserve deterministic, auditable reasoning boundaries for AI-assisted workflows.
+- Build deterministic structural evidence for supported JavaScript/TypeScript inputs.
+- Preserve unresolved relationships rather than fabricating runtime meaning.
+- Supply validated static-analysis artifacts for inspection and future downstream systems.
 
-## Core Model Layers
+## Current model layers
 
 ### 1) Knowledge Graph
-- Entities: modules, services, schemas, interfaces, data domains.
-- Relationships: dependency, call, ownership, boundary, trust.
+- Nodes represent files and extracted symbols.
+- Edges represent containment, exports, and resolved imports from the current graph builder.
 
-### 2) System Intelligence Model
-- Derived interpretation layer:
-  - architectural patterns
-  - coupling hotspots
-  - domain boundaries
-  - modernization opportunities
+### 2) Semantic Analysis
+- Conservative calls and references with explicit resolution state.
+- Supported Express routes/middleware, entry points, and static unused/dead-code indicators.
 
-### 3) Inference Layer
-- Domain inference (bounded-context suggestions, capability clusters).
-- Confidence-scored heuristics with provenance links.
+### 3) Flow Analysis
+- CFG/DFG artifacts and deterministic built-in taint propagation for supported patterns.
 
-## Context Boundaries
+## Current invariants
 
-Knowledge Service enforces context boundaries so downstream AI and transformation components receive scoped, policy-approved slices—not full raw dumps.
-
-## Invariants (Normative)
-
-1. Every inferred claim must trace to source evidence.
-2. Confidence must be explicit for inferred, non-deterministic conclusions.
-3. Policy-scoped context boundaries must be enforced at query/export time.
-4. Knowledge snapshots are immutable and versioned.
-5. No silent mutation of prior accepted knowledge states.
+1. Validated static evidence is deterministic for the same supported input and configuration.
+2. Unknown, ambiguous, and unsupported relationships are not promoted to resolved facts.
+3. Analysis artifacts are immutable after contract construction.
+4. Static evidence is not runtime behavior, business intent, vulnerability absence, or migration-safety proof.
 
 ## Processing Flow
 
 ```text
-Parsed Artifacts + Graph Snapshots
+Files + Symbols + Dependency Graph
             |
             v
-Knowledge Normalization
+Knowledge Graph + Semantic Analysis
             |
             v
-Inference + Rule Evaluation
+CFG / DFG / Conservative Taint
             |
             v
-Knowledge Snapshot (Versioned)
-            |
-            v
-Context Export API
+Run-scoped Storage + Projections
 ```
 
 ## Contracts
 
 ### Input
-- Parsed artifacts
-- Graph snapshots
-- inference/policy configuration
+- discovered file paths
+- symbol tables
+- dependency graph
+- normalized AST evidence for semantic and flow analysis
 
 ### Output
-- `KnowledgeSnapshot`
-- `ContextSlice` (policy-filtered)
-- inference evidence reports
+- validated `KnowledgeGraph` and `SemanticAnalysis` artifacts
+- validated control-flow and data-flow artifacts
 
 ## Failure Handling
 
-- Evidence gaps => mark inference unresolved (not fabricated).
-- Schema mismatch => reject ingest.
-- Policy boundary violation => deny context export.
+- Evidence gaps remain unresolved rather than fabricated.
+- Schema mismatches reject the affected contract/persisted snapshot.
+- Parser and symbol failures are isolated and surfaced as analysis diagnostics.
 
-## Observability
+## Target architecture
+
+Domain/business-intent inference, architectural recommendations, confidence aggregation, policy-scoped context export, AI-assisted reasoning, and a general query service are not implemented. The current built-in taint policy is not project-configurable or plugin-extensible.
+
+## Target observability
 
 - Snapshot build duration
 - Inference coverage/confidence

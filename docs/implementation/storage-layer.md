@@ -22,10 +22,10 @@ flowchart TD
 
 ## 2. Key Components
 
-1. **`StorageManager` (`storage-manager.ts`):** High-level storage facade managing storage providers and projection pipelines. Implements `findScoped(criteria)` to delegate bounded queries.
-2. **`StorageProvider` (`storage-provider.ts`):** Canonical persistence contract supporting `save`, `findById`, `findAll`, and `findScoped(criteria: StorageQueryCriteria)`.
-3. **`MemoryStorageProvider` (`adapters/memory-storage.ts`):** High-performance in-memory storage provider with index-aware scoped querying.
-4. **`SqliteStorageProvider` (`adapters/sqlite-storage.ts`):** Durable SQLite persistence provider with parameterized SQL queries utilizing composite indexes (`idx_records_lookup`, `idx_records_file`) for zero-overhead bounded retrieval.
+1. **`StorageManager` (`storage-manager.ts`):** High-level storage facade managing storage providers and projection pipelines. Implements `findScoped(criteria)` to delegate bounded queries, provides `clearTransient()` for safe session-boundary transient state clearing without affecting persistent storage, and coordinates lifecycle shutdown via `close()`.
+2. **`StorageProvider` (`storage-provider.ts`):** Canonical persistence contract supporting `save`, `saveBatch`, `commitBatch`, `findById`, `findAll`, and `findScoped(criteria: StorageQueryCriteria)`, `iterateScoped`, `delete`, `clear`, and optional lifecycle `close`. Optionally exposes `isPersistent?: boolean`.
+3. **`MemoryStorageProvider` (`adapters/memory-storage.ts`):** High-performance in-memory storage provider with index-aware scoped querying. Stores records in transient JavaScript `Map` structures for the duration of the active session; clears the provider's `records` Map and releases the provider's retained references to those records upon caller-driven `clearTransient()` / `clear()` and terminal `close()`.
+4. **`SqliteStorageProvider` (`adapters/sqlite-storage.ts`):** SQLite persistence provider with parameterized SQL queries utilizing composite indexes (`idx_records_lookup`, `idx_records_file`) for zero-overhead bounded retrieval. Configures `isPersistent: boolean` (`!this.isInMemory`); disk-backed SQLite instances are persistent (`isPersistent === true`), protecting database tables from transient clearing operations, while in-memory SQLite instances (`:memory:`) are non-persistent (`isPersistent === false`).
 5. **`StreamingJsonWriter` (`projections/streaming-json-writer.ts`):** Low-memory streaming writer that splits JSON output into bounded 64KB chunks with backpressure handling to prevent out-of-memory errors on large repositories.
 6. **`FileDiscoveryProjection` (`projections/file-discovery-projection.ts`):** Generates structured discovery ledgers mapping file paths, languages, hashes, and symbol counts.
 
@@ -154,11 +154,46 @@ Storage records and the durable event journal are canonical analysis state. `.di
 
 This contract is separate from post-commit event-delivery semantics: subscriber failures are recorded without failing an already committed command, whereas projection failure makes the requested filesystem deliverable incomplete and therefore remains a typed caller-visible failure.
 
+### 4.12 Transient Session Reset & Storage Lifetime Management
+
+To prevent unbounded memory growth in long-running engine hosts (such as IDE language servers, daemon processes, and multi-test execution suites) while preserving deterministic repeatability and avoiding destructive data loss:
+
+1. **Deterministic Retention Model (No Uncontrolled Eviction):**
+   * `MemoryStorageProvider` retains records in an in-memory `Map` for the lifetime of the active transient session.
+   * LegacyExodus intentionally does not implement silent background LRU eviction, TTL expiry, or automatic run pruning. Within an active session, historical analysis records remain queryable via `DiscoveryQueryService` (e.g. `getAnalysisRun(projectId, runId)` and `listAnalysisRuns(projectId)`).
+   * Memory bounds are controlled explicitly at session boundaries by the calling process.
+
+2. **Caller-Controlled Lifecycle Boundary (`LegacyExodusEngine.resetSession`):**
+   * Callers invoke `await engine.resetSession()` between independent tasks or repository analyses to release transient state without the overhead of destroying and reinitializing the engine runtime.
+   * `resetSession()` leaves the engine in the `running` state. Configuration, runtime environments, and core services remain initialized and ready for subsequent commands.
+
+3. **Selective Transient Clearing (`StorageManager.clearTransient`):**
+   * `StorageManager` exposes `clearTransient()` which checks `this.isPersistent()`, delegating to `this.provider.isPersistent ?? false`.
+   * **Transient Non-Persistent Providers (`MemoryStorageProvider`, In-Memory SQLite):** Because `isPersistent` is falsy (including `MemoryStorageProvider` and in-memory `SqliteStorageProvider`), `clearTransient()` executes `this.clear()`, clearing the provider's `records` Map (or SQLite table) and releasing the provider's retained references to those records.
+   * **Persistent Providers (Disk-Backed `SqliteStorageProvider`):** Disk-backed SQLite providers configure `isPersistent = !this.isInMemory` (`true` when configured with a database file path). When `isPersistent()` is `true`, `clearTransient()` resolves immediately as a safe no-op (`Promise.resolve()`). Persisted `storage_records`, SQLite indexes, and durable domain events are preserved intact across session resets.
+   * **Separation from Destructive Clearing:** `StorageManager.clear()` remains an administrative destructive operation that unconditionally calls `provider.clear()` (executing `DELETE FROM storage_records` on SQLite). Session resets strictly use `clearTransient()`, preventing catastrophic data loss in persistent configurations.
+
+4. **Volatile Event Store Clearing (`InMemoryEventStore.clear`):**
+   * `resetSession()` resets process-local volatile domain events via `context.eventStore.clear()` (`events.length = 0`).
+   * When disk-backed SQLite storage is configured, durable domain events persisted in the `storage_records` table (`WHERE type = 'domain-event'`) remain stored and queryable via `loadDurableEvents`.
+
+5. **Concurrency & Lifecycle Serialization:**
+   * **Engine State Precondition:** `engine.resetSession()` verifies `this.state === "running"`. If the engine is in `created`, `stopping`, or `stopped` states, it immediately throws a typed `LegacyExodusError` with code `ENGINE_NOT_RUNNING`.
+   * **Active Execution Guard:** If commands are currently executing (`this.activeExecutions.size > 0`), `resetSession()` immediately throws `ENGINE_BUSY` without clearing transient state.
+   * **Execution Mutual Exclusion:** If a session reset is currently in progress (`this.resetPromise !== null`), `engine.execute()` immediately rejects with `ENGINE_BUSY`.
+   * **Concurrent Reset Coalescing:** Multiple concurrent calls to `resetSession()` return the same active `resetPromise`, ensuring transient state is cleared in a single coordinated operation.
+   * **Shutdown Synchronization:** `engine.shutdown()` checks if a session reset is in progress (`resetPromise !== null`) and awaits `Promise.allSettled([this.resetPromise])` before awaiting active executions and tearing down runtime components. Calling `resetSession()` after shutdown begins throws `ENGINE_NOT_RUNNING`.
+
+6. **Terminal Disposal (`close`):**
+   * During terminal `engine.shutdown()`, `StorageManager.close()` is called.
+   * `MemoryStorageProvider.close()` delegates to `this.clear()`, clearing the provider's `records` Map and releasing the provider's retained references to those records.
+   * `SqliteStorageProvider.close()` finalizes prepared statements (`maxSeqStmt.finalize()`) and closes the underlying SQLite database handle without deleting persisted records.
+
 ---
 
 ## 5. Implementation Evidence
 
-* **Source Location:** [`src/storage/`](../../legacy-exodus-core/src/storage), [`src/discovery/discovery-query-service.ts`](../../legacy-exodus-core/src/discovery/discovery-query-service.ts), [`src/core/engine/engine.ts`](../../legacy-exodus-core/src/core/engine/engine.ts), [`src/core/orchestration/command-handler.ts`](../../legacy-exodus-core/src/core/orchestration/command-handler.ts), [`src/storage/projections/`](../../legacy-exodus-core/src/storage/projections).
-* **Tests:** `memory-storage.test.ts`, `storage-manager.test.ts`, `storage-scoped-query.test.ts`, `schema-drift-integrity.test.ts`, `streaming-json-writer.test.ts`, `projection-manifest-integrity.test.ts`, `projection-failure-semantics.test.ts`, `analysis-run-atomicity.test.ts`, `concurrent-projection-safety.test.ts`, `storage-schema-versioning.test.ts`, `sqlite-storage.test.ts`.
+* **Source Location:** [`src/storage/`](../../legacy-exodus-core/src/storage), [`src/storage/storage-manager.ts`](../../legacy-exodus-core/src/storage/storage-manager.ts), [`src/storage/adapters/memory-storage.ts`](../../legacy-exodus-core/src/storage/adapters/memory-storage.ts), [`src/storage/adapters/sqlite-storage.ts`](../../legacy-exodus-core/src/storage/adapters/sqlite-storage.ts), [`src/core/engine/engine.ts`](../../legacy-exodus-core/src/core/engine/engine.ts), [`src/core/events/event-store.ts`](../../legacy-exodus-core/src/core/events/event-store.ts), [`src/discovery/discovery-query-service.ts`](../../legacy-exodus-core/src/discovery/discovery-query-service.ts), [`src/core/orchestration/command-handler.ts`](../../legacy-exodus-core/src/core/orchestration/command-handler.ts), [`src/storage/projections/`](../../legacy-exodus-core/src/storage/projections).
+* **Tests:** `engine.test.ts`, `memory-storage.test.ts`, `storage-manager.test.ts`, `storage-scoped-query.test.ts`, `schema-drift-integrity.test.ts`, `streaming-json-writer.test.ts`, `projection-manifest-integrity.test.ts`, `projection-failure-semantics.test.ts`, `analysis-run-atomicity.test.ts`, `concurrent-projection-safety.test.ts`, `storage-schema-versioning.test.ts`, `sqlite-storage.test.ts`.
 * **Related ADR:** **[ADR-005: Storage Strategy](../adr/ADR-005-storage-strategy.md)**.
 * **Architecture Spec:** **[Storage Service Architecture](../architecture/components/storage-service.md)**.
