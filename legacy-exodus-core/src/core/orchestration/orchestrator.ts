@@ -18,11 +18,13 @@ import type { RuntimeService } from "@runtime/application";
 
 import {
   DiscoverProjectHandler,
+  type AstStoreCleanupFailure,
   type CommandExecution,
   AnalyzeProjectHandler,
   InitializeProjectHandler,
   UpdateKnowledgeHandler,
 } from "./command-handler";
+import type { AnalysisAstStoreFactory } from "./run-scoped-ast-store";
 
 export type OrchestratorStatus = "idle" | "executing" | "stopped";
 
@@ -38,6 +40,14 @@ export type PostCommitEventDeliveryFailureReporter = (
   failure: PostCommitEventDeliveryFailure,
 ) => void;
 
+export interface AstStoreCleanupDiagnostic extends AstStoreCleanupFailure {
+  readonly stage: "cleanup" | "reporting";
+}
+
+export type AstStoreCleanupFailureReporter = (
+  failure: AstStoreCleanupDiagnostic,
+) => void;
+
 export class Orchestrator implements RuntimeService {
   public readonly name = "orchestrator";
   private status: OrchestratorStatus = "idle";
@@ -48,6 +58,7 @@ export class Orchestrator implements RuntimeService {
   private readonly analyzeProjectHandler: AnalyzeProjectHandler;
   private readonly initialState: ProjectState;
   private postCommitEventDeliveryFailures: PostCommitEventDeliveryFailure[] = [];
+  private astStoreCleanupFailures: AstStoreCleanupDiagnostic[] = [];
 
   public constructor(
     private readonly eventStore: InMemoryEventStore,
@@ -58,9 +69,17 @@ export class Orchestrator implements RuntimeService {
     parserManager: ParserManager = createDefaultParserManager(),
     symbolExtractor: JavaScriptSymbolExtractor = new JavaScriptSymbolExtractor(),
     private readonly reportPostCommitEventDeliveryFailure?: PostCommitEventDeliveryFailureReporter,
+    astStoreFactory?: AnalysisAstStoreFactory,
+    private readonly reportAstStoreCleanupFailure?: AstStoreCleanupFailureReporter,
   ) {
     this.initialState = initialState ?? createProjectState("Uninitialized Project");
-    this.analyzeProjectHandler = new AnalyzeProjectHandler(discoveryEngine, parserManager, symbolExtractor);
+    this.analyzeProjectHandler = new AnalyzeProjectHandler(
+      discoveryEngine,
+      parserManager,
+      symbolExtractor,
+      undefined,
+      astStoreFactory,
+    );
   }
 
   public async execute(command: unknown): Promise<CommandExecution> {
@@ -73,10 +92,27 @@ export class Orchestrator implements RuntimeService {
 
     this.status = "executing";
     this.postCommitEventDeliveryFailures = [];
+    this.astStoreCleanupFailures = [];
 
     const executionTask = (async () => {
       const validatedCommand = validateCommand(command);
       const execution = await this.executeValidatedCommand(validatedCommand);
+
+      if (validatedCommand.type === "AnalyzeProject") {
+        for (const cleanupFailure of this.analyzeProjectHandler.getAstStoreCleanupFailures()) {
+          const diagnostic = Object.freeze({ ...cleanupFailure, stage: "cleanup" as const });
+          this.astStoreCleanupFailures.push(diagnostic);
+          try {
+            this.reportAstStoreCleanupFailure?.(diagnostic);
+          } catch (reportingError: unknown) {
+            this.astStoreCleanupFailures.push(Object.freeze({
+              ...cleanupFailure,
+              stage: "reporting" as const,
+              error: reportingError,
+            }));
+          }
+        }
+      }
 
       const analysisRunId = validatedCommand.type === "AnalyzeProject" ? validatedCommand.id : undefined;
 
@@ -157,6 +193,10 @@ export class Orchestrator implements RuntimeService {
 
   public getPostCommitEventDeliveryFailures(): readonly PostCommitEventDeliveryFailure[] {
     return Object.freeze([...this.postCommitEventDeliveryFailures]);
+  }
+
+  public getAstStoreCleanupFailures(): readonly AstStoreCleanupDiagnostic[] {
+    return Object.freeze([...this.astStoreCleanupFailures]);
   }
 
   private async executeValidatedCommand(command: LegacyExodusCommand): Promise<CommandExecution> {

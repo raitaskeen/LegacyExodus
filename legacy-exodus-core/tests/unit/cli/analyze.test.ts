@@ -25,7 +25,7 @@ const report: AnalyzeProjectReport = Object.freeze({
 describe("analyze command output", () => {
   test("reports every analysis disposition in concise human output", () => {
     expect(formatAnalyzeOutput(report)).toBe([
-      "Discovery completed",
+      "Analysis completed with isolated non-fatal faults",
       "",
       "Project: controlled-project",
       "Files discovered: 6",

@@ -39,7 +39,7 @@ export function createEngineContext(
   const parserRegistry = new ParserRegistry();
   parserRegistry.register(new JavaScriptParser());
   const parserManager = new ParserManager(parserRegistry);
-  const pluginLoader = new PluginLoader(plugins, { logger, eventBus, storage });
+  const pluginLoader = new PluginLoader(plugins);
   const runtime = new ApplicationRuntime(config, logger, storage, plugins, pluginLoader);
   runtime.registerService(discoveryProjection);
   const orchestrator = new Orchestrator(
@@ -62,6 +62,20 @@ export function createEngineContext(
           stage: failure.stage,
         },
         "Post-commit event delivery failed",
+      );
+    },
+    undefined,
+    (failure) => {
+      logger.error(
+        {
+          analysisRunId: failure.analysisRunId,
+          ...(failure.error instanceof Error
+            ? { err: failure.error }
+            : { error: String(failure.error) }),
+          projectId: failure.projectId,
+          stage: failure.stage,
+        },
+        "Run-scoped AST cleanup failed",
       );
     },
   );

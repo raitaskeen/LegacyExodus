@@ -151,14 +151,11 @@ describe("F-09: Bounded Per-File AST Lifecycle & Whole-Repository Retention Inva
     const dfgBuilder = new DeterministicDataFlowGraphBuilder();
     const context = dfgBuilder.buildContext(ast, undefined, []);
 
-    // Check that state.functions has no ASTNode keys or values retaining AST
-    const functionKeys = [...context.state.functions.keys()];
-    const functionNodes = functionKeys.filter((k: any) => typeof k === "object" && k !== null && "type" in k);
-    expect(functionNodes).toHaveLength(0);
-
-    // Check that FunctionRecord does not retain ASTNode
-    for (const record of context.state.functions.values()) {
-      expect((record as any).node).toBeUndefined();
-    }
+    // The compact connection state must not own function maps capable of retaining AST nodes.
+    expect(Object.keys(context.state).sort()).toEqual(["sinks", "taintPaths", "transfers"]);
+    expect("functions" in context.state).toBe(false);
+    expect("resolvableFunctions" in context.state).toBe(false);
+    expect("functionsBySymbolId" in context.state).toBe(false);
+    expect(Reflect.ownKeys(context.state).filter((key) => typeof key === "symbol")).toEqual([]);
   });
 });

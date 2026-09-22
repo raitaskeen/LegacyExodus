@@ -8,6 +8,7 @@ import { LegacyExodusError } from "@shared/errors";
 import { StreamingJsonWriter } from "./streaming-json-writer";
 
 const unsafeProjectionPathCode = "DISCOVERY_PROJECTION_PATH_UNSAFE";
+const defaultEngineRoot = resolve(import.meta.dir, "../../..");
 
 function isFileSystemError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
@@ -36,13 +37,13 @@ function unsafeProjectionPath(path: string, reason: string, cause?: unknown): Le
  * Security boundary: invokes `git` directly using `spawnSync` with `shell: false`
  * and strictly isolated stdio to eliminate shell injection risks (SEC-01).
  *
- * @param cwd - Optional working directory path.
+ * @param cwd - Explicit working directory path.
  * @returns 40-character git commit SHA string, or `undefined` if not a git repository or git fails.
  */
-export function resolveGitCommitSha(cwd?: string): string | undefined {
+export function resolveGitCommitSha(cwd: string): string | undefined {
   try {
     const result = spawnSync("git", ["rev-parse", "HEAD"], {
-      ...(cwd !== undefined ? { cwd } : {}),
+      cwd,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
       shell: false,
@@ -60,6 +61,8 @@ export function resolveGitCommitSha(cwd?: string): string | undefined {
 export class FileDiscoveryProjectionAdapter {
   private readonly writer = new StreamingJsonWriter();
   private readonly directoryQueues = new Map<string, Promise<void>>();
+
+  public constructor(private readonly engineRoot: string = defaultEngineRoot) {}
 
   /**
    * Serializes a discovery projection into atomic JSON artifacts on disk.
@@ -134,11 +137,11 @@ export class FileDiscoveryProjectionAdapter {
     const repoCommitSha = resolveGitCommitSha(projection.projectPath);
 
     // Resolve engine metadata
-    const engineCommitSha = resolveGitCommitSha() ?? "uncommitted/local";
+    const engineCommitSha = resolveGitCommitSha(this.engineRoot) ?? "uncommitted/local";
 
     let enginePackageVersion = "0.1.0";
     try {
-      const enginePkg = JSON.parse(await readFile(resolve(import.meta.dir, "../../..", "package.json"), "utf8"));
+      const enginePkg = JSON.parse(await readFile(join(this.engineRoot, "package.json"), "utf8"));
       enginePackageVersion = enginePkg.version ?? "0.1.0";
     } catch {}
 

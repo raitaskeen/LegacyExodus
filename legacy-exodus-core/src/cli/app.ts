@@ -18,7 +18,12 @@ export function createCLI(): Command {
 
   registerCommands(program, {
     version: CLI_VERSION,
-    createEngine: () => createLegacyExodusEngine({ ...process.env, LOG_LEVEL: process.env.LOG_LEVEL ?? "silent" }),
+    createEngine: (environment) =>
+      createLegacyExodusEngine({
+        ...process.env,
+        ...environment,
+        LOG_LEVEL: environment?.LOG_LEVEL ?? process.env.LOG_LEVEL ?? "silent",
+      }),
   });
 
   function configureHelpRecursively(cmd: Command): void {

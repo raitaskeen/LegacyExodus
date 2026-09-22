@@ -7,6 +7,7 @@ import type { EngineState, EngineStatus } from "./engine-status";
 export class LegacyExodusEngine {
   private state: EngineState = "created";
   private readonly activeExecutions = new Set<Promise<unknown>>();
+  private resetPromise: Promise<void> | null = null;
   private shutdownPromise: Promise<void> | null = null;
 
   public constructor(private readonly context: EngineContext) {}
@@ -40,6 +41,10 @@ export class LegacyExodusEngine {
 
     this.shutdownPromise = (async () => {
       try {
+        if (this.resetPromise !== null) {
+          await Promise.allSettled([this.resetPromise]);
+        }
+
         if (this.activeExecutions.size > 0) {
           await Promise.allSettled([...this.activeExecutions]);
         }
@@ -51,6 +56,38 @@ export class LegacyExodusEngine {
     })();
 
     return this.shutdownPromise;
+  }
+
+  public resetSession(): Promise<void> {
+    if (this.state !== "running") {
+      throw new LegacyExodusError({
+        code: "ENGINE_NOT_RUNNING",
+        message: "The engine must be running before its session can be reset.",
+      });
+    }
+
+    if (this.resetPromise !== null) {
+      return this.resetPromise;
+    }
+
+    if (this.activeExecutions.size > 0) {
+      throw new LegacyExodusError({
+        code: "ENGINE_BUSY",
+        message: "The engine cannot reset its session while a command is executing.",
+      });
+    }
+
+    const operation = Promise.resolve()
+      .then(async () => {
+        await this.context.storage.clearTransient();
+        this.context.eventStore.clear();
+      })
+      .finally(() => {
+        this.resetPromise = null;
+      });
+
+    this.resetPromise = operation;
+    return operation;
   }
 
   public status(): EngineStatus {
@@ -72,6 +109,13 @@ export class LegacyExodusEngine {
       throw new LegacyExodusError({
         code: "ENGINE_NOT_RUNNING",
         message: "The engine must be initialized before command execution.",
+      });
+    }
+
+    if (this.resetPromise !== null) {
+      throw new LegacyExodusError({
+        code: "ENGINE_BUSY",
+        message: "The engine cannot execute commands while its session is being reset.",
       });
     }
 

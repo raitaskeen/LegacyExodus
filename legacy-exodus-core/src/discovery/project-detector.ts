@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import type {
   DependencyArtifact,
+  DiscoveryManifestFailure,
   FileArtifact,
   FrameworkArtifact,
 } from "@contracts/discovery";
@@ -35,47 +36,84 @@ export interface ProjectDetection {
   readonly dependencies: readonly DependencyArtifact[];
   readonly frameworks: readonly FrameworkArtifact[];
   readonly languages: readonly string[];
+  readonly manifestFailures: readonly DiscoveryManifestFailure[];
   readonly projectName: string;
 }
 
+export interface ProjectDetectorOptions {
+  readonly readFile?: (path: string, encoding: "utf8") => Promise<string>;
+}
+
+type ManifestResult =
+  | { readonly status: "absent" }
+  | { readonly status: "valid"; readonly manifest: ProjectManifest }
+  | { readonly status: "failure"; readonly failure: DiscoveryManifestFailure };
+
 export class ProjectDetector {
+  private readonly readFileFn: (path: string, encoding: "utf8") => Promise<string>;
+
+  public constructor(options: ProjectDetectorOptions = {}) {
+    this.readFileFn = options.readFile ?? readFile;
+  }
+
   public async detect(
     projectPath: string,
     files: readonly FileArtifact[],
   ): Promise<ProjectDetection> {
-    const manifest = await this.readManifest(projectPath, files);
+    const result = await this.readManifest(projectPath, files);
+    const manifest = result.status === "valid" ? result.manifest : null;
     const dependencies = this.detectDependencies(manifest);
     const frameworks = this.detectFrameworks(dependencies, files);
     const languages = [...new Set(files.map((file) => file.language).filter((language) => language !== "unknown"))]
       .sort();
+    const manifestFailures = result.status === "failure"
+      ? [Object.freeze(result.failure)]
+      : [];
 
     return Object.freeze({
       projectName: manifest?.name?.trim() || basename(projectPath),
       dependencies: Object.freeze(dependencies),
       frameworks: Object.freeze(frameworks),
       languages: Object.freeze(languages),
+      manifestFailures: Object.freeze(manifestFailures),
     });
   }
 
   private async readManifest(
     projectPath: string,
     files: readonly FileArtifact[],
-  ): Promise<ProjectManifest | null> {
+  ): Promise<ManifestResult> {
     // UPGRADE: OS-Agnostic path matching
     const hasPackageJson = files.some((file) => file.path === "package.json");
 
     if (!hasPackageJson) {
-      return null;
+      return Object.freeze({ status: "absent" });
     }
 
+    let fileContent: string;
     try {
-      const fileContent = await readFile(join(projectPath, "package.json"), "utf8");
-      const parsedManifest = projectManifestSchema.safeParse(JSON.parse(fileContent));
-
-      return parsedManifest.success ? parsedManifest.data : null;
-    } catch {
-      return null;
+      fileContent = await this.readFileFn(join(projectPath, "package.json"), "utf8");
+    } catch (error: unknown) {
+      const code = getErrorCode(error);
+      return code === "ENOENT"
+        ? Object.freeze({ status: "absent" })
+        : createManifestFailure("manifest-read", code);
     }
+
+    let parsedJson: unknown;
+    try {
+      parsedJson = JSON.parse(fileContent);
+    } catch (error: unknown) {
+      return createManifestFailure(
+        "manifest-parse",
+        error instanceof SyntaxError ? "INVALID_JSON" : "JSON_PARSE_FAILURE",
+      );
+    }
+
+    const parsedManifest = projectManifestSchema.safeParse(parsedJson);
+    return parsedManifest.success
+      ? Object.freeze({ status: "valid", manifest: Object.freeze(parsedManifest.data) })
+      : createManifestFailure("manifest-validation", "SCHEMA_INVALID");
   }
 
   private detectDependencies(manifest: ProjectManifest | null): DependencyArtifact[] {
@@ -141,4 +179,24 @@ export class ProjectDetector {
       frameworks.push(Object.freeze({ name, evidence }));
     }
   }
+}
+
+function createManifestFailure(
+  kind: DiscoveryManifestFailure["kind"],
+  code: string,
+): ManifestResult {
+  return Object.freeze({
+    status: "failure",
+    failure: Object.freeze({ path: "package.json", kind, code }),
+  });
+}
+
+function getErrorCode(error: unknown): string {
+  if (typeof error === "object" && error !== null && "code" in error) {
+    const code = (error as { readonly code: unknown }).code;
+    if (typeof code === "string" && code.length > 0) {
+      return code;
+    }
+  }
+  return "MANIFEST_READ_FAILURE";
 }

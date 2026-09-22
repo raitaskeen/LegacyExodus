@@ -7,6 +7,7 @@ import {
   formatInitOutput,
   formatPluginListOutput,
   formatStatusOutput,
+  isCleanAnalyzeReport,
 } from "../output/formatter";
 import type { TerminalCapabilities } from "./capabilities";
 import { LayoutRenderer } from "./layout";
@@ -106,7 +107,8 @@ export class SummaryPresenter {
 
   public formatAnalyze(report: AnalyzeProjectReport): string {
     const enumFailures = report.enumerationFailures ?? 0;
-    const isComplete = report.discoveryComplete ?? (enumFailures === 0);
+    const discoveryComplete = report.discoveryComplete ?? (enumFailures === 0);
+    const isClean = isCleanAnalyzeReport(report);
 
     if (this.capabilities.mode === "plain" || this.capabilities.mode === "ci") {
       return formatAnalyzeOutput(report);
@@ -119,9 +121,9 @@ export class SummaryPresenter {
       { label: "Analysis Run ID", value: "Verified Active Run" },
       {
         label: "Discovery Complete",
-        value: isComplete ? "yes" : "no",
-        badge: isComplete ? "COMPLETED" : "NEEDS_REVIEW",
-        badgeType: isComplete ? "success" : "warning",
+        value: discoveryComplete ? "yes" : "no",
+        badge: discoveryComplete ? "COMPLETED" : "NEEDS_REVIEW",
+        badgeType: discoveryComplete ? "success" : "warning",
       },
     ]);
 
@@ -159,7 +161,7 @@ export class SummaryPresenter {
       },
     ]);
 
-    const statusBanner = isComplete
+    const statusBanner = isClean
       ? `  ${this.layout.theme.success(this.layout.symbols.success)} ${this.layout.theme.text("Analysis and graph persistence completed successfully.")}`
       : `  ${this.layout.theme.warning(this.layout.symbols.warning)} ${this.layout.theme.text("Analysis completed with isolated non-fatal faults.")}`;
 
