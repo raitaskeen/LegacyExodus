@@ -4,31 +4,32 @@
 
 ## Overview
 
-Graph Service builds and serves structural relationship graphs derived from parsed artifacts to support architecture inference, transformation planning, and validation reasoning.
+The current graph layer builds deterministic structural relationship artifacts from parsed evidence. It does not expose a general graph server or claim transformation-planning semantics.
 
-## Scope
+## Current scope
 
 - dependency graph
 - call graph
 - control flow graph
 - data flow graph
-- deterministic projected graph artifacts
+- deterministic validated graph artifacts and projections
 
 ## Purpose
 
 - Convert parsed code into navigable system relationships.
-- Provide graph-backed intelligence for NolaraStruct and downstream stages.
-- Provide deterministic artifacts for analysis and future decision support.
+- Provide graph-backed structural evidence for current semantic and flow analysis.
+- Provide deterministic artifacts for inspection and future decision support.
 
 ## Graph Types
 
 ### 1) Dependency Graph
-- Module/package/service dependencies.
-- Declared and inferred edges with confidence.
+- Repository-local file/symbol relationships proven from supported ESM/CommonJS imports and exports.
+- Relative-path and proven `tsconfig` alias resolution, named/default/wildcard re-export traversal, and deterministic cycle reporting.
+- Full Node/package/workspace resolution and confidence-scored inferred dependencies are not implemented.
 
 ### 2) Call Graph
-- Function/method invocation relationships.
-- Cross-file and cross-module calls.
+- Conservative function/method invocation relationships with exact target IDs when static evidence proves a unique target.
+- Supported imported and namespace calls can cross file boundaries; ambiguous or dynamic targets remain unresolved or unrecorded according to the semantic contract.
 
 ### 3) Control Flow Graph (CFG)
 - Execution path structure within routines/components.
@@ -65,27 +66,30 @@ The following are `TARGET ARCHITECTURE`; the current CLI does not expose a gener
 - Hotspot detection (high fan-in/fan-out nodes)
 - Unsafe path identification (sensitive data flows)
 
-## Contracts
+## Current contracts
 
 ### Input
 - Parsed artifacts + extraction rules.
 
 ### Output
-- Versioned graph snapshots + query indexes.
+- Immutable, Zod-validated dependency, knowledge, semantic, control-flow, and data-flow contracts persisted as run-scoped records and projected artifacts.
 
 ## Consistency Rules
 
-- Graph edges must retain provenance.
-- Edge/node schema versions must match graph version.
-- Conflicts are resolved by deterministic merge strategy.
+- Graph nodes and edges use deterministic identities and canonical ordering where defined by their contracts.
+- Invalid graph payloads are rejected at validation boundaries.
+- Unknown or ambiguous relationships are not fabricated.
 
 ## Failure Handling
 
-- Partial graph build allowed only with explicit completeness metrics.
-- Invalid node/edge schemas rejected.
-- Query execution failures return structured diagnostics.
+- Per-file parser and symbol failures remain isolated and reported; downstream artifacts reflect only successfully analyzed evidence.
+- Invalid node/edge schemas are rejected.
 
-## Observability
+## Target architecture
+
+A long-running graph service, general query API, graph-version migration, confidence/provenance enrichment for every edge, percentile telemetry, vulnerability detection, and transformation-planning queries remain target architecture.
+
+## Target observability
 
 - Graph build time by graph type
 - Node/edge counts

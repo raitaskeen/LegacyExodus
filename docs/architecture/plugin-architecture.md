@@ -1,6 +1,6 @@
 # Plugin Architecture
 
-> **Status:** `PARTIAL`. At verified core checkpoint `ce36ea8`, the core implements plugin manifests, contracts, registry, loader, lifecycle hooks, and a frozen, capability-empty in-process `PluginContext`. IA-CRIT-001 is `VERIFIED` and core-integrated but **not main-promoted**. Dynamic package discovery, narrow host capability facades, permission manifests, marketplace distribution, process isolation, filesystem/network sandboxing, provider plugins, migration plugins, and validator plugins are `TARGET ARCHITECTURE` and are not implemented.
+> **Status:** `PARTIAL`. At synchronized core checkpoint `204f123`, the core implements plugin manifests, contracts, registry, loader, lifecycle hooks, and a frozen, capability-empty in-process `PluginContext`. IA-CRIT-001 is `VERIFIED` and core-integrated but **not main-promoted**. Dynamic package discovery, narrow host capability facades, permission manifests, marketplace distribution, process isolation, filesystem/network sandboxing, provider plugins, migration plugins, and validator plugins are `TARGET ARCHITECTURE` and are not implemented.
 
 ## Overview
 
