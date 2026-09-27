@@ -10,6 +10,11 @@ export interface TaintTransfer { readonly sourceDefinitionId: string; readonly t
 export interface PendingSink { readonly id: string; readonly name: string; readonly argumentDefinitionIds: readonly string[]; }
 export interface FlowState { readonly definitions: VariableDefinition[]; readonly uses: VariableUse[]; readonly taintPaths: Map<string, Map<string, readonly string[]>>; readonly transfers: TaintTransfer[]; readonly sinks: PendingSink[]; readonly functions: Map<ASTNode, FunctionRecord>; readonly resolvableFunctions: Map<string, FunctionRecord>; readonly functionsBySymbolId: Map<string, FunctionRecord>; readonly provenTargets: ReadonlyMap<string, ProvenCallTarget>; readonly hasSemanticResolution: boolean; readonly pendingCalls: CapturedPendingCall[]; readonly interproceduralFlows: InterproceduralFlow[]; }
 
+interface JoinInputs { readonly id: string; readonly incoming: readonly (string | undefined)[]; }
+// Connection states retain their joins; the lookup does not retain completed builds.
+const joinInputsById = new Map<string, WeakRef<JoinInputs>>();
+const joinsByTransfers = new WeakMap<readonly TaintTransfer[], JoinInputs[]>();
+
 interface FlowConnectionState {
   readonly transfers: readonly TaintTransfer[];
   readonly taintPaths: ReadonlyMap<string, ReadonlyMap<string, readonly string[]>>;
@@ -37,10 +42,16 @@ const sinks = new Set(["child_process.exec", "res.send", "res.json"]);
 const sanitizers = new Set(["validator.escape", "sanitize"]);
 
 export class DeterministicDataFlowGraphBuilder {
+  // Private frame metadata keeps ownership out of the public graph/Scope contracts.
+  private readonly functionScopes = new WeakSet<Scope>();
+  private readonly capturedEntries = new WeakMap<Scope, Map<string, VariableDefinition>>();
+
   public buildContext(ast: ASTResult, provenCallTargets?: readonly ProvenCallTarget[], symbols: readonly CodeSymbol[] = []): BuildContextResult {
+    for (const [id, reference] of joinInputsById) if (reference.deref() === undefined) joinInputsById.delete(id);
     const functions = collectFunctions(ast.root, symbols);
     const targets = provenCallTargets === undefined ? undefined : createProvenCallTargets(provenCallTargets);
     const state: FlowState = { definitions: [], uses: [], taintPaths: new Map(), transfers: [], sinks: [], functions, resolvableFunctions: new Map(), functionsBySymbolId: new Map(), provenTargets: new Map((targets ?? []).map((target) => [callLocationKey(target.sourceFilePath, target.location), target])), hasSemanticResolution: targets !== undefined, pendingCalls: [], interproceduralFlows: [] };
+    joinsByTransfers.set(state.transfers, []);
     for (const record of state.functions.values()) if (record.name.length > 0 && [...state.functions.values()].filter((candidate) => candidate.name === record.name).length === 1) state.resolvableFunctions.set(record.name, record);
     for (const record of state.functions.values()) if (record.symbolId !== undefined) state.functionsBySymbolId.set(record.symbolId, record);
     this.visit(ast.root, createScope(), ast.metadata.sourcePath, state);
@@ -91,19 +102,50 @@ export class DeterministicDataFlowGraphBuilder {
     return this.buildContext(ast, provenCallTargets, symbols).graph;
   }
 
-  public computeTaintFlows(state: Pick<FlowConnectionState, "sinks">, taintPaths: ReadonlyMap<string, ReadonlyMap<string, readonly string[]>>): readonly TaintFlow[] {
+  public computeTaintFlows(state: Pick<FlowConnectionState, "sinks"> & Partial<Pick<FlowConnectionState, "transfers">>, taintPaths: ReadonlyMap<string, ReadonlyMap<string, readonly string[]>>): readonly TaintFlow[] {
+    const confirmed = new Map<string, Set<string>>();
+    const predecessors = new Map<string, string[]>();
+    for (const edge of state.transfers ?? []) {
+      const inputs = predecessors.get(edge.targetDefinitionId) ?? [];
+      inputs.push(edge.sourceDefinitionId);
+      predecessors.set(edge.targetDefinitionId, inputs);
+    }
+    const isConfirmed = (definitionId: string, sourceId: string, active = new Set<string>()): boolean => {
+      const path = taintPaths.get(definitionId)?.get(sourceId);
+      if (path === undefined || active.has(definitionId)) return false;
+      if (confirmed.get(sourceId)?.has(definitionId)) return true;
+      active.add(definitionId);
+      const join = joinInputsById.get(definitionId)?.deref();
+      const certain = join !== undefined
+        ? join.incoming.every((id) => id !== undefined && isConfirmed(id, sourceId, active))
+        : path.every((id) => joinInputsById.get(id)?.deref() === undefined || isConfirmed(id, sourceId, active))
+          || (predecessors.get(definitionId) ?? []).some((id) => isConfirmed(id, sourceId, active));
+      active.delete(definitionId);
+      if (certain) {
+        const definitions = confirmed.get(sourceId) ?? new Set<string>();
+        definitions.add(definitionId);
+        confirmed.set(sourceId, definitions);
+      }
+      return certain;
+    };
     const flows = state.sinks.flatMap((sink) =>
       sink.argumentDefinitionIds.flatMap((definitionId) =>
         [...(taintPaths.get(definitionId)?.entries() ?? [])].map(([sourceId, path]) => ({
           sourceId,
           sinkId: sink.id,
           path: Object.freeze([...path, sink.name]),
-          state: "CONFIRMED" as const,
+          state: isConfirmed(definitionId, sourceId) ? "CONFIRMED" as const : "INFERRED" as const,
         })),
       ),
     );
+    // An unconditional argument path wins over a conditional path to the same sink.
+    const unique = new Map<string, TaintFlow>();
+    for (const flow of flows) {
+      const key = flow.sourceId + ":" + flow.sinkId;
+      if (unique.get(key)?.state !== "CONFIRMED") unique.set(key, flow);
+    }
     return Object.freeze(
-      [...new Map(flows.map((flow) => [`${flow.sourceId}:${flow.sinkId}`, flow])).values()].sort((left, right) =>
+      [...unique.values()].sort((left, right) =>
         `${left.sourceId}:${left.sinkId}`.localeCompare(`${right.sourceId}:${right.sinkId}`),
       ),
     );
@@ -124,7 +166,7 @@ export class DeterministicDataFlowGraphBuilder {
         const name = identifierName(left)!;
         const receiver = this.define(name, "assignment", expression, scope, filePath, state, undefined, false);
         this.call(right, scope, filePath, state, receiver.id, true);
-        scope.definitions.set(name, receiver);
+        this.publishDefinition(scope, receiver);
         return;
       }
       if (this.orderedChildCount(node) === 1 && expression?.type === "AssignmentExpression"
@@ -140,10 +182,11 @@ export class DeterministicDataFlowGraphBuilder {
         }
       }
     }
+    if (node.type === "IfStatement") { this.conditional(node, scope, filePath, state, currentFunction); return; }
     if (node.type === "Program") { for (const child of node.children) this.visit(child, scope, filePath, state, currentFunction); return; }
     if (node.type === "BlockStatement") { const childScope = createScope(scope); for (const child of node.children) this.visit(child, childScope, filePath, state, currentFunction); return; }
     if (node.type === "ForOfStatement" || node.type === "ForInStatement") { this.iteration(node, scope, filePath, state, currentFunction); return; }
-    if (node.type === "VariableDeclaration") { for (const child of node.children.filter((candidate) => candidate.role === "declarations")) this.declarator(child, scope, filePath, state); return; }
+    if (node.type === "VariableDeclaration") { for (const child of node.children.filter((candidate) => candidate.role === "declarations")) this.declarator(child, scope, filePath, state, node.attributes.kind); return; }
     if (isFunction(node)) { this.function(node, scope, filePath, state); return; }
     if (node.type === "ReturnStatement") { this.returnValue(node, scope, filePath, state, currentFunction); return; }
     if (node.type === "AssignmentExpression") { this.assignment(node, scope, filePath, state, currentFunction); return; }
@@ -159,6 +202,58 @@ export class DeterministicDataFlowGraphBuilder {
     }
     if (node.type === "Identifier") { this.use(identifierName(node), node, scope, filePath, state); return; }
     for (const child of node.children) this.visit(child, scope, filePath, state, currentFunction);
+  }
+
+  private conditional(node: ASTNode, scope: Scope, filePath: string, state: FlowState, currentFunction?: FunctionRecord): void {
+    const test = node.children.find((child) => child.role === "test");
+    if (test !== undefined) this.visit(test, scope, filePath, state, currentFunction);
+    const frames: Scope[] = [];
+    for (let frame: Scope | undefined = scope; frame !== undefined; frame = frame.parent) frames.push(frame);
+    const fork = (): Scope[] => {
+      const copies: Scope[] = [];
+      for (let index = frames.length - 1; index >= 0; index--) {
+        const original = frames[index]!;
+        const copy: Scope = { parent: copies[index + 1], definitions: new Map(original.definitions) };
+        if (this.functionScopes.has(original)) this.functionScopes.add(copy);
+        const captured = this.capturedEntries.get(original);
+        if (captured !== undefined) this.capturedEntries.set(copy, new Map(captured));
+        copies[index] = copy;
+      }
+      return copies;
+    };
+    const consequent = fork();
+    const alternate = fork();
+    const thenNode = node.children.find((child) => child.role === "consequent");
+    const elseNode = node.children.find((child) => child.role === "alternate");
+    if (thenNode !== undefined) this.visit(thenNode, consequent[0]!, filePath, state, currentFunction);
+    if (elseNode !== undefined) this.visit(elseNode, alternate[0]!, filePath, state, currentFunction);
+    const position = node.location === undefined ? "anon-" + state.definitions.length : node.location.start.line + ":" + node.location.start.column;
+    for (const [index, owner] of frames.entries()) {
+      const thenDefinitions = consequent[index]!.definitions;
+      const elseDefinitions = alternate[index]!.definitions;
+      const names = [...new Set([...thenDefinitions.keys(), ...elseDefinitions.keys()])].sort();
+      for (const name of names) {
+        const captured = this.capturedEntries.get(consequent[index]!)?.get(name)
+          ?? this.capturedEntries.get(alternate[index]!)?.get(name);
+        const entry = owner.definitions.get(name) ?? captured;
+        const incoming = [thenDefinitions.get(name)?.id ?? entry?.id, elseDefinitions.get(name)?.id ?? entry?.id];
+        if (incoming[0] === incoming[1]) continue;
+        const id = hash("join:" + filePath + ":" + name + ":" + position + ":" + index + ":" + incoming.map((value) => value ?? "unbound").join(":"));
+        const definition: VariableDefinition = { id, filePath, name, kind: "assignment" };
+        const join: JoinInputs = joinInputsById.get(id)?.deref() ?? { id, incoming: Object.freeze(incoming) };
+        joinsByTransfers.get(state.transfers)?.push(join);
+        joinInputsById.set(id, new WeakRef(join));
+        state.definitions.push(definition);
+        for (const input of incoming) if (input !== undefined) this.addTransfer(state, input, id);
+        // These are the original owner frames, never the transient branch scopes.
+        if (captured !== undefined && !owner.definitions.has(name)) {
+          const entries = this.capturedEntries.get(owner) ?? new Map<string, VariableDefinition>();
+          entries.set(name, captured);
+          this.capturedEntries.set(owner, entries);
+        }
+        owner.definitions.set(name, definition);
+      }
+    }
   }
 
   private *orderedChildren(node: ASTNode): IterableIterator<ASTNode> {
@@ -374,7 +469,7 @@ export class DeterministicDataFlowGraphBuilder {
     const incoming = compound ? this.evaluateOrderedExpression(left, scope, filePath, state) : undefined;
     const value = this.evaluateOrderedExpression(right, scope, filePath, state);
     this.materializeOrderedValue(incoming === undefined ? value : { kind: "combined", values: [incoming, value] }, definition.id, state);
-    scope.definitions.set(name, definition);
+    this.publishDefinition(scope, definition);
     return { kind: "definition", id: definition.id };
   }
 
@@ -399,7 +494,8 @@ export class DeterministicDataFlowGraphBuilder {
     }
   }
 
-  private declarator(node: ASTNode, scope: Scope, filePath: string, state: FlowState): void {
+  private declarator(node: ASTNode, scope: Scope, filePath: string, state: FlowState, declarationKind?: unknown): void {
+    const owner = this.declarationOwner(scope, declarationKind);
     const id = node.children.find((child) => child.role === "id");
     const singleName = identifierName(id);
     const boundNames = singleName !== undefined ? [singleName] : extractBoundNames(id);
@@ -407,17 +503,17 @@ export class DeterministicDataFlowGraphBuilder {
     const init = node.children.find((child) => child.role === "init");
     const initVal = singleName !== undefined ? literalValue(init) : undefined;
     if (singleName !== undefined) {
-      const definition = this.define(singleName, "declaration", node, scope, filePath, state, initVal);
+      const definition = this.define(singleName, "declaration", node, scope, filePath, state, initVal, true, owner);
       if (init !== undefined) this.transferTaint(init, definition.id, scope, filePath, state);
     } else if (id !== undefined) {
-      this.bindDestructuringPattern(id, init, "declaration", node, scope, filePath, state);
+      this.bindDestructuringPattern(id, init, "declaration", node, scope, filePath, state, undefined, owner);
     }
     if (init !== undefined) {
-      const primaryDefId = boundNames.length === 1 ? scope.definitions.get(boundNames[0]!)?.id : undefined;
+      const primaryDefId = boundNames.length === 1 ? owner.definitions.get(boundNames[0]!)?.id : undefined;
       this.visit(init, scope, filePath, state, undefined, primaryDefId);
     }
     for (const { boundNames: defaultBoundNames, defaultNode } of extractPatternDefaults(id)) {
-      const primaryDefId = defaultBoundNames.length === 1 ? scope.definitions.get(defaultBoundNames[0]!)?.id : undefined;
+      const primaryDefId = defaultBoundNames.length === 1 ? owner.definitions.get(defaultBoundNames[0]!)?.id : undefined;
       this.visit(defaultNode, scope, filePath, state, undefined, primaryDefId);
     }
   }
@@ -435,10 +531,10 @@ export class DeterministicDataFlowGraphBuilder {
     const targetDefinitions: VariableDefinition[] = [];
     if (left?.type === "VariableDeclaration") {
       for (const declarator of left.children.filter((candidate) => candidate.role === "declarations")) {
-        this.declarator(declarator, loopScope, filePath, state);
+        this.declarator(declarator, loopScope, filePath, state, left.attributes.kind);
         const id = declarator.children.find((child) => child.role === "id");
         const name = identifierName(id);
-        const definition = name === undefined ? undefined : loopScope.definitions.get(name);
+        const definition = name === undefined ? undefined : resolve(loopScope, name);
         if (definition !== undefined) targetDefinitions.push(definition);
       }
     } else {
@@ -463,6 +559,7 @@ export class DeterministicDataFlowGraphBuilder {
     if (name !== undefined) this.define(name, "declaration", node, scope, filePath, state, undefined);
     const record = state.functions.get(node);
     const functionScope = createScope(scope);
+    this.functionScopes.add(functionScope);
     for (const parameter of node.children.filter((child) => child.role === "params")) {
       const paramNames = extractBoundNames(parameter);
       const slotDefinitions: VariableDefinition[] = [];
@@ -510,11 +607,11 @@ export class DeterministicDataFlowGraphBuilder {
       this.bindDestructuringPattern(left, right, "assignment", node, scope, filePath, state);
     }
     if (right !== undefined) {
-      const primaryDefId = boundNames.length === 1 ? scope.definitions.get(boundNames[0]!)?.id : undefined;
+      const primaryDefId = boundNames.length === 1 ? resolve(scope, boundNames[0]!)?.id : undefined;
       this.visit(right, scope, filePath, state, currentFunction, primaryDefId);
     }
     for (const { boundNames: defaultBoundNames, defaultNode } of extractPatternDefaults(left)) {
-      const primaryDefId = defaultBoundNames.length === 1 ? scope.definitions.get(defaultBoundNames[0]!)?.id : undefined;
+      const primaryDefId = defaultBoundNames.length === 1 ? resolve(scope, defaultBoundNames[0]!)?.id : undefined;
       this.visit(defaultNode, scope, filePath, state, currentFunction, primaryDefId);
     }
   }
@@ -528,12 +625,13 @@ export class DeterministicDataFlowGraphBuilder {
     filePath: string,
     state: FlowState,
     captures?: ReadonlyMap<ASTNode, OrderedExpressionValue>,
+    declarationOwner: Scope = scope,
   ): void {
     if (pattern.type === "Identifier") {
       const name = identifierName(pattern);
       if (name === undefined) return;
       const constVal = init !== undefined && init.type !== "ArrayHole" ? literalValue(init) : undefined;
-      const definition = this.define(name, kind, declarationOrAssignmentNode, scope, filePath, state, constVal);
+      const definition = this.define(name, kind, declarationOrAssignmentNode, scope, filePath, state, constVal, true, declarationOwner);
       if (init !== undefined && init.type !== "ArrayHole") {
         this.transferTaint(init, definition.id, scope, filePath, state, captures);
       }
@@ -544,7 +642,7 @@ export class DeterministicDataFlowGraphBuilder {
       const path = memberPath(pattern);
       if (path === undefined) return;
       const constVal = init !== undefined && init.type !== "ArrayHole" ? literalValue(init) : undefined;
-      const definition = this.define(path, kind, declarationOrAssignmentNode, scope, filePath, state, constVal);
+      const definition = this.define(path, kind, declarationOrAssignmentNode, scope, filePath, state, constVal, true, declarationOwner);
       if (init !== undefined && init.type !== "ArrayHole") {
         this.transferTaint(init, definition.id, scope, filePath, state, captures);
       }
@@ -557,19 +655,19 @@ export class DeterministicDataFlowGraphBuilder {
       if (left === undefined) return;
       if (init !== undefined && init.type !== "ArrayHole") {
         if (isStaticallyDefinedLiteral(init)) {
-          this.bindDestructuringPattern(left, init, kind, declarationOrAssignmentNode, scope, filePath, state, captures);
+          this.bindDestructuringPattern(left, init, kind, declarationOrAssignmentNode, scope, filePath, state, captures, declarationOwner);
         } else {
-          this.bindDestructuringPattern(left, init, kind, declarationOrAssignmentNode, scope, filePath, state, captures);
+          this.bindDestructuringPattern(left, init, kind, declarationOrAssignmentNode, scope, filePath, state, captures, declarationOwner);
           if (right !== undefined) {
             const boundNames = extractBoundNames(left);
             for (const name of boundNames) {
-              const def = scope.definitions.get(name);
+              const def = resolve(scope, name);
               if (def !== undefined) this.transferTaint(right, def.id, scope, filePath, state, captures);
             }
           }
         }
       } else {
-        this.bindDestructuringPattern(left, right, kind, declarationOrAssignmentNode, scope, filePath, state, captures);
+        this.bindDestructuringPattern(left, right, kind, declarationOrAssignmentNode, scope, filePath, state, captures, declarationOwner);
       }
       return;
     }
@@ -577,7 +675,7 @@ export class DeterministicDataFlowGraphBuilder {
     if (pattern.type === "RestElement") {
       const argument = pattern.children.find((c) => c.role === "argument");
       if (argument !== undefined) {
-        this.bindDestructuringPattern(argument, init, kind, declarationOrAssignmentNode, scope, filePath, state, captures);
+        this.bindDestructuringPattern(argument, init, kind, declarationOrAssignmentNode, scope, filePath, state, captures, declarationOwner);
       }
       return;
     }
@@ -606,13 +704,13 @@ export class DeterministicDataFlowGraphBuilder {
           if (matchedProp !== undefined) {
             const initValNode = matchedProp.children.find((c) => c.role === "value");
             if (valNode !== undefined) {
-              this.bindDestructuringPattern(valNode, initValNode, kind, declarationOrAssignmentNode, scope, filePath, state, captures);
+              this.bindDestructuringPattern(valNode, initValNode, kind, declarationOrAssignmentNode, scope, filePath, state, captures, declarationOwner);
             }
           } else {
             const spreadChild = init.children.find((initChild) => initChild.type === "SpreadElement");
             const spreadSource = spreadChild?.children.find((c) => c.role === "argument") ?? spreadChild;
             if (valNode !== undefined) {
-              this.bindDestructuringPattern(valNode, spreadSource, kind, declarationOrAssignmentNode, scope, filePath, state, captures);
+              this.bindDestructuringPattern(valNode, spreadSource, kind, declarationOrAssignmentNode, scope, filePath, state, captures, declarationOwner);
             }
           }
         }
@@ -621,7 +719,7 @@ export class DeterministicDataFlowGraphBuilder {
           const restArg = restElement.children.find((c) => c.role === "argument");
           const restName = identifierName(restArg) ?? memberPath(restArg);
           if (restName !== undefined) {
-            const restDef = this.define(restName, kind, declarationOrAssignmentNode, scope, filePath, state, undefined);
+            const restDef = this.define(restName, kind, declarationOrAssignmentNode, scope, filePath, state, undefined, true, declarationOwner);
             for (const initChild of init.children) {
               if (initChild.type === "ObjectProperty" || initChild.role === "properties") {
                 const initKeyNode = initChild.children.find((c) => c.role === "key") ?? initChild.children.find((c) => c.type === "Identifier");
@@ -646,10 +744,10 @@ export class DeterministicDataFlowGraphBuilder {
             const keyChild = child.children.find((c) => c.role === "key") ?? child.children.find((c) => c.type === "Identifier");
             const target = valChild ?? keyChild;
             if (target !== undefined) {
-              this.bindDestructuringPattern(target, init, kind, declarationOrAssignmentNode, scope, filePath, state, captures);
+              this.bindDestructuringPattern(target, init, kind, declarationOrAssignmentNode, scope, filePath, state, captures, declarationOwner);
             }
           } else if (child.type === "RestElement") {
-            this.bindDestructuringPattern(child, init, kind, declarationOrAssignmentNode, scope, filePath, state, captures);
+            this.bindDestructuringPattern(child, init, kind, declarationOrAssignmentNode, scope, filePath, state, captures, declarationOwner);
           }
         }
       }
@@ -667,7 +765,7 @@ export class DeterministicDataFlowGraphBuilder {
             const restArg = elem.children.find((c) => c.role === "argument");
             const restName = identifierName(restArg) ?? memberPath(restArg);
             if (restName !== undefined) {
-              const restDef = this.define(restName, kind, declarationOrAssignmentNode, scope, filePath, state, undefined);
+              const restDef = this.define(restName, kind, declarationOrAssignmentNode, scope, filePath, state, undefined, true, declarationOwner);
               for (let j = i; j < initElements.length; j++) {
                 const initElem = initElements[j]!;
                 if (initElem.type !== "ArrayHole") {
@@ -678,12 +776,12 @@ export class DeterministicDataFlowGraphBuilder {
             break;
           }
           const matchedInit = initElements[i];
-          this.bindDestructuringPattern(elem, matchedInit, kind, declarationOrAssignmentNode, scope, filePath, state, captures);
+          this.bindDestructuringPattern(elem, matchedInit, kind, declarationOrAssignmentNode, scope, filePath, state, captures, declarationOwner);
         }
       } else {
         for (const elem of patternElements) {
           if (elem.type === "ArrayHole") continue;
-          this.bindDestructuringPattern(elem, init, kind, declarationOrAssignmentNode, scope, filePath, state, captures);
+          this.bindDestructuringPattern(elem, init, kind, declarationOrAssignmentNode, scope, filePath, state, captures, declarationOwner);
         }
       }
       return;
@@ -917,20 +1015,53 @@ export class DeterministicDataFlowGraphBuilder {
   }
 
   private taintFlows(state: FlowState): readonly TaintFlow[] {
-    const flows = state.sinks.flatMap((sink) => sink.argumentDefinitionIds.flatMap((definitionId) => [...(state.taintPaths.get(definitionId)?.entries() ?? [])].map(([sourceId, path]) => ({ sourceId, sinkId: sink.id, path: Object.freeze([...path, sink.name]), state: "CONFIRMED" as const }))));
-    return Object.freeze([...new Map(flows.map((flow) => [`${flow.sourceId}:${flow.sinkId}`, flow])).values()].sort((left, right) => `${left.sourceId}:${left.sinkId}`.localeCompare(`${right.sourceId}:${right.sinkId}`)));
+    return this.computeTaintFlows(state, state.taintPaths);
   }
 
   private memberUse(node: ASTNode, scope: Scope, filePath: string, state: FlowState): void { const path = memberPath(node); if (path !== undefined) this.use(path, node, scope, filePath, state); const base = memberBase(node); if (base !== undefined && base !== path) this.use(base, node, scope, filePath, state); }
   private use(name: string | undefined, node: ASTNode, scope: Scope, filePath: string, state: FlowState): void { if (name === undefined) return; const definition = resolve(scope, name); const position = node.location === undefined ? `anon-${state.uses.length}` : `${node.location.start.line}:${node.location.start.column}`; state.uses.push({ id: hash(`use:${filePath}:${name}:${position}`), filePath, name, ...(definition === undefined ? {} : { definitionId: definition.id }) }); }
-  private define(name: string, kind: VariableDefinition["kind"], node: ASTNode, scope: Scope, filePath: string, state: FlowState, constantValue: string | number | boolean | null | undefined, publish = true): VariableDefinition { const position = node.location === undefined ? `anon-${state.definitions.length}` : `${node.location.start.line}:${node.location.start.column}`; const definition: VariableDefinition = { id: hash(`definition:${filePath}:${name}:${kind}:${position}`), filePath, name, kind, ...(constantValue === undefined ? {} : { constantValue }) }; if (publish) scope.definitions.set(name, definition); state.definitions.push(definition); return definition; }
+  private declarationOwner(scope: Scope, kind: unknown): Scope {
+    if (kind !== "var") return scope;
+    let owner = scope;
+    while (owner.parent !== undefined && !this.functionScopes.has(owner)) owner = owner.parent;
+    return owner;
+  }
+
+  private publishDefinition(scope: Scope, definition: VariableDefinition, declarationOwner: Scope = scope): void {
+    let owner = declarationOwner;
+    if (definition.kind === "assignment") {
+      // Unresolved writes retain the local fallback; reads still resolve lexically.
+      owner = bindingOwner(scope, definition.name) ?? scope;
+      const executionOwner = this.declarationOwner(scope, "var");
+      if (this.declarationOwner(owner, "var") !== executionOwner) {
+        // Analyzing a function is not executing it. Keep captured-binding writes
+        // in this function's environment, without changing the ancestor's live map.
+        const entry = owner.definitions.get(definition.name);
+        if (entry !== undefined) {
+          const entries = this.capturedEntries.get(executionOwner) ?? new Map<string, VariableDefinition>();
+          entries.set(definition.name, entry);
+          this.capturedEntries.set(executionOwner, entries);
+        }
+        owner = executionOwner;
+      }
+    }
+    owner.definitions.set(definition.name, definition);
+  }
+
+  private define(name: string, kind: VariableDefinition["kind"], node: ASTNode, scope: Scope, filePath: string, state: FlowState, constantValue: string | number | boolean | null | undefined, publish = true, declarationOwner: Scope = scope): VariableDefinition { const position = node.location === undefined ? `anon-${state.definitions.length}` : `${node.location.start.line}:${node.location.start.column}`; const definition: VariableDefinition = { id: hash(`definition:${filePath}:${name}:${kind}:${position}`), filePath, name, kind, ...(constantValue === undefined ? {} : { constantValue }) }; if (publish) this.publishDefinition(scope, definition, declarationOwner); state.definitions.push(definition); return definition; }
   private source(node: ASTNode, filePath: string): string | undefined { const path = memberPath(node); if (path === undefined || ![...sources].some((source) => path === source || path.startsWith(`${source}.`))) return undefined; const position = node.location === undefined ? "anon" : `${node.location.start.line}:${node.location.start.column}`; return hash(`source:${filePath}:${path}:${position}`); }
 }
 
 function createScope(parent?: Scope): Scope { return { parent, definitions: new Map() }; }
 function collectFunctions(root: ASTNode, symbols: readonly CodeSymbol[]): Map<ASTNode, FunctionRecord> { const records = new Map<ASTNode, FunctionRecord>(); const visit = (node: ASTNode): void => { if (isFunction(node)) { const name = functionName(node); if (name !== undefined) { const symbol = symbols.filter((candidate) => (candidate.kind === "function" || candidate.kind === "method") && candidate.name === name && sameLocation(candidate.location, node.location)); records.set(node, { name, parameters: [], returns: [], ...(symbol.length === 1 && symbol[0] !== undefined ? { symbolId: symbol[0].id } : {}) }); } } for (const child of node.children) visit(child); }; visit(root); return records; }
 function resolveFunction(name: string | undefined, functions: ReadonlyMap<string, FunctionRecord>): FunctionRecord | undefined { if (name === undefined) return undefined; const direct = functions.get(name); if (direct !== undefined) return direct; const property = name.split(".").at(-1); return property === undefined ? undefined : functions.get(property); }
-function resolve(scope: Scope | undefined, name: string): VariableDefinition | undefined { for (let current = scope; current !== undefined; current = current.parent) { const definition = current.definitions.get(name); if (definition !== undefined) return definition; } return undefined; }
+function bindingOwner(scope: Scope | undefined, name: string): Scope | undefined {
+  for (let current = scope; current !== undefined; current = current.parent) {
+    if (current.definitions.has(name)) return current;
+  }
+  return undefined;
+}
+function resolve(scope: Scope | undefined, name: string): VariableDefinition | undefined { return bindingOwner(scope, name)?.definitions.get(name); }
 function isFunction(node: ASTNode): boolean { return ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ObjectMethod"].includes(node.type); }
 function functionName(node: ASTNode): string | undefined { return identifierName(node.children.find((child) => child.role === "id" || child.role === "key")); }
 function identifierName(node: ASTNode | undefined): string | undefined { const value = node?.attributes.name; return typeof value === "string" && value.length > 0 ? value : undefined; }

@@ -753,7 +753,8 @@ describe("control and data flow analysis", () => {
 
   test("remains conservative for branch-local and dynamic call results", async (): Promise<void> => {
     const branch = await buildDataFlowGraph("taint-branch", `const input = req.body.name; let value; if (condition) { value = input; } child_process.exec(value);`);
-    expect(branch.taintFlows).toEqual([]);
+    expect(branch.taintFlows).toHaveLength(1);
+    expect(branch.taintFlows[0]?.state).toBe("INFERRED");
 
     const dynamic = await buildDataFlowGraph("taint-dynamic", `const input = req.body.name; const result = object[userControlledName](input); child_process.exec(result);`);
     expect(dynamic.taintFlows).toHaveLength(1);
