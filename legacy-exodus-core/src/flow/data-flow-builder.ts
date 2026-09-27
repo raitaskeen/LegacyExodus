@@ -8,7 +8,7 @@ export interface FunctionRecord { readonly name: string; readonly parameters: Va
 export interface PendingCall { readonly id: string; readonly targetSymbolId?: string; readonly callee?: FunctionRecord; readonly argumentDefinitionIds: readonly (string | undefined)[]; readonly argumentSourceIds: readonly (string | undefined)[]; readonly receiverDefinitionId?: string; }
 export interface TaintTransfer { readonly sourceDefinitionId: string; readonly targetDefinitionId: string; }
 export interface PendingSink { readonly id: string; readonly name: string; readonly argumentDefinitionIds: readonly string[]; }
-export interface FlowState { readonly definitions: VariableDefinition[]; readonly uses: VariableUse[]; readonly taintPaths: Map<string, Map<string, readonly string[]>>; readonly transfers: TaintTransfer[]; readonly sinks: PendingSink[]; readonly functions: Map<ASTNode, FunctionRecord>; readonly resolvableFunctions: Map<string, FunctionRecord>; readonly functionsBySymbolId: Map<string, FunctionRecord>; readonly provenTargets: ReadonlyMap<string, ProvenCallTarget>; readonly hasSemanticResolution: boolean; readonly pendingCalls: PendingCall[]; readonly interproceduralFlows: InterproceduralFlow[]; }
+export interface FlowState { readonly definitions: VariableDefinition[]; readonly uses: VariableUse[]; readonly taintPaths: Map<string, Map<string, readonly string[]>>; readonly transfers: TaintTransfer[]; readonly sinks: PendingSink[]; readonly functions: Map<ASTNode, FunctionRecord>; readonly resolvableFunctions: Map<string, FunctionRecord>; readonly functionsBySymbolId: Map<string, FunctionRecord>; readonly provenTargets: ReadonlyMap<string, ProvenCallTarget>; readonly hasSemanticResolution: boolean; readonly pendingCalls: CapturedPendingCall[]; readonly interproceduralFlows: InterproceduralFlow[]; }
 
 interface FlowConnectionState {
   readonly transfers: readonly TaintTransfer[];
@@ -20,6 +20,17 @@ export interface BuildContextResult {
   readonly graph: DataFlowGraph;
   readonly state: FlowConnectionState;
 }
+
+
+type OrderedExpressionValue =
+  | { readonly kind: "definition" | "source"; readonly id: string }
+  | { readonly kind: "combined"; readonly values: readonly OrderedExpressionValue[] };
+
+// Transient build evidence; public call-binding and graph contracts remain unchanged.
+type CapturedPendingCall = PendingCall & {
+  readonly argumentValues?: readonly OrderedExpressionValue[];
+};
+const orderedAssignmentOperators = new Set(["=", "+=", "-=", "*=", "/=", "%=", "**=", "<<=", ">>=", ">>>=", "&=", "|=", "^="]);
 
 const sources = new Set(["process.env", "req.body", "req.params", "req.query"]);
 const sinks = new Set(["child_process.exec", "res.send", "res.json"]);
@@ -99,6 +110,36 @@ export class DeterministicDataFlowGraphBuilder {
   }
 
   private visit(node: ASTNode, scope: Scope, filePath: string, state: FlowState, currentFunction?: FunctionRecord, receiverDefinitionId?: string): void {
+    if (node.type === "ExpressionStatement") {
+      const expression = node.children.find((child) => child.role === "expression");
+      // Classify the entire entry before any effects; rejection keeps the legacy path.
+      if (this.orderedChildCount(node) === 1 && expression?.type === "AssignmentExpression" && this.isOrderedExpression(expression)) {
+        this.evaluateOrderedExpression(expression, scope, filePath, state);
+        return;
+      }
+      if (this.orderedChildCount(node) === 1 && expression?.type === "AssignmentExpression"
+        && this.isStagedCallAssignment(expression)) {
+        const left = expression.children.find((child) => child.role === "left")!;
+        const right = expression.children.find((child) => child.role === "right")!;
+        const name = identifierName(left)!;
+        const receiver = this.define(name, "assignment", expression, scope, filePath, state, undefined, false);
+        this.call(right, scope, filePath, state, receiver.id, true);
+        scope.definitions.set(name, receiver);
+        return;
+      }
+      if (this.orderedChildCount(node) === 1 && expression?.type === "AssignmentExpression"
+        && expression.attributes.operator === "=" && this.orderedChildCount(expression) === 2) {
+        const left = expression.children.find((child) => child.role === "left");
+        const right = expression.children.find((child) => child.role === "right");
+        if (left !== undefined && (left.type === "ArrayPattern" || left.type === "ObjectPattern")
+          && right !== undefined && this.isStagedLiteral(right) && this.isStagedPattern(left, right)) {
+          const captures = new Map<ASTNode, OrderedExpressionValue>();
+          this.captureStagedLiteral(right, scope, filePath, state, captures);
+          this.bindDestructuringPattern(left, right, "assignment", expression, scope, filePath, state, captures);
+          return;
+        }
+      }
+    }
     if (node.type === "Program") { for (const child of node.children) this.visit(child, scope, filePath, state, currentFunction); return; }
     if (node.type === "BlockStatement") { const childScope = createScope(scope); for (const child of node.children) this.visit(child, childScope, filePath, state, currentFunction); return; }
     if (node.type === "ForOfStatement" || node.type === "ForInStatement") { this.iteration(node, scope, filePath, state, currentFunction); return; }
@@ -118,6 +159,244 @@ export class DeterministicDataFlowGraphBuilder {
     }
     if (node.type === "Identifier") { this.use(identifierName(node), node, scope, filePath, state); return; }
     for (const child of node.children) this.visit(child, scope, filePath, state, currentFunction);
+  }
+
+  private *orderedChildren(node: ASTNode): IterableIterator<ASTNode> {
+    for (const child of node.children) {
+      if ((child.type === "CommentLine" || child.type === "CommentBlock")
+        && (child.role === "leadingComments" || child.role === "trailingComments" || child.role === "innerComments")
+        && child.children.length === 0) continue;
+      yield child;
+    }
+  }
+
+  private orderedChildCount(node: ASTNode): number {
+    let count = 0;
+    for (const _child of this.orderedChildren(node)) count++;
+    return count;
+  }
+
+  private isOrderedExpression(node: ASTNode): boolean {
+    switch (node.type) {
+      case "Identifier":
+        return identifierName(node) !== undefined && this.orderedChildCount(node) === 0;
+      case "StringLiteral":
+      case "NumericLiteral":
+      case "BooleanLiteral":
+      case "NullLiteral":
+        return this.orderedChildCount(node) === 0;
+      case "MemberExpression": {
+        const object = node.children.find((child) => child.role === "object");
+        const property = node.children.find((child) => child.role === "property");
+        return node.attributes.computed !== true && this.orderedChildCount(node) === 2
+          && object !== undefined && (object.type === "Identifier" || object.type === "MemberExpression")
+          && property?.type === "Identifier"
+          && this.isOrderedExpression(object) && this.isOrderedExpression(property);
+      }
+      case "BinaryExpression":
+      case "AssignmentExpression": {
+        const left = node.children.find((child) => child.role === "left");
+        const right = node.children.find((child) => child.role === "right");
+        if (this.orderedChildCount(node) !== 2 || left === undefined || right === undefined) return false;
+        if (node.type === "AssignmentExpression"
+          && (left.type !== "Identifier" || typeof node.attributes.operator !== "string"
+            || !orderedAssignmentOperators.has(node.attributes.operator))) return false;
+        return this.isOrderedExpression(left) && this.isOrderedExpression(right);
+      }
+      case "SequenceExpression": {
+        let hasExpression = false;
+        for (const child of this.orderedChildren(node)) {
+          if (child.role !== "expressions" || !this.isOrderedExpression(child)) return false;
+          hasExpression = true;
+        }
+        return hasExpression;
+      }
+      case "ArrayExpression":
+        for (const child of this.orderedChildren(node)) {
+          if (child.role !== "elements"
+            || !(child.type === "ArrayHole" ? this.orderedChildCount(child) === 0 : this.isOrderedExpression(child))) return false;
+        }
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  // This entry handles plain literal destructuring only. Defaults, rest, computed
+  // keys, repeated targets and unsupported values retain the whole legacy entry.
+  private isStagedLiteral(node: ASTNode): boolean {
+    if (node.type === "ArrayExpression") return [...this.orderedChildren(node)].every((child) =>
+      child.role === "elements" && (child.type === "ArrayHole" ? this.orderedChildCount(child) === 0 : this.isStagedLiteral(child)));
+    if (node.type !== "ObjectExpression") return this.isOrderedExpression(node);
+    const keys = new Set<string>();
+    return [...this.orderedChildren(node)].every((property) => {
+      const key = this.stagedPropertyKey(property);
+      const value = property.children.find((child) => child.role === "value");
+      if (key === undefined || keys.has(key) || value === undefined || !this.isStagedLiteral(value)) return false;
+      keys.add(key);
+      return true;
+    });
+  }
+
+  private stagedPropertyKey(property: ASTNode): string | undefined {
+    const key = property.children.find((child) => child.role === "key");
+    if (property.type !== "ObjectProperty" || property.role !== "properties"
+      || property.attributes.computed === true || this.orderedChildCount(property) !== 2
+      || key === undefined || this.orderedChildCount(key) !== 0) return undefined;
+    return key.type === "Identifier" ? identifierName(key) : key.type === "StringLiteral" ? stringValue(key) : undefined;
+  }
+
+  private isStagedPattern(pattern: ASTNode, init: ASTNode | undefined, names = new Set<string>()): boolean {
+    if (pattern.type === "Identifier") {
+      const name = identifierName(pattern);
+      if (name === undefined || names.has(name) || !this.isOrderedExpression(pattern)) return false;
+      names.add(name);
+      return true;
+    }
+    if (pattern.type === "ArrayPattern" && init?.type === "ArrayExpression") {
+      const elements = init.children.filter((child) => child.role === "elements");
+      return [...this.orderedChildren(pattern)].every((child, index) =>
+        child.role === "elements" && (child.type === "ArrayHole" ? this.orderedChildCount(child) === 0 : this.isStagedPattern(child, elements[index], names)));
+    }
+    if (pattern.type === "ObjectPattern" && init?.type === "ObjectExpression") {
+      return [...this.orderedChildren(pattern)].every((property) => {
+        const key = this.stagedPropertyKey(property);
+        const value = property.children.find((child) => child.role === "value");
+        if (key === undefined || value === undefined) return false;
+        const matched = init.children.find((child) => this.stagedPropertyKey(child) === key);
+        return this.isStagedPattern(value, matched?.children.find((child) => child.role === "value"), names);
+      });
+    }
+    return false;
+  }
+
+  private captureStagedLiteral(node: ASTNode, scope: Scope, filePath: string, state: FlowState, captures: Map<ASTNode, OrderedExpressionValue>): OrderedExpressionValue {
+    let value: OrderedExpressionValue;
+    if (node.type === "ObjectExpression") {
+      value = { kind: "combined", values: [...this.orderedChildren(node)].map((property) =>
+        this.captureStagedLiteral(property.children.find((child) => child.role === "value")!, scope, filePath, state, captures)) };
+    } else if (node.type === "ArrayExpression") {
+      value = { kind: "combined", values: [...this.orderedChildren(node)].map((child) =>
+        this.captureStagedLiteral(child, scope, filePath, state, captures)) };
+    } else value = this.evaluateOrderedExpression(node, scope, filePath, state);
+    captures.set(node, value);
+    return value;
+  }
+
+
+  private isStagedCallAssignment(node: ASTNode): boolean {
+    const left = node.children.find((child) => child.role === "left");
+    const right = node.children.find((child) => child.role === "right");
+    if (node.attributes.operator !== "=" || this.orderedChildCount(node) !== 2
+      || left?.type !== "Identifier" || !this.isOrderedExpression(left)
+      || right?.type !== "CallExpression" || right.attributes.optional === true) return false;
+    const callee = right.children.find((child) => child.role === "callee");
+    if (callee === undefined || (callee.type !== "Identifier" && callee.type !== "MemberExpression")
+      || !this.isOrderedExpression(callee)) return false;
+    return [...this.orderedChildren(right)].every((child) =>
+      child === callee || child.role === "arguments" && this.isOrderedExpression(child));
+  }
+
+  private orderedValueIds(value: OrderedExpressionValue, kind: "definition" | "source"): string[] {
+    const ids = new Set<string>();
+    const pending = [value];
+    while (pending.length > 0) {
+      const current = pending.pop()!;
+      if (current.kind === "combined") {
+        for (let index = current.values.length - 1; index >= 0; index--) pending.push(current.values[index]!);
+      } else if (current.kind === kind) ids.add(current.id);
+    }
+    return [...ids];
+  }
+
+
+  private evaluateOrderedExpression(node: ASTNode, scope: Scope, filePath: string, state: FlowState): OrderedExpressionValue {
+    switch (node.type) {
+      case "Identifier": {
+        const name = identifierName(node);
+        const definition = name === undefined ? undefined : resolve(scope, name);
+        this.use(name, node, scope, filePath, state);
+        return definition === undefined ? { kind: "combined", values: [] } : { kind: "definition", id: definition.id };
+      }
+      case "MemberExpression": {
+        this.memberUse(node, scope, filePath, state);
+        const sourceId = this.source(node, filePath);
+        if (sourceId !== undefined) return { kind: "source", id: sourceId };
+        // Preserve the legacy full-path/base preference, including inner-path fallback.
+        for (let current: ASTNode | undefined = node; current !== undefined; current = current.children.find((child) => child.role === "object")) {
+          for (const name of [identifierName(current), memberPath(current), memberBase(current)]) {
+            if (name === undefined) continue;
+            const definition = resolve(scope, name);
+            if (definition !== undefined) return { kind: "definition", id: definition.id };
+          }
+        }
+        return { kind: "combined", values: [] };
+      }
+      case "AssignmentExpression":
+        return this.evaluateOrderedAssignment(node, scope, filePath, state);
+      case "BinaryExpression": {
+        const left = node.children.find((child) => child.role === "left")!;
+        const right = node.children.find((child) => child.role === "right")!;
+        return { kind: "combined", values: [
+          this.evaluateOrderedExpression(left, scope, filePath, state),
+          this.evaluateOrderedExpression(right, scope, filePath, state),
+        ] };
+      }
+      case "SequenceExpression": {
+        let value: OrderedExpressionValue = { kind: "combined", values: [] };
+        for (const child of this.orderedChildren(node)) value = this.evaluateOrderedExpression(child, scope, filePath, state);
+        return value;
+      }
+      case "ArrayExpression": {
+        const values: OrderedExpressionValue[] = [];
+        for (const child of this.orderedChildren(node)) values.push(this.evaluateOrderedExpression(child, scope, filePath, state));
+        return { kind: "combined", values };
+      }
+      case "StringLiteral":
+      case "NumericLiteral":
+      case "BooleanLiteral":
+      case "NullLiteral":
+      case "ArrayHole":
+        return { kind: "combined", values: [] };
+      default:
+        throw new Error(`Ineligible ordered expression: ${node.type}`);
+    }
+  }
+
+  private evaluateOrderedAssignment(node: ASTNode, scope: Scope, filePath: string, state: FlowState): OrderedExpressionValue {
+    const left = node.children.find((child) => child.role === "left")!;
+    const right = node.children.find((child) => child.role === "right")!;
+    const name = identifierName(left)!;
+    const compound = node.attributes.operator !== "=";
+    // Reserve in legacy allocation order for anonymous IDs, without exposing the binding.
+    const definition = this.define(name, "assignment", node, scope, filePath, state,
+      compound ? undefined : literalValue(right), false);
+    const incoming = compound ? this.evaluateOrderedExpression(left, scope, filePath, state) : undefined;
+    const value = this.evaluateOrderedExpression(right, scope, filePath, state);
+    this.materializeOrderedValue(incoming === undefined ? value : { kind: "combined", values: [incoming, value] }, definition.id, state);
+    scope.definitions.set(name, definition);
+    return { kind: "definition", id: definition.id };
+  }
+
+  private materializeOrderedValue(value: OrderedExpressionValue, targetDefinitionId: string, state: FlowState): void {
+    // A value tree avoids copying growing dependency sets at each binary ancestor.
+    const pending = [value];
+    const definitions = new Set<string>();
+    const sourceIds = new Set<string>();
+    while (pending.length > 0) {
+      const current = pending.pop()!;
+      if (current.kind === "combined") {
+        for (let index = current.values.length - 1; index >= 0; index--) pending.push(current.values[index]!);
+      } else if (current.kind === "definition") {
+        if (!definitions.has(current.id)) {
+          definitions.add(current.id);
+          this.addTransfer(state, current.id, targetDefinitionId);
+        }
+      } else if (!sourceIds.has(current.id)) {
+        sourceIds.add(current.id);
+        this.setTaintPath(state, targetDefinitionId, current.id, [current.id, targetDefinitionId]);
+      }
+    }
   }
 
   private declarator(node: ASTNode, scope: Scope, filePath: string, state: FlowState): void {
@@ -248,6 +527,7 @@ export class DeterministicDataFlowGraphBuilder {
     scope: Scope,
     filePath: string,
     state: FlowState,
+    captures?: ReadonlyMap<ASTNode, OrderedExpressionValue>,
   ): void {
     if (pattern.type === "Identifier") {
       const name = identifierName(pattern);
@@ -255,7 +535,7 @@ export class DeterministicDataFlowGraphBuilder {
       const constVal = init !== undefined && init.type !== "ArrayHole" ? literalValue(init) : undefined;
       const definition = this.define(name, kind, declarationOrAssignmentNode, scope, filePath, state, constVal);
       if (init !== undefined && init.type !== "ArrayHole") {
-        this.transferTaint(init, definition.id, scope, filePath, state);
+        this.transferTaint(init, definition.id, scope, filePath, state, captures);
       }
       return;
     }
@@ -266,7 +546,7 @@ export class DeterministicDataFlowGraphBuilder {
       const constVal = init !== undefined && init.type !== "ArrayHole" ? literalValue(init) : undefined;
       const definition = this.define(path, kind, declarationOrAssignmentNode, scope, filePath, state, constVal);
       if (init !== undefined && init.type !== "ArrayHole") {
-        this.transferTaint(init, definition.id, scope, filePath, state);
+        this.transferTaint(init, definition.id, scope, filePath, state, captures);
       }
       return;
     }
@@ -277,19 +557,19 @@ export class DeterministicDataFlowGraphBuilder {
       if (left === undefined) return;
       if (init !== undefined && init.type !== "ArrayHole") {
         if (isStaticallyDefinedLiteral(init)) {
-          this.bindDestructuringPattern(left, init, kind, declarationOrAssignmentNode, scope, filePath, state);
+          this.bindDestructuringPattern(left, init, kind, declarationOrAssignmentNode, scope, filePath, state, captures);
         } else {
-          this.bindDestructuringPattern(left, init, kind, declarationOrAssignmentNode, scope, filePath, state);
+          this.bindDestructuringPattern(left, init, kind, declarationOrAssignmentNode, scope, filePath, state, captures);
           if (right !== undefined) {
             const boundNames = extractBoundNames(left);
             for (const name of boundNames) {
               const def = scope.definitions.get(name);
-              if (def !== undefined) this.transferTaint(right, def.id, scope, filePath, state);
+              if (def !== undefined) this.transferTaint(right, def.id, scope, filePath, state, captures);
             }
           }
         }
       } else {
-        this.bindDestructuringPattern(left, right, kind, declarationOrAssignmentNode, scope, filePath, state);
+        this.bindDestructuringPattern(left, right, kind, declarationOrAssignmentNode, scope, filePath, state, captures);
       }
       return;
     }
@@ -297,7 +577,7 @@ export class DeterministicDataFlowGraphBuilder {
     if (pattern.type === "RestElement") {
       const argument = pattern.children.find((c) => c.role === "argument");
       if (argument !== undefined) {
-        this.bindDestructuringPattern(argument, init, kind, declarationOrAssignmentNode, scope, filePath, state);
+        this.bindDestructuringPattern(argument, init, kind, declarationOrAssignmentNode, scope, filePath, state, captures);
       }
       return;
     }
@@ -326,13 +606,13 @@ export class DeterministicDataFlowGraphBuilder {
           if (matchedProp !== undefined) {
             const initValNode = matchedProp.children.find((c) => c.role === "value");
             if (valNode !== undefined) {
-              this.bindDestructuringPattern(valNode, initValNode, kind, declarationOrAssignmentNode, scope, filePath, state);
+              this.bindDestructuringPattern(valNode, initValNode, kind, declarationOrAssignmentNode, scope, filePath, state, captures);
             }
           } else {
             const spreadChild = init.children.find((initChild) => initChild.type === "SpreadElement");
             const spreadSource = spreadChild?.children.find((c) => c.role === "argument") ?? spreadChild;
             if (valNode !== undefined) {
-              this.bindDestructuringPattern(valNode, spreadSource, kind, declarationOrAssignmentNode, scope, filePath, state);
+              this.bindDestructuringPattern(valNode, spreadSource, kind, declarationOrAssignmentNode, scope, filePath, state, captures);
             }
           }
         }
@@ -349,12 +629,12 @@ export class DeterministicDataFlowGraphBuilder {
                 if (initKey === undefined || !matchedKeys.has(initKey)) {
                   const initValNode = initChild.children.find((c) => c.role === "value");
                   if (initValNode !== undefined) {
-                    this.transferTaint(initValNode, restDef.id, scope, filePath, state);
+                    this.transferTaint(initValNode, restDef.id, scope, filePath, state, captures);
                   }
                 }
               } else if (initChild.type === "SpreadElement") {
                 const spreadArg = initChild.children.find((c) => c.role === "argument") ?? initChild;
-                this.transferTaint(spreadArg, restDef.id, scope, filePath, state);
+                this.transferTaint(spreadArg, restDef.id, scope, filePath, state, captures);
               }
             }
           }
@@ -366,10 +646,10 @@ export class DeterministicDataFlowGraphBuilder {
             const keyChild = child.children.find((c) => c.role === "key") ?? child.children.find((c) => c.type === "Identifier");
             const target = valChild ?? keyChild;
             if (target !== undefined) {
-              this.bindDestructuringPattern(target, init, kind, declarationOrAssignmentNode, scope, filePath, state);
+              this.bindDestructuringPattern(target, init, kind, declarationOrAssignmentNode, scope, filePath, state, captures);
             }
           } else if (child.type === "RestElement") {
-            this.bindDestructuringPattern(child, init, kind, declarationOrAssignmentNode, scope, filePath, state);
+            this.bindDestructuringPattern(child, init, kind, declarationOrAssignmentNode, scope, filePath, state, captures);
           }
         }
       }
@@ -391,35 +671,54 @@ export class DeterministicDataFlowGraphBuilder {
               for (let j = i; j < initElements.length; j++) {
                 const initElem = initElements[j]!;
                 if (initElem.type !== "ArrayHole") {
-                  this.transferTaint(initElem, restDef.id, scope, filePath, state);
+                  this.transferTaint(initElem, restDef.id, scope, filePath, state, captures);
                 }
               }
             }
             break;
           }
           const matchedInit = initElements[i];
-          this.bindDestructuringPattern(elem, matchedInit, kind, declarationOrAssignmentNode, scope, filePath, state);
+          this.bindDestructuringPattern(elem, matchedInit, kind, declarationOrAssignmentNode, scope, filePath, state, captures);
         }
       } else {
         for (const elem of patternElements) {
           if (elem.type === "ArrayHole") continue;
-          this.bindDestructuringPattern(elem, init, kind, declarationOrAssignmentNode, scope, filePath, state);
+          this.bindDestructuringPattern(elem, init, kind, declarationOrAssignmentNode, scope, filePath, state, captures);
         }
       }
       return;
     }
   }
 
-  private call(node: ASTNode, scope: Scope, filePath: string, state: FlowState, receiverDefinitionId?: string): void {
+  private call(node: ASTNode, scope: Scope, filePath: string, state: FlowState, receiverDefinitionId?: string, staged = false): void {
     const callee = node.children.find((child) => child.role === "callee"); const name = memberPath(callee) ?? identifierName(callee);
-    const argumentsNodes = node.children.filter((child) => child.role === "arguments"); for (const argument of argumentsNodes) this.visit(argument, scope, filePath, state);
+    const argumentsNodes = node.children.filter((child) => child.role === "arguments");
+    // Capture the member receiver before argument side effects. This is the existing
+    // conservative unknown-call dependency policy, not a use of the method name.
+    const object = callee?.type === "MemberExpression" ? callee.children.find((child) => child.role === "object") : undefined;
+    const receiverValue: OrderedExpressionValue = { kind: "combined", values: staged && object !== undefined ? [
+      ...this.collectDefinitions(object, scope, filePath, state).map((definition): OrderedExpressionValue => ({ kind: "definition", id: definition.id })),
+      ...this.collectSources(object, filePath, state).map((id): OrderedExpressionValue => ({ kind: "source", id })),
+    ] : [] };
+    const values: OrderedExpressionValue[] = [];
+    for (const argument of argumentsNodes) {
+      if (staged) values.push(this.evaluateOrderedExpression(argument, scope, filePath, state));
+      else this.visit(argument, scope, filePath, state);
+    }
     const proven = node.location === undefined ? undefined : state.provenTargets.get(callLocationKey(filePath, node.location.start));
     const resolved = state.hasSemanticResolution ? (proven === undefined ? undefined : state.functionsBySymbolId.get(proven.targetSymbolId)) : resolveFunction(name, state.resolvableFunctions);
     const callPosition = node.location === undefined ? `anon-${state.pendingCalls.length}` : `${node.location.start.line}:${node.location.start.column}`;
-    if (resolved !== undefined || proven !== undefined) state.pendingCalls.push({ id: proven?.callId ?? hash(`call:${filePath}:${name}:${callPosition}`), ...(proven === undefined ? {} : { targetSymbolId: proven.targetSymbolId }), ...(resolved === undefined ? {} : { callee: resolved }), argumentDefinitionIds: argumentsNodes.map((argument) => this.definitionFor(argument, scope)?.id), argumentSourceIds: argumentsNodes.map((argument) => this.source(argument, filePath)), ...(receiverDefinitionId === undefined ? {} : { receiverDefinitionId }) });
+    const cut = staged && sanitized(node);
+    if (resolved !== undefined || proven !== undefined) state.pendingCalls.push({ id: proven?.callId ?? hash(`call:${filePath}:${name}:${callPosition}`), ...(proven === undefined ? {} : { targetSymbolId: proven.targetSymbolId }), ...(resolved === undefined ? {} : { callee: resolved }), argumentDefinitionIds: staged ? values.map((value) => this.orderedValueIds(value, "definition")[0]) : argumentsNodes.map((argument) => this.definitionFor(argument, scope)?.id), argumentSourceIds: staged ? values.map((value) => this.orderedValueIds(value, "source")[0]) : argumentsNodes.map((argument) => this.source(argument, filePath)), ...(receiverDefinitionId === undefined || cut ? {} : { receiverDefinitionId }), ...(staged ? { argumentValues: values } : {}) });
+    if (staged && receiverDefinitionId !== undefined && !cut) {
+      const calleeSource = callee === undefined ? undefined : this.source(callee, filePath);
+      if (calleeSource !== undefined) this.materializeOrderedValue({ kind: "source", id: calleeSource }, receiverDefinitionId, state);
+      else if (resolved === undefined && proven === undefined) this.materializeOrderedValue({ kind: "combined", values: [receiverValue, ...values] }, receiverDefinitionId, state);
+      // Resolved return-to-receiver evidence is attached by connectCalls().
+    }
     if (name === undefined || !sinks.has(name)) return;
     const sinkPosition = node.location === undefined ? `anon-${state.sinks.length}` : `${node.location.start.line}:${node.location.start.column}`;
-    state.sinks.push({ id: hash(`sink:${filePath}:${name}:${sinkPosition}`), name, argumentDefinitionIds: argumentsNodes.flatMap((argument) => this.collectDefinitions(argument, scope, filePath, state).map((definition) => definition.id)) });
+    state.sinks.push({ id: hash(`sink:${filePath}:${name}:${sinkPosition}`), name, argumentDefinitionIds: staged ? values.flatMap((value) => this.orderedValueIds(value, "definition")) : argumentsNodes.flatMap((argument) => this.collectDefinitions(argument, scope, filePath, state).map((definition) => definition.id)) });
   }
 
   private definitionFor(node: ASTNode, scope: Scope): VariableDefinition | undefined {
@@ -445,9 +744,19 @@ export class DeterministicDataFlowGraphBuilder {
         const slot = call.callee?.parameters[index];
         if (slot !== undefined) {
           for (const parameter of slot) {
-            if (argumentDefinitionId !== undefined) this.addInterproceduralFlow(state, call.id, "argument-to-parameter", argumentDefinitionId, parameter.id);
-            const sourceId = call.argumentSourceIds[index];
-            if (sourceId !== undefined) this.setTaintPath(state, parameter.id, sourceId, [sourceId, parameter.id]);
+            const captured = call.argumentValues?.[index];
+            if (captured !== undefined) {
+              for (const definitionId of this.orderedValueIds(captured, "definition")) {
+                this.addInterproceduralFlow(state, call.id, "argument-to-parameter", definitionId, parameter.id);
+              }
+              for (const sourceId of this.orderedValueIds(captured, "source")) {
+                this.setTaintPath(state, parameter.id, sourceId, [sourceId, parameter.id]);
+              }
+            } else {
+              if (argumentDefinitionId !== undefined) this.addInterproceduralFlow(state, call.id, "argument-to-parameter", argumentDefinitionId, parameter.id);
+              const sourceId = call.argumentSourceIds[index];
+              if (sourceId !== undefined) this.setTaintPath(state, parameter.id, sourceId, [sourceId, parameter.id]);
+            }
           }
         }
       }
@@ -462,7 +771,12 @@ export class DeterministicDataFlowGraphBuilder {
     state.transfers.push({ sourceDefinitionId, targetDefinitionId });
   }
 
-  private transferTaint(node: ASTNode, targetDefinitionId: string, scope: Scope, filePath: string, state: FlowState): void {
+  private transferTaint(node: ASTNode, targetDefinitionId: string, scope: Scope, filePath: string, state: FlowState, captures?: ReadonlyMap<ASTNode, OrderedExpressionValue>): void {
+    const captured = captures?.get(node);
+    if (captured !== undefined) {
+      this.materializeOrderedValue(captured, targetDefinitionId, state);
+      return;
+    }
     if (sanitized(node)) return;
     const sources = this.collectSources(node, filePath, state);
     for (const sourceId of sources) {
@@ -609,7 +923,7 @@ export class DeterministicDataFlowGraphBuilder {
 
   private memberUse(node: ASTNode, scope: Scope, filePath: string, state: FlowState): void { const path = memberPath(node); if (path !== undefined) this.use(path, node, scope, filePath, state); const base = memberBase(node); if (base !== undefined && base !== path) this.use(base, node, scope, filePath, state); }
   private use(name: string | undefined, node: ASTNode, scope: Scope, filePath: string, state: FlowState): void { if (name === undefined) return; const definition = resolve(scope, name); const position = node.location === undefined ? `anon-${state.uses.length}` : `${node.location.start.line}:${node.location.start.column}`; state.uses.push({ id: hash(`use:${filePath}:${name}:${position}`), filePath, name, ...(definition === undefined ? {} : { definitionId: definition.id }) }); }
-  private define(name: string, kind: VariableDefinition["kind"], node: ASTNode, scope: Scope, filePath: string, state: FlowState, constantValue: string | number | boolean | null | undefined): VariableDefinition { const position = node.location === undefined ? `anon-${state.definitions.length}` : `${node.location.start.line}:${node.location.start.column}`; const definition: VariableDefinition = { id: hash(`definition:${filePath}:${name}:${kind}:${position}`), filePath, name, kind, ...(constantValue === undefined ? {} : { constantValue }) }; scope.definitions.set(name, definition); state.definitions.push(definition); return definition; }
+  private define(name: string, kind: VariableDefinition["kind"], node: ASTNode, scope: Scope, filePath: string, state: FlowState, constantValue: string | number | boolean | null | undefined, publish = true): VariableDefinition { const position = node.location === undefined ? `anon-${state.definitions.length}` : `${node.location.start.line}:${node.location.start.column}`; const definition: VariableDefinition = { id: hash(`definition:${filePath}:${name}:${kind}:${position}`), filePath, name, kind, ...(constantValue === undefined ? {} : { constantValue }) }; if (publish) scope.definitions.set(name, definition); state.definitions.push(definition); return definition; }
   private source(node: ASTNode, filePath: string): string | undefined { const path = memberPath(node); if (path === undefined || ![...sources].some((source) => path === source || path.startsWith(`${source}.`))) return undefined; const position = node.location === undefined ? "anon" : `${node.location.start.line}:${node.location.start.column}`; return hash(`source:${filePath}:${path}:${position}`); }
 }
 
