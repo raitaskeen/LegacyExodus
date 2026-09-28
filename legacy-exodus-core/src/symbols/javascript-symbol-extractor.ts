@@ -901,7 +901,7 @@ function findModuleSpecifier(node: ASTNode): string | undefined {
     return sourceValue;
   }
 
-  return source === undefined ? findStringLiteral(node) : findStringLiteral(source);
+  return source === undefined ? undefined : findStringLiteral(source);
 }
 
 function readIdentifierName(node: ASTNode | undefined): string | undefined {
