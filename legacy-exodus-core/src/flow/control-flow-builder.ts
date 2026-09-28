@@ -426,7 +426,7 @@ function hasUnsupportedExpressionControl(nodes: readonly ASTNode[]): boolean {
 }
 function hasPotentiallyThrowingEvaluation(node: ASTNode): boolean {
   if (isFunction(node) || node.type === "ThrowStatement") return false;
-  if (["CallExpression", "NewExpression", "OptionalCallExpression"].includes(node.type)) return true;
+  if (["CallExpression", "NewExpression", "OptionalCallExpression", "MemberExpression"].includes(node.type)) return true;
   if (["Program", "CatchClause", "TryStatement", "LabeledStatement", "SwitchCase"].includes(node.type)) return false;
   if (node.type === "IfStatement") {
     return node.children.filter((child) => child.role === "test").some(hasPotentiallyThrowingEvaluation);
