@@ -58,7 +58,15 @@ class FlowState {
   public buildStatements(nodes: readonly ASTNode[], current: string, exit: string | undefined, control: ControlContext | undefined): string {
     let block = current;
     let terminated = false;
-    for (const node of nodes) {
+    // Unroll structural blocks in this frame so completion and control targets stay shared.
+    const pending = [...nodes].reverse();
+    while (pending.length > 0) {
+      const node = pending.pop();
+      if (node === undefined) continue;
+      if (node.type === "BlockStatement") {
+        for (const child of [...node.children].reverse()) pending.push(child);
+        continue;
+      }
       if (isFunction(node)) continue;
       if (control?.potentialExceptionTarget !== undefined && hasPotentiallyThrowingEvaluation(node)) {
         this.addEdge(block, control.potentialExceptionTarget, "exception");

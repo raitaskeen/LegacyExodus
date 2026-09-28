@@ -86,7 +86,7 @@ describe("IA-HIGH-007 catch reachability for potential throws", () => {
 
   test("keeps catch reachable for a call inside a nested block", async (): Promise<void> => {
     const graph = await buildGraph("try {\n  {\n    mayThrow();\n  }\n} catch (error) {\n  recover(error);\n}");
-    const nestedBlock = statementBlock(graph, "BlockStatement", 2);
+    const nestedBlock = statementBlock(graph, "ExpressionStatement", 3);
     const catchBlock = statementBlock(graph, "ExpressionStatement", 6);
 
     expect(graph.edges
