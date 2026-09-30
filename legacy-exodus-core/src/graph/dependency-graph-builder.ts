@@ -78,7 +78,7 @@ export class DeterministicDependencyGraphBuilder {
       const resolved = this.resolver.resolve(tableCanonicalPath, direct.moduleSpecifier, files).resolvedPath;
       const target = resolved === null ? undefined : tables.get(resolved);
       const forwardedName = direct.sourceSymbolName ?? name;
-      return target === undefined ? direct : this.resolveExport(target, forwardedName, files, tables, nextVisited);
+      return target === undefined ? undefined : this.resolveExport(target, forwardedName, files, tables, nextVisited);
     }
 
     if (name === "default" || name === "*") {
