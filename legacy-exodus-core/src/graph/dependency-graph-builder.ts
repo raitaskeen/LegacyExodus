@@ -2,13 +2,13 @@ import { createHash } from "node:crypto";
 
 import type { CodeSymbol, SymbolTable } from "@symbols/index";
 
-import { validateDependencyGraph, type DependencyGraph } from "./dependency-graph-contracts";
+import { validateCurrentDependencyGraph, type CurrentDependencyGraph, type DependencyGraphEdge, type ModuleDependencyEdge } from "./dependency-graph-contracts";
 import { canonicalizePath, type KnownPathLookup, ModuleResolver } from "./module-resolver";
 
 export class DeterministicDependencyGraphBuilder {
   public constructor(private readonly resolver: ModuleResolver = new ModuleResolver()) {}
 
-  public build(symbolTables: readonly SymbolTable[], files: KnownPathLookup): DependencyGraph {
+  public build(symbolTables: readonly SymbolTable[], files: KnownPathLookup): CurrentDependencyGraph {
     const orderedTables = [...symbolTables].sort((left, right) =>
       canonicalizePath(left.filePath).localeCompare(canonicalizePath(right.filePath)),
     );
@@ -20,39 +20,72 @@ export class DeterministicDependencyGraphBuilder {
         symbolId: symbol.id,
       })),
     );
-    const edges = orderedTables.flatMap((table) =>
-      table.symbols
-        .filter((symbol) => symbol.kind === "import" && symbol.moduleSpecifier !== undefined)
-        .flatMap((symbol) => {
-          const canonicalTablePath = canonicalizePath(table.filePath);
-          const resolved = this.resolver.resolve(canonicalTablePath, symbol.moduleSpecifier ?? "", files);
-          const target = resolved.resolvedPath === null ? undefined : tablesByPath.get(resolved.resolvedPath);
-          const exported = target === undefined
-            ? undefined
-            : this.resolveExport(target, symbol.defaultExport ? "default" : (symbol.sourceSymbolName ?? symbol.name), files, tablesByPath, new Set());
-
-          if (exported === undefined) {
-            return [];
+    const edges: DependencyGraphEdge[] = [];
+    const moduleEdges: ModuleDependencyEdge[] = [];
+    for (const table of orderedTables) {
+      const sourceFilePath = canonicalizePath(table.filePath);
+      if (table.moduleReferences === undefined && table.symbols.some((symbol) => symbol.kind === "import")) {
+        throw new Error(`Current import relationships require module reference evidence: ${sourceFilePath}`);
+      }
+      const symbolsById = new Map(table.symbols.map((symbol) => [symbol.id, symbol]));
+      const associatedIds = new Set<string>();
+      for (const reference of table.moduleReferences ?? []) {
+        for (const id of new Set(reference.importSymbolIds)) {
+          const symbol = symbolsById.get(id);
+          if (associatedIds.has(id) || symbol?.kind !== "import" || symbol.moduleSpecifier !== reference.moduleSpecifier) {
+            throw new Error(`Invalid module reference binding: ${id}`);
           }
-
-          return [{
+          associatedIds.add(id);
+        }
+      }
+      if (table.symbols.some((symbol) => symbol.kind === "import" && !associatedIds.has(symbol.id))) {
+        throw new Error(`Current import relationships require complete module reference evidence: ${sourceFilePath}`);
+      }
+      for (const reference of table.moduleReferences ?? []) {
+        const resolved = this.resolver.resolve(sourceFilePath, reference.moduleSpecifier, files);
+        if (resolved.resolvedPath === null) continue;
+        if (reference.sourceAnchor === undefined) {
+          throw new Error(`Resolved import lacks source anchor: ${sourceFilePath} -> ${reference.moduleSpecifier}`);
+        }
+        const targetFilePath = canonicalizePath(resolved.resolvedPath);
+        const anchor = reference.sourceAnchor;
+        const taggedAnchor = anchor.kind === "offset" ? ["offset", anchor.start, anchor.end]
+          : ["location", anchor.start.line, anchor.start.column, anchor.end.line, anchor.end.column];
+        moduleEdges.push({
+          id: createHash("sha256").update(JSON.stringify([
+            "f07-module-edge-v1", sourceFilePath, reference.form, taggedAnchor, reference.moduleSpecifier, targetFilePath,
+          ])).digest("hex"),
+          sourceFilePath, targetFilePath, moduleSpecifier: reference.moduleSpecifier,
+          sourceAnchor: anchor, form: reference.form,
+          ...(reference.sourcePhase === undefined ? {} : { sourcePhase: reference.sourcePhase }),
+        });
+        if (reference.form === "esm-side-effect") continue;
+        const target = tablesByPath.get(targetFilePath);
+        for (const importSymbolId of reference.importSymbolIds) {
+          const symbol = symbolsById.get(importSymbolId);
+          if (symbol === undefined || symbol.kind !== "import" || symbol.moduleSpecifier !== reference.moduleSpecifier) {
+            throw new Error(`Invalid module reference binding: ${importSymbolId}`);
+          }
+          const exported = target === undefined ? undefined
+            : this.resolveExport(target, symbol.defaultExport ? "default" : (symbol.sourceSymbolName ?? symbol.name), files, tablesByPath, new Set());
+          if (exported === undefined) continue;
+          edges.push({
             id: createHash("sha256").update(`${symbol.id}:${exported.id}`).digest("hex"),
-            sourceFilePath: canonicalTablePath,
-            targetFilePath: canonicalizePath(exported.filePath),
-            importSymbolId: symbol.id,
-            targetExportSymbolId: exported.id,
+            sourceFilePath, targetFilePath: canonicalizePath(exported.filePath),
+            importSymbolId: symbol.id, targetExportSymbolId: exported.id,
             moduleSpecifier: symbol.moduleSpecifier ?? "",
-          }];
-        }),
-    );
+          });
+        }
+      }
+    }
 
-    return validateDependencyGraph({
+    return validateCurrentDependencyGraph({
       nodes: [...nodes].sort((left, right) => left.id.localeCompare(right.id)),
       edges: [...edges].sort((left, right) => left.id.localeCompare(right.id)),
-      cycles: findCycles(edges),
+      cycles: findCycles(moduleEdges),
+      moduleGraph: { contract: "f07-import-relations-v1", edges: moduleEdges.sort((left, right) => left.id.localeCompare(right.id)) },
     });
   }
-
   private resolveExport(
     table: SymbolTable,
     name: string,

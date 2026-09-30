@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { validateASTResult, type ASTNode, type ASTResult } from "@parser/index";
 
 import type { SymbolExtractor } from "./symbol-extractor";
+import { sourceAnchorSchema, type ModuleReference, type SourceAnchor } from "./module-reference-contracts";
 import {
   validateSymbolTable,
   type CodeSymbol,
@@ -42,6 +43,7 @@ const supportedLanguages = new Set(["javascript", "typescript"]);
 
 export class JavaScriptSymbolExtractor implements SymbolExtractor {
   private unlocatedSequence = 0;
+  private moduleReferences: ModuleReference[] = [];
 
   public extract(ast: ASTResult): SymbolTable {
     const validatedAst = validateASTResult(ast);
@@ -51,6 +53,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     }
 
     this.unlocatedSequence = 0;
+    this.moduleReferences = [];
     const symbols: CodeSymbol[] = [];
     const pendingExports: PendingExportBinding[] = [];
     this.visit(validatedAst.root, validatedAst, initialContext, symbols, pendingExports);
@@ -64,6 +67,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       language: validatedAst.metadata.language,
       symbols,
       summary: createSummary(symbols),
+      moduleReferences: this.moduleReferences,
     });
   }
 
@@ -234,6 +238,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
   }
 
   private addImportSymbols(node: ASTNode, ast: ASTResult, symbols: CodeSymbol[]): void {
+    const symbolStart = symbols.length;
     const moduleSpecifier = findStringLiteral(node) ?? "unknown-module";
     const specifiers = node.children.filter(
       (child) => child.role === "specifiers" && child.type.startsWith("Import"),
@@ -241,6 +246,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
 
     if (specifiers.length === 0) {
       symbols.push(this.createSymbol("import", moduleSpecifier, node, ast, initialContext, { moduleSpecifier }));
+      this.addModuleReference(node, moduleSpecifier, "esm-side-effect", symbols.slice(symbolStart), "value");
       return;
     }
 
@@ -265,6 +271,29 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         }),
       );
     }
+    const phases = specifiers.map((specifier) => specifier.attributes.importKind === "type" ? "type" : "value");
+    const phase = node.attributes.importKind === "type" ? "type"
+      : phases.every((value) => value === "type") ? "type"
+      : phases.some((value) => value === "type") ? "mixed" : "value";
+    this.addModuleReference(node, moduleSpecifier, "esm-binding", symbols.slice(symbolStart), phase);
+  }
+
+  private addModuleReference(
+    node: ASTNode,
+    moduleSpecifier: string,
+    form: ModuleReference["form"],
+    symbols: readonly CodeSymbol[],
+    sourcePhase?: ModuleReference["sourcePhase"],
+  ): void {
+    const importSymbolIds = symbols.filter((symbol) => symbol.kind === "import").map((symbol) => symbol.id);
+    if (importSymbolIds.length === 0) return;
+    const offset = sourceAnchorSchema.safeParse({ kind: "offset", start: node.attributes.start, end: node.attributes.end });
+    const location = sourceAnchorSchema.safeParse({ kind: "location", ...node.location });
+    const sourceAnchor: SourceAnchor | undefined = offset.success ? offset.data : location.success ? location.data : undefined;
+    this.moduleReferences.push({ moduleSpecifier, form, importSymbolIds,
+      ...(sourceAnchor === undefined ? {} : { sourceAnchor }),
+      ...(sourcePhase === undefined ? {} : { sourcePhase }),
+    });
   }
 
   private addVariableSymbols(
@@ -285,6 +314,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       const name = getName(declarator);
       const initializer = declarator.children.find((child) => child.role === "init");
       const required = requireSpecifier(initializer);
+      const symbolStart = symbols.length;
 
       if (binding?.type === "ObjectPattern" || binding?.type === "ArrayPattern") {
         if (required !== undefined) {
@@ -332,6 +362,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
             );
           }
         }
+        if (required !== undefined) this.addModuleReference(declarator, required, "commonjs-import", symbols.slice(symbolStart));
         continue;
       }
 
@@ -374,6 +405,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
           }));
         }
       }
+      if (required !== undefined) this.addModuleReference(declarator, required, "commonjs-import", symbols.slice(symbolStart));
     }
   }
 
@@ -565,6 +597,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
 
     // Check for require(...) on RHS
     const required = requireSpecifier(innermostRight);
+    const symbolStart = symbols.length;
     if (required !== undefined) {
       const property = requireProperty(innermostRight);
       const isDefaultReq = property === undefined;
@@ -580,6 +613,8 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         );
       }
     }
+
+    if (required !== undefined) this.addModuleReference(node, required, "commonjs-import", symbols.slice(symbolStart));
 
     // Process targets for exports and property assignments
     for (const target of targets) {
