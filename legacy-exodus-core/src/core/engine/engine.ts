@@ -25,6 +25,14 @@ export class LegacyExodusEngine {
     }
 
     await this.context.runtime.start();
+
+    if (["stopping", "stopped"].includes(this.state)) {
+      throw new LegacyExodusError({
+        code: "ENGINE_RESTART_NOT_SUPPORTED",
+        message: "Initialization cannot complete because engine shutdown has begun.",
+      });
+    }
+
     this.state = "running";
   }
 
