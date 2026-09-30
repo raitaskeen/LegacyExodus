@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { LegacyExodusError } from "@shared/errors";
+import { moduleReferenceSchema, freezeModuleReference, type ModuleReference } from "./module-reference-contracts";
 
 export type SymbolKind = "class" | "export" | "function" | "import" | "method" | "variable";
 
@@ -47,6 +48,7 @@ export interface SymbolTable {
   readonly language: string;
   readonly symbols: readonly CodeSymbol[];
   readonly summary: SymbolSummary;
+  readonly moduleReferences?: readonly ModuleReference[];
 }
 
 const symbolKindSchema = z.enum(["class", "export", "function", "import", "method", "variable"]);
@@ -78,6 +80,7 @@ const symbolTableSchema = z.object({
   filePath: z.string().min(1),
   language: z.string().min(1),
   symbols: z.array(codeSymbolSchema),
+  moduleReferences: z.array(moduleReferenceSchema).optional(),
   summary: z.object({
     classes: z.number().int().nonnegative(),
     exports: z.number().int().nonnegative(),
@@ -86,6 +89,22 @@ const symbolTableSchema = z.object({
     methods: z.number().int().nonnegative(),
     variables: z.number().int().nonnegative(),
   }),
+}).superRefine((table, context) => {
+  if (table.moduleReferences === undefined) return;
+  const symbols = new Map(table.symbols.map((symbol) => [symbol.id, symbol]));
+  const associated = new Set<string>();
+  for (const reference of table.moduleReferences) {
+    for (const id of new Set(reference.importSymbolIds)) {
+      const symbol = symbols.get(id);
+      if (associated.has(id) || symbol?.kind !== "import" || symbol.moduleSpecifier !== reference.moduleSpecifier) {
+        context.addIssue({ code: "custom", message: "Invalid module reference symbol association." });
+      }
+      associated.add(id);
+    }
+  }
+  if (table.symbols.some((symbol) => symbol.kind === "import" && !associated.has(symbol.id))) {
+    context.addIssue({ code: "custom", message: "Module references must cover extracted imports." });
+  }
 });
 
 export function validateSymbolTable(table: unknown): SymbolTable {
@@ -104,6 +123,7 @@ export function validateSymbolTable(table: unknown): SymbolTable {
     language: parsedTable.data.language,
     symbols: Object.freeze(parsedTable.data.symbols.map(freezeCodeSymbol)),
     summary: Object.freeze({ ...parsedTable.data.summary }),
+    ...(parsedTable.data.moduleReferences === undefined ? {} : { moduleReferences: Object.freeze(parsedTable.data.moduleReferences.map(freezeModuleReference)) }),
   });
 }
 

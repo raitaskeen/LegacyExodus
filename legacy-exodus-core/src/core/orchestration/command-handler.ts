@@ -18,7 +18,7 @@ import type {
 import { createDomainEvent, type DomainEvent } from "@core/events/domain-event";
 import { validateProjectDiscovery, type FileArtifact } from "@contracts/discovery";
 import { DiscoveryEngine, DiscoveryValidator, type DiscoveryResult } from "@discovery/index";
-import { DeterministicDependencyGraphBuilder, ModuleResolver, canonicalizePath, type ModuleResolutionOptions } from "@graph/index";
+import { DeterministicDependencyGraphBuilder, ModuleResolver, canonicalizePath, validateCurrentDependencyGraph, type ModuleResolutionOptions } from "@graph/index";
 import { DeterministicControlFlowGraphBuilder, DeterministicDataFlowGraphBuilder, DeterministicFlowAnalysisEngine, createProvenCallTargets, type ControlFlowGraph, type BuildContextResult } from "@flow/index";
 import { DeterministicKnowledgeGraphBuilder } from "@knowledge/index";
 import { readFile } from "node:fs/promises";
@@ -186,7 +186,7 @@ export class AnalyzeProjectHandler {
           if (required.has("dependency-graph.json")) {
             const depGraphRaw = artifacts.get("dependency-graph.json");
             if (!depGraphRaw) throw new Error("Missing dependency-graph.json in validated set.");
-            const depGraphJson = JSON.parse(depGraphRaw);
+            const depGraphJson = validateCurrentDependencyGraph(JSON.parse(depGraphRaw));
             records.push(
               createStorageRecord("dependency-graph", {
                 projectId: discovery.projectId,
@@ -194,6 +194,7 @@ export class AnalyzeProjectHandler {
                 nodes: depGraphJson.nodes ?? [],
                 edges: depGraphJson.edges ?? [],
                 cycles: depGraphJson.cycles ?? [],
+                moduleGraph: depGraphJson.moduleGraph,
               }),
             );
           }
@@ -478,6 +479,7 @@ export class AnalyzeProjectHandler {
           nodes: dependencyGraph.nodes,
           edges: dependencyGraph.edges,
           cycles: dependencyGraph.cycles,
+          moduleGraph: dependencyGraph.moduleGraph,
         }),
       );
       const tablesByPath = new Map(symbolTables.map((table) => [canonicalizePath(table.filePath), table]));

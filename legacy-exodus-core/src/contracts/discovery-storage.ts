@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { moduleDependencyLayerSchema } from "@graph/dependency-graph-contracts";
 
 import { callFlowBindingSchema, controlFlowGraphSchema, dataFlowGraphSchema } from "@flow/flow-contracts";
 import { semanticAnalysisSchema } from "@semantic/semantic-contracts";
@@ -70,7 +71,8 @@ export const dependencyGraphPayloadSchema = z.object({
     }),
   ),
   cycles: z.array(z.array(z.string())),
-});
+  moduleGraph: moduleDependencyLayerSchema.optional(),
+}).refine((graph) => !Object.hasOwn(graph, "moduleGraph") || graph.moduleGraph !== undefined, "Present moduleGraph must satisfy the current contract.");
 
 export const knowledgeGraphPayloadSchema = z.object({
   projectId: z.string().uuid(),
