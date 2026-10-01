@@ -40,7 +40,7 @@ export class DeterministicCallGraphBuilder {
     };
     predeclareScopeBindings(ast.root, initialContext);
     const boundCallees = new Set<ASTNode>();
-    const fileSymbols = createFileSymbolIndex(tablesByPath.get(canonicalizePath(ast.metadata.sourcePath)));
+    const fileSymbols = createFileSymbolIndex(tablesByPath.get(canonicalizePath(ast.metadata.sourcePath)), ast);
     this.visit(ast.root, ast, initialContext, tablesByPath, importsByFile, targetByImportId, calls, references, boundCallees, fileSymbols, undefined, false);
   }
 
@@ -105,17 +105,19 @@ export class DeterministicCallGraphBuilder {
 
     if (!bindingPosition && isLexicalReference(node, parent)) {
       const name = identifier(node);
-      const importedBinding = name === undefined ? undefined : resolveImportBinding(fileSymbols, name, nextContext.scope);
-      if (name !== undefined && importedBinding !== undefined) {
+      const binding = name === undefined ? undefined : resolveLexicalBinding(fileSymbols, name, nextContext.scope);
+      if (name !== undefined && binding?.state === "ONE_BINDING") {
         const location = node.location?.start;
-        references.push({
-          id: hash(`identifier-reference:${ast.metadata.sourcePath}:${importedBinding.id}:${location?.line ?? 0}:${location?.column ?? 0}`),
-          filePath: ast.metadata.sourcePath,
-          name,
-          kind: "identifier",
-          resolutionState: "RESOLVED",
-          resolvedSymbolId: importedBinding.id,
-        });
+        for (const target of binding.referenceTargets) {
+          references.push({
+            id: hash(`identifier-reference:${ast.metadata.sourcePath}:${target.id}:${location?.line ?? 0}:${location?.column ?? 0}`),
+            filePath: ast.metadata.sourcePath,
+            name,
+            kind: "identifier",
+            resolutionState: "RESOLVED",
+            resolvedSymbolId: target.id,
+          });
+        }
       }
     }
 
@@ -143,6 +145,7 @@ interface FileSymbolIndex {
   readonly byName: ReadonlyMap<string, readonly CodeSymbol[]>;
   readonly firstImportByName: ReadonlyMap<string, CodeSymbol>;
   readonly classByLocation: ReadonlyMap<string, CodeSymbol>;
+  readonly lexicalBindings: ReadonlyMap<string, LexicalResolution>;
 }
 
 interface ScopeFrame {
@@ -163,13 +166,20 @@ function createScope(id: string, parent?: ScopeFrame): ScopeFrame {
   return Object.freeze(parent === undefined ? { id } : { id, parent });
 }
 
-function createFileSymbolIndex(table: SymbolTable | undefined): FileSymbolIndex {
+function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult): FileSymbolIndex {
   const byScopeAndName = new Map<string, CodeSymbol[]>();
   const byName = new Map<string, CodeSymbol[]>();
   const firstImportByName = new Map<string, CodeSymbol>();
   const classByLocation = new Map<string, CodeSymbol>();
+  const byAnchor = new Map<string, CodeSymbol[]>();
 
   for (const symbol of table?.symbols ?? []) {
+    const anchor = declarationAnchor(symbol.location);
+    if (anchor !== undefined && canonicalizePath(symbol.filePath) === canonicalizePath(ast.metadata.sourcePath)) {
+      const anchored = byAnchor.get(anchor) ?? [];
+      anchored.push(symbol);
+      byAnchor.set(anchor, anchored);
+    }
     const namedCandidates = byName.get(symbol.name) ?? [];
     namedCandidates.push(symbol);
     byName.set(symbol.name, namedCandidates);
@@ -193,32 +203,192 @@ function createFileSymbolIndex(table: SymbolTable | undefined): FileSymbolIndex 
     }
   }
 
-  return Object.freeze({ byScopeAndName, byName, firstImportByName, classByLocation });
+  const lexicalBindings = createLexicalBindingIndex(ast, table, byAnchor, byScopeAndName);
+  return Object.freeze({ byScopeAndName, byName, firstImportByName, classByLocation, lexicalBindings });
 }
 
-function resolveImportBinding(index: FileSymbolIndex, name: string, scope: ScopeFrame): CodeSymbol | undefined {
-  for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
-    const candidates = (index.byScopeAndName.get(lexicalBindingKey(current.id, name)) ?? []).filter(
-      (symbol) => ["class", "function", "import", "variable"].includes(symbol.kind),
-    );
-    if (candidates.length === 0) continue;
-    const imports = candidates.filter((symbol) => symbol.kind === "import");
-    if (imports.length !== 1) return undefined;
-    const imported = imports[0];
-    if (imported === undefined) return undefined;
-    const conflictingDeclaration = candidates.some(
-      (symbol) => symbol.kind !== "import" && !sameDeclaration(symbol, imported),
-    );
-    return conflictingDeclaration ? undefined : imported;
+type LexicalResolution =
+  | { readonly state: "NO_BINDING" }
+  | { readonly state: "BLOCKED_AMBIGUOUS" }
+  | {
+      readonly state: "ONE_BINDING";
+      readonly canonical: CodeSymbol;
+      readonly referenceTargets: readonly CodeSymbol[];
+    };
+
+interface LexicalBinding {
+  readonly canonical: CodeSymbol;
+  readonly referenceTargets: readonly CodeSymbol[];
+}
+
+function declarationAnchor(location: CodeSymbol["location"]): string | undefined {
+  if (location === undefined) return undefined;
+  return `${location.start.line}:${location.start.column}:${location.end.line}:${location.end.column}`;
+}
+
+// Match only the CommonJS initializer forms already recognized by the extractor.
+function commonJsInitializerSpecifier(node: ASTNode | undefined): string | undefined {
+  if (node?.type === "MemberExpression") return commonJsInitializerSpecifier(node.children.find(child => child.role === "object"));
+  if (node?.type !== "CallExpression") return undefined;
+  const callee = node.children.find(child => child.role === "callee");
+  const argument = node.children.find(child => child.role === "arguments");
+  if (identifier(callee) !== "require" || argument?.type !== "StringLiteral") return undefined;
+  const value = argument.attributes.value;
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+// Associate existing records once per file. A shared name is never an association.
+function createLexicalBindingIndex(
+  ast: ASTResult,
+  table: SymbolTable | undefined,
+  byAnchor: ReadonlyMap<string, readonly CodeSymbol[]>,
+  byScopeAndName: ReadonlyMap<string, readonly CodeSymbol[]>,
+): ReadonlyMap<string, LexicalResolution> {
+  const bindings = new Map<string, LexicalBinding>();
+  const nonbindings = new Set<string>();
+  const companions = new Set<string>();
+  const classified = new Set<string>();
+  const ambiguous = new Set<string>();
+  const commonJsImports = new Set(
+    (table?.moduleReferences ?? []).filter(reference => reference.form === "commonjs-import").flatMap(reference => reference.importSymbolIds),
+  );
+  const anchored = (node: ASTNode): readonly CodeSymbol[] => {
+    const anchor = declarationAnchor(node.location);
+    return anchor === undefined ? [] : byAnchor.get(anchor) ?? [];
+  };
+  const declare = (symbol: CodeSymbol): void => {
+    classified.add(symbol.id);
+    bindings.set(symbol.id, { canonical: symbol, referenceTargets: [symbol] });
+  };
+  const addCompanions = (canonical: CodeSymbol, targets: readonly CodeSymbol[]): void => {
+    for (const target of targets) {
+      classified.add(target.id);
+      companions.add(target.id);
+    }
+    bindings.set(canonical.id, {
+      canonical,
+      referenceTargets: [...new Map([canonical, ...targets].map(symbol => [symbol.id, symbol])).values()]
+        .sort((left, right) => left.id.localeCompare(right.id)),
+    });
+  };
+  const boundIdentifiers = (node: ASTNode): readonly ASTNode[] => {
+    if (node.type === "Identifier") return [node];
+    if (node.type === "AssignmentPattern") {
+      const left = node.children.find(child => child.role === "left");
+      return left === undefined ? [] : boundIdentifiers(left);
+    }
+    if (node.type === "ObjectProperty") {
+      const value = node.children.find(child => child.role === "value");
+      return value === undefined ? [] : boundIdentifiers(value);
+    }
+    if (["ObjectPattern", "ArrayPattern", "RestElement"].includes(node.type)) return node.children.flatMap(boundIdentifiers);
+    return [];
+  };
+  const visit = (node: ASTNode, scopeId: string, functionScopeId: string, parent?: ASTNode): void => {
+    const createsScope = node.type === "BlockStatement" || isCallable(node) || node.type === "CatchClause" || isLoop(node);
+    const nestedScope = createsScope ? createLexicalScopeId(node.type, node.location) : scopeId;
+    const nestedFunctionScope = isCallable(node) ? nestedScope : functionScopeId;
+    if (node.type === "FunctionDeclaration" || node.type === "ClassDeclaration") {
+      const kind = node.type === "FunctionDeclaration" ? "function" : "class";
+      for (const symbol of anchored(node)) {
+        if (symbol.kind === kind && symbol.name === nodeName(node) && symbol.scopeId === scopeId) declare(symbol);
+      }
+    }
+    if (isCallable(node)) {
+      for (const param of node.children.filter(child => child.role === "param" || child.role === "params")) {
+        for (const id of boundIdentifiers(param)) {
+          for (const symbol of anchored(id)) {
+            if (symbol.kind === "variable" && symbol.declarationKind === "param"
+              && symbol.name === identifier(id) && symbol.scopeId === nestedScope) declare(symbol);
+          }
+        }
+      }
+    }
+    if (node.type === "CatchClause") {
+      const param = node.children.find(child => child.role === "param");
+      if (param !== undefined) {
+        const names = new Set(extractBoundNames(param));
+        for (const symbol of anchored(param)) {
+          if (symbol.kind === "variable" && symbol.declarationKind === "let"
+            && names.has(symbol.name) && symbol.scopeId === nestedScope) declare(symbol);
+        }
+      }
+    }
+    if (["ImportSpecifier", "ImportDefaultSpecifier", "ImportNamespaceSpecifier"].includes(node.type)) {
+      const local = node.children.find(child => child.role === "local");
+      for (const symbol of anchored(node)) {
+        if (symbol.kind === "import" && symbol.name === identifier(local) && symbol.scopeId === "scope:module") declare(symbol);
+      }
+    }
+    if (node.type === "VariableDeclarator" && parent?.type === "VariableDeclaration") {
+      const declarationKind = parent.attributes.kind;
+      const declarationScope = declarationKind === "var" ? functionScopeId : scopeId;
+      const binding = node.children.find(child => child.role === "id");
+      const init = node.children.find(child => child.role === "init");
+      for (const name of extractBoundNames(binding)) {
+        const variables = anchored(node).filter(symbol => symbol.kind === "variable" && symbol.name === name
+          && symbol.declarationKind === declarationKind && symbol.scopeId === declarationScope);
+        for (const symbol of variables) declare(symbol);
+        const imports = anchored(node).filter(symbol => symbol.kind === "import" && symbol.name === name
+          && symbol.scopeId === "scope:module" && commonJsImports.has(symbol.id) && symbol.moduleSpecifier === commonJsInitializerSpecifier(init));
+        if (variables.length === 1) {
+          const canonical = variables[0]!;
+          const functions = init?.type === "FunctionExpression" || init?.type === "ArrowFunctionExpression"
+            ? anchored(init).filter(symbol => symbol.kind === "function" && symbol.name === name && symbol.scopeId === declarationScope)
+            : [];
+          if (functions.length <= 1 && imports.length <= 1) addCompanions(canonical, [...functions, ...imports]);
+          else ambiguous.add(canonical.id);
+        } else if (variables.length === 0) {
+          for (const symbol of imports) declare(symbol);
+        }
+      }
+    }
+    // Only matching record kinds can prove a member or implementation role.
+    const propertyRole = ["ObjectProperty", "ClassProperty", "ClassPrivateProperty", "PropertyDefinition", "ClassAccessorProperty"].includes(node.type);
+    const implementationRole = node.type === "FunctionExpression" || node.type === "ArrowFunctionExpression";
+    const memberTarget = (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") && node.role === "left";
+    const importOrigin = node.type === "AssignmentExpression" || node.type === "ImportDeclaration";
+    if (propertyRole || implementationRole || memberTarget || importOrigin) {
+      for (const symbol of anchored(node)) {
+        const confirmed = ((propertyRole || memberTarget) && (symbol.kind === "variable" || symbol.kind === "method"))
+          || (implementationRole && (symbol.kind === "function" || symbol.kind === "method"))
+          || (importOrigin && symbol.kind === "import");
+        if (confirmed && !classified.has(symbol.id)) nonbindings.add(symbol.id);
+      }
+    }
+    for (const child of node.children) visit(child, nestedScope, nestedFunctionScope, node);
+  };
+  visit(ast.root, "scope:module", "scope:module");
+
+  const result = new Map<string, LexicalResolution>();
+  for (const [key, records] of byScopeAndName) {
+    const groups = new Map<string, LexicalBinding>();
+    let opaque = false;
+    for (const symbol of records) {
+      if (companions.has(symbol.id) || nonbindings.has(symbol.id) || !["class", "function", "import", "variable"].includes(symbol.kind)) continue;
+      const binding = bindings.get(symbol.id);
+      if (binding !== undefined) {
+        groups.set(binding.canonical.id, binding);
+        if (ambiguous.has(symbol.id)) opaque = true;
+      }
+      // Explicit imports supplied by partial callers retain the old lookup compatibility.
+      else if (symbol.kind === "import") groups.set(symbol.id, { canonical: symbol, referenceTargets: [symbol] });
+      else opaque = true;
+    }
+    const only = groups.values().next().value;
+    result.set(key, opaque || groups.size > 1 ? { state: "BLOCKED_AMBIGUOUS" }
+      : only === undefined ? { state: "NO_BINDING" }
+      : { state: "ONE_BINDING", ...only });
   }
-  return undefined;
+  return result;
 }
 
-function sameDeclaration(left: CodeSymbol, right: CodeSymbol): boolean {
-  return left.location !== undefined
-    && right.location !== undefined
-    && left.location.start.line === right.location.start.line
-    && left.location.start.column === right.location.start.column;
+function resolveLexicalBinding(index: FileSymbolIndex, name: string, scope: ScopeFrame): LexicalResolution {
+  for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
+    const resolution = index.lexicalBindings.get(lexicalBindingKey(current.id, name));
+    if (resolution !== undefined && resolution.state !== "NO_BINDING") return resolution;
+  }
+  return { state: "NO_BINDING" };
 }
 
 function lexicalBindingKey(scopeId: string, name: string): string {
