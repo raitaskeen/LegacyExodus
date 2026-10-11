@@ -210,6 +210,14 @@ describe("IA-HIGH-001: Run-Scoped Parser Lifecycle", () => {
     expect(execution.events.map((event) => event.type)).not.toContain("AnalysisRunFailed");
     expect(graphs.some((graph) => graph.filePath === "src/file1.js")).toBe(true);
     expect(graphs.some((graph) => graph.filePath === "src/file2.js")).toBe(false);
+    // R4: retained tables are primary successes; restoration degradation is orthogonal.
+    expect(execution.records.filter((record) => record.type === "symbol-table")).toHaveLength(2);
+    expect(execution.analysis).toMatchObject({
+      filesDiscovered: 4, filesAnalyzed: 2, parserFailures: 0,
+      symbolExtractionFailures: 0, unsupportedFiles: 1, nonSourceArtifacts: 1,
+      unclassifiedArtifacts: 0, enumerationFailures: 0, secondPassFailures: 1,
+      discoveryComplete: true,
+    });
   });
 
   it("preserves first-pass parser failure isolation without retrying the failed file", async () => {

@@ -1,7 +1,8 @@
 import { z } from "zod";
 
-import { createDiscoveryProjection, type DiscoveryProjection } from "@contracts/discovery-projection";
+import { createDiscoveryProjection, validateAnalysisDisposition, type DiscoveryProjection } from "@contracts/discovery-projection";
 import {
+  analysisRunPayloadSchema,
   discoveryPayloadSchema as discoveryStoragePayloadSchema,
   dependencyGraphPayloadSchema as dependencyGraphStoragePayloadSchema,
   symbolTablePayloadSchema as symbolTableStoragePayloadSchema,
@@ -53,20 +54,21 @@ export class DiscoveryProjectionService implements RuntimeService {
       projectId: payload.projectId,
       ...(payload.analysisRunId !== undefined ? { analysisRunId: payload.analysisRunId } : {}),
     };
-    const [graphRecords, symbolRecords, knowledgeRecords, semanticRecords, controlFlowRecords, dataFlowRecords] = await Promise.all([
+    const [graphRecords, symbolRecords, knowledgeRecords, semanticRecords, controlFlowRecords, dataFlowRecords, runRecords] = await Promise.all([
       this.storage.findScoped({ type: "dependency-graph", ...runCriteria }),
       this.storage.findScoped({ type: "symbol-table", ...runCriteria }),
       this.storage.findScoped({ type: "knowledge-graph", ...runCriteria }),
       this.storage.findScoped({ type: "semantic-analysis", ...runCriteria }),
       this.storage.findScoped({ type: "control-flow-analysis", ...runCriteria }),
       this.storage.findScoped({ type: "data-flow-analysis", ...runCriteria }),
+      this.storage.findScoped({ type: "analysis-run", ...runCriteria }),
     ]);
     const graph = latestPayload(graphRecords, dependencyGraphStoragePayloadSchema, payload.projectId, payload.analysisRunId);
     const knowledge = latestPayload(knowledgeRecords, knowledgeGraphStoragePayloadSchema, payload.projectId, payload.analysisRunId);
     const semantic = latestPayload(semanticRecords, semanticAnalysisStoragePayloadSchema, payload.projectId, payload.analysisRunId);
     const controlFlow = latestPayload(controlFlowRecords, controlFlowStoragePayloadSchema, payload.projectId, payload.analysisRunId);
     const dataFlow = latestPayload(dataFlowRecords, dataFlowStoragePayloadSchema, payload.projectId, payload.analysisRunId);
-    const symbols = symbolRecords
+    const tables = symbolRecords
       .map((candidate) => {
         const parsed = symbolTableStoragePayloadSchema.safeParse(candidate.payload);
         if (!parsed.success) {
@@ -79,8 +81,30 @@ export class DiscoveryProjectionService implements RuntimeService {
         return matchesRun(parsed.data, payload.projectId, payload.analysisRunId) ? parsed.data : undefined;
       })
       .filter((candidate): candidate is z.infer<typeof symbolTableStoragePayloadSchema> => candidate !== undefined)
-      .sort((left, right) => left.path.localeCompare(right.path))
-      .flatMap((candidate) => candidate.symbols);
+      .sort((left, right) => left.path.localeCompare(right.path));
+    const symbols = tables.flatMap((candidate) => candidate.symbols);
+    // Historical discovery/analysis projections remain readable. Only an exact,
+    // unambiguous current completed run can authorize the R01 capability.
+    const matchingRuns = runRecords.filter((record) => {
+      const identity = z.object({ projectId: z.string(), analysisRunId: z.string() }).parse(record.payload);
+      return payload.analysisRunId !== undefined && matchesRun(identity, payload.projectId, payload.analysisRunId);
+    });
+    if (matchingRuns.length > 1) {
+      throw new LegacyExodusError({ code: "R01_DISPOSITION_INVALID", message: "Ambiguous matching analysis run." });
+    }
+    const run = matchingRuns.length === 0 ? undefined : analysisRunPayloadSchema.parse(matchingRuns[0]!.payload);
+    if (run?.analysisDisposition !== undefined && run.status !== "completed") {
+      throw new LegacyExodusError({ code: "R01_DISPOSITION_INVALID", message: "Current disposition requires a completed run." });
+    }
+    const analysisDisposition = run?.analysisDisposition === undefined ? undefined : validateAnalysisDisposition(run.analysisDisposition, {
+      files: payload.files,
+      symbols,
+      tables,
+      summary: run.summary,
+      enumerationFailures: (payload.enumerationFailures ?? []).length,
+      manifestFailures: (payload.manifestFailures ?? []).length,
+    });
+
 
     const projection = createDiscoveryProjection({
       projectPath: payload.projectPath,
@@ -102,6 +126,7 @@ export class DiscoveryProjectionService implements RuntimeService {
         {
           name: "summary.json",
           payload: {
+            ...(analysisDisposition === undefined ? {} : { analysisDisposition }),
             projectName: payload.projectName,
             fileCount: payload.files.length,
             dependencyCount: payload.dependencies.length,

@@ -1,3 +1,4 @@
+import { analysisDispositionV1Schema } from "./discovery-projection";
 import { z } from "zod";
 import { moduleDependencyLayerSchema } from "@graph/dependency-graph-contracts";
 
@@ -50,6 +51,7 @@ export const discoveryPayloadSchema = z.object({
 });
 
 export const symbolTablePayloadSchema = z.object({
+  fileId: z.string().min(1).optional(),
   projectId: z.string().uuid(),
   analysisRunId: z.string().uuid().optional(),
   path: z.string(),
@@ -114,6 +116,7 @@ export const analysisRunPayloadSchema = z.object({
   startedAt: z.string().datetime(),
   completedAt: z.string().datetime().optional(),
   error: z.string().optional(),
+  analysisDisposition: analysisDispositionV1Schema.optional(),
   summary: z
     .object({
       filesDiscovered: z.number().int().nonnegative(),
@@ -125,9 +128,26 @@ export const analysisRunPayloadSchema = z.object({
       unclassifiedArtifacts: z.number().int().nonnegative(),
       enumerationFailures: z.number().int().nonnegative().optional(),
       discoveryComplete: z.boolean().optional(),
+      secondPassFailures: z.number().int().nonnegative().optional(),
       durationMs: z.number().nonnegative(),
     })
     .optional(),
+}).superRefine((run, context) => {
+  if (run.analysisDisposition === undefined) return; // Historical record, no optimistic upgrade.
+  const files = run.analysisDisposition.files;
+  const summary = run.summary;
+  const analyzed = files.filter((file) => file.kind === "analyzed");
+  if (run.status !== "completed" || summary === undefined ||
+    new Set(files.map((file) => file.fileId)).size !== files.length ||
+    new Set(files.map((file) => file.path)).size !== files.length ||
+    summary.filesAnalyzed !== analyzed.length ||
+    summary.parserFailures !== files.filter((file) => file.kind === "initial-parser-failure").length ||
+    summary.symbolExtractionFailures !== files.filter((file) => file.kind === "symbol-extraction-failure").length ||
+    summary.secondPassFailures !== analyzed.filter((file) => file.secondPassFailure !== undefined).length ||
+    summary.filesDiscovered !== summary.filesAnalyzed + summary.parserFailures + summary.symbolExtractionFailures +
+      summary.unsupportedFiles + summary.nonSourceArtifacts + summary.unclassifiedArtifacts) {
+    context.addIssue({ code: "custom", message: "Current R01 run disposition and summary must reconcile." });
+  }
 });
 
 export const astResultPayloadSchema = z.object({
