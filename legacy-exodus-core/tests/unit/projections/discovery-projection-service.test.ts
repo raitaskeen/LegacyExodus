@@ -1,3 +1,8 @@
+import { writeFile } from "node:fs/promises";
+import { randomUUID, createHash } from "node:crypto";
+import { createEngineContext } from "@runtime/composition/services";
+import { analysisRunPayloadSchema, discoveryPayloadSchema } from "@contracts/discovery-storage";
+import { createAnalysisDisposition, validateAnalysisDisposition, type AnalysisFileDisposition } from "@contracts/discovery-projection";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -210,3 +215,112 @@ describe("DiscoveryProjectionService", () => {
     }
   });
 });
+
+
+describe("R01 projection evidence", () => {
+  for (const mode of ["empty", "missing-table", "duplicate-table", "failed-table", "wrong-file-id", "summary-mismatch", "ambiguous-run", "foreign-run", "duplicate-discovery-path"] as const) {
+    test(`R01 projection ${mode} validates actual matching table/run evidence`, async () => {
+      const projectPath = await mkdtemp(join(tmpdir(), "r01-projection-"));
+      const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+      try {
+        await writeFile(join(projectPath, "empty.js"), "");
+        if (mode === "failed-table") await writeFile(join(projectPath, "bad.js"), "function broken( {");
+        const execution = await context.orchestrator.execute({
+          id: randomUUID(), type: "AnalyzeProject", createdAt: new Date(), payload: { projectId: randomUUID(), path: projectPath },
+        });
+        const discovery = execution.records.find((record) => record.type === "project-discovery")!;
+        const run = execution.records.find((record) => record.type === "analysis-run")!;
+        const table = execution.records.find((record) => record.type === "symbol-table")!;
+        const runPayload = analysisRunPayloadSchema.parse(run.payload);
+        let discoveryId = discovery.id;
+        switch (mode) {
+          case "missing-table": await context.storage.delete(table.id); break;
+          case "duplicate-table": await context.storage.save(createStorageRecord("symbol-table", { ...(table.payload as object), duplicateRecord: true })); break;
+          case "failed-table": await context.storage.save(createStorageRecord("symbol-table", {
+            ...(table.payload as object), fileId: execution.discovery!.files.find((file) => file.path === "bad.js")!.id, path: "bad.js",
+          })); break;
+          case "wrong-file-id": await context.storage.delete(table.id); await context.storage.save(createStorageRecord("symbol-table", { ...(table.payload as object), fileId: "wrong" })); break;
+          case "summary-mismatch": {
+            // B6: reject a contradictory stored run before authorizing projection.
+            expect(runPayload.summary?.filesAnalyzed).toBe(1);
+            const contradictoryRun = { ...runPayload, summary: { ...runPayload.summary, filesAnalyzed: 999 } };
+            expect(analysisRunPayloadSchema.safeParse(contradictoryRun).success).toBe(false);
+            await context.storage.delete(run.id);
+            await context.storage.save(createStorageRecord("analysis-run", contradictoryRun));
+            break;
+          }
+          case "ambiguous-run": await context.storage.save(createStorageRecord("analysis-run", { ...runPayload, completedAt: "2026-01-01T00:00:00.000Z" })); break;
+          case "foreign-run":
+            await context.storage.save(createStorageRecord("symbol-table", { ...(table.payload as object), analysisRunId: randomUUID(), path: "foreign.js", fileId: "foreign" }));
+            await context.storage.save(createStorageRecord("analysis-run", { ...runPayload, analysisRunId: randomUUID(), analysisDisposition: { contract: "invalid", files: [] } }));
+            break;
+          case "duplicate-discovery-path": {
+            const payload = discoveryPayloadSchema.parse(discovery.payload);
+            const altered = createStorageRecord("project-discovery", { ...payload, files: [...payload.files, { ...payload.files[0]!, id: "other" }] });
+            await context.storage.save(altered);
+            discoveryId = altered.id;
+            break;
+          }
+        }
+        if (mode === "empty" || mode === "foreign-run") {
+          const projection = await context.discoveryProjection.project(discoveryId);
+          const summary = projection.artifacts.find((artifact) => artifact.name === "summary.json")!.payload as Record<string, unknown>;
+          expect(summary.analysisDisposition).toEqual(runPayload.analysisDisposition);
+          expect(Object.keys(summary).sort()).toEqual([
+            "analysisDisposition", "dependencyCount", "discoveryComplete", "enumerationFailureCount",
+            "fileCount", "frameworkCount", "languages", "projectName",
+          ]);
+          for (const counter of ["filesDiscovered", "filesAnalyzed", "parserFailures", "symbolExtractionFailures",
+            "unsupportedFiles", "nonSourceArtifacts", "unclassifiedArtifacts", "enumerationFailures", "secondPassFailures"]) {
+            expect(Object.hasOwn(summary, counter)).toBe(false);
+          }
+          expect(JSON.parse(await readFile(join(projectPath, ".discovery", "symbols.json"), "utf8"))).toEqual([]);
+          expect(runPayload.analysisDisposition!.files[0]).toMatchObject({ path: "empty.js", kind: "analyzed", symbolCount: 0 });
+        } else {
+          await expect(context.discoveryProjection.project(discoveryId)).rejects.toThrow();
+          expect(await exists(join(projectPath, ".discovery", "summary.json"))).toBe(false);
+        }
+      } finally { await context.runtime.shutdown(); await rm(projectPath, { recursive: true, force: true }); }
+    });
+  }
+
+  test("R01 preserves distinct validated path spellings and rejects forged identity", () => {
+    const paths = ["./src/a.js", "src/a.js", "src\\a.js", "SRC/a.js"];
+    const files = paths.map((path, index) => ({ id: `file-${index}`, path, language: "javascript", fileKind: "source" }));
+    const entries: AnalysisFileDisposition[] = files.map((file) => ({ fileId: file.id, path: file.path, kind: "analyzed", symbolCount: 0 }));
+    const summary = { filesDiscovered: 4, filesAnalyzed: 4, parserFailures: 0, symbolExtractionFailures: 0,
+      unsupportedFiles: 0, nonSourceArtifacts: 0, unclassifiedArtifacts: 0, enumerationFailures: 0,
+      secondPassFailures: 0, discoveryComplete: true };
+    const evidence = { files, symbols: [], tables: files.map((file) => ({ fileId: file.id, path: file.path, symbols: [] })),
+      summary, enumerationFailures: 0, manifestFailures: 0 };
+    const validated = validateAnalysisDisposition(createAnalysisDisposition(entries), evidence);
+    expect(validated.files).toHaveLength(4);
+    for (const file of files) expect(validated.files.find((entry) => entry.fileId === file.id)?.path).toBe(file.path);
+    for (const forgedPath of ["other.js", "../escape.js", "/absolute.js", "C:\\escape.js", "\\\\server\\share\\a.js"]) {
+      expect(() => validateAnalysisDisposition(createAnalysisDisposition([
+        { ...entries[0]!, path: forgedPath }, ...entries.slice(1),
+      ]), evidence)).toThrow();
+    }
+    expect(() => validateAnalysisDisposition(createAnalysisDisposition([
+      { ...entries[0]!, path: "src/a.js" }, ...entries.slice(1),
+    ]), evidence)).toThrow();
+  });
+
+  test("R01 disposition bytes and hashes match across three record/property permutations", () => {
+    const entries: AnalysisFileDisposition[] = [
+      { fileId: "lower", path: "a.js", kind: "analyzed", symbolCount: 0 },
+      { kind: "initial-parser-failure", path: "z.js", code: "PARSE_FAILED", fileId: "last" },
+      { secondPassFailure: { code: "AST_RESTORE_INJECTED" }, symbolCount: 2, kind: "analyzed", path: "Z.js", fileId: "upper" },
+    ];
+    const permutations = [entries, [entries[2]!, entries[0]!, entries[1]!], [...entries].reverse()];
+    const bytes = permutations.map((files) => JSON.stringify(createAnalysisDisposition(files)));
+    expect(new Set(bytes).size).toBe(1);
+    expect(new Set(bytes.map((value) => createHash("sha256").update(value).digest("hex"))).size).toBe(1);
+    expect(JSON.parse(bytes[0]!).files.map((file: { path: string }) => file.path)).toEqual(["Z.js", "a.js", "z.js"]);
+    expect(bytes[0]).toStartWith('{"contract":"r01-analysis-disposition-v1","files":[{"fileId":"upper","path":"Z.js","kind":"analyzed","symbolCount":2,"secondPassFailure":{"code":"AST_RESTORE_INJECTED"}}');
+  });
+});
+
+async function exists(path: string): Promise<boolean> {
+  try { await readFile(path); return true; } catch { return false; }
+}

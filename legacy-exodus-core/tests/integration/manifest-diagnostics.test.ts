@@ -1,3 +1,4 @@
+import { computeFileAccounting, detectContamination, verifyCompleteness } from "../../benchmarks/governance";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -72,6 +73,19 @@ describe("manifest diagnostics integration", () => {
       expect(reused.isReused).toBe(true);
       expect(reused.discovery.manifestFailures).toEqual([expectedFailure]);
       expect(reused.analysis.discoveryComplete).toBe(false);
+      const expectedAccounting = { filesDiscovered: 2, filesAnalyzed: 1, parserFailures: 0,
+        symbolExtractionFailures: 0, unsupportedFiles: 0, nonSourceArtifacts: 1, unclassifiedArtifacts: 0,
+        enumerationFailures: 0, secondPassFailures: 0, discoveryComplete: false };
+      for (const execution of [result, reused]) {
+        expect(execution.analysis).toMatchObject(expectedAccounting);
+        const accounting = computeFileAccounting(execution.analysis);
+        expect(accounting).toMatchObject({ computedTotal: 2, discrepancy: 0, reconciles: true });
+        expect(verifyCompleteness(execution.analysis, accounting, detectContamination([])).status).toBe("NEEDS_REVIEW");
+      }
+      const coldSummary = summary as typeof summary & { analysisDisposition: unknown };
+      const warmSummary = JSON.parse(await readFile(join(projectPath, ".discovery", "summary.json"), "utf8"));
+      expect(warmSummary.analysisDisposition).toEqual(coldSummary.analysisDisposition);
+      expect(Object.hasOwn(warmSummary, "secondPassFailures")).toBe(false);
     } finally {
       await engine?.shutdown();
       await rm(projectPath, { force: true, recursive: true });

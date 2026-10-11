@@ -1,3 +1,4 @@
+import { createAnalysisDisposition, deriveR01Accounting, validateAnalysisDisposition, type AnalysisFileDisposition } from "@contracts/discovery-projection";
 import type {
   AnalyzeProjectCommand,
   DiscoverProjectCommand,
@@ -5,6 +6,7 @@ import type {
   UpdateKnowledgeCommand,
 } from "@contracts/commands";
 import {
+  knowledgeGraphPayloadSchema,
   controlFlowPayloadSchema,
   dataFlowPayloadSchema,
   semanticAnalysisPayloadSchema,
@@ -128,6 +130,11 @@ export class AnalyzeProjectHandler {
           const filesJson = JSON.parse(filesRaw) as readonly any[];
           const depsJson = JSON.parse(depsRaw) as readonly any[];
           const frameworksJson = JSON.parse(frameworksRaw) as readonly any[];
+          const summaryRaw = artifacts.get("summary.json");
+          if (summaryRaw === undefined) throw new Error("Missing R01 summary.");
+          const snapshotSummary = JSON.parse(summaryRaw);
+          const enumerationRaw = artifacts.get("enumeration-failures.json");
+          const snapshotEnumeration = enumerationRaw === undefined ? [] : JSON.parse(enumerationRaw);
 
           const discovery = validateProjectDiscovery({
             projectId: command.payload.projectId,
@@ -150,7 +157,7 @@ export class AnalyzeProjectHandler {
               evidence: f.evidence,
             })),
             languages: projectJson.languages ?? [],
-            enumerationFailures: [],
+            enumerationFailures: snapshotEnumeration,
             manifestFailures: projectJson.manifestFailures ?? [],
             discoveredAt: new Date(validation.manifest.analysis.generatedAt),
           });
@@ -163,7 +170,7 @@ export class AnalyzeProjectHandler {
             dependencies: discovery.dependencies.map((dependency) => ({ ...dependency })),
             frameworks: discovery.frameworks.map((framework) => ({ ...framework })),
             languages: [...discovery.languages],
-            enumerationFailures: [],
+            enumerationFailures: discovery.enumerationFailures,
             manifestFailures: discovery.manifestFailures.map((failure) => ({ ...failure })),
             discoveredAt: discovery.discoveredAt.toISOString(),
             analysisRunId: command.id,
@@ -172,16 +179,21 @@ export class AnalyzeProjectHandler {
           const records: StorageRecord[] = [record];
 
           const required = new Set(validation.manifest.requiredArtifacts);
-          const analyzableFiles = discovery.files.filter(
-            (file) =>
-              (file.language === "javascript" || file.language === "typescript") &&
-              (file.fileKind === "source" || file.fileKind === undefined),
-          );
-
-          // If project has analyzable source files, the snapshot must contain analysis artifacts
-          if (analyzableFiles.length > 0 && (!required.has("dependency-graph.json") || !required.has("symbols.json"))) {
-            throw new Error("Snapshot contains discovery only; falling through to full analysis.");
+          for (const artifact of ["symbols.json", "dependency-graph.json", "knowledge.json", "semantic.json", "control-flow.json", "data-flow.json"]) {
+            if (!required.has(artifact) || !artifacts.has(artifact)) throw new Error("Missing current analysis artifact.");
           }
+          if (discovery.enumerationFailures.length > 0) throw new Error("Enumeration-degraded snapshots require fresh discovery.");
+          if (snapshotSummary.fileCount !== discovery.files.length ||
+            snapshotSummary.enumerationFailureCount !== discovery.enumerationFailures.length ||
+            (snapshotSummary.manifestFailureCount ?? 0) !== discovery.manifestFailures.length) {
+            throw new Error("Snapshot discovery counts contradict diagnostics.");
+          }
+          const snapshotSymbols = validateCodeSymbols(JSON.parse(artifacts.get("symbols.json")!));
+          const analysisDisposition = validateAnalysisDisposition(snapshotSummary.analysisDisposition, {
+            files: discovery.files, symbols: snapshotSymbols, summary: snapshotSummary,
+            enumerationFailures: discovery.enumerationFailures.length,
+            manifestFailures: discovery.manifestFailures.length, projected: true,
+          });
 
           if (required.has("dependency-graph.json")) {
             const depGraphRaw = artifacts.get("dependency-graph.json");
@@ -202,7 +214,7 @@ export class AnalyzeProjectHandler {
           if (required.has("symbols.json")) {
             const symbolsRaw = artifacts.get("symbols.json");
             if (!symbolsRaw) throw new Error("Missing symbols.json in validated set.");
-            const symbolsJson = validateCodeSymbols(JSON.parse(symbolsRaw));
+            const symbolsJson = snapshotSymbols;
             const symbolsByFile = new Map<string, CodeSymbol[]>();
             for (const symbol of symbolsJson) {
               let list = symbolsByFile.get(symbol.filePath);
@@ -213,11 +225,11 @@ export class AnalyzeProjectHandler {
               list.push(symbol);
             }
 
-            for (const file of analyzableFiles) {
+            for (const file of analysisDisposition.files.filter((file) => file.kind === "analyzed")) {
               const fileSymbols = symbolsByFile.get(file.path) ?? [];
               records.push(
                 createStorageRecord("symbol-table", {
-                  fileId: file.id,
+                  fileId: file.fileId,
                   path: file.path,
                   projectId: discovery.projectId,
                   analysisRunId: command.id,
@@ -235,7 +247,7 @@ export class AnalyzeProjectHandler {
           if (required.has("knowledge.json")) {
             const knowledgeRaw = artifacts.get("knowledge.json");
             if (!knowledgeRaw) throw new Error("Missing knowledge.json in validated set.");
-            const knowledgeJson = JSON.parse(knowledgeRaw);
+            const knowledgeJson = knowledgeGraphPayloadSchema.parse({ ...JSON.parse(knowledgeRaw), projectId: discovery.projectId, analysisRunId: command.id });
             records.push(
               createStorageRecord("knowledge-graph", {
                 projectId: discovery.projectId,
@@ -286,24 +298,8 @@ export class AnalyzeProjectHandler {
           }
 
           const durationMs = performance.now() - startedAt;
-          const analyzedCount = analyzableFiles.length;
-
           const analysisSummary = createAnalysisSummary({
-            filesDiscovered: discovery.files.length,
-            filesAnalyzed: analyzedCount,
-            parserFailures: 0,
-            symbolExtractionFailures: 0,
-            unsupportedFiles: discovery.files.filter(
-              (file) => file.fileKind === "source" && file.language !== "javascript" && file.language !== "typescript",
-            ).length,
-            nonSourceArtifacts: discovery.files.filter(
-              (file) => file.fileKind !== "source" && file.fileKind !== "unknown" && file.fileKind !== undefined,
-            ).length,
-            unclassifiedArtifacts: discovery.files.filter(
-              (file) => file.fileKind === "unknown" || file.fileKind === undefined,
-            ).length,
-            enumerationFailures: 0,
-            discoveryComplete: discovery.manifestFailures.length === 0,
+            ...deriveR01Accounting(analysisDisposition, discovery.files, discovery.enumerationFailures.length, discovery.manifestFailures.length),
             durationMs,
           });
 
@@ -311,6 +307,7 @@ export class AnalyzeProjectHandler {
             projectId: discovery.projectId,
             analysisRunId: command.id,
             status: "completed",
+            analysisDisposition,
             startedAt: discovery.discoveredAt.toISOString(),
             completedAt: new Date().toISOString(),
             summary: {
@@ -323,6 +320,7 @@ export class AnalyzeProjectHandler {
               unclassifiedArtifacts: analysisSummary.unclassifiedArtifacts,
               enumerationFailures: analysisSummary.enumerationFailures,
               discoveryComplete: analysisSummary.discoveryComplete,
+              secondPassFailures: analysisSummary.secondPassFailures,
               durationMs: analysisSummary.durationMs,
             },
           });
@@ -376,6 +374,7 @@ export class AnalyzeProjectHandler {
     const events: DomainEvent[] = [...this.discoveryEngine.createEvents(discovery)];
     const records: StorageRecord[] = [record];
     const symbolTables: SymbolTable[] = [];
+    const dispositions = new Map<string, AnalysisFileDisposition>();
     const successfullyParsedFiles: FileArtifact[] = [];
     const astStore = await this.astStoreFactory();
 
@@ -392,6 +391,7 @@ export class AnalyzeProjectHandler {
             source: await readFile(resolve(discovery.projectPath, file.path), "utf8"),
           });
         } catch (error: unknown) {
+          dispositions.set(file.id, { fileId: file.id, path: file.path, kind: "initial-parser-failure", code: getErrorCode(error, "PARSER_FAILURE") });
           events.push(createDomainEvent({
             type: "ParserFailure",
             aggregateId: discovery.projectId,
@@ -400,6 +400,7 @@ export class AnalyzeProjectHandler {
           continue;
         }
         if (ast.errors.length > 0) {
+          dispositions.set(file.id, { fileId: file.id, path: file.path, kind: "initial-parser-failure", code: ast.errors[0]?.code ?? "PARSER_FAILURE" });
           events.push(createDomainEvent({
             type: "ParserFailure",
             aggregateId: discovery.projectId,
@@ -436,6 +437,7 @@ export class AnalyzeProjectHandler {
         try {
           table = this.symbolExtractor.extract(ast);
         } catch (error: unknown) {
+          dispositions.set(file.id, { fileId: file.id, path: file.path, kind: "symbol-extraction-failure", code: getErrorCode(error, "SYMBOL_EXTRACTION_FAILED") });
           events.push(createDomainEvent({
             type: "SymbolsExtractionFailure",
             aggregateId: discovery.projectId,
@@ -446,6 +448,7 @@ export class AnalyzeProjectHandler {
         await astStore.write(ast);
         successfullyParsedFiles.push(file);
         symbolTables.push(table);
+        dispositions.set(file.id, { fileId: file.id, path: file.path, kind: "analyzed", symbolCount: table.symbols.length });
         records.push(
           createStorageRecord("symbol-table", {
             fileId: file.id,
@@ -505,6 +508,7 @@ export class AnalyzeProjectHandler {
         try {
           ast = await astStore.read(file.path);
         } catch (error: unknown) {
+          recordSecondPassFailure(dispositions, file.id, getErrorCode(error, "PARSER_FAILURE"));
           events.push(createDomainEvent({
             type: "ParserFailure",
             aggregateId: discovery.projectId,
@@ -514,6 +518,7 @@ export class AnalyzeProjectHandler {
         }
 
         if (ast.errors.length > 0) {
+          recordSecondPassFailure(dispositions, file.id, ast.errors[0]?.code ?? "PARSER_FAILURE");
           events.push(createDomainEvent({
             type: "ParserFailure",
             aggregateId: discovery.projectId,
@@ -623,16 +628,9 @@ export class AnalyzeProjectHandler {
       );
 
       const durationMs = performance.now() - startedAt;
+      const analysisDisposition = createAnalysisDisposition([...dispositions.values()]);
       const analysisSummary = createAnalysisSummary({
-        filesDiscovered: discovery.files.length,
-        filesAnalyzed: symbolTables.length,
-        parserFailures: events.filter((event) => event.type === "ParserFailure").length,
-        symbolExtractionFailures: events.filter((event) => event.type === "SymbolsExtractionFailure").length,
-        unsupportedFiles: discovery.files.filter((file) => file.fileKind === "source" && file.language !== "javascript" && file.language !== "typescript").length,
-        nonSourceArtifacts: discovery.files.filter((file) => file.fileKind !== "source" && file.fileKind !== "unknown" && file.fileKind !== undefined).length,
-        unclassifiedArtifacts: discovery.files.filter((file) => file.fileKind === "unknown" || file.fileKind === undefined).length,
-        enumerationFailures: enumerationFailures.length,
-        discoveryComplete: enumerationFailures.length === 0 && discovery.manifestFailures.length === 0,
+        ...deriveR01Accounting(analysisDisposition, discovery.files, enumerationFailures.length, discovery.manifestFailures.length),
         durationMs,
       });
 
@@ -641,6 +639,7 @@ export class AnalyzeProjectHandler {
           projectId: discovery.projectId,
           analysisRunId: command.id,
           status: "completed",
+          analysisDisposition,
           startedAt: discovery.discoveredAt.toISOString(),
           completedAt: new Date().toISOString(),
           summary: {
@@ -653,6 +652,7 @@ export class AnalyzeProjectHandler {
             unclassifiedArtifacts: analysisSummary.unclassifiedArtifacts,
             enumerationFailures: analysisSummary.enumerationFailures,
             discoveryComplete: analysisSummary.discoveryComplete,
+            secondPassFailures: analysisSummary.secondPassFailures,
             durationMs: analysisSummary.durationMs,
           },
         }),
@@ -748,4 +748,10 @@ function getErrorCode(error: unknown, fallback = "UNKNOWN_ERROR"): string {
   }
 
   return fallback;
+}
+
+function recordSecondPassFailure(dispositions: Map<string, AnalysisFileDisposition>, fileId: string, code: string): void {
+  const disposition = dispositions.get(fileId);
+  if (disposition?.kind !== "analyzed") throw new Error("Second-pass failure requires a successful table.");
+  dispositions.set(fileId, { ...disposition, secondPassFailure: { code } });
 }

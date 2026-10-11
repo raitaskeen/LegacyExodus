@@ -56,6 +56,7 @@ export async function executeBenchmarkRun(
       filesAnalyzed: result.analysis.filesAnalyzed,
       parserFailures: result.analysis.parserFailures,
       symbolExtractionFailures: result.analysis.symbolExtractionFailures,
+      secondPassFailures: result.analysis.secondPassFailures ?? 0,
       unsupportedFiles: result.analysis.unsupportedFiles,
       nonSourceArtifacts: result.analysis.nonSourceArtifacts,
       unclassifiedArtifacts: result.analysis.unclassifiedArtifacts,

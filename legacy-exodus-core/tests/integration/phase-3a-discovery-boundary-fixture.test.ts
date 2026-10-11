@@ -210,9 +210,10 @@ describe("Phase 3A Discovery Boundary Hardening — Canonical Fixture Suite", ()
       await writeFile(join(projectPath, "src", "index.js"), "export const ok = true;", "utf8");
       await writeFile(join(projectPath, "package.json"), JSON.stringify({ name: "e2e-fixture" }), "utf8");
 
+      let enumerationFault = true;
       const scanner = new FileScanner({
         readdir: (async (path: string, options: any) => {
-          if (resolve(path).includes("protected_area")) {
+          if (enumerationFault && resolve(path).includes("protected_area")) {
             const err = new Error("Forbidden") as any;
             err.code = "EACCES";
             throw err;
@@ -280,6 +281,32 @@ describe("Phase 3A Discovery Boundary Hardening — Canonical Fixture Suite", ()
       expect(failureJson).toEqual([
         { path: "protected_area", kind: "directory-read", code: "EACCES" },
       ]);
+      const repeated = await orchestrator.execute({
+        id: "00000000-0000-4000-8000-000000000703", type: "AnalyzeProject", createdAt: new Date(),
+        payload: { projectId: "00000000-0000-4000-8000-000000000702", path: projectPath },
+      });
+      expect(repeated.isReused).toBeUndefined();
+      expect(repeated.analysis).toMatchObject({
+        filesDiscovered: 2, filesAnalyzed: 1, parserFailures: 0, symbolExtractionFailures: 0,
+        unsupportedFiles: 0, nonSourceArtifacts: 1, unclassifiedArtifacts: 0, enumerationFailures: 1,
+        secondPassFailures: 0, discoveryComplete: false,
+      });
+      // The same persisted enumeration-degraded snapshot must also be rejected after fault recovery.
+      enumerationFault = false;
+      const recovered = await orchestrator.execute({
+        id: "00000000-0000-4000-8000-000000000704", type: "AnalyzeProject", createdAt: new Date(),
+        payload: { projectId: "00000000-0000-4000-8000-000000000702", path: projectPath },
+      });
+      expect(recovered.isReused).toBeUndefined();
+      expect(recovered.analysis).toMatchObject({
+        filesDiscovered: 2, filesAnalyzed: 1, parserFailures: 0, symbolExtractionFailures: 0,
+        unsupportedFiles: 0, nonSourceArtifacts: 1, unclassifiedArtifacts: 0, enumerationFailures: 0,
+        secondPassFailures: 0, discoveryComplete: true,
+      });
+      for (const result of [execution, repeated, recovered]) {
+        expect(computeFileAccounting(result.analysis!)).toMatchObject({ computedTotal: 2, discrepancy: 0, reconciles: true });
+      }
+      await context.runtime.shutdown();
     } finally {
       await rm(projectPath, { force: true, recursive: true });
     }
@@ -332,5 +359,24 @@ describe("Phase 3A Discovery Boundary Hardening — Canonical Fixture Suite", ()
 
     expect(completeness.status).toBe("NEEDS_REVIEW");
     expect(completeness.details.some((d) => d.includes("1 filesystem enumeration failure(s)"))).toBe(true);
+  });
+});
+
+describe("R01 second-pass completeness", () => {
+  test("degradation forces review without entering primary totals or weakening FAIL precedence", () => {
+    const disposition: AnalysisDisposition = {
+      filesDiscovered: 2, filesAnalyzed: 2, parserFailures: 0, symbolExtractionFailures: 0,
+      unsupportedFiles: 0, nonSourceArtifacts: 0, unclassifiedArtifacts: 0,
+      enumerationFailures: 0, secondPassFailures: 1, discoveryComplete: true, durationMs: 0,
+    };
+    const accounting = computeFileAccounting(disposition);
+    expect(accounting).toMatchObject({ computedTotal: 2, discrepancy: 0, reconciles: true });
+    const completeness = verifyCompleteness(disposition, accounting, detectContamination([]));
+    expect(completeness.status).toBe("NEEDS_REVIEW");
+    expect(completeness.details).toEqual(["1 second-pass AST restoration failure(s) recorded"]);
+    expect(verifyCompleteness(disposition, { ...accounting, reconciles: false }, detectContamination([])).status).toBe("FAIL");
+    expect(verifyCompleteness(disposition, accounting, detectContamination([{ path: ".discovery/foreign.json" }])).status).toBe("FAIL");
+    const healthy = { ...disposition, secondPassFailures: 0 };
+    expect(verifyCompleteness(healthy, computeFileAccounting(healthy), detectContamination([])).status).toBe("PASS");
   });
 });

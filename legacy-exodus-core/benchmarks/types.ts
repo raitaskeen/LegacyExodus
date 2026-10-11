@@ -52,6 +52,7 @@ export interface AnalysisDisposition {
   readonly filesAnalyzed: number;
   readonly parserFailures: number;
   readonly symbolExtractionFailures: number;
+  readonly secondPassFailures?: number;
   readonly unsupportedFiles: number;
   readonly nonSourceArtifacts: number;
   readonly unclassifiedArtifacts: number;

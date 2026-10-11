@@ -95,6 +95,10 @@ export function verifyCompleteness(
     details.push(`${disposition.symbolExtractionFailures} symbol extraction failure(s) recorded`);
   }
 
+  if ((disposition.secondPassFailures ?? 0) > 0) {
+    details.push(`${disposition.secondPassFailures} second-pass AST restoration failure(s) recorded`);
+  }
+
   if (disposition.unclassifiedArtifacts > 0) {
     details.push(`${disposition.unclassifiedArtifacts} unclassified artifact(s) recorded`);
   }
@@ -107,7 +111,8 @@ export function verifyCompleteness(
     enumerationFailures > 0 ||
     disposition.unclassifiedArtifacts > 0 ||
     disposition.parserFailures > 0 ||
-    disposition.symbolExtractionFailures > 0
+    disposition.symbolExtractionFailures > 0 ||
+    (disposition.secondPassFailures ?? 0) > 0
   ) {
     status = "NEEDS_REVIEW";
   }
