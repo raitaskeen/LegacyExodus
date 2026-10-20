@@ -6,7 +6,7 @@ import { AnalyzeProjectHandler } from "@core/orchestration/command-handler";
 import { DiscoveryEngine } from "@discovery/index";
 import { createEngineContext } from "@runtime/composition/services";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash, randomUUID } from "node:crypto";
@@ -15,6 +15,7 @@ import { semanticAnalysisPayloadSchema } from "@contracts/discovery-storage";
 import { createLegacyExodusEngine } from "@runtime/composition/services";
 import type { LegacyExodusEngine } from "@core/engine";
 import { DiscoveryValidator } from "@discovery/discovery-validator";
+import { FileScanner } from "@discovery/file-scanner";
 import { DiscoveryQueryService } from "@discovery/discovery-query-service";
 import { JavaScriptParser, ParserManager, ParserRegistry } from "@parser/index";
 import { SqliteStorageProvider } from "@storage/adapters/sqlite-storage";
@@ -1179,4 +1180,99 @@ describe("R01 complete accounting and capability oracles", () => {
       } finally { await f.close(); }
     });
   }
+
+  for (const changed of [false, true]) {
+    it(`R02 missing digest forces fresh analysis of ${changed ? "same-size changed" : "unchanged"} source`, async () => {
+      const original = "export const alpha = 1;\n";
+      const replacement = "export const bravo = 1;\n";
+      const f = await prepare({ "package.json": '{"name":"r02"}', "index.js": original });
+      try {
+        const validator = new DiscoveryValidator();
+        const before = { ...f.counts };
+        const warm = await f.run();
+        expect(warm.isReused).toBe(true);
+        expect(f.counts).toEqual(before);
+        expect(disposition(warm)).toEqual(disposition(f.cold));
+        const manifest = (await validator.validate({ projectPath: f.path })).manifest;
+        if (!manifest) throw new Error("Missing fixture manifest");
+        delete manifest.repository.sourceDigest;
+        await writeFile(join(f.path, ".discovery", "manifest.json"), JSON.stringify(manifest));
+        const sourcePath = join(f.path, "index.js");
+        const timestamp = new Date(1700000000000);
+        await utimes(sourcePath, timestamp, timestamp);
+        const initialStat = await stat(sourcePath);
+        if (changed) {
+          expect(Buffer.byteLength(replacement)).toBe(Buffer.byteLength(original));
+          expect(createHash("sha256").update(replacement).digest("hex"))
+            .not.toBe(createHash("sha256").update(original).digest("hex"));
+          await writeFile(sourcePath, replacement);
+          await utimes(sourcePath, timestamp, timestamp);
+        }
+        const currentStat = await stat(sourcePath);
+        expect(currentStat.size).toBe(initialStat.size);
+        expect(currentStat.mtimeMs).toBe(initialStat.mtimeMs);
+        expect((await validator.validate({ projectPath: f.path })).status).toBe("VALID");
+        const result = await f.run();
+        expect(result.isReused).toBeUndefined();
+        expect(f.counts.parser).toBe(before.parser + 1);
+        expect(f.counts.extractor).toBe(before.extractor + 1);
+        expect(vector(result)).toEqual([2,1,0,0,0,1,0,0,0,true]);
+        assertAccounting(result, "PASS");
+        const symbols = validateCodeSymbols(result.records.filter((record) => record.type === "symbol-table")
+          .flatMap((record) => (record.payload as { symbols: unknown[] }).symbols));
+        expect(symbols.map((symbol) => symbol.name)).toEqual(changed ? ["bravo", "bravo"] : ["alpha", "alpha"]);
+        expect(disposition(result).files).toHaveLength(1);
+      } finally { await f.close(); }
+    });
+  }
+
+  it("R02 checksum-valid null inventory safely falls back and preserves R01 accounting", async () => {
+    const f = await prepare(sources);
+    try {
+      await rewriteR01Artifact(f.path, "files.json", () => null);
+      const before = { ...f.counts };
+      const result = await f.run();
+      expect(result.isReused).toBeUndefined();
+      expect(f.counts.parser).toBe(before.parser + 2);
+      expect(f.counts.extractor).toBe(before.extractor + 2);
+      expect(vector(result)).toEqual(vector(f.cold));
+      expect(disposition(result)).toEqual(disposition(f.cold));
+      assertAccounting(result, "PASS");
+    } finally { await f.close(); }
+  });
+
+  it("R02 repaired on-disk inventory cannot rescue stale checksum-validated bytes during reuse", async () => {
+    const f = await prepare(sources);
+    const originalScan = FileScanner.prototype.scan;
+    try {
+      const inventoryPath = join(f.path, ".discovery", "files.json");
+      const validRaw = await readFile(inventoryPath, "utf8");
+      const inventory = JSON.parse(validRaw) as { path: string; size: number }[];
+      const file = inventory.find((entry) => entry.path === "ok.js");
+      if (!file) throw new Error("Missing fixture source");
+      file.size++;
+      await rewriteR01Artifact(f.path, "files.json", () => inventory);
+      const before = { ...f.counts };
+      let replacements = 0;
+      FileScanner.prototype.scan = async function (projectPath) {
+        if (projectPath === f.path && replacements === 0) {
+          replacements++;
+          await writeFile(inventoryPath, validRaw);
+        }
+        return originalScan.call(this, projectPath);
+      };
+      const result = await f.run();
+      expect(replacements).toBe(1);
+      expect(result.isReused).toBeUndefined();
+      expect(f.counts.parser).toBe(before.parser + 2);
+      expect(f.counts.extractor).toBe(before.extractor + 2);
+      expect(vector(result)).toEqual(vector(f.cold));
+      expect(disposition(result)).toEqual(disposition(f.cold));
+      expect(result.discovery?.files.find((entry) => entry.path === "ok.js")?.size)
+        .toBe(Buffer.byteLength(sources["ok.js"]));
+    } finally {
+      FileScanner.prototype.scan = originalScan;
+      await f.close();
+    }
+  });
 });

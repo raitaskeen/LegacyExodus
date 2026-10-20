@@ -76,6 +76,11 @@ const manifestSchema = z.object({
   ),
 });
 
+const freshnessFilesSchema = z.array(z.object({
+  path: z.string().min(1),
+  size: z.number().nonnegative(),
+}));
+
 export type DiscoveryManifest = z.infer<typeof manifestSchema>;
 
 export type DiscoveryValidationStatus =
@@ -378,7 +383,7 @@ export class DiscoveryValidator {
     }
 
     if (options.verifyFreshness === true) {
-      const freshness = await this.verifyWorkspaceFreshness(projectPath, discoveryDir, manifest);
+      const freshness = await this.verifyWorkspaceFreshness(projectPath, manifest, validatedArtifacts);
       if (!freshness.fresh) {
         return {
           valid: false,
@@ -417,9 +422,35 @@ export class DiscoveryValidator {
    */
   private async verifyWorkspaceFreshness(
     projectPath: string,
-    discoveryDir: string,
     manifest: DiscoveryManifest,
+    validatedArtifacts: ReadonlyMap<string, string>,
   ): Promise<{ readonly fresh: boolean; readonly reason?: string }> {
+    if (manifest.repository.sourceDigest === undefined) {
+      return {
+        fresh: false,
+        reason: "Snapshot manifest is missing sourceDigest required for freshness verification.",
+      };
+    }
+
+    const filesRaw = validatedArtifacts.get("files.json");
+    if (filesRaw === undefined) {
+      return {
+        fresh: false,
+        reason: "Validated snapshot files.json is missing for freshness verification.",
+      };
+    }
+
+    let snapshotFiles: readonly { readonly path: string; readonly size: number }[];
+    try {
+      const parsedFiles: unknown = JSON.parse(filesRaw);
+      snapshotFiles = freshnessFilesSchema.parse(parsedFiles);
+    } catch {
+      return {
+        fresh: false,
+        reason: "Snapshot files.json is invalid for freshness verification.",
+      };
+    }
+
     let currentFiles: readonly FileArtifact[];
     try {
       const scanner = new FileScanner();
@@ -430,18 +461,6 @@ export class DiscoveryValidator {
       return {
         fresh: false,
         reason: `Failed to scan current workspace for freshness check: ${message}`,
-      };
-    }
-
-    let snapshotFiles: readonly { readonly path: string; readonly size: number }[];
-    try {
-      const filesArtifactPath = resolve(discoveryDir, "files.json");
-      const filesRaw = await readFile(filesArtifactPath, "utf8");
-      snapshotFiles = JSON.parse(filesRaw);
-    } catch {
-      return {
-        fresh: false,
-        reason: "Failed to read snapshot files.json for freshness check.",
       };
     }
 
@@ -473,14 +492,12 @@ export class DiscoveryValidator {
       }
     }
 
-    if (manifest.repository.sourceDigest !== undefined) {
-      const currentDigest = await computeWorkspaceDigest(projectPath, currentFiles);
-      if (currentDigest !== manifest.repository.sourceDigest) {
-        return {
-          fresh: false,
-          reason: `Workspace source content digest mismatch (current: ${currentDigest}, snapshot: ${manifest.repository.sourceDigest}).`,
-        };
-      }
+    const currentDigest = await computeWorkspaceDigest(projectPath, currentFiles);
+    if (currentDigest !== manifest.repository.sourceDigest) {
+      return {
+        fresh: false,
+        reason: `Workspace source content digest mismatch (current: ${currentDigest}, snapshot: ${manifest.repository.sourceDigest}).`,
+      };
     }
 
     return { fresh: true };
