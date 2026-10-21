@@ -22,6 +22,8 @@ export interface AnalyzeProjectResult {
   readonly discovery: ProjectDiscovery;
   readonly analysis: AnalysisSummary;
   readonly isReused?: boolean;
+  /** Analysis run that produced the reused snapshot; present only with `isReused`. */
+  readonly snapshotAnalysisRunId?: string;
 }
 
 export interface AnalysisSummary {
