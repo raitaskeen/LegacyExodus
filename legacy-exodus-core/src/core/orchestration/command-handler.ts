@@ -26,7 +26,7 @@ import { DeterministicKnowledgeGraphBuilder } from "@knowledge/index";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { ParserManager, type ASTResult } from "@parser/index";
-import { DeterministicCallGraphBuilder, DeterministicSemanticAnalysisEngine, findHttpCalls, type ExpressRoute, type MiddlewareChain, type SemanticCall, type SymbolReference } from "@semantic/index";
+import { collectUnstableExportIds, DeterministicCallGraphBuilder, DeterministicSemanticAnalysisEngine, findHttpCalls, type ExpressRoute, type MiddlewareChain, type SemanticCall, type SymbolReference } from "@semantic/index";
 import { createStorageRecord, type StorageRecord } from "@storage/index";
 import { JavaScriptSymbolExtractor, validateCodeSymbols, type CodeSymbol, type SymbolTable } from "@symbols/index";
 import { RunScopedAstStore, type AnalysisAstStoreFactory } from "./run-scoped-ast-store";
@@ -374,6 +374,8 @@ export class AnalyzeProjectHandler {
     const events: DomainEvent[] = [...this.discoveryEngine.createEvents(discovery)];
     const records: StorageRecord[] = [record];
     const symbolTables: SymbolTable[] = [];
+    // Exports reassigned by their own module; the call graph must know them before any importer is built.
+    const unstableExportIds = new Set<string>();
     const dispositions = new Map<string, AnalysisFileDisposition>();
     const successfullyParsedFiles: FileArtifact[] = [];
     const astStore = await this.astStoreFactory();
@@ -445,6 +447,7 @@ export class AnalyzeProjectHandler {
           }));
           continue;
         }
+        for (const id of collectUnstableExportIds(ast, table)) unstableExportIds.add(id);
         await astStore.write(ast);
         successfullyParsedFiles.push(file);
         symbolTables.push(table);
@@ -531,7 +534,7 @@ export class AnalyzeProjectHandler {
 
         const fileCalls: SemanticCall[] = [];
         const fileReferences: SymbolReference[] = [];
-        callGraphBuilder.buildForFile(ast, tablesByPath, importsByFile, targetByImportId, fileCalls, fileReferences);
+        callGraphBuilder.buildForFile(ast, tablesByPath, importsByFile, targetByImportId, unstableExportIds, fileCalls, fileReferences);
         allCalls.push(...fileCalls);
         allReferences.push(...fileReferences);
 

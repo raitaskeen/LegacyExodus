@@ -14,21 +14,27 @@ export class DeterministicCallGraphBuilder {
     const tablesByPath = new Map(symbolTables.map((table) => [canonicalizePath(table.filePath), table]));
     const importsByFile = new Map<string, readonly { readonly id: string; readonly name: string }[]>();
     const targetByImportId = new Map(dependencyGraph.edges.map((edge) => [edge.importSymbolId, edge.targetExportSymbolId]));
+    const unstableExportIds = new Set(astResults.flatMap((ast) => collectUnstableExportIds(ast, tablesByPath.get(canonicalizePath(ast.metadata.sourcePath)))));
     const calls: SemanticCall[] = [];
     const references: SymbolReference[] = [];
 
     for (const ast of [...astResults].sort((left, right) => left.metadata.sourcePath.localeCompare(right.metadata.sourcePath))) {
-      this.buildForFile(ast, tablesByPath, importsByFile, targetByImportId, calls, references);
+      this.buildForFile(ast, tablesByPath, importsByFile, targetByImportId, unstableExportIds, calls, references);
     }
 
     return Object.freeze({ calls: Object.freeze(calls), references: Object.freeze(references) });
   }
 
+  /**
+   * @param unstableExportIds - Export symbols of every analyzed module whose value can change
+   *   after definition (see collectUnstableExportIds); imports resolving to them stay UNRESOLVED.
+   */
   public buildForFile(
     ast: ASTResult,
     tablesByPath: ReadonlyMap<string, SymbolTable>,
     importsByFile: ReadonlyMap<string, readonly { readonly id: string; readonly name: string }[]>,
     targetByImportId: ReadonlyMap<string, string>,
+    unstableExportIds: ReadonlySet<string>,
     calls: SemanticCall[],
     references: SymbolReference[],
   ): void {
@@ -40,7 +46,7 @@ export class DeterministicCallGraphBuilder {
     };
     predeclareScopeBindings(ast.root, initialContext);
     const boundCallees = new Set<ASTNode>();
-    const fileSymbols = createFileSymbolIndex(tablesByPath.get(canonicalizePath(ast.metadata.sourcePath)), ast);
+    const fileSymbols = createFileSymbolIndex(tablesByPath.get(canonicalizePath(ast.metadata.sourcePath)), ast, unstableExportIds);
     this.visit(ast.root, ast, initialContext, tablesByPath, importsByFile, targetByImportId, calls, references, boundCallees, fileSymbols, undefined, false);
   }
 
@@ -91,9 +97,10 @@ export class DeterministicCallGraphBuilder {
           const imported = isShadowed
             ? undefined
             : fileSymbols.firstImportByName.get(calleeName);
+          const importTarget = imported === undefined ? undefined : targetByImportId.get(imported.id);
           const targetSymbolId = imported === undefined
             ? resolveLocalCall(table, fileSymbols, calleeName, nextContext, tablesByPath, this.resolver, node)
-            : isRebound(fileSymbols, MODULE_SCOPE_ID, calleeName) ? undefined : targetByImportId.get(imported.id);
+            : isRebound(fileSymbols, MODULE_SCOPE_ID, calleeName) || isUnstableTarget(fileSymbols, importTarget) ? undefined : importTarget;
           const id = hash(`${ast.metadata.sourcePath}:${nextContext.callerName}:${calleeName}:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`);
           const resolutionState = targetSymbolId === undefined ? "UNRESOLVED" as const : "RESOLVED" as const;
           const reference: SymbolReference = { id: hash(`reference:${id}`), filePath: ast.metadata.sourcePath, name: calleeName, kind: "call", resolutionState, ...(targetSymbolId === undefined ? {} : { resolvedSymbolId: targetSymbolId }) };
@@ -142,11 +149,15 @@ export class DeterministicCallGraphBuilder {
 
 interface FileSymbolIndex {
   readonly byScopeAndName: ReadonlyMap<string, readonly CodeSymbol[]>;
+  /** byScopeAndName without symbols for assigned functions (`f = () => …`), which declare no binding. */
+  readonly declarationsByScopeAndName: ReadonlyMap<string, readonly CodeSymbol[]>;
   readonly byName: ReadonlyMap<string, readonly CodeSymbol[]>;
   readonly firstImportByName: ReadonlyMap<string, CodeSymbol>;
   readonly classByLocation: ReadonlyMap<string, CodeSymbol>;
   readonly lexicalBindings: ReadonlyMap<string, LexicalResolution>;
   readonly writes: BindingWrites;
+  /** Export symbols (of any module) whose value can change after definition. */
+  readonly unstableExportIds: ReadonlySet<string>;
 }
 
 /**
@@ -156,8 +167,13 @@ interface FileSymbolIndex {
 interface BindingWrites {
   /** Binding keys (`scopeId:name`) declared more than once or written after declaration. */
   readonly reboundBindings: ReadonlySet<string>;
-  /** Non-computed member writes per property name (`anything.name = …`). */
+  /**
+   * Member writes and deletions per property name (`anything.name = …`, `anything["name"] = …`,
+   * `delete anything.name`, statically keyed Object/Reflect writes); private names as `#name`.
+   */
   readonly propertyWrites: ReadonlyMap<string, number>;
+  /** A write whose property name is not static (`o[key] = …`, `Object.assign(o, src)`, prototype swaps): it may name any public property. */
+  readonly unknownPropertyWrites: boolean;
   /** Every write to a binding, including implicit parameter, catch and for-in/of writes. */
   readonly writeSites: ReadonlyMap<string, readonly WriteSite[]>;
   /** Execution context (function or class element) in which each binding is declared. */
@@ -211,7 +227,7 @@ function createScope(id: string, parent?: ScopeFrame): ScopeFrame {
   return Object.freeze(parent === undefined ? { id } : { id, parent });
 }
 
-function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult): FileSymbolIndex {
+function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult, unstableExportIds: ReadonlySet<string>): FileSymbolIndex {
   const byScopeAndName = new Map<string, CodeSymbol[]>();
   const byName = new Map<string, CodeSymbol[]>();
   const firstImportByName = new Map<string, CodeSymbol>();
@@ -249,8 +265,72 @@ function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult): 
   }
 
   const lexicalBindings = createLexicalBindingIndex(ast, table, byAnchor, byScopeAndName);
-  const writes = collectBindingWrites(ast.root, byScopeAndName);
-  return Object.freeze({ byScopeAndName, byName, firstImportByName, classByLocation, lexicalBindings, writes });
+  const declarationsByScopeAndName = withoutAssignedFunctions(byScopeAndName, ast.root);
+  const writes = collectBindingWrites(ast.root, declarationsByScopeAndName);
+  return Object.freeze({ byScopeAndName, declarationsByScopeAndName, byName, firstImportByName, classByLocation, lexicalBindings, writes, unstableExportIds });
+}
+
+/**
+ * The extractor also records `f = () => …` as a function symbol named f in the assigning
+ * scope. That symbol declares nothing: the assignment writes f's real declaration, so
+ * binding lookups that decide what a write or call refers to must skip it.
+ */
+function withoutAssignedFunctions(byScopeAndName: ReadonlyMap<string, readonly CodeSymbol[]>, root: ASTNode): ReadonlyMap<string, readonly CodeSymbol[]> {
+  const assigned = new Set<string>();
+  const visit = (node: ASTNode): void => {
+    if (node.type === "AssignmentExpression" && node.attributes.operator === "=") {
+      let right = node.children.find((child) => child.role === "right");
+      while (right?.type === "AssignmentExpression") right = right.children.find((child) => child.role === "right");
+      const anchor = right?.type === "FunctionExpression" || right?.type === "ArrowFunctionExpression" ? declarationAnchor(right.location) : undefined;
+      if (anchor !== undefined) assigned.add(anchor);
+    }
+    for (const child of node.children) visit(child);
+  };
+  visit(root);
+  if (assigned.size === 0) return byScopeAndName;
+  const declarations = new Map<string, readonly CodeSymbol[]>();
+  for (const [key, symbols] of byScopeAndName) {
+    const declared = symbols.filter((symbol) => symbol.kind !== "function" || !assigned.has(declarationAnchor(symbol.location) ?? ""));
+    if (declared.length > 0) declarations.set(key, declared);
+  }
+  return declarations;
+}
+
+/**
+ * Export symbols of this module whose value can change after the module defines it: ES
+ * exports whose local binding the module reassigns (importers see live bindings), and
+ * CommonJS names exported more than once (`require` returns the last value). Re-exports
+ * resolve to their declaring module and are judged there.
+ */
+export function collectUnstableExportIds(ast: ASTResult, table: SymbolTable | undefined): readonly string[] {
+  if (table === undefined) return [];
+  const byScopeAndName = new Map<string, CodeSymbol[]>();
+  // An export slot is the module value itself (`module.exports =`, `export default`) or one named
+  // property of it; `module.exports.default = f` names a property and does not replace the module value.
+  const exportSlot = (symbol: CodeSymbol): string => `${symbol.defaultExport ? "module" : "property"}:${symbol.name}`;
+  const exportsBySlot = new Map<string, number>();
+  for (const symbol of table.symbols) {
+    if (symbol.scopeId !== undefined) {
+      const key = lexicalBindingKey(symbol.scopeId, symbol.name);
+      byScopeAndName.set(key, [...(byScopeAndName.get(key) ?? []), symbol]);
+    }
+    if (symbol.kind === "export" && symbol.moduleSpecifier === undefined) exportsBySlot.set(exportSlot(symbol), (exportsBySlot.get(exportSlot(symbol)) ?? 0) + 1);
+  }
+  const { reboundBindings } = collectBindingWrites(ast.root, withoutAssignedFunctions(byScopeAndName, ast.root));
+  const rebound = (name: string | undefined): boolean => name !== undefined && reboundBindings.has(bindingWriteKey(MODULE_SCOPE_ID, name));
+  return table.symbols.filter((symbol) => {
+    if (symbol.kind === "export") {
+      if (symbol.moduleSpecifier !== undefined) return false;
+      // `export default <expression>` has no local binding to reassign.
+      const local = symbol.sourceSymbolName ?? (symbol.defaultExport ? undefined : symbol.name);
+      return (exportsBySlot.get(exportSlot(symbol)) ?? 0) > 1 || rebound(local);
+    }
+    return symbol.exported && symbol.scopeId === MODULE_SCOPE_ID && rebound(symbol.name);
+  }).map((symbol) => symbol.id);
+}
+
+function isUnstableTarget(index: FileSymbolIndex, targetSymbolId: string | undefined): boolean {
+  return targetSymbolId !== undefined && index.unstableExportIds.has(targetSymbolId);
 }
 
 interface WriteWalk {
@@ -263,14 +343,16 @@ interface WriteWalk {
 /**
  * Records every write that can change which function a binding or property names,
  * with where and under which control it executes. Scope frames mirror `childContext`,
- * so keys match the resolver's binding keys. Assumes no `eval`/`with`, computed-key
- * or reflective (`defineProperty`) writes, and no mutation of this module's objects
- * from other modules.
+ * so keys match the resolver's binding keys. Assumes no `eval`/`with`, no mutation of
+ * this module's objects by other modules (including property-copying helpers such as
+ * `mixin` or `_.extend`), and that the `Object`/`Reflect` builtins are not reached
+ * through other objects (`globalThis.Object`).
  */
 function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string, readonly CodeSymbol[]>): BindingWrites {
   const reboundBindings = new Set<string>();
   const declarations = new Map<string, number>();
   const propertyWrites = new Map<string, number>();
+  let unknownPropertyWrites = false;
   const writeSites = new Map<string, WriteSite[]>();
   const declaringContext = new Map<string, string>();
   const callSites = new Map<ASTNode, ExecutionSite>();
@@ -304,6 +386,23 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
     if (count > 1) reboundBindings.add(key);
     recordWrite(key, site, walk, constructed);
   };
+  const writeProperty = (name: string | undefined): void => {
+    // `__proto__` swaps the prototype, so it may change every inherited method.
+    if (name === undefined || name === "__proto__") {
+      unknownPropertyWrites = true;
+      return;
+    }
+    propertyWrites.set(name, (propertyWrites.get(name) ?? 0) + 1);
+  };
+  const writeObjectKeys = (source: ASTNode | undefined): void => {
+    if (source?.type !== "ObjectExpression") {
+      unknownPropertyWrites = true;
+      return;
+    }
+    for (const property of source.children) {
+      writeProperty(property.type === "ObjectProperty" || property.type === "ObjectMethod" ? propertyKeyName(property) : undefined);
+    }
+  };
   const write = (target: ASTNode | undefined, site: ASTNode, walk: WriteWalk, constructed?: WriteSite["constructed"]): void => {
     if (target === undefined) return;
     switch (target.type) {
@@ -316,11 +415,9 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
         return;
       }
       case "MemberExpression":
-      case "OptionalMemberExpression": {
-        const property = target.attributes.computed === true ? undefined : identifier(target.children.find((child) => child.role === "property"));
-        if (property !== undefined) propertyWrites.set(property, (propertyWrites.get(property) ?? 0) + 1);
+      case "OptionalMemberExpression":
+        writeProperty(memberPropertyName(target));
         return;
-      }
       case "AssignmentPattern":
         write(target.children.find((child) => child.role === "left"), site, walk);
         return;
@@ -360,6 +457,31 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
 
     if (node.type === "CallExpression" || node.type === "OptionalCallExpression" || node.type === "NewExpression") {
       if (node.location !== undefined) callSites.set(node, { contextId: walk.contextId, loopIds: walk.loopIds, start: node.location.start });
+    }
+    if (node.type === "CallExpression" || node.type === "OptionalCallExpression") {
+      const callee = node.children.find((child) => child.role === "callee");
+      const args = node.children.filter((child) => child.role === "arguments");
+      const writer = callee === undefined ? undefined : reflectiveWriterName(callee);
+      if (writer !== undefined && args.some((arg) => arg.type === "SpreadElement")) {
+        unknownPropertyWrites = true;
+      } else if (writer === "Object.assign") {
+        // Filling a fresh object cannot replace a method of an existing one.
+        if (!isFreshObject(args[0])) for (const source of args.slice(1)) writeObjectKeys(source);
+      } else if (writer === "Object.defineProperties") {
+        writeObjectKeys(args[1]);
+      } else if (writer === "Object.setPrototypeOf" || writer === "Reflect.setPrototypeOf") {
+        unknownPropertyWrites = true;
+      } else if (writer !== undefined) {
+        writeProperty(staticPropertyKey(args[1]));
+      }
+      const property = callee?.type === "MemberExpression" || callee?.type === "OptionalMemberExpression" ? memberPropertyName(callee) : undefined;
+      if (property === "__defineGetter__" || property === "__defineSetter__") writeProperty(staticPropertyKey(args[0]));
+    }
+    // Object/Reflect writers reached any other way (aliased, passed on, `.call`) are untracked writes.
+    if (escapesReflectiveWriters(node, parent)) unknownPropertyWrites = true;
+    if (node.type === "UnaryExpression" && node.attributes.operator === "delete") {
+      const argument = node.children.find((child) => child.role === "argument");
+      if (argument?.type === "MemberExpression" || argument?.type === "OptionalMemberExpression") write(argument, node, walk);
     }
     if (node.type === "AssignmentExpression") {
       const left = node.children.find((child) => child.role === "left");
@@ -406,7 +528,62 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
     }
   };
   visit(root, { scope: createScope(MODULE_SCOPE_ID), contextId: MODULE_SCOPE_ID, loopIds: [], unconditional: true }, undefined);
-  return Object.freeze({ reboundBindings, propertyWrites, writeSites, declaringContext, callSites });
+  return Object.freeze({ reboundBindings, propertyWrites, unknownPropertyWrites, writeSites, declaringContext, callSites });
+}
+
+const reflectiveWriters = new Set([
+  "Object.assign", "Object.defineProperty", "Object.defineProperties", "Object.setPrototypeOf",
+  "Reflect.set", "Reflect.defineProperty", "Reflect.deleteProperty", "Reflect.setPrototypeOf",
+]);
+const reflectiveNamespaces = new Set(["Object", "Reflect"]);
+
+/** `Object.assign`-style builtin named directly by a member expression. */
+function reflectiveWriterName(node: ASTNode): string | undefined {
+  if ((node.type !== "MemberExpression" && node.type !== "OptionalMemberExpression") || node.attributes.computed === true) return undefined;
+  const namespace = node.children.find((child) => child.role === "object");
+  const name = `${namespace?.type === "Identifier" ? identifier(namespace) : ""}.${identifier(node.children.find((child) => child.role === "property")) ?? ""}`;
+  return reflectiveWriters.has(name) ? name : undefined;
+}
+
+/**
+ * True when `node` hands a reflective writer to code this walk cannot follow: `Object` or
+ * `Reflect` used other than as `Object.member`, or a writer used other than as a direct callee.
+ */
+function escapesReflectiveWriters(node: ASTNode, parent: ASTNode | undefined): boolean {
+  if (node.type === "Identifier" && reflectiveNamespaces.has(identifier(node) ?? "")) {
+    if (parent === undefined || parent.type.startsWith("TS")) return false;
+    const isMember = parent.type === "MemberExpression" || parent.type === "OptionalMemberExpression";
+    if (isMember && parent.attributes.computed !== true && (node.role === "object" || node.role === "property")) return false;
+    if (node.role === "key" && parent.attributes.computed !== true) return false;
+    return true;
+  }
+  if (reflectiveWriterName(node) === undefined) return false;
+  return !((parent?.type === "CallExpression" || parent?.type === "OptionalCallExpression") && node.role === "callee");
+}
+
+/** Static name of the property a member expression reads or writes: `#name` for private names. */
+function memberPropertyName(member: ASTNode): string | undefined {
+  const property = member.children.find((child) => child.role === "property");
+  if (member.attributes.computed === true) return staticPropertyKey(property);
+  if (property?.type === "PrivateName") {
+    const name = identifier(property);
+    return name === undefined ? undefined : `#${name}`;
+  }
+  return identifier(property);
+}
+
+function propertyKeyName(property: ASTNode): string | undefined {
+  const key = property.children.find((child) => child.role === "key");
+  return property.attributes.computed === true ? staticPropertyKey(key) : key?.type === "Identifier" ? identifier(key) : staticPropertyKey(key);
+}
+
+function staticPropertyKey(node: ASTNode | undefined): string | undefined {
+  if (node?.type === "NumericLiteral" && typeof node.attributes.value === "number") return String(node.attributes.value);
+  return extractStaticString(node);
+}
+
+function isFreshObject(node: ASTNode | undefined): boolean {
+  return node?.type === "ObjectExpression" || node?.type === "ArrayExpression";
 }
 
 /** Children that run only on some executions of their parent, or not in source order. */
@@ -467,11 +644,11 @@ function provenReceiverClass(index: FileSymbolIndex, receiver: string, context: 
 
   const constructed = reaching?.constructed;
   if (constructed === undefined) return undefined;
-  const classes = (index.byName.get(constructed.className) ?? []).filter(
-    (symbol) => symbol.kind === "class" && isInScope(symbol, constructed.scope),
-  );
-  const classScope = targetScopeForAssignment(constructed.className, constructed.scope, index);
-  return classes.length === 1 && !isRebound(index, classScope.id, constructed.className) ? classes[0]?.id : undefined;
+  // `new C()` constructs whatever the nearest declaration of C holds; that must be the class itself.
+  const classFrame = declaredBindingFrame(index, constructed.className, constructed.scope);
+  if (classFrame === undefined || isRebound(index, classFrame.id, constructed.className)) return undefined;
+  const declared = index.declarationsByScopeAndName.get(lexicalBindingKey(classFrame.id, constructed.className)) ?? [];
+  return declared.length === 1 && declared[0]?.kind === "class" ? declared[0].id : undefined;
 }
 
 /**
@@ -480,7 +657,7 @@ function provenReceiverClass(index: FileSymbolIndex, receiver: string, context: 
  */
 function declaredBindingFrame(index: FileSymbolIndex, name: string, scope: ScopeFrame): ScopeFrame | undefined {
   for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
-    if ((index.byScopeAndName.get(lexicalBindingKey(current.id, name)) ?? []).length > 0) return current;
+    if ((index.declarationsByScopeAndName.get(lexicalBindingKey(current.id, name)) ?? []).length > 0) return current;
   }
   return undefined;
 }
@@ -1128,16 +1305,18 @@ function resolveNamespaceCall(
 
   const exportSymbol = targetTable.symbols.find((s) => s.kind === "export" && s.name === methodName);
   if (exportSymbol !== undefined) {
-    return exportSymbol.id;
+    return isUnstableTarget(index, exportSymbol.id) ? undefined : exportSymbol.id;
   }
   const directSymbol = targetTable.symbols.find(
     (s) => (s.kind === "function" || s.kind === "class" || s.kind === "variable") && s.exported && s.name === methodName,
   );
-  return directSymbol?.id;
+  return isUnstableTarget(index, directSymbol?.id) ? undefined : directSymbol?.id;
 }
 
+/** Writes that may replace `propertyName`; dynamic and reflective writes cannot reach private names. */
 function propertyWriteCount(index: FileSymbolIndex, propertyName: string): number {
-  return index.writes.propertyWrites.get(propertyName) ?? 0;
+  const writes = index.writes.propertyWrites.get(propertyName) ?? 0;
+  return index.writes.unknownPropertyWrites && !propertyName.startsWith("#") ? Number.POSITIVE_INFINITY : writes;
 }
 
 function resolveLocalCall(
@@ -1196,7 +1375,7 @@ function resolveLocalCall(
 
 function nearestScoped(index: FileSymbolIndex, name: string, context: ResolutionContext): CodeSymbol | undefined {
   for (let current: ScopeFrame | undefined = context.scope; current !== undefined; current = current.parent) {
-    const matchingSymbols = index.byScopeAndName.get(lexicalBindingKey(current.id, name)) ?? [];
+    const matchingSymbols = index.declarationsByScopeAndName.get(lexicalBindingKey(current.id, name)) ?? [];
     const callableSymbols = matchingSymbols.filter((symbol) => symbol.kind === "function" || symbol.kind === "class");
     const nonCallableSymbols = matchingSymbols.filter((symbol) => symbol.kind !== "function" && symbol.kind !== "class");
     // A rebound function or class binding may name another callee when the call runs.

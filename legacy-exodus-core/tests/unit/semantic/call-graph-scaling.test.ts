@@ -153,6 +153,7 @@ function buildForFile(
     new Map([[SOURCE_PATH, table]]),
     importsByFile,
     targetByImportId,
+    new Set(),
     calls,
     references,
   );
