@@ -149,7 +149,7 @@ export class DeterministicCallGraphBuilder {
 
 interface FileSymbolIndex {
   readonly byScopeAndName: ReadonlyMap<string, readonly CodeSymbol[]>;
-  /** byScopeAndName without symbols for assigned functions (`f = () => …`), which declare no binding. */
+  /** byScopeAndName restricted to symbols that declare a binding (see bindingDeclarations). */
   readonly declarationsByScopeAndName: ReadonlyMap<string, readonly CodeSymbol[]>;
   readonly byName: ReadonlyMap<string, readonly CodeSymbol[]>;
   readonly firstImportByName: ReadonlyMap<string, CodeSymbol>;
@@ -180,6 +180,8 @@ interface BindingWrites {
   readonly declaringContext: ReadonlyMap<string, string>;
   /** Where each call expression executes. */
   readonly callSites: ReadonlyMap<ASTNode, ExecutionSite>;
+  /** Frame (with its enclosing frames) for each scope id, to resolve names as seen from a symbol's scope. */
+  readonly scopeFrames: ReadonlyMap<string, ScopeFrame>;
 }
 
 interface SourcePoint {
@@ -265,32 +267,56 @@ function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult, u
   }
 
   const lexicalBindings = createLexicalBindingIndex(ast, table, byAnchor, byScopeAndName);
-  const declarationsByScopeAndName = withoutAssignedFunctions(byScopeAndName, ast.root);
+  const declarationsByScopeAndName = bindingDeclarations(byScopeAndName, ast.root);
   const writes = collectBindingWrites(ast.root, declarationsByScopeAndName);
   return Object.freeze({ byScopeAndName, declarationsByScopeAndName, byName, firstImportByName, classByLocation, lexicalBindings, writes, unstableExportIds });
 }
 
 /**
- * The extractor also records `f = () => …` as a function symbol named f in the assigning
- * scope. That symbol declares nothing: the assignment writes f's real declaration, so
- * binding lookups that decide what a write or call refers to must skip it.
+ * byScopeAndName restricted to symbols that declare a binding: imports, classes, functions
+ * and declared variables (declarators, parameters, catch parameters). The extractor records
+ * more under the same scope and name: members (methods, class properties, `o.p = …`, object
+ * literal keys), export records, and `f = () => …` as a function named f, which writes f's
+ * real declaration. Binding lookups that decide what a write or call refers to must skip
+ * them, or a member named like a binding would stand in for that binding's declaration.
  */
-function withoutAssignedFunctions(byScopeAndName: ReadonlyMap<string, readonly CodeSymbol[]>, root: ASTNode): ReadonlyMap<string, readonly CodeSymbol[]> {
-  const assigned = new Set<string>();
+function bindingDeclarations(byScopeAndName: ReadonlyMap<string, readonly CodeSymbol[]>, root: ASTNode): ReadonlyMap<string, readonly CodeSymbol[]> {
+  const assignedFunctions = new Set<string>();
+  const objectKeys = new Set<string>();
   const visit = (node: ASTNode): void => {
     if (node.type === "AssignmentExpression" && node.attributes.operator === "=") {
       let right = node.children.find((child) => child.role === "right");
       while (right?.type === "AssignmentExpression") right = right.children.find((child) => child.role === "right");
       const anchor = right?.type === "FunctionExpression" || right?.type === "ArrowFunctionExpression" ? declarationAnchor(right.location) : undefined;
-      if (anchor !== undefined) assigned.add(anchor);
+      if (anchor !== undefined) assignedFunctions.add(anchor);
+    }
+    if (node.type === "ObjectExpression") {
+      for (const property of node.children) {
+        const anchor = declarationAnchor(property.location);
+        if (anchor !== undefined) objectKeys.add(anchor);
+      }
     }
     for (const child of node.children) visit(child);
   };
   visit(root);
-  if (assigned.size === 0) return byScopeAndName;
+  const declaresBinding = (symbol: CodeSymbol): boolean => {
+    const anchor = declarationAnchor(symbol.location) ?? "";
+    switch (symbol.kind) {
+      case "import":
+      case "class":
+        return true;
+      case "function":
+        return !assignedFunctions.has(anchor);
+      case "variable":
+        // Members carry no declaration kind, except object literal keys.
+        return symbol.declarationKind !== undefined && !objectKeys.has(anchor);
+      default:
+        return false;
+    }
+  };
   const declarations = new Map<string, readonly CodeSymbol[]>();
   for (const [key, symbols] of byScopeAndName) {
-    const declared = symbols.filter((symbol) => symbol.kind !== "function" || !assigned.has(declarationAnchor(symbol.location) ?? ""));
+    const declared = symbols.filter(declaresBinding);
     if (declared.length > 0) declarations.set(key, declared);
   }
   return declarations;
@@ -316,7 +342,7 @@ export function collectUnstableExportIds(ast: ASTResult, table: SymbolTable | un
     }
     if (symbol.kind === "export" && symbol.moduleSpecifier === undefined) exportsBySlot.set(exportSlot(symbol), (exportsBySlot.get(exportSlot(symbol)) ?? 0) + 1);
   }
-  const { reboundBindings } = collectBindingWrites(ast.root, withoutAssignedFunctions(byScopeAndName, ast.root));
+  const { reboundBindings } = collectBindingWrites(ast.root, bindingDeclarations(byScopeAndName, ast.root));
   const rebound = (name: string | undefined): boolean => name !== undefined && reboundBindings.has(bindingWriteKey(MODULE_SCOPE_ID, name));
   return table.symbols.filter((symbol) => {
     if (symbol.kind === "export") {
@@ -356,6 +382,7 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
   const writeSites = new Map<string, WriteSite[]>();
   const declaringContext = new Map<string, string>();
   const callSites = new Map<ASTNode, ExecutionSite>();
+  const scopeFrames = new Map<string, ScopeFrame>();
 
   const bindingKeyAt = (name: string, scope: ScopeFrame): string => {
     for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
@@ -447,6 +474,7 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
     const scope = node.type === "BlockStatement" || isCallable(node) || node.type === "CatchClause" || isLoop(node)
       ? createScope(createLexicalScopeId(node.type, node.location), walk.scope)
       : walk.scope;
+    if (!scopeFrames.has(scope.id)) scopeFrames.set(scope.id, scope);
     // Functions and class element initializers run whenever they are invoked, not in place.
     const opensContext = isCallable(node) || classElementContexts.has(node.type);
     const contextId = opensContext ? `context:${node.type}:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}` : walk.contextId;
@@ -528,7 +556,7 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
     }
   };
   visit(root, { scope: createScope(MODULE_SCOPE_ID), contextId: MODULE_SCOPE_ID, loopIds: [], unconditional: true }, undefined);
-  return Object.freeze({ reboundBindings, propertyWrites, unknownPropertyWrites, writeSites, declaringContext, callSites });
+  return Object.freeze({ reboundBindings, propertyWrites, unknownPropertyWrites, writeSites, declaringContext, callSites, scopeFrames });
 }
 
 const reflectiveWriters = new Set([
@@ -1352,10 +1380,13 @@ function resolveLocalCall(
   }
 
   // 2. Object container method (e.g. app.init after `app.init = function …`): the container
-  //    binding never changes and the property is declared once and never otherwise written.
+  //    binding never changes and the property is declared once on that same binding and
+  //    never otherwise written.
   const containerFrame = receiver === "this" ? undefined : declaredBindingFrame(index, receiver, context.scope);
   if (containerFrame !== undefined && !isRebound(index, containerFrame.id, receiver)) {
-    const declared = (index.byName.get(methodName) ?? []).filter((symbol) => symbol.containerName === receiver);
+    const declared = (index.byName.get(methodName) ?? []).filter(
+      (symbol) => symbol.containerName === receiver && isDefinedOnBinding(index, symbol, receiver, containerFrame),
+    );
     const candidates = declared.filter((symbol) => symbol.kind === "method" || symbol.kind === "function");
     const candidate = candidates.length === 1 && declared.length === 1 ? candidates[0] : undefined;
     // A member-assigned definition is itself the one permitted write; a class member admits none.
@@ -1371,6 +1402,21 @@ function resolveLocalCall(
   }
 
   return undefined;
+}
+
+/**
+ * Whether `member` was defined on the `receiver` binding declared in `frame`. A same-named
+ * binding elsewhere (a parameter, block local or catch parameter) may hold any object. A
+ * class member belongs to the class that binding declares; any other member to the binding
+ * that `receiver` names where the member is defined.
+ */
+function isDefinedOnBinding(index: FileSymbolIndex, member: CodeSymbol, receiver: string, frame: ScopeFrame): boolean {
+  if (member.containerId !== undefined) {
+    const declared = index.declarationsByScopeAndName.get(lexicalBindingKey(frame.id, receiver)) ?? [];
+    return declared.length === 1 && declared[0]?.id === member.containerId;
+  }
+  const definedIn = member.scopeId === undefined ? undefined : index.writes.scopeFrames.get(member.scopeId);
+  return definedIn !== undefined && declaredBindingFrame(index, receiver, definedIn)?.id === frame.id;
 }
 
 function nearestScoped(index: FileSymbolIndex, name: string, context: ResolutionContext): CodeSymbol | undefined {

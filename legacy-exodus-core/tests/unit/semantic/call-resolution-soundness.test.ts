@@ -672,3 +672,185 @@ describe("F-002 call resolution soundness: exports reassigned by their own modul
     expect(call.resolutionState).toBe("RESOLVED");
   });
 });
+
+// A container method is proven only on the binding it was defined on; another binding
+// with the same name (a parameter, block local or catch parameter) may hold any object.
+describe("F-002 call resolution soundness: container binding identity", () => {
+  it("does not resolve a container method through a parameter that shadows the container", async () => {
+    // run() receives another object, so its own init runs.
+    const { call } = await callOf(`
+      const app = {};
+      app.init = function () { return 1; };
+      function run(app) { return app.init(); }
+      run({ init: () => 2 });
+    `, "app.init");
+    expect(call.resolutionState).toBe("UNRESOLVED");
+  });
+
+  it("does not resolve a container method through a block binding that shadows the container", async () => {
+    const { call } = await callOf(`
+      function make() { return { init() { return 2; } }; }
+      const app = {};
+      app.init = function () { return 1; };
+      { const app = make(); app.init(); }
+    `, "app.init");
+    expect(call.resolutionState).toBe("UNRESOLVED");
+  });
+
+  it("does not resolve a container method through a catch parameter that shadows the container", async () => {
+    const { call } = await callOf(`
+      const app = {};
+      app.init = function () { return 1; };
+      try { throw { init: () => 2 }; } catch (app) { app.init(); }
+    `, "app.init");
+    expect(call.resolutionState).toBe("UNRESOLVED");
+  });
+
+  it("does not resolve a module binding's method from a definition on a block binding of the same name", async () => {
+    const { call } = await callOf(`
+      function make() { return { init() { return 2; } }; }
+      const app = make();
+      { const app = {}; app.init = function () { return 1; }; }
+      app.init();
+    `, "app.init");
+    expect(call.resolutionState).toBe("UNRESOLVED");
+  });
+
+  it("does not resolve a module binding's method from a definition on a parameter of the same name", async () => {
+    // decorate() is never called on the module app, which keeps make()'s init.
+    const { call } = await callOf(`
+      function make() { return { init() { return 2; } }; }
+      function decorate(app) { app.init = function () { return 1; }; }
+      const app = make();
+      app.init();
+    `, "app.init");
+    expect(call.resolutionState).toBe("UNRESOLVED");
+  });
+
+  it("does not resolve a parameter's method from a definition on a local of the same name (fastify's logger.child)", async () => {
+    // childOf() receives a pino logger, not the null logger that create() decorates.
+    const { call } = await callOf(`
+      function childOf(logger) { return logger.child(); }
+      function create() { const logger = {}; logger.child = () => logger; return logger; }
+      childOf({ child: () => 2 });
+    `, "logger.child");
+    expect(call.resolutionState).toBe("UNRESOLVED");
+  });
+
+  it("does not resolve a static method through a parameter that shadows the class", async () => {
+    const { call } = await callOf(`
+      class C { static m() { return 1; } }
+      function run(C) { return C.m(); }
+      run({ m: () => 2 });
+    `, "C.m");
+    expect(call.resolutionState).toBe("UNRESOLVED");
+  });
+
+  it("keeps resolving a container method called from a nested function that does not shadow it", async () => {
+    const { call, symbols } = await callOf(`
+      const app = {};
+      app.init = function () { return 1; };
+      function run() { return app.init(); }
+    `, "app.init");
+    expect(call.resolutionState).toBe("RESOLVED");
+    expect(call.targetSymbolId).toBe(method(symbols, "init", "app").id);
+  });
+
+  it("keeps resolving a container method defined from a nested function on the outer binding", async () => {
+    const { call, symbols } = await callOf(`
+      const app = {};
+      function setup() { app.init = function () { return 1; }; }
+      setup();
+      app.init();
+    `, "app.init");
+    expect(call.resolutionState).toBe("RESOLVED");
+    expect(call.targetSymbolId).toBe(method(symbols, "init", "app").id);
+  });
+
+  it("keeps resolving a container method defined and called on the same block binding", async () => {
+    const { call, symbols } = await callOf(`
+      { const app = {}; app.init = function () { return 1; }; app.init(); }
+    `, "app.init");
+    expect(call.resolutionState).toBe("RESOLVED");
+    expect(call.targetSymbolId).toBe(method(symbols, "init", "app").id);
+  });
+
+  it("keeps resolving the outer container's method when an unrelated function has a parameter of the same name", async () => {
+    const { call, symbols } = await callOf(`
+      const app = {};
+      app.init = function () { return 1; };
+      function other(app) { return app; }
+      app.init();
+    `, "app.init");
+    expect(call.resolutionState).toBe("RESOLVED");
+    expect(call.targetSymbolId).toBe(method(symbols, "init", "app").id);
+  });
+
+  it("keeps resolving a static method called through the class from a nested function", async () => {
+    const { call, symbols } = await callOf(`
+      class C { static m() { return 1; } }
+      function run() { return C.m(); }
+    `, "C.m");
+    expect(call.resolutionState).toBe("RESOLVED");
+    expect(call.targetSymbolId).toBe(method(symbols, "m", "C").id);
+  });
+});
+
+// Member symbols (`o.x = …`, object literal keys) and export records share names with
+// bindings but declare none; taken for declarations they hide writes to the real binding.
+describe("F-002 call resolution soundness: only declarations name bindings", () => {
+  it("does not take a member write for the receiver's declaration", async () => {
+    // swap() writes the module x between `x = new A()` and the call, so B.m runs.
+    const { call } = await callOf(`
+      class A { m() { return 1; } }
+      class B { m() { return 2; } }
+      const o = {};
+      let x;
+      function swap() { x = new B(); }
+      function run() { o.x = 1; x = new A(); swap(); x.m(); }
+    `, "x.m");
+    expect(call.resolutionState).toBe("UNRESOLVED");
+  });
+
+  it("does not take an object literal key for the receiver's declaration", async () => {
+    const { call } = await callOf(`
+      class A { m() { return 1; } }
+      class B { m() { return 2; } }
+      let x;
+      function swap() { x = new B(); }
+      function run() { const o = { x: 1 }; x = new A(); swap(); x.m(); }
+    `, "x.m");
+    expect(call.resolutionState).toBe("UNRESOLVED");
+  });
+
+  it("does not take a member write for the container's declaration", async () => {
+    // app is rebound before run() calls it, so the second init runs.
+    const { call } = await callOf(`
+      let app = {};
+      app.init = function () { return 1; };
+      const o = {};
+      function run() { o.app = 1; app.init(); }
+      app = { init() { return 2; } };
+    `, "app.init");
+    expect(call.resolutionState).toBe("UNRESOLVED");
+  });
+
+  it("keeps resolving new C() for an exported class", async () => {
+    const { call, symbols } = await callOf(`
+      export class C { m() { return 1; } }
+      const c = new C();
+      c.m();
+    `, "c.m");
+    expect(call.resolutionState).toBe("RESOLVED");
+    expect(call.targetSymbolId).toBe(method(symbols, "m", "C").id);
+  });
+
+  it("keeps resolving a static method of an exported class", async () => {
+    const { call, symbols } = await callOf(`
+      export class C { static m() { return 1; } }
+      C.m();
+    `, "C.m");
+    expect(call.resolutionState).toBe("RESOLVED");
+    expect(call.targetSymbolId).toBe(method(symbols, "m", "C").id);
+  });
+});
