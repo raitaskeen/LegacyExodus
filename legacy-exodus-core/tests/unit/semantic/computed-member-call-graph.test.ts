@@ -61,7 +61,9 @@ describe("SEM-01: Dynamic & Computed Member Call-Graph Precision & Resolution", 
   });
 
   // ─── Case A3: Contextual 'this' Computed Member Call
-  it("Case A3: resolves contextual 'this' computed member call to prototype method", async () => {
+  // F-002: the computed key still normalizes to this.defaultConfiguration, but public `this`
+  // is chosen by the caller, so the call is not proven to reach app.defaultConfiguration.
+  it("Case A3: normalizes a contextual 'this' computed member call without claiming its target", async () => {
     const source = `
       const app = {};
       app.defaultConfiguration = function() { return true; };
@@ -75,8 +77,8 @@ describe("SEM-01: Dynamic & Computed Member Call-Graph Precision & Resolution", 
 
     const call = analysis.calls.find((c) => c.calleeName === "this.defaultConfiguration");
     expect(call).toBeDefined();
-    expect(call?.resolutionState).toBe("RESOLVED");
-    expect(call?.targetSymbolId).toBe(configSymbol?.id);
+    expect(call?.resolutionState).toBe("UNRESOLVED");
+    expect(call?.targetSymbolId).toBeUndefined();
   });
 
   // ─── Case B: Static Constant Key
