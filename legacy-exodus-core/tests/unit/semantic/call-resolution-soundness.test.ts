@@ -854,3 +854,75 @@ describe("F-002 call resolution soundness: only declarations name bindings", () 
     expect(call.targetSymbolId).toBe(method(symbols, "m", "C").id);
   });
 });
+
+// `app.init = f` proves `app.init()` only if the call cannot run while app holds another
+// init: before the definition, on a path that skips it, or with a value that had one.
+describe("F-002 call resolution soundness: container methods called before their definition", () => {
+  const make = "function make() { return { init() { return 2; } }; }";
+  const unresolved = async (source: string, calleeName = "app.init"): Promise<void> => {
+    const { call } = await callOf(source, calleeName);
+    expect(call.resolutionState).toBe("UNRESOLVED");
+  };
+  const resolvedToDefinition = async (source: string, calleeName = "app.init"): Promise<void> => {
+    const [receiver, name] = calleeName.split(".") as [string, string];
+    const { call, symbols } = await callOf(source, calleeName);
+    expect(call.resolutionState).toBe("RESOLVED");
+    expect(call.targetSymbolId).toBe(method(symbols, name, receiver).id);
+  };
+
+  it("does not resolve a call before the definition on an object that already has the method", async () => {
+    await unresolved(`${make}\nconst app = make();\napp.init();\napp.init = function () { return 1; };`);
+  });
+
+  it("does not resolve a call before the definition on a parameter", async () => {
+    await unresolved("function setup(app) { app.init(); app.init = function () { return 1; }; }");
+  });
+
+  it("does not resolve a call after a definition that runs on one branch only", async () => {
+    await unresolved(`${make}\nconst app = make();\nif (process.env.FLAG) app.init = function () { return 1; };\napp.init();`);
+  });
+
+  it("does not resolve a call before the function that defines the method runs", async () => {
+    await unresolved(`${make}\nconst app = make();\nfunction setup() { app.init = function () { return 1; }; }\napp.init();\nsetup();`);
+  });
+
+  it("does not resolve a call from a function that may run before the definition", async () => {
+    await unresolved(`${make}\nconst app = make();\nfunction run() { return app.init(); }\nrun();\napp.init = function () { return 1; };`);
+  });
+
+  it("does not resolve a method a fresh object inherits from Object.prototype", async () => {
+    await unresolved("const app = {};\napp.toString();\napp.toString = function () { return 1; };", "app.toString");
+  });
+
+  it("does not resolve on an object literal that sets its prototype", async () => {
+    await unresolved("const app = { __proto__: { init() { return 2; } } };\napp.init();\napp.init = function () { return 1; };");
+  });
+
+  it("does not resolve on an object literal that spreads another object", async () => {
+    await unresolved("const base = { init() { return 2; } };\nconst app = { ...base };\napp.init();\napp.init = function () { return 1; };");
+  });
+
+  it("does not resolve on an object literal with a computed key, which may name the method", async () => {
+    await unresolved("const key = 'init';\nconst app = { [key]: () => 2 };\napp.init();\napp.init = function () { return 1; };");
+  });
+
+  it("does not resolve on a class that inherits a static method of the same name", async () => {
+    await unresolved("class B { static m() { return 2; } }\nclass C extends B {}\nC.m();\nC.m = function () { return 1; };", "C.m");
+  });
+
+  it("keeps resolving a call from another function on a function container, which cannot have the method yet", async () => {
+    await resolvedToDefinition("function app() {}\napp.init = function () { return 1; };\nfunction run() { return app.init(); }");
+  });
+
+  it("keeps resolving when the definition always runs first in the call's function", async () => {
+    await resolvedToDefinition(`${make}\nconst app = make();\napp.init = function () { return 1; };\napp.init();`);
+  });
+
+  it("keeps resolving on a parameter when the definition always runs first", async () => {
+    await resolvedToDefinition("function setup(app) { app.init = function () { return 1; }; app.init(); }");
+  });
+
+  it("keeps resolving a call inside the defined function, which exists only once the definition ran (express route-map)", async () => {
+    await resolvedToDefinition(`${make}\nconst app = make();\napp.init = function (depth) { if (depth > 0) app.init(depth - 1); };`);
+  });
+});

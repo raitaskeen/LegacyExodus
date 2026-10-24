@@ -174,6 +174,10 @@ interface BindingWrites {
   readonly propertyWrites: ReadonlyMap<string, number>;
   /** A write whose property name is not static (`o[key] = …`, `Object.assign(o, src)`, prototype swaps): it may name any public property. */
   readonly unknownPropertyWrites: boolean;
+  /** Where each statically named member is assigned or deleted (`o.name = …`, `delete o.name`). */
+  readonly propertyWriteSites: ReadonlyMap<string, readonly WriteSite[]>;
+  /** Value each binding is declared with: its initializer, or the function a declaration creates. */
+  readonly declaredValues: ReadonlyMap<string, ASTNode>;
   /** Every write to a binding, including implicit parameter, catch and for-in/of writes. */
   readonly writeSites: ReadonlyMap<string, readonly WriteSite[]>;
   /** Execution context (function or class element) in which each binding is declared. */
@@ -379,6 +383,8 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
   const declarations = new Map<string, number>();
   const propertyWrites = new Map<string, number>();
   let unknownPropertyWrites = false;
+  const propertyWriteSites = new Map<string, WriteSite[]>();
+  const declaredValues = new Map<string, ASTNode>();
   const writeSites = new Map<string, WriteSite[]>();
   const declaringContext = new Map<string, string>();
   const callSites = new Map<ASTNode, ExecutionSite>();
@@ -390,9 +396,9 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
     }
     return bindingWriteKey(scope.id, name);
   };
-  const recordWrite = (key: string, site: ASTNode, walk: WriteWalk, constructed?: WriteSite["constructed"]): void => {
-    const sites = writeSites.get(key) ?? [];
-    writeSites.set(key, sites);
+  const recordSite = (sitesByKey: Map<string, WriteSite[]>, key: string, site: ASTNode, walk: WriteWalk, constructed?: WriteSite["constructed"]): void => {
+    const sites = sitesByKey.get(key) ?? [];
+    sitesByKey.set(key, sites);
     const location = site.location;
     sites.push({
       contextId: walk.contextId,
@@ -403,6 +409,9 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
       unconditional: walk.unconditional,
       ...(constructed === undefined ? {} : { constructed }),
     });
+  };
+  const recordWrite = (key: string, site: ASTNode, walk: WriteWalk, constructed?: WriteSite["constructed"]): void => {
+    recordSite(writeSites, key, site, walk, constructed);
   };
   const declare = (name: string, site: ASTNode, walk: WriteWalk, initialized: boolean, constructed?: WriteSite["constructed"]): void => {
     const key = bindingKeyAt(name, walk.scope);
@@ -442,9 +451,12 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
         return;
       }
       case "MemberExpression":
-      case "OptionalMemberExpression":
-        writeProperty(memberPropertyName(target));
+      case "OptionalMemberExpression": {
+        const name = memberPropertyName(target);
+        writeProperty(name);
+        if (name !== undefined) recordSite(propertyWriteSites, name, site, walk);
         return;
+      }
       case "AssignmentPattern":
         write(target.children.find((child) => child.role === "left"), site, walk);
         return;
@@ -534,11 +546,13 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
       const id = node.children.find((child) => child.role === "id");
       for (const name of extractBoundNames(id)) {
         declare(name, node, walk, init !== undefined, id?.type === "Identifier" ? constructedBy(init, scope) : undefined);
+        if (id?.type === "Identifier" && init !== undefined) declaredValues.set(bindingKeyAt(name, walk.scope), init);
       }
     }
     if (node.type === "FunctionDeclaration" || node.type === "ClassDeclaration") {
       const name = nodeName(node);
       if (name !== undefined) declare(name, node, walk, true);
+      if (name !== undefined && node.type === "FunctionDeclaration") declaredValues.set(bindingKeyAt(name, walk.scope), node);
     }
     if (isCallable(node)) {
       // Parameters are written by every call with the caller's arguments.
@@ -556,7 +570,7 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
     }
   };
   visit(root, { scope: createScope(MODULE_SCOPE_ID), contextId: MODULE_SCOPE_ID, loopIds: [], unconditional: true }, undefined);
-  return Object.freeze({ reboundBindings, propertyWrites, unknownPropertyWrites, writeSites, declaringContext, callSites, scopeFrames });
+  return Object.freeze({ reboundBindings, propertyWrites, unknownPropertyWrites, propertyWriteSites, declaredValues, writeSites, declaringContext, callSites, scopeFrames });
 }
 
 const reflectiveWriters = new Set([
@@ -1380,8 +1394,8 @@ function resolveLocalCall(
   }
 
   // 2. Object container method (e.g. app.init after `app.init = function …`): the container
-  //    binding never changes and the property is declared once on that same binding and
-  //    never otherwise written.
+  //    binding never changes, the property is declared once on that same binding and never
+  //    otherwise written, and the call cannot run before the definition takes effect.
   const containerFrame = receiver === "this" ? undefined : declaredBindingFrame(index, receiver, context.scope);
   if (containerFrame !== undefined && !isRebound(index, containerFrame.id, receiver)) {
     const declared = (index.byName.get(methodName) ?? []).filter(
@@ -1391,7 +1405,7 @@ function resolveLocalCall(
     const candidate = candidates.length === 1 && declared.length === 1 ? candidates[0] : undefined;
     // A member-assigned definition is itself the one permitted write; a class member admits none.
     if (candidate !== undefined && propertyWriteCount(index, methodName) === (candidate.containerId === undefined ? 1 : 0)) {
-      return candidate.id;
+      if (candidate.containerId !== undefined || isDefinedBeforeCall(index, candidate, receiver, containerFrame, callNode)) return candidate.id;
     }
   }
 
@@ -1402,6 +1416,52 @@ function resolveLocalCall(
   }
 
   return undefined;
+}
+
+// Standard properties a fresh object or function already has, own or inherited.
+const objectBuiltins = new Set([
+  "constructor", "hasOwnProperty", "isPrototypeOf", "propertyIsEnumerable", "toLocaleString", "toString", "valueOf",
+  "__defineGetter__", "__defineSetter__", "__lookupGetter__", "__lookupSetter__", "__proto__",
+]);
+const functionBuiltins = new Set([...objectBuiltins, "apply", "bind", "call", "arguments", "caller", "length", "name", "prototype"]);
+
+/**
+ * Whether no execution can reach the call while the container still holds a different
+ * `name` than the member-assigned `definition`. Either the container starts as a fresh
+ * object or function without that property, so an earlier call throws; or the definition
+ * always runs earlier in the call's own execution context; or the call lies inside the
+ * defined function, which exists only once the definition has run. Assumes property
+ * assignments store their value (no setters, frozen objects or read-only properties) and
+ * that no code adds properties to Object.prototype or Function.prototype.
+ */
+function isDefinedBeforeCall(index: FileSymbolIndex, definition: CodeSymbol, receiver: string, frame: ScopeFrame, callNode: ASTNode | undefined): boolean {
+  return startsWithout(index, receiver, frame, definition.name) || definitionRunsFirst(index, definition.name, callNode) || encloses(definition.location, callNode?.location);
+}
+
+function startsWithout(index: FileSymbolIndex, receiver: string, frame: ScopeFrame, name: string): boolean {
+  const value = index.writes.declaredValues.get(bindingWriteKey(frame.id, receiver));
+  if (value?.type === "ObjectExpression") {
+    // A spread, a computed key or a `__proto__` key may supply the property.
+    return !objectBuiltins.has(name) && value.children.every((property) => {
+      if (property.type !== "ObjectProperty" && property.type !== "ObjectMethod") return false;
+      const key = propertyKeyName(property);
+      return key !== undefined && key !== name && key !== "__proto__";
+    });
+  }
+  const isFunction = value?.type === "FunctionDeclaration" || value?.type === "FunctionExpression" || value?.type === "ArrowFunctionExpression";
+  return isFunction && !functionBuiltins.has(name);
+}
+
+function definitionRunsFirst(index: FileSymbolIndex, name: string, callNode: ASTNode | undefined): boolean {
+  const call = callNode === undefined ? undefined : index.writes.callSites.get(callNode);
+  const definitions = index.writes.propertyWriteSites.get(name) ?? [];
+  const definition = definitions.length === 1 ? definitions[0] : undefined;
+  return call !== undefined && definition !== undefined && definition.ordered && definition.unconditional &&
+    definition.contextId === call.contextId && comparePoints(definition.end, call.start) < 0;
+}
+
+function encloses(outer: CodeSymbol["location"], inner: CodeSymbol["location"]): boolean {
+  return outer !== undefined && inner !== undefined && comparePoints(outer.start, inner.start) <= 0 && comparePoints(inner.end, outer.end) <= 0;
 }
 
 /**
