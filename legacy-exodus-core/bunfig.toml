@@ -5,6 +5,7 @@ exact = true
 
 [test]
 root = "./tests"
+preload = ["./tests/support/analyzer-identity.ts"]
 coverage = true
 coverageSkipTestFiles = true
 coverageReporter = ["text", "lcov"]

@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { createLegacyExodusEngine } from "@runtime/composition/services";
+import { fingerprintAnalyzerSource, loadedAnalyzerFingerprint } from "../../support/analyzer-identity";
 import { CORPUS_DIR } from "../../../benchmarks/paths";
 import type { BenchmarkManifest } from "../../../benchmarks/types";
 
@@ -79,57 +80,14 @@ async function acquireRepository(manifest: BenchmarkManifest, targetDir: string)
 }
 
 const ANALYZER_ROOT = resolve(import.meta.dir, "../../..");
-const ANALYZER_CONFIGURATION_FILES = ["package.json", "bun.lock", "tsconfig.json"] as const;
-const IGNORED_ANALYZER_DIRECTORIES = new Set([".discovery", ".legacy-exodus", ".git", "node_modules"]);
 
 // Written next to the projection; deliberately not `*.json`, so tools that enumerate
 // `.discovery/*.json` as analysis artifacts never see it.
 const IDENTITY_RECORD_FILE = "fidelity-helper.identity";
 
-/**
- * Fingerprints the analyzer source under `analyzerRoot`: every file in `src/` (excluding
- * generated `.discovery` output), package.json, bun.lock, tsconfig.json and the Bun version.
- * Returns undefined when the source cannot be read, which makes every projection non-reusable.
- */
-async function computeAnalyzerFingerprint(analyzerRoot: string): Promise<string | undefined> {
-  try {
-    const hash = createHash("sha256");
-    for (const path of await listAnalyzerSourceFiles(join(analyzerRoot, "src"), "src")) {
-      hash.update(`file\0${path}\0${sha256(await readFile(join(analyzerRoot, path)))}\n`);
-    }
-    for (const name of ANALYZER_CONFIGURATION_FILES) {
-      const path = join(analyzerRoot, name);
-      hash.update(`file\0${name}\0${existsSync(path) ? sha256(await readFile(path)) : "<absent>"}\n`);
-    }
-    hash.update(`runtime\0${Bun.version}\n`);
-    return hash.digest("hex");
-  } catch {
-    return undefined;
-  }
-}
-
-async function listAnalyzerSourceFiles(directory: string, relativeDirectory: string): Promise<string[]> {
-  const files: string[] = [];
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    const relativePath = `${relativeDirectory}/${entry.name}`;
-    if (entry.isDirectory()) {
-      if (!IGNORED_ANALYZER_DIRECTORIES.has(entry.name)) {
-        files.push(...await listAnalyzerSourceFiles(join(directory, entry.name), relativePath));
-      }
-    } else if (entry.isFile()) {
-      files.push(relativePath);
-    }
-  }
-  return files.sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
-}
-
 function sha256(content: Buffer): string {
   return createHash("sha256").update(content).digest("hex");
 }
-
-// The in-process engine was imported above; capturing its source identity once, now, keeps a
-// record describing the code that produced the projection even if the source is edited mid-run.
-const loadedAnalyzerFingerprint = computeAnalyzerFingerprint(ANALYZER_ROOT);
 
 async function isRecordedProjectionCurrent(discoveryDir: string, analyzerFingerprint: string): Promise<boolean> {
   try {
@@ -151,18 +109,22 @@ async function isRecordedProjectionCurrent(discoveryDir: string, analyzerFingerp
  * engine regenerates the projection with `refresh`, bypassing the engine's own snapshot reuse.
  *
  * `analyzerRoot` (default: this package) names the analyzer source tree to fingerprint. For the default
- * root the fingerprint is captured once per process, when the in-process engine is loaded; an explicit
- * root is fingerprinted on every call so tests can model analyzer source changes.
+ * root the identity is the one the test preload captured before any test file loaded the engine; an
+ * explicit root is fingerprinted at the start of each call so tests can model analyzer source changes.
+ * Before recording, the source is fingerprinted again: if it changed during the run, the code that
+ * produced the projection can no longer be identified, so no record is written. `afterAnalysis` runs
+ * between the engine run and that check.
  */
 export async function ensureDiscoveryProjections(
   repoPath: string,
-  options?: { readonly force?: boolean; readonly analyzerRoot?: string },
+  options?: { readonly force?: boolean; readonly analyzerRoot?: string; readonly afterAnalysis?: () => Promise<void> },
 ): Promise<void> {
   const absPath = resolve(repoPath);
   const discoveryDir = join(absPath, ".discovery");
+  const analyzerRoot = options?.analyzerRoot === undefined ? ANALYZER_ROOT : resolve(options.analyzerRoot);
   const analyzerFingerprint = options?.analyzerRoot === undefined
-    ? await loadedAnalyzerFingerprint
-    : await computeAnalyzerFingerprint(resolve(options.analyzerRoot));
+    ? loadedAnalyzerFingerprint
+    : fingerprintAnalyzerSource(analyzerRoot);
 
   if (
     !options?.force &&
@@ -207,7 +169,8 @@ export async function ensureDiscoveryProjections(
     await engine.shutdown();
   }
 
-  if (analyzerFingerprint !== undefined) {
+  await options?.afterAnalysis?.();
+  if (analyzerFingerprint !== undefined && fingerprintAnalyzerSource(analyzerRoot) === analyzerFingerprint) {
     const manifest = await readFile(join(discoveryDir, "manifest.json"));
     await writeFile(
       join(discoveryDir, IDENTITY_RECORD_FILE),

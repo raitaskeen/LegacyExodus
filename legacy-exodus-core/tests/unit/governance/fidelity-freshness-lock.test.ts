@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { DiscoveryArtifactProvenance, GroundTruthFact } from "@contracts/fidelity";
 import { runFidelityValidation } from "../../../benchmarks/fidelity/runner";
 import { ensureDiscoveryProjections } from "./test-fidelity-helpers";
@@ -609,7 +610,7 @@ describe("ensureDiscoveryProjections Helper Provenance Hardening", () => {
     }
   }, 30000);
 
-  it("3. Recorded analyzer identity matches + Git unavailable -> reuses existing projection", async () => {
+  it("3. Recorded analyzer identity matches + Git unavailable -> reuses existing projection without consulting Git", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "helper-nogit-valid-3-"));
     const spy = spyOn(cp, "execSync").mockImplementation(() => {
       throw new Error("git binary not found");
@@ -620,6 +621,8 @@ describe("ensureDiscoveryProjections Helper Provenance Hardening", () => {
       await plantReuseCanary(tempDir);
       await ensureDiscoveryProjections(tempDir);
       expect(await isProjectionReused(tempDir)).toBe(true);
+      // Analyzer identity is the source fingerprint; Git state is never consulted for it.
+      expect(spy).not.toHaveBeenCalled();
     } finally {
       spy.mockRestore();
       await rm(tempDir, { recursive: true, force: true });
@@ -639,7 +642,7 @@ describe("ensureDiscoveryProjections Helper Provenance Hardening", () => {
       spy.mockRestore();
       await rm(tempDir, { recursive: true, force: true });
     }
-  });
+  }, 30000);
 
   it("5. Non-string manifest SHA + Git unavailable -> regenerates projection", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "helper-nogit-nonstring-5-"));
@@ -654,7 +657,7 @@ describe("ensureDiscoveryProjections Helper Provenance Hardening", () => {
       spy.mockRestore();
       await rm(tempDir, { recursive: true, force: true });
     }
-  });
+  }, 30000);
 
   it("6. Whitespace-only manifest SHA + Git unavailable -> regenerates projection", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "helper-nogit-whitespace-6-"));
@@ -669,7 +672,7 @@ describe("ensureDiscoveryProjections Helper Provenance Hardening", () => {
       spy.mockRestore();
       await rm(tempDir, { recursive: true, force: true });
     }
-  });
+  }, 30000);
 
   it("7. Padded current HEAD SHA without analyzer record -> regenerates projection", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "helper-padded-7-"));
@@ -792,6 +795,26 @@ describe("ensureDiscoveryProjections Helper Provenance Hardening", () => {
     }
   }, 30000);
 
+  it("12b. Missing helper record over a snapshot the engine would reuse -> regenerates with refresh", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "helper-refresh-12b-"));
+    try {
+      await createHelperRepo(tempDir);
+      await ensureDiscoveryProjections(tempDir);
+      const discoveryDir = join(tempDir, ".discovery");
+      const first = JSON.parse(await readFile(join(discoveryDir, "manifest.json"), "utf8"));
+
+      // The engine's own snapshot is untouched and reusable; only the helper record is gone.
+      await rm(join(discoveryDir, "fidelity-helper.identity"));
+      await ensureDiscoveryProjections(tempDir);
+
+      const second = JSON.parse(await readFile(join(discoveryDir, "manifest.json"), "utf8"));
+      expect(second.analysis.generatedAt).not.toBe(first.analysis.generatedAt);
+      expect(existsSync(join(discoveryDir, "fidelity-helper.identity"))).toBe(true);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  }, 30000);
+
   it("13. Unreadable analyzer source -> regenerates projection and records no identity", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "helper-no-analyzer-13-"));
     try {
@@ -807,4 +830,56 @@ describe("ensureDiscoveryProjections Helper Provenance Hardening", () => {
       await rm(tempDir, { recursive: true, force: true });
     }
   }, 30000);
+
+  it("14. Analyzer source changed while the projection was produced -> records no identity and regenerates", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "helper-mid-run-14-"));
+    const analyzerRoot = await mkdtemp(join(tmpdir(), "helper-analyzer-14-"));
+    try {
+      await createHelperRepo(tempDir);
+      await createAnalyzerRoot(analyzerRoot);
+      const editDuringRun = async () => {
+        await writeFile(join(analyzerRoot, "src", "semantic", "call-graph.ts"), "export const version = 2;\n", "utf8");
+      };
+      await ensureDiscoveryProjections(tempDir, { analyzerRoot, afterAnalysis: editDuringRun });
+      expect(existsSync(join(tempDir, ".discovery", "fidelity-helper.identity"))).toBe(false);
+
+      await plantReuseCanary(tempDir);
+      await ensureDiscoveryProjections(tempDir, { analyzerRoot });
+      expect(await isProjectionReused(tempDir)).toBe(false);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+      await rm(analyzerRoot, { recursive: true, force: true });
+    }
+  }, 60000);
+});
+
+describe("Loaded analyzer identity for fidelity projections", () => {
+  const packageRoot = join(import.meta.dir, "../../..");
+
+  it("is captured by a test preload, before any test file loads the engine", async () => {
+    const bunfig = await readFile(join(packageRoot, "bunfig.toml"), "utf8");
+    const preload = /^preload\s*=\s*\[([^\]]*)\]/m.exec(bunfig)?.[1] ?? "";
+    expect(preload).toContain('"./tests/support/analyzer-identity.ts"');
+  });
+
+  it("describes the analyzer source present when the identity module loaded, not when first asked", async () => {
+    const analyzerRoot = await mkdtemp(join(tmpdir(), "helper-identity-load-"));
+    try {
+      await mkdir(join(analyzerRoot, "src"), { recursive: true });
+      await mkdir(join(analyzerRoot, "tests", "support"), { recursive: true });
+      await writeFile(join(analyzerRoot, "src", "a.ts"), "export const a = 1;\n", "utf8");
+      // A copy whose package root is this scratch analyzer: loading it is loading that analyzer.
+      const modulePath = join(analyzerRoot, "tests", "support", "analyzer-identity.ts");
+      await writeFile(modulePath, await readFile(join(packageRoot, "tests", "support", "analyzer-identity.ts")));
+      const copy = await import(pathToFileURL(modulePath).href);
+      const loaded = copy.loadedAnalyzerFingerprint;
+      expect(loaded).toBe(copy.fingerprintAnalyzerSource(analyzerRoot));
+
+      await writeFile(join(analyzerRoot, "src", "a.ts"), "export const a = 2;\n", "utf8");
+      expect(copy.fingerprintAnalyzerSource(analyzerRoot)).not.toBe(loaded);
+      expect(copy.loadedAnalyzerFingerprint).toBe(loaded);
+    } finally {
+      await rm(analyzerRoot, { recursive: true, force: true });
+    }
+  });
 });
