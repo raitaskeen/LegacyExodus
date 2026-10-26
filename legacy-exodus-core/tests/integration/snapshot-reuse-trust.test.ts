@@ -145,6 +145,30 @@ describe("F-001 snapshot reuse trust boundary", () => {
     });
   });
 
+  it("does not credit output to an analyzer build whose source changed while the analysis ran", async () => {
+    await withScratch(async (root) => {
+      const projectPath = await createProject(root, "project");
+      const environment = environmentFor(join(root, "home"));
+      const buildA = `lx-analyzer-v1:${"a".repeat(64)}`;
+      const buildB = `lx-analyzer-v1:${"b".repeat(64)}`;
+      let onDisk = buildA;
+      const engine = createEngine(environment, { analyzerFingerprint: async () => onDisk });
+      await engine.initialize();
+      try {
+        // Build A's code is loaded; the analyzer source on disk becomes build B before the run.
+        onDisk = buildB;
+        await engine.execute({ id: randomUUID(), type: "AnalyzeProject", createdAt: new Date(), payload: { projectId: randomUUID(), path: projectPath } });
+      } finally {
+        await engine.shutdown();
+      }
+
+      expect((await readManifest(projectPath)).analyzer?.fingerprint).toBeUndefined();
+      expect((await analyze(projectPath, environment, { analyzerFingerprint: async () => buildB })).isReused).toBeUndefined();
+      // Control: once a run's identity is stable, its own build reuses the snapshot.
+      expect((await analyze(projectPath, environment, { analyzerFingerprint: async () => buildB })).isReused).toBe(true);
+    });
+  });
+
   it("binds the snapshot to its canonical location so a cwd-relative path cannot select it elsewhere", async () => {
     await withScratch(async (root) => {
       const originalProject = await createProject(join(root, "a"), "proj");

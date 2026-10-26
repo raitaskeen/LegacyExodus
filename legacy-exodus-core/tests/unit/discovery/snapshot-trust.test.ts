@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { computeManifestMac, manifestKeyId, MANIFEST_MAC_ALGORITHM, verifyManifestMac, type DiscoveryManifest } from "@discovery/discovery-manifest";
 import { DiscoveryValidator } from "@discovery/discovery-validator";
@@ -244,5 +245,33 @@ describe("computeAnalyzerFingerprint", () => {
     await withScratch(async (root) => {
       expect(await computeAnalyzerFingerprint(join(root, "no-engine"))).toBeUndefined();
     });
+  });
+
+  it("identifies the loaded analyzer by the source present when it was loaded, not when first asked", async () => {
+    await withScratch(async (root) => {
+      // A copy of the module whose own package root is this scratch engine: loading it is loading that analyzer.
+      const engineRoot = await createEngineRoot(root);
+      await mkdir(join(engineRoot, "src", "runtime"), { recursive: true });
+      const modulePath = join(engineRoot, "src", "runtime", "analyzer-fingerprint.ts");
+      await writeFile(modulePath, await readFile(join(import.meta.dir, "../../../src/runtime/analyzer-fingerprint.ts")));
+      const loaded = await computeAnalyzerFingerprint(engineRoot);
+      const copy = await import(pathToFileURL(modulePath).href) as typeof import("@runtime/analyzer-fingerprint");
+
+      await writeFile(join(engineRoot, "src", "nested", "b.ts"), "export const b = 3;\n");
+
+      expect(await copy.computeAnalyzerFingerprint()).not.toBe(loaded);
+      expect(await copy.getAnalyzerFingerprint()).toBe(loaded);
+    });
+  });
+});
+
+describe("createSnapshotTrust analyzer identity", () => {
+  it("reads an injected identity once, when the trust boundary is created", async () => {
+    let calls = 0;
+    const trust = createSnapshotTrust({ analyzerFingerprint: async () => `lx-analyzer-v1:${String(++calls).repeat(64)}` });
+    expect(calls).toBe(1);
+    expect(await trust.analyzerFingerprint()).toBe(`lx-analyzer-v1:${"1".repeat(64)}`);
+    expect(await trust.analyzerFingerprint()).toBe(`lx-analyzer-v1:${"1".repeat(64)}`);
+    expect(await trust.currentAnalyzerFingerprint()).toBe(`lx-analyzer-v1:${"2".repeat(64)}`);
   });
 });

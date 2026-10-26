@@ -3,7 +3,7 @@ import { link, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
-import { getAnalyzerFingerprint } from "@runtime/analyzer-fingerprint";
+import { computeAnalyzerFingerprint, getAnalyzerFingerprint } from "@runtime/analyzer-fingerprint";
 import { LegacyExodusError } from "@shared/errors";
 
 export const SNAPSHOT_KEY_FILE_NAME = "snapshot-hmac.key";
@@ -87,19 +87,28 @@ export class SnapshotKeyStore {
 
 export interface SnapshotTrust {
   readonly keyStore: SnapshotKeyStore;
-  /** Identity of the running analyzer; `undefined` disables snapshot reuse. */
+  /** Identity of the analyzer code this process loaded; `undefined` disables snapshot reuse. */
   analyzerFingerprint(): Promise<string | undefined>;
+  /** Identity of the analyzer source on disk now; it differs from the loaded one once that source changes. */
+  currentAnalyzerFingerprint(): Promise<string | undefined>;
 }
 
 export interface SnapshotTrustOptions {
   readonly keyDirectory?: string;
+  /** Reads the analyzer identity on disk: once at creation as the loaded identity, and again on each recheck. */
   readonly analyzerFingerprint?: () => Promise<string | undefined>;
 }
 
 export function createSnapshotTrust(options: SnapshotTrustOptions = {}): SnapshotTrust {
+  const readCurrent = options.analyzerFingerprint ?? (() => computeAnalyzerFingerprint());
+  // Captured before this trust boundary can authorize or sign anything.
+  const loaded = options.analyzerFingerprint === undefined
+    ? getAnalyzerFingerprint()
+    : readCurrent().catch(() => undefined);
   return Object.freeze({
     keyStore: new SnapshotKeyStore(options.keyDirectory ?? defaultSnapshotKeyDirectory()),
-    analyzerFingerprint: options.analyzerFingerprint ?? (() => getAnalyzerFingerprint()),
+    analyzerFingerprint: () => loaded,
+    currentAnalyzerFingerprint: () => readCurrent().catch(() => undefined),
   });
 }
 

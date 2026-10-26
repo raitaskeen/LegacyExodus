@@ -179,7 +179,12 @@ export class FileDiscoveryProjectionAdapter {
     const sourceDigest = await computeWorkspaceDigest(projection.projectPath, files);
     // Reuse is bound to the physical location, never to a cwd-relative spelling.
     const canonicalProjectPath = await realpath(resolve(projection.projectPath));
-    const analyzerFingerprint = await this.trust.analyzerFingerprint();
+    // The output belongs to the analyzer this process loaded. If its source has changed since,
+    // the identity of the code that ran can no longer be stated, so none is recorded.
+    const loadedFingerprint = await this.trust.analyzerFingerprint();
+    const analyzerFingerprint = loadedFingerprint !== undefined && loadedFingerprint === await this.trust.currentAnalyzerFingerprint()
+      ? loadedFingerprint
+      : undefined;
 
     const unsignedManifest: DiscoveryManifest = {
       schemaVersion: 1,

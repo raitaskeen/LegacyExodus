@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readdir, readFile } from "node:fs/promises";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 export const ANALYZER_FINGERPRINT_PREFIX = "lx-analyzer-v1:";
@@ -11,8 +11,12 @@ const ignoredDirectories = new Set([".discovery", ".legacy-exodus", ".git", "nod
 const configurationFiles = ["package.json", "bun.lock", "tsconfig.json"] as const;
 const cachedFingerprints = new Map<string, Promise<string | undefined>>();
 
+// Read synchronously while this module loads, before any analysis can run, so the identity
+// describes the code this process loaded rather than whatever is on disk when first asked.
+cachedFingerprints.set(defaultAnalyzerRoot, Promise.resolve(fingerprintSync(defaultAnalyzerRoot)));
+
 /**
- * Identifies the analyzer build that produces analysis artifacts.
+ * Identifies the analyzer build on disk under `root` now.
  *
  * Covers every analyzer source file, the package manifest, lockfile and compiler
  * configuration, the installed versions of runtime dependencies, and the runtime
@@ -22,31 +26,13 @@ const cachedFingerprints = new Map<string, Promise<string | undefined>>();
  *   Callers must treat an unavailable fingerprint as "no reusable identity".
  */
 export async function computeAnalyzerFingerprint(root: string = defaultAnalyzerRoot): Promise<string | undefined> {
-  try {
-    const hash = createHash("sha256");
-    for (const path of await listFiles(join(root, "src"), "src")) {
-      hash.update(`file\0${path}\0${digest(await readFile(join(root, path)))}\n`);
-    }
-
-    let manifest: unknown;
-    for (const name of configurationFiles) {
-      const content = await readOptional(join(root, name));
-      hash.update(`file\0${name}\0${content === undefined ? "<absent>" : digest(content)}\n`);
-      if (name === "package.json" && content !== undefined) manifest = JSON.parse(content.toString("utf8"));
-    }
-
-    for (const dependency of runtimeDependencies(manifest)) {
-      hash.update(`dependency\0${dependency}\0${await installedVersion(root, dependency)}\n`);
-    }
-
-    hash.update(`runtime\0${typeof process.versions.bun === "string" ? `bun-${process.versions.bun}` : process.version}\n`);
-    return `${ANALYZER_FINGERPRINT_PREFIX}${hash.digest("hex")}`;
-  } catch {
-    return undefined;
-  }
+  return fingerprintSync(resolve(root));
 }
 
-/** Computes the fingerprint once per analyzer root for the life of the process. */
+/**
+ * Identity of the analyzer loaded by this process. For the default root it was read when
+ * this module loaded; another root is read once, on its first request.
+ */
 export function getAnalyzerFingerprint(root: string = defaultAnalyzerRoot): Promise<string | undefined> {
   const key = resolve(root);
   let fingerprint = cachedFingerprints.get(key);
@@ -57,12 +43,37 @@ export function getAnalyzerFingerprint(root: string = defaultAnalyzerRoot): Prom
   return fingerprint;
 }
 
-async function listFiles(directory: string, relativeDirectory: string): Promise<string[]> {
+function fingerprintSync(root: string): string | undefined {
+  try {
+    const hash = createHash("sha256");
+    for (const path of listFiles(join(root, "src"), "src")) {
+      hash.update(`file\0${path}\0${digest(readFileSync(join(root, path)))}\n`);
+    }
+
+    let manifest: unknown;
+    for (const name of configurationFiles) {
+      const content = readOptional(join(root, name));
+      hash.update(`file\0${name}\0${content === undefined ? "<absent>" : digest(content)}\n`);
+      if (name === "package.json" && content !== undefined) manifest = JSON.parse(content.toString("utf8"));
+    }
+
+    for (const dependency of runtimeDependencies(manifest)) {
+      hash.update(`dependency\0${dependency}\0${installedVersion(root, dependency)}\n`);
+    }
+
+    hash.update(`runtime\0${typeof process.versions.bun === "string" ? `bun-${process.versions.bun}` : process.version}\n`);
+    return `${ANALYZER_FINGERPRINT_PREFIX}${hash.digest("hex")}`;
+  } catch {
+    return undefined;
+  }
+}
+
+function listFiles(directory: string, relativeDirectory: string): string[] {
   const files: string[] = [];
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const relativePath = `${relativeDirectory}/${entry.name}`;
     if (entry.isDirectory()) {
-      if (!ignoredDirectories.has(entry.name)) files.push(...await listFiles(join(directory, entry.name), relativePath));
+      if (!ignoredDirectories.has(entry.name)) files.push(...listFiles(join(directory, entry.name), relativePath));
     } else if (entry.isFile()) {
       files.push(relativePath);
     }
@@ -78,9 +89,9 @@ function runtimeDependencies(manifest: unknown): string[] {
   return Object.keys(dependencies).sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
 }
 
-async function installedVersion(root: string, dependency: string): Promise<string> {
+function installedVersion(root: string, dependency: string): string {
   try {
-    const manifest: unknown = JSON.parse(await readFile(join(root, "node_modules", dependency, "package.json"), "utf8"));
+    const manifest: unknown = JSON.parse(readFileSync(join(root, "node_modules", dependency, "package.json"), "utf8"));
     const version = typeof manifest === "object" && manifest !== null && "version" in manifest
       ? (manifest as { readonly version: unknown }).version
       : undefined;
@@ -90,9 +101,9 @@ async function installedVersion(root: string, dependency: string): Promise<strin
   }
 }
 
-async function readOptional(path: string): Promise<Buffer | undefined> {
+function readOptional(path: string): Buffer | undefined {
   try {
-    return await readFile(path);
+    return readFileSync(path);
   } catch (error: unknown) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
     throw error;
