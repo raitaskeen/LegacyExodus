@@ -198,6 +198,9 @@ export class LegacyExodusEngine {
             discovery: execution.discovery,
             analysis: execution.analysis,
             ...(execution.isReused === true ? { isReused: true } : {}),
+            ...(execution.isReused === true && execution.snapshotAnalysisRunId !== undefined
+              ? { snapshotAnalysisRunId: execution.snapshotAnalysisRunId }
+              : {}),
           };
         }
       }
