@@ -336,12 +336,20 @@ export interface AuditFinding {
   readonly remediation?: string;
 }
 
+export interface AuditCheckResult {
+  readonly id: string;
+  readonly name: string;
+  readonly passed: boolean;
+  readonly evidence: string;
+}
+
 export interface BenchmarkAuditReport {
   readonly auditedAt: string;
   readonly engineSha: string;
   readonly totalChecks: number;
   readonly passedChecks: number;
   readonly failedChecks: number;
+  readonly checks: readonly AuditCheckResult[];
   readonly findings: readonly AuditFinding[];
   readonly verdict: "PASS" | "PASS_WITH_CONDITIONS" | "NO_GO";
 }

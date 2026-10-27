@@ -367,7 +367,7 @@ export class HelpPresenter {
       this.theme.heading("VERIFICATION GATES"),
       `  ${this.theme.active("1. Static Typecheck".padEnd(28, " "))}  ${this.theme.text("Zero TypeScript compiler errors (tsc --noEmit)")}`,
       `  ${this.theme.active("2. Test Suite".padEnd(28, " "))}  ${this.theme.text("All unit, integration, and architecture test suites")}`,
-      `  ${this.theme.active("3. Benchmark Governance".padEnd(28, " "))}  ${this.theme.text("10-point benchmark system self-audit")}`,
+      `  ${this.theme.active("3. Benchmark Governance".padEnd(28, " "))}  ${this.theme.text("Benchmark system self-audit; every governed check must pass")}`,
       `  ${this.theme.active("4. Working Tree Hygiene".padEnd(28, " "))}  ${this.theme.text("Git diff whitespace and file hygiene check")}`,
     ].join("\n");
 
