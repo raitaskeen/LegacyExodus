@@ -6,14 +6,14 @@ This branch preserves raw evidence and handoff notes from the audit remediation 
 
 | Finding | PR | Head | State |
 |---|---|---|---|
-| F-001 snapshot reuse trust | #198 | `7e72c92` | Review fix pushed for the red-team FAIL on `140ec83`. **Needs independent re-review**, then merges first. |
-| Fidelity helper identity | #199 | `51221a3` | Review fix pushed for the red-team FAIL on `521b86e`. **Needs independent re-review**. Merges after #198 and #200. Both #198 and #199 add a `preload` line to `bunfig.toml`; combine them into one list when updating #199 onto `main`. |
-| F-002 call resolution | #200 | `ca568f2` | Review fix pushed: all 24 counterexamples from the red team on `efe425a` are closed. **Needs independent re-review**. Merges after #198. |
+| F-001 snapshot reuse trust | #198 | merged `f43fe7f` | **Merged** 2026-10-27 after independent re-review PASS (basic depth). |
+| Fidelity helper identity | #199 | merged `35312b9` | **Merged** 2026-10-27 after independent re-review PASS (basic depth). |
+| F-002 call resolution | #200 | merged `fcb3797` | **Merged** 2026-10-27 after independent re-review PASS (basic depth). |
 | F-003 CFG loop headers + dominators | #201 (draft) | `7153b83` | Candidate with the option-A dominator fix. **Needs independent review.** |
 | F-010 benchmark audit gate | #202 (draft) | `12a2d13` | Candidate. **Needs independent review**, plus a docs follow-up for the "10/10" claims. |
 | F-004 DFG loops/switch/try | none | none | Design stage. Reproduced: 23 of 27 programs miss a real taint flow on `af48a64` (`f004-design/`). The user approved option B (structured joins in `data-flow-builder.ts`), which is not yet implemented. |
 
-Merge order: #198 → #200 → #199. #201 and #202 touch none of their files. Each merge requires an independent red-team PASS on the exact head, per `.agents/`.
+#198, #200 and #199 are merged into `main` (head `35312b9`), in that order. Each was updated onto the latest `main` and passed the required CI before merging. #201 and #202 remain drafts: their independent review could not start because the machine had too little disk space. Retry it, then update each onto `main` and merge.
 
 ## Layout
 
