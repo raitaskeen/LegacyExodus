@@ -96,11 +96,15 @@ export class DeterministicCallGraphBuilder {
           const isShadowed = isLexicallyShadowed(calleeName, nextContext, fileSymbols);
           const imported = isShadowed
             ? undefined
-            : fileSymbols.firstImportByName.get(calleeName);
+            : visibleImport(fileSymbols, calleeName, nextContext.scope);
           const importTarget = imported === undefined ? undefined : targetByImportId.get(imported.id);
-          const targetSymbolId = imported === undefined
-            ? resolveLocalCall(table, fileSymbols, calleeName, nextContext, tablesByPath, this.resolver, node)
-            : isRebound(fileSymbols, MODULE_SCOPE_ID, calleeName) || isUnstableTarget(fileSymbols, importTarget) ? undefined : importTarget;
+          // `f.call(…)`, `f.apply(…)` and `f.bind(…)(…)` are resolved as `f`; that holds only while those properties are the builtins.
+          const invokesThroughWrittenProperty = invokerProperties(node).some((name) => propertyWriteCount(fileSymbols, name) > 0);
+          const targetSymbolId = invokesThroughWrittenProperty
+            ? undefined
+            : imported === undefined
+              ? resolveLocalCall(table, fileSymbols, calleeName, nextContext, tablesByPath, this.resolver, node)
+              : isRebound(fileSymbols, MODULE_SCOPE_ID, calleeName) || isUnstableTarget(fileSymbols, importTarget) ? undefined : importTarget;
           const id = hash(`${ast.metadata.sourcePath}:${nextContext.callerName}:${calleeName}:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`);
           const resolutionState = targetSymbolId === undefined ? "UNRESOLVED" as const : "RESOLVED" as const;
           const reference: SymbolReference = { id: hash(`reference:${id}`), filePath: ast.metadata.sourcePath, name: calleeName, kind: "call", resolutionState, ...(targetSymbolId === undefined ? {} : { resolvedSymbolId: targetSymbolId }) };
@@ -158,6 +162,25 @@ interface FileSymbolIndex {
   readonly writes: BindingWrites;
   /** Export symbols (of any module) whose value can change after definition. */
   readonly unstableExportIds: ReadonlySet<string>;
+  readonly classes: ClassFacts;
+}
+
+/** Class structure read from the AST; the symbol table also files nested object literal methods under a class. */
+interface ClassFacts {
+  /** Declaration node of each class symbol. */
+  readonly nodes: ReadonlyMap<string, ASTNode>;
+  /** Class symbols that a decorator may replace. */
+  readonly decorated: ReadonlySet<string>;
+  /** Methods declared directly in a class body, by declaration anchor. */
+  readonly members: ReadonlyMap<string, ClassMemberFact>;
+}
+
+interface ClassMemberFact {
+  readonly classNode: ASTNode;
+  readonly isStatic: boolean;
+  /** `method`, `get`, `set` or `constructor`; `field` for a field initialized with a function. */
+  readonly kind: string;
+  readonly decorated: boolean;
 }
 
 /**
@@ -186,6 +209,8 @@ interface BindingWrites {
   readonly callSites: ReadonlyMap<ASTNode, ExecutionSite>;
   /** Frame (with its enclosing frames) for each scope id, to resolve names as seen from a symbol's scope. */
   readonly scopeFrames: ReadonlyMap<string, ScopeFrame>;
+  /** Binding keys whose declaration the symbol table places in the wrong scope (see collectUnscopedBindings). */
+  readonly unscopedBindings: ReadonlySet<string>;
 }
 
 interface SourcePoint {
@@ -218,6 +243,8 @@ const loopStatements = new Set(["ForStatement", "ForInStatement", "ForOfStatemen
 interface ScopeFrame {
   readonly id: string;
   readonly parent?: ScopeFrame;
+  /** Name a named function or class expression binds to itself, visible only inside it. */
+  readonly selfName?: string;
 }
 
 interface ResolutionContext {
@@ -229,8 +256,27 @@ interface ResolutionContext {
   readonly constantBindings: ReadonlyMap<string, string | null>;
 }
 
-function createScope(id: string, parent?: ScopeFrame): ScopeFrame {
-  return Object.freeze(parent === undefined ? { id } : { id, parent });
+function createScope(id: string, parent?: ScopeFrame, selfName?: string): ScopeFrame {
+  return Object.freeze({ id, ...(parent === undefined ? {} : { parent }), ...(selfName === undefined ? {} : { selfName }) });
+}
+
+function createsScope(node: ASTNode): boolean {
+  return node.type === "BlockStatement" || isCallable(node) || node.type === "CatchClause" || isLoop(node);
+}
+
+/**
+ * Frame in which `node`'s own code runs. A named function or class expression binds its name
+ * in a frame of its own between the enclosing frame and its body, where parameters and body
+ * declarations can still shadow it. Frame ids match the symbol extractor's scope ids.
+ */
+function frameFor(node: ASTNode, enclosing: ScopeFrame): ScopeFrame {
+  const selfName = node.type === "FunctionExpression" || node.type === "ClassExpression"
+    ? identifier(node.children.find((child) => child.role === "id"))
+    : undefined;
+  const outer = selfName === undefined
+    ? enclosing
+    : createScope(`self:${node.type}:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`, enclosing, selfName);
+  return createsScope(node) ? createScope(createLexicalScopeId(node.type, node.location), outer) : outer;
 }
 
 function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult, unstableExportIds: ReadonlySet<string>): FileSymbolIndex {
@@ -239,6 +285,7 @@ function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult, u
   const firstImportByName = new Map<string, CodeSymbol>();
   const classByLocation = new Map<string, CodeSymbol>();
   const byAnchor = new Map<string, CodeSymbol[]>();
+  const classSymbols: CodeSymbol[] = [];
 
   for (const symbol of table?.symbols ?? []) {
     const anchor = declarationAnchor(symbol.location);
@@ -263,6 +310,7 @@ function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult, u
     }
 
     if (symbol.kind === "class" && symbol.location !== undefined) {
+      classSymbols.push(symbol);
       const key = symbolLocationKey(symbol.location.start.line, symbol.location.start.column);
       if (!classByLocation.has(key)) {
         classByLocation.set(key, symbol);
@@ -273,7 +321,89 @@ function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult, u
   const lexicalBindings = createLexicalBindingIndex(ast, table, byAnchor, byScopeAndName);
   const declarationsByScopeAndName = bindingDeclarations(byScopeAndName, ast.root);
   const writes = collectBindingWrites(ast.root, declarationsByScopeAndName);
-  return Object.freeze({ byScopeAndName, declarationsByScopeAndName, byName, firstImportByName, classByLocation, lexicalBindings, writes, unstableExportIds });
+  const classes = collectClassFacts(ast.root, classSymbols);
+  return Object.freeze({ byScopeAndName, declarationsByScopeAndName, byName, firstImportByName, classByLocation, lexicalBindings, writes, unstableExportIds, classes });
+}
+
+function collectClassFacts(root: ASTNode, symbols: readonly CodeSymbol[]): ClassFacts {
+  const classNodes = new Map<string, ASTNode>();
+  const members = new Map<string, ClassMemberFact>();
+  const isDecorated = (node: ASTNode): boolean => node.children.some((child) => child.role === "decorators");
+  const visit = (node: ASTNode): void => {
+    if (node.type === "ClassDeclaration" || node.type === "ClassExpression") {
+      const anchor = declarationAnchor(node.location);
+      if (anchor !== undefined) classNodes.set(anchor, node);
+      for (const element of node.children.find((child) => child.type === "ClassBody")?.children ?? []) {
+        const elementAnchor = declarationAnchor(element.location);
+        if (elementAnchor === undefined) continue;
+        if (element.type === "ClassMethod" || element.type === "ClassPrivateMethod") {
+          members.set(elementAnchor, { classNode: node, isStatic: element.attributes.static === true, kind: String(element.attributes.kind ?? "method"), decorated: isDecorated(element) });
+        } else if (classFieldTypes.has(element.type)) {
+          const value = element.children.find((child) => child.role === "value");
+          if (value?.type === "ArrowFunctionExpression" || value?.type === "FunctionExpression") {
+            members.set(elementAnchor, { classNode: node, isStatic: element.attributes.static === true, kind: "field", decorated: isDecorated(element) });
+          }
+        }
+      }
+    }
+    for (const child of node.children) visit(child);
+  };
+  visit(root);
+  const nodes = new Map<string, ASTNode>();
+  const decorated = new Set<string>();
+  for (const symbol of symbols) {
+    const node = symbol.kind === "class" ? classNodes.get(declarationAnchor(symbol.location) ?? "") : undefined;
+    if (node === undefined) continue;
+    nodes.set(symbol.id, node);
+    if (isDecorated(node)) decorated.add(symbol.id);
+  }
+  return Object.freeze({ nodes, decorated, members });
+}
+
+/**
+ * Whether `method` is a plain method, or a field initialized with a function, declared in the
+ * body of class `classId`: not a getter or setter, not decorated in a class no decorator
+ * replaces, and static or not as `isStatic` asks.
+ */
+function isClassBodyMethod(index: FileSymbolIndex, method: CodeSymbol, classId: string, isStatic: boolean | undefined): boolean {
+  const classNode = index.classes.nodes.get(classId);
+  const fact = index.classes.members.get(declarationAnchor(method.location) ?? "");
+  return classNode !== undefined && fact !== undefined && fact.classNode === classNode && (fact.kind === "method" || fact.kind === "field") && !fact.decorated
+    && !index.classes.decorated.has(classId) && (isStatic === undefined || fact.isStatic === isStatic);
+}
+
+/** Property writes a class member makes itself: a field writes its name once; a method none. */
+function ownPropertyWrites(index: FileSymbolIndex, member: CodeSymbol): number {
+  return index.classes.members.get(declarationAnchor(member.location) ?? "")?.kind === "field" ? 1 : 0;
+}
+
+/**
+ * Whether `new C()` yields an instance of C: neither C nor any base class returns another
+ * object from its constructor, and every base class is a class this file declares.
+ */
+function constructsInstance(index: FileSymbolIndex, classId: string, seen: Set<string> = new Set()): boolean {
+  const node = index.classes.nodes.get(classId);
+  if (node === undefined || seen.has(classId) || index.classes.decorated.has(classId)) return false;
+  seen.add(classId);
+  const body = node.children.find((child) => child.type === "ClassBody");
+  const constructor = body?.children.find((child) => child.type === "ClassMethod" && child.attributes.kind === "constructor");
+  if (constructor !== undefined && returnsValue(constructor, true)) return false;
+  const superClass = node.children.find((child) => child.role === "superClass");
+  if (superClass === undefined) return true;
+  const superName = superClass.type === "Identifier" ? identifier(superClass) : undefined;
+  const classSymbol = (index.byName.get(nodeName(node) ?? "") ?? []).find((symbol) => symbol.id === classId);
+  const declaredIn = classSymbol?.scopeId === undefined ? undefined : index.writes.scopeFrames.get(classSymbol.scopeId);
+  const frame = superName === undefined || declaredIn === undefined ? undefined : declaredBindingFrame(index, superName, declaredIn);
+  if (superName === undefined || frame === undefined || isRebound(index, frame.id, superName)) return false;
+  const declared = index.declarationsByScopeAndName.get(lexicalBindingKey(frame.id, superName)) ?? [];
+  return declared.length === 1 && declared[0]?.kind === "class" && constructsInstance(index, declared[0].id, seen);
+}
+
+/** Whether a `return` with a value runs in this function's own body. */
+function returnsValue(node: ASTNode, isRoot = false): boolean {
+  if (!isRoot && (isCallable(node) || node.type === "ClassDeclaration" || node.type === "ClassExpression")) return false;
+  if (node.type === "ReturnStatement" && node.children.some((child) => child.role === "argument")) return true;
+  return node.children.some((child) => returnsValue(child));
 }
 
 /**
@@ -392,10 +522,11 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
 
   const bindingKeyAt = (name: string, scope: ScopeFrame): string => {
     for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
-      if ((byScopeAndName.get(lexicalBindingKey(current.id, name)) ?? []).length > 0) return bindingWriteKey(current.id, name);
+      if ((byScopeAndName.get(lexicalBindingKey(current.id, name)) ?? []).length > 0 || current.selfName === name) return bindingWriteKey(current.id, name);
     }
     return bindingWriteKey(scope.id, name);
   };
+  const unscopedBindings = collectUnscopedBindings(root, bindingKeyAt);
   const recordSite = (sitesByKey: Map<string, WriteSite[]>, key: string, site: ASTNode, walk: WriteWalk, constructed?: WriteSite["constructed"]): void => {
     const sites = sitesByKey.get(key) ?? [];
     sitesByKey.set(key, sites);
@@ -448,8 +579,22 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
         const key = bindingKeyAt(name, walk.scope);
         reboundBindings.add(key);
         recordWrite(key, site, walk, constructed);
+        if (unscopedBindings.has(key)) {
+          // The binding found here may really be out of scope, so the write may reach any outer same-named binding.
+          for (let current = walk.scope.parent; current !== undefined; current = current.parent) {
+            reboundBindings.add(bindingWriteKey(current.id, name));
+            recordWrite(bindingWriteKey(current.id, name), site, walk);
+          }
+        }
         return;
       }
+      case "TSAsExpression":
+      case "TSSatisfiesExpression":
+      case "TSNonNullExpression":
+      case "TSTypeAssertion":
+      case "ParenthesizedExpression":
+        write(target.children.find((child) => child.role === "expression"), site, walk, constructed);
+        return;
       case "MemberExpression":
       case "OptionalMemberExpression": {
         const name = memberPropertyName(target);
@@ -483,9 +628,7 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
   };
 
   const visit = (node: ASTNode, walk: WriteWalk, parent: ASTNode | undefined): void => {
-    const scope = node.type === "BlockStatement" || isCallable(node) || node.type === "CatchClause" || isLoop(node)
-      ? createScope(createLexicalScopeId(node.type, node.location), walk.scope)
-      : walk.scope;
+    const scope = frameFor(node, walk.scope);
     if (!scopeFrames.has(scope.id)) scopeFrames.set(scope.id, scope);
     // Functions and class element initializers run whenever they are invoked, not in place.
     const opensContext = isCallable(node) || classElementContexts.has(node.type);
@@ -526,7 +669,13 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
     if (node.type === "AssignmentExpression") {
       const left = node.children.find((child) => child.role === "left");
       const constructed = node.attributes.operator === "=" ? constructedBy(node.children.find((child) => child.role === "right"), scope) : undefined;
-      write(left, node, walk, left?.type === "Identifier" ? constructed : undefined);
+      // `&&=`, `||=` and `??=` store only when the current value lets them.
+      const logical = ["&&=", "||=", "??="].includes(String(node.attributes.operator));
+      write(left, node, logical ? { ...walk, unconditional: false } : walk, left?.type === "Identifier" ? constructed : undefined);
+    }
+    if (classFieldTypes.has(node.type)) {
+      // A field is an own property of every instance (or of the class, if static): it hides a method of that name.
+      writeProperty(classElementName(node));
     }
     if (node.type === "UpdateExpression") write(node.children.find((child) => child.role === "argument"), node, walk);
     if (node.type === "ForInStatement" || node.type === "ForOfStatement") {
@@ -570,7 +719,60 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
     }
   };
   visit(root, { scope: createScope(MODULE_SCOPE_ID), contextId: MODULE_SCOPE_ID, loopIds: [], unconditional: true }, undefined);
-  return Object.freeze({ reboundBindings, propertyWrites, unknownPropertyWrites, propertyWriteSites, declaredValues, writeSites, declaringContext, callSites, scopeFrames });
+  return Object.freeze({ reboundBindings, propertyWrites, unknownPropertyWrites, propertyWriteSites, declaredValues, writeSites, declaringContext, callSites, scopeFrames, unscopedBindings });
+}
+
+const classFieldTypes = new Set(["ClassProperty", "ClassPrivateProperty", "PropertyDefinition", "ClassAccessorProperty"]);
+
+/**
+ * Binding keys of declarations whose real scope the symbol table does not model, so a name
+ * resolved to them may mean another binding: lexical declarations in a switch case or a class
+ * static block (recorded in the enclosing scope), and `var` or function declarations in a
+ * function with parameter expressions (which see the parameter scope, not the body).
+ */
+function collectUnscopedBindings(root: ASTNode, bindingKeyAt: (name: string, scope: ScopeFrame) => string): ReadonlySet<string> {
+  const unscoped = new Set<string>();
+  const declaredNames = (statement: ASTNode, includeVar: boolean): string[] => {
+    if (statement.type === "VariableDeclaration" && (includeVar || statement.attributes.kind !== "var")) {
+      return statement.children.filter((child) => child.role === "declarations").flatMap((declarator) => extractBoundNames(declarator.children.find((child) => child.role === "id")));
+    }
+    if (statement.type === "FunctionDeclaration" || statement.type === "ClassDeclaration") {
+      const name = nodeName(statement);
+      return name === undefined ? [] : [name];
+    }
+    return [];
+  };
+  const functionScopedNames = (node: ASTNode): string[] => {
+    const names: string[] = [];
+    const visit = (current: ASTNode): void => {
+      if (current !== node && (isCallable(current) || current.type === "ClassDeclaration" || current.type === "ClassExpression")) {
+        if (current.type === "FunctionDeclaration") names.push(...declaredNames(current, true));
+        return;
+      }
+      if (current.type === "VariableDeclaration" && current.attributes.kind === "var") names.push(...declaredNames(current, true));
+      for (const child of current.children) visit(child);
+    };
+    for (const child of node.children.filter((candidate) => candidate.role === "body")) visit(child);
+    return names;
+  };
+  const visit = (node: ASTNode, scope: ScopeFrame): void => {
+    const inner = frameFor(node, scope);
+    if (node.type === "SwitchCase" || node.type === "StaticBlock") {
+      for (const statement of node.children.filter((child) => child.role === "consequent" || child.role === "body")) {
+        for (const name of declaredNames(statement, false)) unscoped.add(bindingKeyAt(name, inner));
+      }
+    }
+    if (isCallable(node) && node.children.some((child) => (child.role === "params" || child.role === "param") && hasParameterExpression(child))) {
+      for (const name of functionScopedNames(node)) unscoped.add(bindingKeyAt(name, inner));
+    }
+    for (const child of node.children) visit(child, inner);
+  };
+  visit(root, createScope(MODULE_SCOPE_ID));
+  return unscoped;
+}
+
+function hasParameterExpression(node: ASTNode): boolean {
+  return node.type === "AssignmentPattern" || (node.type === "ObjectProperty" && node.attributes.computed === true) || node.children.some(hasParameterExpression);
 }
 
 const reflectiveWriters = new Set([
@@ -612,6 +814,14 @@ function memberPropertyName(member: ASTNode): string | undefined {
     return name === undefined ? undefined : `#${name}`;
   }
   return identifier(property);
+}
+
+/** Name of a class member or field: `#name` for private names. */
+function classElementName(element: ASTNode): string | undefined {
+  const key = element.children.find((child) => child.role === "key");
+  if (key?.type !== "PrivateName") return propertyKeyName(element);
+  const name = identifier(key);
+  return name === undefined ? undefined : `#${name}`;
 }
 
 function propertyKeyName(property: ASTNode): string | undefined {
@@ -695,11 +905,16 @@ function provenReceiverClass(index: FileSymbolIndex, receiver: string, context: 
 
 /**
  * Frame that declares `name` as seen from `scope`. Undeclared (global) names have none:
- * any script can write them, so no value-derived target through them is proven.
+ * any script can write them, so no value-derived target through them is proven. Neither
+ * has a function or class expression's own name, nor a declaration the symbol table places
+ * in the wrong scope: what such a name holds there is not modeled.
  */
 function declaredBindingFrame(index: FileSymbolIndex, name: string, scope: ScopeFrame): ScopeFrame | undefined {
   for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
-    if ((index.declarationsByScopeAndName.get(lexicalBindingKey(current.id, name)) ?? []).length > 0) return current;
+    if (current.selfName === name) return undefined;
+    if ((index.declarationsByScopeAndName.get(lexicalBindingKey(current.id, name)) ?? []).length > 0) {
+      return index.writes.unscopedBindings.has(bindingWriteKey(current.id, name)) ? undefined : current;
+    }
   }
   return undefined;
 }
@@ -890,6 +1105,7 @@ function createLexicalBindingIndex(
 
 function resolveLexicalBinding(index: FileSymbolIndex, name: string, scope: ScopeFrame): LexicalResolution {
   for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
+    if (current.selfName === name) return { state: "NO_BINDING" };
     const resolution = index.lexicalBindings.get(lexicalBindingKey(current.id, name));
     if (resolution !== undefined && resolution.state !== "NO_BINDING") return resolution;
   }
@@ -950,12 +1166,10 @@ function childContext(node: ASTNode, context: ResolutionContext, index: FileSymb
   let callerName = context.callerName;
   let containerId = context.containerId;
   let containerName = context.containerName;
-  if (node.type === "BlockStatement" || isCallable(node) || node.type === "CatchClause" || isLoop(node)) {
-    scope = createScope(createLexicalScopeId(node.type, node.location), context.scope);
-  }
+  scope = frameFor(node, context.scope);
   if (isCallable(node)) callerName = nodeName(node) ?? callerName;
   if (node.type === "ClassDeclaration" || node.type === "ClassExpression") {
-    containerId = findClassSymbolId(node, context.scope, index);
+    containerId = findClassSymbolId(node, index);
     containerName = nodeName(node) ?? containerName;
   }
   if (node.type === "ClassMethod" || node.type === "ClassPrivateMethod") {
@@ -1005,20 +1219,11 @@ function childContext(node: ASTNode, context: ResolutionContext, index: FileSymb
   };
 }
 
-function findClassSymbolId(node: ASTNode, scope: ScopeFrame, index: FileSymbolIndex): string | undefined {
-  const className = nodeName(node);
-  if (className !== undefined) {
-    const candidates = (index.byName.get(className) ?? []).filter(
-      (symbol) => symbol.kind === "class" && isInScope(symbol, scope),
-    );
-    if (candidates.length === 1) return candidates[0]?.id;
-  }
+// The class's own symbol, found by location. Never by name: a class expression may share its
+// name with an unrelated class declaration (class expressions have no symbol of their own).
+function findClassSymbolId(node: ASTNode, index: FileSymbolIndex): string | undefined {
   const loc = node.location;
-  if (loc !== undefined) {
-    const candidate = index.classByLocation.get(symbolLocationKey(loc.start.line, loc.start.column));
-    if (candidate !== undefined) return candidate.id;
-  }
-  return undefined;
+  return loc === undefined ? undefined : index.classByLocation.get(symbolLocationKey(loc.start.line, loc.start.column))?.id;
 }
 
 function isCallable(node: ASTNode): boolean {
@@ -1056,6 +1261,23 @@ function collectBoundCalleeChain(calleeNode: ASTNode, context?: ResolutionContex
     current = object;
   }
   return current;
+}
+
+/** `call`, `apply` and `bind` properties that callName looks through on the way to the callee. */
+function invokerProperties(call: ASTNode): string[] {
+  const names: string[] = [];
+  for (let current = call.children.find((child) => child.role === "callee"); current !== undefined;) {
+    if (current.type === "CallExpression" || current.type === "OptionalCallExpression") {
+      current = current.children.find((child) => child.role === "callee");
+    } else if (current.type === "MemberExpression" || current.type === "OptionalMemberExpression") {
+      const name = memberPropertyName(current);
+      if (name === "call" || name === "apply" || name === "bind") names.push(name);
+      current = current.children.find((child) => child.role === "object");
+    } else {
+      break;
+    }
+  }
+  return names;
 }
 
 function callName(node: ASTNode, context: ResolutionContext, boundCallees?: Set<ASTNode>): string | undefined {
@@ -1123,6 +1345,10 @@ function extractBoundNames(node: ASTNode | undefined): string[] {
     const argument = node.children.find((child) => child.role === "argument");
     return extractBoundNames(argument);
   }
+  if (node.type === "TSParameterProperty") {
+    // `constructor(private svc)` binds svc like any other parameter.
+    return extractBoundNames(node.children.find((child) => child.role === "parameter"));
+  }
   if (node.type === "ObjectPattern") {
     const names: string[] = [];
     for (const child of node.children) {
@@ -1177,7 +1403,7 @@ function recordReceiverType(node: ASTNode, context: ResolutionContext, index: Fi
 function targetScopeForAssignment(name: string, scope: ScopeFrame, index: FileSymbolIndex): ScopeFrame {
   for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
     const candidates = index.byScopeAndName.get(lexicalBindingKey(current.id, name)) ?? [];
-    if (candidates.length > 0) {
+    if (candidates.length > 0 || current.selfName === name) {
       return current;
     }
   }
@@ -1202,6 +1428,30 @@ function predeclareScopeBindings(node: ASTNode, context: ResolutionContext): voi
       }
     }
   }
+  // Until its declarator runs, a hoisted `var` holds undefined and a `let`/`const` cannot be
+  // read, so neither may expose an outer constant of the same name to a computed key.
+  for (const name of hoistedNames(node)) {
+    (context.constantBindings as Map<string, string | null>).set(bindingKey(context.scope, name), null);
+  }
+}
+
+/** Names declared in the scope `node` opens before their declarations run. */
+function hoistedNames(node: ASTNode): string[] {
+  const declared = (declaration: ASTNode): string[] =>
+    declaration.children.filter((child) => child.role === "declarations").flatMap((declarator) => extractBoundNames(declarator.children.find((child) => child.role === "id")));
+  const names: string[] = [];
+  if (node.type === "Program" || node.type === "BlockStatement") {
+    for (const child of node.children) if (child.type === "VariableDeclaration" && child.attributes.kind !== "var") names.push(...declared(child));
+  }
+  if (node.type === "Program" || isCallable(node)) {
+    const visit = (current: ASTNode): void => {
+      if (isCallable(current) || current.type === "ClassDeclaration" || current.type === "ClassExpression") return;
+      if (current.type === "VariableDeclaration" && current.attributes.kind === "var") names.push(...declared(current));
+      for (const child of current.children) visit(child);
+    };
+    for (const child of node.children) if (node.type === "Program" || child.role === "body") visit(child);
+  }
+  return names;
 }
 
 function recordParamReceiverTypes(node: ASTNode, context: ResolutionContext): void {
@@ -1303,6 +1553,7 @@ function resolvePropertyKey(node: ASTNode | undefined, context: ResolutionContex
 
 function lookupConstant(name: string, scope: ScopeFrame, bindings: ReadonlyMap<string, string | null>): string | undefined {
   for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
+    if (current.selfName === name) return undefined;
     const entry = bindings.get(bindingKey(current, name));
     if (entry !== undefined) {
       return entry === null ? undefined : entry;
@@ -1315,16 +1566,26 @@ function bindingKey(scope: ScopeFrame, name: string): string {
   return `${scope.id}:${name}`;
 }
 
+/**
+ * The import that `name` names at `scope`. The symbol table files every `require` as a module
+ * import, even one inside a function, so the import counts only where it is the visible binding.
+ */
+function visibleImport(index: FileSymbolIndex, name: string, scope: ScopeFrame): CodeSymbol | undefined {
+  const imported = index.firstImportByName.get(name);
+  if (imported === undefined) return undefined;
+  const binding = resolveLexicalBinding(index, name, scope);
+  return binding.state === "ONE_BINDING" && binding.referenceTargets.some((target) => target.id === imported.id) ? imported : undefined;
+}
+
 function resolveNamespaceCall(
   table: SymbolTable,
   index: FileSymbolIndex,
-  receiver: string,
+  importSymbol: CodeSymbol,
   methodName: string,
   tablesByPath: ReadonlyMap<string, SymbolTable>,
   resolver: ModuleResolver,
 ): string | undefined {
-  const importSymbol = index.firstImportByName.get(receiver);
-  if (importSymbol?.moduleSpecifier === undefined) return undefined;
+  if (importSymbol.moduleSpecifier === undefined) return undefined;
   if (importSymbol.sourceSymbolName !== "*") {
     return undefined;
   }
@@ -1383,14 +1644,17 @@ function resolveLocalCall(
   // 1. Class instance receiver: a binding proven to hold `new C()` at this call (see
   //    provenReceiverClass), or `this` for private `#methods`, which can be neither
   //    overridden nor borrowed.
+  //    The instance must really be a C (constructsInstance), and the method declared in C's body.
   const classId = receiver === "this"
     ? (methodName.startsWith("#") ? context.containerId : undefined)
     : provenReceiverClass(index, receiver, context, callNode);
-  if (classId !== undefined && propertyWriteCount(index, methodName) === 0) {
+  if (classId !== undefined && (receiver === "this" || constructsInstance(index, classId))) {
     const candidates = (index.byName.get(methodName) ?? []).filter(
-      (symbol) => symbol.kind === "method" && symbol.containerId === classId,
+      (symbol) => symbol.kind === "method" && symbol.containerId === classId && isClassBodyMethod(index, symbol, classId, receiver === "this" ? undefined : false),
     );
-    if (candidates.length === 1) return candidates[0]?.id;
+    const candidate = candidates.length === 1 ? candidates[0] : undefined;
+    // No other write may replace it: a field's own initializer is the one permitted write.
+    if (candidate !== undefined && propertyWriteCount(index, methodName) === ownPropertyWrites(index, candidate)) return candidate.id;
   }
 
   // 2. Object container method (e.g. app.init after `app.init = function …`): the container
@@ -1403,15 +1667,19 @@ function resolveLocalCall(
     );
     const candidates = declared.filter((symbol) => symbol.kind === "method" || symbol.kind === "function");
     const candidate = candidates.length === 1 && declared.length === 1 ? candidates[0] : undefined;
-    // A member-assigned definition is itself the one permitted write; a class member admits none.
-    if (candidate !== undefined && propertyWriteCount(index, methodName) === (candidate.containerId === undefined ? 1 : 0)) {
-      if (candidate.containerId !== undefined || isDefinedBeforeCall(index, candidate, receiver, containerFrame, callNode)) return candidate.id;
+    // A member-assigned definition is itself the one permitted write; a class member admits none
+    // and, called on the class, must be a static method declared in its body.
+    if (candidate !== undefined && propertyWriteCount(index, methodName) === (candidate.containerId === undefined ? 1 : ownPropertyWrites(index, candidate))) {
+      if (candidate.containerId !== undefined
+        ? isClassBodyMethod(index, candidate, candidate.containerId, true)
+        : isDefinedBeforeCall(index, candidate, receiver, containerFrame, callNode)) return candidate.id;
     }
   }
 
   // 3. Imported namespace receiver (e.g. import * as api from "./api"; api.ping() or api["ping"]())
-  if (receiver !== "this" && tablesByPath !== undefined && resolver !== undefined && !isLexicallyShadowed(receiver, context, index)) {
-    const namespaceTarget = resolveNamespaceCall(table, index, receiver, methodName, tablesByPath, resolver);
+  const namespaceImport = receiver === "this" || isLexicallyShadowed(receiver, context, index) ? undefined : visibleImport(index, receiver, context.scope);
+  if (namespaceImport !== undefined && tablesByPath !== undefined && resolver !== undefined) {
+    const namespaceTarget = resolveNamespaceCall(table, index, namespaceImport, methodName, tablesByPath, resolver);
     if (namespaceTarget !== undefined) return namespaceTarget;
   }
 
@@ -1481,11 +1749,13 @@ function isDefinedOnBinding(index: FileSymbolIndex, member: CodeSymbol, receiver
 
 function nearestScoped(index: FileSymbolIndex, name: string, context: ResolutionContext): CodeSymbol | undefined {
   for (let current: ScopeFrame | undefined = context.scope; current !== undefined; current = current.parent) {
+    if (current.selfName === name) return undefined;
     const matchingSymbols = index.declarationsByScopeAndName.get(lexicalBindingKey(current.id, name)) ?? [];
+    if (matchingSymbols.length > 0 && index.writes.unscopedBindings.has(bindingWriteKey(current.id, name))) return undefined;
     const callableSymbols = matchingSymbols.filter((symbol) => symbol.kind === "function" || symbol.kind === "class");
     const nonCallableSymbols = matchingSymbols.filter((symbol) => symbol.kind !== "function" && symbol.kind !== "class");
-    // A rebound function or class binding may name another callee when the call runs.
-    if (callableSymbols.length === 1) return isRebound(index, current.id, name) ? undefined : callableSymbols[0];
+    // A rebound function or class binding may name another callee when the call runs; a decorator may replace a class.
+    if (callableSymbols.length === 1) return isRebound(index, current.id, name) || index.classes.decorated.has(callableSymbols[0]!.id) ? undefined : callableSymbols[0];
     if (callableSymbols.length > 1) return undefined;
     if (nonCallableSymbols.length > 0) return undefined;
     if (context.receiverTypes.has(receiverKey(current, name))) return undefined;
@@ -1498,7 +1768,7 @@ function isLexicallyShadowed(name: string, context: ResolutionContext, index: Fi
     if (current.id === "scope:module") {
       break;
     }
-    if (context.receiverTypes.has(receiverKey(current, name))) {
+    if (current.selfName === name || context.receiverTypes.has(receiverKey(current, name))) {
       return true;
     }
     if (context.constantBindings.has(bindingKey(current, name))) {
@@ -1508,11 +1778,6 @@ function isLexicallyShadowed(name: string, context: ResolutionContext, index: Fi
       return true;
     }
   }
-  return false;
-}
-
-function isInScope(symbol: CodeSymbol, scope: ScopeFrame): boolean {
-  for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) if (symbol.scopeId === current.id) return true;
   return false;
 }
 
