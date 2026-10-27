@@ -1,0 +1,31 @@
+fix(semantic): match container methods and receivers by binding, not name (F-002)
+
+Container-method resolution matched a definition such as `app.init = ...`
+to any call whose receiver had the same name. A parameter, block local
+or catch parameter named `app` may hold another object, so a different
+function could run:
+
+- a parameter, block or catch binding shadows the container at the call;
+- the method was defined on a same-named binding elsewhere, as with
+  fastify's `logger.child`: defined on a local null logger, called on a
+  `logger` parameter;
+- a parameter shadows a class whose static method is called.
+
+Binding lookups also took member symbols for declarations. `o.x = ...`
+or an object literal key `{ x: 1 }` inside a function made `x` look
+declared there, hiding writes to the real `x`: a receiver was proven to
+hold `new A()` while `B.m` runs. Export records likewise made `new C()`
+and `C.m()` unprovable for `export class C`.
+
+A container method now counts only when it was defined on the binding
+the call's receiver names. Binding lookups consider only symbols that
+declare a binding: imports, classes, functions and declared variables.
+
+Against 0c556c8: express 1039 -> 1039, fastify 1338 -> 1333, core
+5246 -> 5246 resolved calls; taint flows unchanged. All five lost calls
+were wrong targets: fastify route handlers' `reply.send()` resolved to
+a test stub defined on another test's local `reply`.
+
+Co-authored-by: rsexo <raitaskeen.dev@gmail.com>
+Co-authored-by: pamexo <raimrazzaq12@gmail.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

@@ -1,0 +1,6 @@
+## synthetic abrupt-tail set: base, v1, v2
+synth-base: {"oracleLoops":4,"emittedReachableLoops":7,"loopsMissingMembers":1,"missingBlocks":2,"extraReachableBlocks":0,"emittedNotOracle":3,"oracleNotEmitted":0,"idomMismatch":5,"headerIdomMismatch":2}
+   MISSING 2 labelled.js f@1:0 header@LabeledStatement:1|WhileStatement:1
+synth-cand1: {"oracleLoops":4,"emittedReachableLoops":7,"loopsMissingMembers":1,"missingBlocks":3,"extraReachableBlocks":0,"emittedNotOracle":3,"oracleNotEmitted":0,"idomMismatch":11,"headerIdomMismatch":7}
+   MISSING 3 labelled.js f@1:0 header@WhileStatement:1
+synth-cand2: {"oracleLoops":4,"emittedReachableLoops":7,"loopsMissingMembers":0,"missingBlocks":0,"extraReachableBlocks":0,"emittedNotOracle":3,"oracleNotEmitted":0,"idomMismatch":0,"headerIdomMismatch":0}

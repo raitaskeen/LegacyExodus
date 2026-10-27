@@ -1,0 +1,22 @@
+## express determinism
+base run1 cfg=3adc4f15b58d9585 run2 cfg=3adc4f15b58d9585 dfg1=2aa5d654d2673d20 dfg2=2aa5d654d2673d20
+cand1 run1 cfg=d8e9bce393f0c5d5 run2 cfg=d8e9bce393f0c5d5 dfg1=2aa5d654d2673d20 dfg2=2aa5d654d2673d20
+## fastify determinism
+base run1 cfg=f51064a94ea5df0d run2 cfg=f51064a94ea5df0d dfg1=94fa9df5675b714f dfg2=94fa9df5675b714f
+cand1 run1 cfg=63a146650715c02e run2 cfg=63a146650715c02e dfg1=94fa9df5675b714f dfg2=94fa9df5675b714f
+## express candidate v1, 3 runs
+run1 cfg=d8e9bce393f0c5d5 dfg=2aa5d654d2673d20
+run2 cfg=d8e9bce393f0c5d5 dfg=2aa5d654d2673d20
+run3 cfg=d8e9bce393f0c5d5 dfg=2aa5d654d2673d20
+## fastify candidate v1, 3 runs
+run1 cfg=63a146650715c02e dfg=94fa9df5675b714f
+run2 cfg=63a146650715c02e dfg=94fa9df5675b714f
+run3 cfg=63a146650715c02e dfg=94fa9df5675b714f
+## express candidate v2, 3 runs
+run1 cfg=1e53f7a54bfba69c dfg=2aa5d654d2673d20
+run2 cfg=1e53f7a54bfba69c dfg=2aa5d654d2673d20
+run3 cfg=1e53f7a54bfba69c dfg=2aa5d654d2673d20
+## fastify candidate v2, 3 runs
+run1 cfg=c82eaa4fd1f9d63f dfg=94fa9df5675b714f
+run2 cfg=c82eaa4fd1f9d63f dfg=94fa9df5675b714f
+run3 cfg=c82eaa4fd1f9d63f dfg=94fa9df5675b714f

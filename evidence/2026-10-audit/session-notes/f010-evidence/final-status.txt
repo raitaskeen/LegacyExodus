@@ -1,0 +1,9 @@
+ M benchmarks/audit.ts
+ M benchmarks/cli.ts
+ M benchmarks/types.ts
+ M src/cli/commands/verify.ts
+ M src/cli/presentation/help.ts
+ M src/cli/presentation/verification.ts
+?? benchmarks/fixtures/
+?? tests/unit/cli/verify-benchmark-gate.test.ts
+?? tests/unit/governance/benchmark-self-audit.test.ts

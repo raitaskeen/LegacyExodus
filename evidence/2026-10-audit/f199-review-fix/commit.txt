@@ -1,0 +1,23 @@
+test(governance): capture fidelity analyzer identity in a preload and recheck it before recording
+
+The helper read the analyzer identity when its own module was first
+evaluated. In one `bun test` process earlier test files load the engine
+long before that (about 32 s in a full run), so an engine edit in between
+was recorded as the identity of output the old code produced, and later
+runs reused that projection.
+
+- `tests/support/analyzer-identity.ts` fingerprints the analyzer when it
+  loads; bunfig.toml preloads it before any test file.
+- Before writing its record the helper fingerprints the source again and
+  writes no record if it changed during the run.
+- Case 3 now checks that Git is never consulted (its mock no longer
+  reached the helper). Case 12b checks that a missing record forces a
+  fresh run even when the engine itself would reuse its snapshot, which
+  case 12 stops proving once snapshots are authenticated.
+- Cases 4-6 get the 30 s limit the other engine-run cases already have.
+
+Found by the independent red-team review of 521b86e.
+
+Co-authored-by: rsexo <raitaskeen.dev@gmail.com>
+Co-authored-by: pamexo <raimrazzaq12@gmail.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

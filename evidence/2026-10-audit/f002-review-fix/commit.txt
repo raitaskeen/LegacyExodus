@@ -1,0 +1,46 @@
+fix(semantic): close independent review counterexamples in call resolution (F-002)
+
+An independent red-team review of efe425a ran 24 calls marked RESOLVED
+where another function runs. Each root cause is now handled in
+call-graph-builder.ts:
+
+- new C() yields a C instance only if neither C nor any base class
+  returns an object from its constructor and every base class is a
+  class this file declares.
+- Class fields count as property writes, so a field hides a method of
+  its name. A field initialized with a function is itself a target when
+  its initializer is the only write of that name.
+- f.call(), f.apply() and f.bind() are resolved as f only while no write
+  can replace those properties.
+- Only methods declared in the class body count: object literal and
+  nested class expression methods filed under the class are skipped,
+  getters and setters are not methods, and a call on the class needs a
+  static method. Decorated methods and classes are never proven.
+- Named function and class expressions bind their name in a frame of
+  their own. A class expression is never matched to a same-named class
+  declaration.
+- Declarations the symbol table files in the wrong scope (switch cases,
+  static blocks, var in functions with parameter expressions) block
+  resolution through that name. Writes past them may reach any outer
+  binding of that name.
+- A require inside a function no longer names a module-level call: an
+  import counts only where it is the visible binding.
+- A hoisted var or uninitialized let/const hides an outer constant from
+  computed keys.
+- TypeScript assignment targets (as, satisfies, !, <T>, parentheses) and
+  constructor parameter properties are recorded as writes.
+- &&=, ||= and ??= are conditional definitions.
+
+Tests: the 28 new counterexample tests fail on efe425a and pass now.
+Two existing expectations change:
+- The scaling test no longer picks the first of two same-named imports.
+- One Fastify ground-truth fact (addNewRoute.call in route.js) is now
+  conservatively UNRESOLVED, because that file writes computed keys.
+
+Against efe425a: express and core unchanged; fastify 1333 -> 1312
+resolved calls, all fn.call(this, ...) in files with computed-key
+writes; taint unchanged.
+
+Co-authored-by: rsexo <raitaskeen.dev@gmail.com>
+Co-authored-by: pamexo <raimrazzaq12@gmail.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

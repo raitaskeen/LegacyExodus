@@ -1,0 +1,9 @@
+af48a64b58046f61adf97531937f2fe60c3d7d93
+10ccd51e2bec28fded7ee2ab84f811f3f474310327eb64974c64a6163f7c40f7 *-
+afe044fe50c9e2d70cbb6d0890779e48dcc22930 benchmarks/fixtures/governance-audit.pin.json
+81529e7d1b4638113f28a8e2ffb00ad04a52bcb8 benchmarks/fixtures/governance-audit/package.json
+056e0eee68056429f99686900e6bb734279a142f benchmarks/fixtures/governance-audit/src/format.js
+69b63a1bd2d5b9dda7e1aa856bd183c5d5549baf benchmarks/fixtures/governance-audit/src/index.js
+b8a0bdbb6ee419d14bc0054ee272166eb3d87e19 benchmarks/fixtures/governance-audit/src/math.js
+cec52f16495cc2ad0ff3248263d3eafd8bcfef1f tests/unit/cli/verify-benchmark-gate.test.ts
+a7b93a2a9f5583cb37d83b09f8a0292af71314ff tests/unit/governance/benchmark-self-audit.test.ts

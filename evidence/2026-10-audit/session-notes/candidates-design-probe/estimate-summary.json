@@ -1,0 +1,153 @@
+{
+ "express": {
+  "label": "express",
+  "files": 152,
+  "classes": 0,
+  "unmatched": 21,
+  "h1": {
+   "unresolvedEvaluated": 8132,
+   "candidates": 72,
+   "byRule": {
+    "R2": 72
+   },
+   "setSize": {
+    "1": 72
+   },
+   "closedWorld": 0,
+   "openWorldReasons": {
+    "container-this-untracked": 72
+   },
+   "f002Demoted": 69,
+   "demotedRecoveredAsCandidates": 69,
+   "demotedStillUnresolvedByRule": {},
+   "demotedBaselineTargetContained": 69,
+   "demotedSingleton": 69
+  },
+  "h2": {
+   "unresolvedEvaluated": 8132,
+   "candidates": 72,
+   "byRule": {
+    "R2": 72
+   },
+   "setSize": {
+    "1": 72
+   },
+   "closedWorld": 0,
+   "openWorldReasons": {
+    "container-this-untracked": 72
+   },
+   "f002Demoted": 69,
+   "demotedRecoveredAsCandidates": 69,
+   "demotedStillUnresolvedByRule": {},
+   "demotedBaselineTargetContained": 69,
+   "demotedSingleton": 69
+  }
+ },
+ "fastify": {
+  "label": "fastify",
+  "files": 287,
+  "classes": 9,
+  "unmatched": 53,
+  "h1": {
+   "unresolvedEvaluated": 28567,
+   "candidates": 12,
+   "byRule": {
+    "R2": 10,
+    "R1": 2
+   },
+   "setSize": {
+    "1": 12
+   },
+   "closedWorld": 0,
+   "openWorldReasons": {
+    "container-this-untracked": 10,
+    "exported-class": 2
+   },
+   "f002Demoted": 22,
+   "demotedRecoveredAsCandidates": 10,
+   "demotedStillUnresolvedByRule": {
+    "R4-param-no-evidence": 12
+   },
+   "demotedBaselineTargetContained": 10,
+   "demotedSingleton": 10
+  },
+  "h2": {
+   "unresolvedEvaluated": 28567,
+   "candidates": 12,
+   "byRule": {
+    "R2": 10,
+    "R1": 2
+   },
+   "setSize": {
+    "1": 12
+   },
+   "closedWorld": 0,
+   "openWorldReasons": {
+    "container-this-untracked": 10,
+    "exported-class": 2
+   },
+   "f002Demoted": 22,
+   "demotedRecoveredAsCandidates": 10,
+   "demotedStillUnresolvedByRule": {
+    "R4-param-no-evidence": 12
+   },
+   "demotedBaselineTargetContained": 10,
+   "demotedSingleton": 10
+  }
+ },
+ "self": {
+  "label": "self",
+  "files": 289,
+  "classes": 82,
+  "unmatched": 4,
+  "h1": {
+   "unresolvedEvaluated": 18658,
+   "candidates": 499,
+   "byRule": {
+    "R1": 496,
+    "R3": 3
+   },
+   "setSize": {
+    "1": 499
+   },
+   "closedWorld": 131,
+   "openWorldReasons": {
+    "exported-class": 365,
+    "untracked-property-write": 16,
+    "prototype-access": 4,
+    "method-value-read": 2,
+    "unknown-write-value": 3
+   },
+   "f002Demoted": 495,
+   "demotedRecoveredAsCandidates": 495,
+   "demotedStillUnresolvedByRule": {},
+   "demotedBaselineTargetContained": 495,
+   "demotedSingleton": 495
+  },
+  "h2": {
+   "unresolvedEvaluated": 18658,
+   "candidates": 499,
+   "byRule": {
+    "R1": 496,
+    "R3": 3
+   },
+   "setSize": {
+    "1": 498,
+    "2": 1
+   },
+   "closedWorld": 131,
+   "openWorldReasons": {
+    "exported-class": 365,
+    "untracked-property-write": 16,
+    "prototype-access": 4,
+    "method-value-read": 2,
+    "unknown-write-value": 3
+   },
+   "f002Demoted": 495,
+   "demotedRecoveredAsCandidates": 495,
+   "demotedStillUnresolvedByRule": {},
+   "demotedBaselineTargetContained": 495,
+   "demotedSingleton": 494
+  }
+ }
+}

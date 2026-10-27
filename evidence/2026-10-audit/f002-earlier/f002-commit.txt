@@ -1,0 +1,33 @@
+fix(semantic): only resolve calls whose target is proven (F-002)
+
+RESOLVED calls feed the DFG as proven call targets, but the call graph
+resolved several shapes whose runtime target can differ:
+
+- public `this.m()` (subclass overrides, .call/.apply, borrowed methods,
+  prototype mutation, instance shadowing);
+- `x.m()` where `x` is reassigned on another branch, in a loop, in a
+  closure or after the call;
+- function, import and `require` bindings that are later reassigned;
+- object-literal container methods whose property is overwritten;
+- receivers and containers that are undeclared globals.
+
+Public `this.m()` is now UNRESOLVED; private `this.#m()` stays RESOLVED.
+A `new C()` receiver is proven only when the binding has a single write,
+or when every write is in the call's execution context, none sits in a
+loop enclosing the call, and the latest preceding write is unconditional
+and constructs C. A method property written elsewhere in the file blocks
+typed-receiver and container dispatch. Rebound and undeclared bindings
+are never resolved.
+
+Expectations that asserted RESOLVED for public `this` calls now assert
+UNRESOLVED, each with a runtime counterexample; G5 and the bind test use
+private methods to keep their original intent. Five express ground-truth
+facts on mixed-in or per-request prototypes are relabelled UNRESOLVED.
+No fidelity or benchmark threshold changed.
+
+Must merge after #198: without its analyzer fingerprint, snapshots
+written by the previous analyzer would still be reused unchanged.
+
+Co-authored-by: rsexo <raitaskeen.dev@gmail.com>
+Co-authored-by: pamexo <raimrazzaq12@gmail.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

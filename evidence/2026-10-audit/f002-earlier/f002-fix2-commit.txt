@@ -1,0 +1,36 @@
+fix(semantic): close review counterexamples in proven call resolution (F-002)
+
+A red-team review of the F-002 candidate found programs where a call was
+still RESOLVED while a different function runs:
+
+- `this.#m()` after `this.#m = ...`: private-name writes were recorded
+  without their `#`, so the private-method check never saw them.
+- `new C()` where a parameter or local binding shadows class C: the class
+  was matched by name among visible classes, not the nearest declaration.
+- Methods replaced through `obj["m"] =`, `this["m"] =`, dynamic keys,
+  `delete`, `Object.assign`/`defineProperty`/`setPrototypeOf`, `Reflect`
+  writers, or an aliased `Object` writer.
+- Imports of a function that its own module reassigns (live ES bindings,
+  namespace members, re-exports, aliased exports), and CommonJS modules
+  that assign `module.exports` twice.
+- A function reassigned to another function from a nested scope: the
+  extractor's symbol for `f = () => ...` was taken for a new declaration,
+  hiding the write. Found while fixing the import case; `statusColor` in
+  the CLI shell was resolved this way.
+
+Writes now record `#name` for private members, static computed keys,
+deletions and statically keyed Object/Reflect writes. A write whose
+property name is unknown blocks public-method dispatch in that file;
+private names stay provable. `new C()` proves C only when the nearest
+declaration of C is that class and is never rebound. A first pass over
+each module records exports whose value can change, and imports or
+namespace members resolving to them stay UNRESOLVED. Binding lookups
+skip assigned-function symbols.
+
+Against 7424525: express 1040 -> 1039, fastify 1339 -> 1338, core
+5251 -> 5246 resolved calls; taint flows unchanged. Two of the seven
+lost calls were wrong targets.
+
+Co-authored-by: rsexo <raitaskeen.dev@gmail.com>
+Co-authored-by: pamexo <raimrazzaq12@gmail.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

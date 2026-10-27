@@ -1,0 +1,12 @@
+import { join } from "node:path";
+const root = process.argv[2]!;
+const { DeterministicDependencyGraphBuilder } = await import(join(root, "src/graph/index.ts"));
+const { JavaScriptParser } = await import(join(root, "src/parser/index.ts"));
+const { DeterministicSemanticAnalysisEngine } = await import(join(root, "src/semantic/index.ts"));
+const { JavaScriptSymbolExtractor } = await import(join(root, "src/symbols/index.ts"));
+const src = `class C { m() {} }\nconst c = new C(); c.m();`;
+const file = { id: "main.js", path: "main.js", language: "javascript", size: src.length };
+const ast = (await new JavaScriptParser().parse({ file, source: src })).result!;
+const table = new JavaScriptSymbolExtractor().extract(ast);
+const analysis = new DeterministicSemanticAnalysisEngine().analyze({ astResults: [ast], dependencyGraph: new DeterministicDependencyGraphBuilder().build([table], [file]), symbolTables: [table] });
+console.log(JSON.stringify(analysis.calls[0], null, 1).slice(0, 900));

@@ -1,0 +1,24 @@
+fix(discovery): capture analyzer identity at load and recheck it before signing (F-001)
+
+The analyzer fingerprint was computed lazily, on first request. Without a
+reusable snapshot the first request came at projection time, after the
+whole analysis, so a snapshot produced by the loaded code was signed with
+the identity of whatever source was on disk at the end of the run. An
+engine edit during a run was then skipped silently: the next run with the
+edited analyzer reused output the old code produced.
+
+- The fingerprint of the running analyzer is read synchronously while
+  its module loads, before any analysis can run, and validation uses it.
+- An injected identity is read once, when the trust boundary is created.
+- Before signing, the source is fingerprinted again. If it changed during
+  the run, the manifest records no analyzer identity, so no build reuses
+  the snapshot.
+
+Residual window: an edit between loading the engine's modules and
+evaluating the fingerprint module, which happens during process startup.
+
+Found by the independent red-team review of 140ec83.
+
+Co-authored-by: rsexo <raitaskeen.dev@gmail.com>
+Co-authored-by: pamexo <raimrazzaq12@gmail.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

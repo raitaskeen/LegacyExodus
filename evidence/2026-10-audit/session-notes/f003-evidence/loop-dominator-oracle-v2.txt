@@ -1,0 +1,11 @@
+## base vs v1 vs v2 vs protoA
+base-express-1: {"oracleLoops":39,"emittedReachableLoops":39,"loopsMissingMembers":0,"missingBlocks":0,"extraReachableBlocks":0,"emittedNotOracle":0,"oracleNotEmitted":0,"idomMismatch":39,"headerIdomMismatch":1}
+cand1-express-1: {"oracleLoops":39,"emittedReachableLoops":39,"loopsMissingMembers":0,"missingBlocks":0,"extraReachableBlocks":0,"emittedNotOracle":0,"oracleNotEmitted":0,"idomMismatch":40,"headerIdomMismatch":2}
+cand2-express-1: {"oracleLoops":39,"emittedReachableLoops":39,"loopsMissingMembers":0,"missingBlocks":0,"extraReachableBlocks":0,"emittedNotOracle":0,"oracleNotEmitted":0,"idomMismatch":0,"headerIdomMismatch":0}
+protoA-express-1: {"oracleLoops":39,"emittedReachableLoops":39,"loopsMissingMembers":0,"missingBlocks":0,"extraReachableBlocks":0,"emittedNotOracle":0,"oracleNotEmitted":0,"idomMismatch":0,"headerIdomMismatch":0}
+base-fastify-1: {"oracleLoops":114,"emittedReachableLoops":114,"loopsMissingMembers":0,"missingBlocks":0,"extraReachableBlocks":0,"emittedNotOracle":0,"oracleNotEmitted":0,"idomMismatch":125,"headerIdomMismatch":0}
+cand1-fastify-1: {"oracleLoops":114,"emittedReachableLoops":114,"loopsMissingMembers":0,"missingBlocks":0,"extraReachableBlocks":0,"emittedNotOracle":0,"oracleNotEmitted":0,"idomMismatch":125,"headerIdomMismatch":0}
+cand2-fastify-1: {"oracleLoops":114,"emittedReachableLoops":114,"loopsMissingMembers":0,"missingBlocks":0,"extraReachableBlocks":0,"emittedNotOracle":0,"oracleNotEmitted":0,"idomMismatch":0,"headerIdomMismatch":0}
+protoA-fastify-1: {"oracleLoops":114,"emittedReachableLoops":114,"loopsMissingMembers":0,"missingBlocks":0,"extraReachableBlocks":0,"emittedNotOracle":0,"oracleNotEmitted":0,"idomMismatch":0,"headerIdomMismatch":0}
+express v2 cfg == protoA cfg: yes
+fastify v2 cfg == protoA cfg: yes

@@ -1,0 +1,32 @@
+fix(semantic): prove container methods are defined before they are called (F-002)
+
+`app.init = f` proved `app.init()` wherever the call was, but the call
+can run while app still holds another init: before the definition, on a
+path that skips it, from a function that runs first, or on an object
+that came with one (a factory result, a parameter, a literal with a
+spread or `__proto__`, an inherited Object.prototype method or class
+static).
+
+A member-assigned container method is now RESOLVED only when one of
+these holds:
+
+- the container starts as a fresh object literal (static keys only, no
+  spread or `__proto__`) or a function, and the name is not a standard
+  object or function property, so an earlier call throws;
+- the definition is unconditional and runs earlier in the call's own
+  execution context;
+- the call lies inside the defined function, which exists only once
+  the definition has run.
+
+This adds two assumptions: property assignments store their value (no
+setters, frozen objects or read-only properties), and no code adds
+properties to Object.prototype or Function.prototype.
+
+Against 0e13553: no resolved call gained, lost or retargeted in express,
+fastify or core; output is identical. The two express calls that rely
+on this rule (`app.map` in examples/route-map) are kept by the second
+and third cases.
+
+Co-authored-by: rsexo <raitaskeen.dev@gmail.com>
+Co-authored-by: pamexo <raimrazzaq12@gmail.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

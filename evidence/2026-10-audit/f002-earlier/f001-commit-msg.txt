@@ -1,0 +1,23 @@
+fix(discovery): bind snapshot reuse to analyzer, location and local key (F-001)
+
+Snapshot reuse previously trusted any self-consistent .discovery manifest:
+recorded engine identity was never compared, the repository path was resolved
+against the current working directory, and artifact hashes only proved
+consistency with a manifest stored beside them. Stale analysis from older
+engine builds, and forged or foreign snapshots, were silently reused.
+
+Reuse is now authorized only when the manifest:
+- records the canonical absolute project path being analyzed;
+- carries an HMAC-SHA256 made with a machine-local 32-byte key kept outside
+  analyzed repositories (LEGACY_EXODUS_HOME, else ~/.legacy-exodus);
+- names the running analyzer fingerprint (source, manifest, lockfile,
+  tsconfig, installed runtime dependency versions, Bun version).
+
+Snapshots that cannot be signed stay unsigned and are never reused; signing
+never fails a committed analysis. Reuse is reported by the CLI (`reused`,
+`snapshotAnalysisRunId`, and a text line only when a snapshot was reused).
+Tests run against an isolated LEGACY_EXODUS_HOME via a bun test preload.
+
+Co-authored-by: rsexo <raitaskeen.dev@gmail.com>
+Co-authored-by: pamexo <raimrazzaq12@gmail.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

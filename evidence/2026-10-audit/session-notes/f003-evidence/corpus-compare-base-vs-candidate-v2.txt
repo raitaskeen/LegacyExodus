@@ -1,0 +1,129 @@
+################ express base -> candidate v2
+## file digests (base -> candidate)
+control-flow.json      3adc4f15b58d9585 -> 1e53f7a54bfba69c DIFFERENT
+data-flow.json         2aa5d654d2673d20 -> 2aa5d654d2673d20 IDENTICAL
+dependencies.json      1a355523b5521884 -> 1a355523b5521884 IDENTICAL
+dependency-graph.json  4d36be74c06ffbce -> 4d36be74c06ffbce IDENTICAL
+files.json             47138f8676163201 -> 47138f8676163201 IDENTICAL
+frameworks.json        6a21692046ab875a -> 6a21692046ab875a IDENTICAL
+knowledge.json         1795367649e94311 -> 1795367649e94311 IDENTICAL
+manifest.json          751fc4d5965cfff3 -> e20f48fcb578e3c1 DIFFERENT
+modules.json           022b0336a4429a5a -> 022b0336a4429a5a IDENTICAL
+project.json           03384ae90a2ca2aa -> 03384ae90a2ca2aa IDENTICAL
+semantic.json          a23a75457ac5a411 -> a23a75457ac5a411 IDENTICAL
+summary.json           f75d4b9fcd7c9f41 -> f75d4b9fcd7c9f41 IDENTICAL
+symbols.json           824c9cad6da8c809 -> 824c9cad6da8c809 IDENTICAL
+
+## CFG aggregate metrics (base -> candidate, delta)
+graphs                            3415 ->      3415  +0
+blocks                            8270 ->      8337  +67
+edges                             5357 ->      5424  +67
+statements                       10005 ->     10064  +59
+loops                               39 ->        39  +0
+unreachableBlocks                   32 ->        32  +0
+deadCodeNodes                        0 ->         0  +0
+resolved                          3271 ->      3271  +0
+unsupported                        144 ->       144  +0
+entryWithIncoming                   22 ->         0  -22
+loopsContainingEntry                22 ->         0  -22
+reachableWithoutIdom                39 ->         0  -39
+loopHeadersWithoutIdom               1 ->         0  -1
+loopsOnlyFromUnreachableTails         0 ->         0  +0
+graphsWithBrokenDominatorTree         9 ->         0  -9
+headersWithExtraStatements          30 ->         0  -30
+extraStatementsInHeaders            63 ->         0  -63
+statementsInsideSomeLoop           229 ->       194  -35
+loopMemberships                    229 ->       194  -35
+
+## edge kinds
+break              21 ->       21  0
+case               36 ->       36  0
+continue            4 ->        4  0
+exception          20 ->       20  0
+false             452 ->      452  0
+loop-back          39 ->       39  0
+next             3888 ->     3955  67
+return            376 ->      376  0
+throw              69 ->       69  0
+true              452 ->      452  0
+
+## block node types whose count changed
+Identifier                        0 ->        3
+UpdateExpression                  0 ->       29
+VariableDeclaration            1938 ->     1965
+
+## graph identity: same graph ids=true, state changes=0, loop-count changes=0
+graphs whose CFG JSON changed=42; graphs containing a loop statement=36; pre-existing statements whose occurrence count changed=0
+statements added (loop clauses split out), by type: {"Identifier":3,"UpdateExpression":29,"VariableDeclaration":27}
+changed graphs with no loop statement=6
+  anonymous@53:9 examples/resource/index.js
+  header@65:13 lib/request.js
+  send@111:11 lib/response.js
+  anonymous@1163:34 lib/response.js
+  compileQueryParser@182:29 lib/utils.js
+################ fastify base -> candidate v2
+## file digests (base -> candidate)
+control-flow.json      f51064a94ea5df0d -> c82eaa4fd1f9d63f DIFFERENT
+data-flow.json         94fa9df5675b714f -> 94fa9df5675b714f IDENTICAL
+dependencies.json      a1fa72fbe7a0992a -> a1fa72fbe7a0992a IDENTICAL
+dependency-graph.json  5035e12cacd45c2f -> 5035e12cacd45c2f IDENTICAL
+files.json             d2caf6f8a0f68e4e -> d2caf6f8a0f68e4e IDENTICAL
+frameworks.json        37517e5f3dc66819 -> 37517e5f3dc66819 IDENTICAL
+knowledge.json         00004004ae862e4c -> 00004004ae862e4c IDENTICAL
+manifest.json          e0510c7825969dba -> 87a4de7eddb4cd66 DIFFERENT
+modules.json           c25f24dd47753054 -> c25f24dd47753054 IDENTICAL
+project.json           e71b018e3574aeb6 -> e71b018e3574aeb6 IDENTICAL
+semantic.json          a0c76062c1bd25c9 -> a0c76062c1bd25c9 IDENTICAL
+summary.json           167bed663a6f776d -> 167bed663a6f776d IDENTICAL
+symbols.json           a8b6cf2eff704bdc -> a8b6cf2eff704bdc IDENTICAL
+
+## CFG aggregate metrics (base -> candidate, delta)
+graphs                            8812 ->      8812  +0
+blocks                           22133 ->     22269  +136
+edges                            14885 ->     15021  +136
+statements                       32743 ->     32876  +133
+loops                              114 ->       114  +0
+unreachableBlocks                  102 ->       102  +0
+deadCodeNodes                        0 ->         0  +0
+resolved                          8606 ->      8606  +0
+unsupported                        206 ->       206  +0
+entryWithIncoming                   79 ->         0  -79
+loopsContainingEntry                79 ->         0  -79
+reachableWithoutIdom               125 ->         0  -125
+loopHeadersWithoutIdom               0 ->         0  +0
+loopsOnlyFromUnreachableTails         0 ->         0  +0
+graphsWithBrokenDominatorTree        31 ->         0  -31
+headersWithExtraStatements          90 ->         0  -90
+extraStatementsInHeaders           595 ->         0  -595
+statementsInsideSomeLoop          1013 ->       446  -567
+loopMemberships                   1030 ->       462  -568
+
+## edge kinds
+break              91 ->       91  0
+case               98 ->       98  0
+continue            8 ->        8  0
+exception         289 ->      289  0
+false            1195 ->     1195  0
+finally            16 ->       16  0
+loop-back         114 ->      114  0
+next            10576 ->    10712  136
+return           1105 ->     1105  0
+throw             198 ->      198  0
+true             1195 ->     1195  0
+
+## block node types whose count changed
+CallExpression                  505 ->      544
+Identifier                       26 ->       69
+MemberExpression                  8 ->       15
+UpdateExpression                  0 ->       22
+VariableDeclaration            5173 ->     5195
+
+## graph identity: same graph ids=true, state changes=0, loop-count changes=0
+graphs whose CFG JSON changed=130; graphs containing a loop statement=100; pre-existing statements whose occurrence count changed=0
+statements added (loop clauses split out), by type: {"Identifier":43,"MemberExpression":7,"UpdateExpression":22,"VariableDeclaration":22,"CallExpression":39}
+changed graphs with no loop statement=30
+  inject@545:2 fastify.js
+  validateLogger@60:0 lib/logger-factory.js
+  anonymous@420:28 lib/reply.js
+  prepareRoute@120:2 lib/route.js
+  findRoute@159:2 lib/route.js

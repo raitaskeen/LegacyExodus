@@ -1,0 +1,22 @@
+{"resolvedBefore":1333,"resolvedAfter":1312,"lost":21,"gained":0,"retargeted":0}
+LOST lib/route.js:147 route
+LOST lib/route.js:233 addNewRoute
+LOST lib/pluginUtils.js:152 checkDependencies
+LOST lib/route.js:237 addNewRoute
+LOST lib/route.js:240 addNewRoute
+LOST lib/pluginUtils.js:148 registerPluginName
+LOST lib/route.js:208 normalizeAndValidateMethod
+LOST lib/pluginUtils.js:151 checkDecorators
+LOST lib/pluginUtils.js:149 checkPluginHealthiness
+LOST lib/route.js:571 handleRequest
+LOST fastify.js:696 _addHook
+LOST lib/route.js:209 validateSchemaBodyOption
+LOST lib/route.js:216 validateSchemaBodyOption
+LOST lib/pluginUtils.js:150 checkVersion
+LOST lib/fourOhFour.js:132 _setNotFoundHandler
+LOST lib/route.js:414 prepareRoute
+LOST lib/route.js:245 addNewRoute
+LOST fastify.js:685 _addHook
+LOST lib/route.js:247 addNewRoute
+LOST lib/route.js:230 addNewRoute
+LOST lib/route.js:215 normalizeAndValidateMethod

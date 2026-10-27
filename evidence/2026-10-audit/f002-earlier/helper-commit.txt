@@ -1,0 +1,25 @@
+test(governance): reuse fidelity projections only from the current analyzer
+
+ensureDiscoveryProjections reused any projection whose manifest engine
+commit equalled git HEAD, or any non-empty commit when Git was
+unavailable, so uncommitted engine edits were scored against stale
+projections. When it did regenerate, it called the engine without
+`refresh`, so the engine's own snapshot reuse could return the stale
+output anyway.
+
+The helper now reuses a projection only when it wrote an identity record
+beside it holding the analyzer source fingerprint (src/** without
+.discovery, package.json, bun.lock, tsconfig.json and the Bun version)
+and the digest of the manifest it produced. Git is no longer consulted
+and regeneration always passes `refresh: true`.
+
+Cases 1 and 3 now expect reuse of a recorded projection; case 7 expects
+regeneration, because a matching HEAD alone is no longer enough. Cases
+8-13 cover a matching HEAD, uncommitted source edits, configuration
+changes, ignored .discovery output under src, a rewritten projection and
+an unreadable analyzer root. No fidelity threshold or ground-truth fact
+changed.
+
+Co-authored-by: rsexo <raitaskeen.dev@gmail.com>
+Co-authored-by: pamexo <raimrazzaq12@gmail.com>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
