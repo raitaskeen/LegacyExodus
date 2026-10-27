@@ -70,7 +70,10 @@ describe("DeterministicCallGraphBuilder symbol lookup scaling", () => {
     expect(calls[0]?.targetSymbolId).toBe("symbol:collision:function");
   });
 
-  it("preserves first-match import ordering", async () => {
+  // F-002: two imports bound to one name are ambiguous, not first-match. After
+  // `var shared = require("./first.js"); var shared = require("./second.js");`
+  // a later `shared()` runs the second module's export.
+  it("does not pick one of two imports that share a name", async () => {
     const ast = await parseSource("shared();");
     const firstImport = createSymbol(0, {
       id: "import:first",
@@ -95,8 +98,8 @@ describe("DeterministicCallGraphBuilder symbol lookup scaling", () => {
       ]),
     );
 
-    expect(calls[0]?.resolutionState).toBe("RESOLVED");
-    expect(calls[0]?.targetSymbolId).toBe("export:first");
+    expect(calls[0]?.resolutionState).toBe("UNRESOLVED");
+    expect(calls[0]?.targetSymbolId).toBeUndefined();
   });
 
   it("preserves import references when non-lexical symbols share the binding name", async () => {
@@ -153,6 +156,7 @@ function buildForFile(
     new Map([[SOURCE_PATH, table]]),
     importsByFile,
     targetByImportId,
+    new Set(),
     calls,
     references,
   );
