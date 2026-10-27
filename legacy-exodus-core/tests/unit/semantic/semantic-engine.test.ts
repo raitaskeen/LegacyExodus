@@ -175,7 +175,9 @@ describe("DeterministicSemanticAnalysisEngine", () => {
     expect(shadowedCall?.targetSymbolId).not.toBe(shadowedOuterHandle?.id);
   });
 
-  test("uses proven class construction and class context without guessing dynamic receivers", async (): Promise<void> => {
+  // F-002: only class construction proves a receiver; `this` inside invoke() is chosen by the
+  // caller (A.prototype.invoke.call(new B()) runs B's handle), so it is not a proof.
+  test("uses proven class construction without guessing class-context or dynamic receivers", async (): Promise<void> => {
     const source = `
       class A { handle() {} invoke() { return this.handle(); } }
       class B { handle() {} }
@@ -200,7 +202,7 @@ describe("DeterministicSemanticAnalysisEngine", () => {
     const calls = analysis.calls.filter((call) => call.calleeName.endsWith(".handle"));
 
     expect(aHandle?.id).toBeDefined();
-    expect(calls.filter((call) => call.calleeName === "this.handle").map((call) => call.targetSymbolId)).toEqual([aHandle?.id]);
+    expect(calls.filter((call) => call.calleeName === "this.handle").map((call) => call.targetSymbolId)).toEqual([undefined]);
     expect(calls.filter((call) => call.calleeName === "a.handle").map((call) => call.targetSymbolId)).toEqual([aHandle?.id]);
     expect(calls.filter((call) => call.calleeName === "unknown.handle").map((call) => call.targetSymbolId)).toEqual([undefined]);
     expect(calls.filter((call) => call.calleeName === "receiver.handle").map((call) => call.targetSymbolId)).toEqual([undefined]);

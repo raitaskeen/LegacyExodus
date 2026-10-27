@@ -67,22 +67,24 @@ describe("F-05: Call Graph Resolution — .bind() Receiver & Bound-Function Invo
   });
 
   // ─── Test 3: Class this.method bound invocation ──────────────────────────
+  // F-002: public this dispatch is never proven, so bind unwrapping in class context is
+  // exercised with a private method, whose target is fixed for the class's own `this`.
   it("Test 3: resolves this.method.bind() invocation within class context", async () => {
     const source = `
       class Worker {
-        process(data) { return data; }
+        #process(data) { return data; }
         run() {
-          this.process.bind(this, "payload")();
+          this.#process.bind(this, "payload")();
         }
       }
     `;
     const { analysis, symbolTable } = await analyze(source);
-    const methodSymbol = symbolTable.symbols.find((s) => s.kind === "method" && s.name === "process");
+    const methodSymbol = symbolTable.symbols.find((s) => s.kind === "method" && s.name === "#process");
     expect(methodSymbol).toBeDefined();
 
     const methodCalls = analysis.calls.filter((c) => c.targetSymbolId === methodSymbol?.id);
     expect(methodCalls).toHaveLength(1);
-    expect(methodCalls[0]?.calleeName).toBe("this.process");
+    expect(methodCalls[0]?.calleeName).toBe("this.#process");
     expect(methodCalls[0]?.callerName).toBe("run");
     expect(methodCalls[0]?.resolutionState).toBe("RESOLVED");
 
