@@ -15,6 +15,7 @@ import { semanticAnalysisPayloadSchema } from "@contracts/discovery-storage";
 import { createLegacyExodusEngine } from "@runtime/composition/services";
 import type { LegacyExodusEngine } from "@core/engine";
 import { DiscoveryValidator } from "@discovery/discovery-validator";
+import { computeManifestMac, manifestKeyId, MANIFEST_MAC_ALGORITHM, SnapshotKeyStore } from "@discovery/index";
 import { FileScanner } from "@discovery/file-scanner";
 import { DiscoveryQueryService } from "@discovery/discovery-query-service";
 import { JavaScriptParser, ParserManager, ParserRegistry } from "@parser/index";
@@ -727,10 +728,14 @@ describe("Phase 3A P0.4 — Discovery Snapshot Reuse & Invalidation", () => {
         sha256: createHash("sha256").update(malformedSemantic).digest("hex"),
         bytes: Buffer.byteLength(malformedSemantic, "utf8"),
       };
+      // F-001: re-authenticate as this machine's analyzer would, so rejection below comes from deep schema validation.
+      const key = await new SnapshotKeyStore().readKey();
+      if (key === undefined) throw new Error("Expected the fresh run to create a local snapshot key.");
+      manifest.integrity = { algorithm: MANIFEST_MAC_ALGORITHM, keyId: manifestKeyId(key), mac: computeManifestMac(manifest, key) };
       await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 
       const validator = new DiscoveryValidator();
-      expect((await validator.validate({ projectPath: testRepoDir })).status).toBe("VALID");
+      expect((await validator.validate({ projectPath: testRepoDir, authorizeReuse: true })).status).toBe("VALID");
 
       const recoveryRun = await engine.execute({
         id: randomUUID(),

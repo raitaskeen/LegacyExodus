@@ -37,6 +37,8 @@ export interface CommandExecution {
   readonly discovery?: DiscoveryResult;
   readonly analysis?: AnalysisSummary;
   readonly isReused?: boolean;
+  /** Analysis run that produced the reused snapshot, when the manifest records it. */
+  readonly snapshotAnalysisRunId?: string;
 }
 
 export interface AstStoreCleanupFailure {
@@ -110,9 +112,11 @@ export class AnalyzeProjectHandler {
     const startedAt = performance.now();
 
     if (!command.payload.refresh) {
+      // Reuse requires an authenticated snapshot of this exact location from this analyzer build.
       const validation = await this.discoveryValidator.validate({
         projectPath: command.payload.path,
         verifyFreshness: true,
+        authorizeReuse: true,
       });
       if (validation.valid && validation.manifest !== undefined && validation.validatedArtifacts !== undefined) {
         try {
@@ -345,6 +349,9 @@ export class AnalyzeProjectHandler {
             discovery,
             analysis: analysisSummary,
             isReused: true,
+            ...(validation.manifest.analysis.analysisRunId === undefined
+              ? {}
+              : { snapshotAnalysisRunId: validation.manifest.analysis.analysisRunId }),
           };
         } catch {
           // If reading or parsing snapshot failed unexpectedly, fall through to fresh discovery
