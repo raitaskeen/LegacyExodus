@@ -68,7 +68,8 @@ class FlowState {
         continue;
       }
       if (isFunction(node)) continue;
-      if (control?.potentialExceptionTarget !== undefined && hasPotentiallyThrowingEvaluation(node)) {
+      // Header loops attribute each clause's potential exception to the block that evaluates it.
+      if (control?.potentialExceptionTarget !== undefined && !hasLoopHeader(node) && hasPotentiallyThrowingEvaluation(node)) {
         this.addEdge(block, control.potentialExceptionTarget, "exception");
       }
       if (isTerminator(node)) {
@@ -87,7 +88,7 @@ class FlowState {
       if (node.type === "LabeledStatement") { block = this.buildLabeled(node, block, control); continue; }
       if (node.type === "IfStatement") { block = this.buildIf(node, block, control); continue; }
       if (node.type === "DoWhileStatement") { block = this.buildDoWhile(node, block, control); continue; }
-      if (isLoop(node)) { block = this.buildLoop(node, block, control); continue; }
+      if (isLoop(node)) { block = this.buildLoop(node, block, control, undefined, control?.potentialExceptionTarget); continue; }
       if (node.type === "SwitchStatement") { block = this.buildSwitch(node, block, control); continue; }
       if (node.type === "TryStatement") {
         block = this.buildTry(node, block, exit ?? current, control);
@@ -103,7 +104,42 @@ class FlowState {
   private buildIf(node: ASTNode, block: string, control: ControlContext | undefined): string { this.addNode(block, node); const consequent = this.createBlock(); const alternate = this.createBlock(); const join = this.createBlock(); const condition = staticBoolean(node.children.find((child) => child.role === "test")); if (condition !== false) this.addEdge(block, consequent, "true"); if (condition !== true) this.addEdge(block, alternate, "false"); const children = node.children.filter((child) => child.role === "consequent" || child.role === "alternate"); const yes = children.filter((child) => child.role === "consequent").flatMap(statementChildren); const no = children.filter((child) => child.role === "alternate").flatMap(statementChildren); this.buildStatements(yes, consequent, join, control); this.buildStatements(no, alternate, join, control); return join; }
   private buildLabeled(node: ASTNode, block: string, control: ControlContext | undefined): string { this.addNode(block, node); const label = labelName(node); const body = node.children.find((child) => child.role === "body"); if (body === undefined || label === undefined) return block; if (body.type === "DoWhileStatement") return this.buildDoWhile(body, block, control, label); if (isLoop(body)) return this.buildLoop(body, block, control, label); const after = this.createBlock(); const labels = withLabel(control?.labels, label, { breakTarget: after }); this.buildStatements(statementChildren(body), block, after, { ...control, labels }); return after; }
   private buildDoWhile(node: ASTNode, block: string, control: ControlContext | undefined, label?: string): string { const body = this.createBlock(); const conditionBlock = this.createBlock(); const after = this.createBlock(); const condition = staticBoolean(node.children.find((child) => child.role === "test")); this.addNode(block, node); this.addEdge(block, body, "next"); const labels = label === undefined ? control?.labels : withLabel(control?.labels, label, { breakTarget: after, continueTarget: conditionBlock }); const content = node.children.filter((child) => child.role === "body").flatMap(statementChildren); const last = this.buildStatements(content, body, undefined, { ...control, breakTarget: after, continueTarget: conditionBlock, labels }); if (this.block(last).terminator === undefined) this.addEdge(last, conditionBlock, "next"); if (condition !== false) this.addEdge(conditionBlock, body, "true"); if (condition !== true) this.addEdge(conditionBlock, after, "false"); return after; }
-  private buildLoop(node: ASTNode, block: string, control: ControlContext | undefined, label?: string): string { const header = block; this.addNode(header, node); const body = this.createBlock(); const after = this.createBlock(); const testNode = node.children.find((child) => child.role === "test"); const condition = node.type === "ForStatement" && testNode === undefined ? true : staticBoolean(testNode); if (condition !== false) this.addEdge(header, body, "true"); if (condition !== true) this.addEdge(header, after, "false"); const labels = label === undefined ? control?.labels : withLabel(control?.labels, label, { breakTarget: after, continueTarget: header }); const content = node.children.filter((child) => child.role === "body").flatMap(statementChildren); const last = this.buildStatements(content, body, undefined, { ...control, breakTarget: after, continueTarget: header, labels }); if (this.block(last).terminator === undefined && condition !== false) this.addEdge(last, header, "loop-back"); return after; }
+  private buildLoop(node: ASTNode, block: string, control: ControlContext | undefined, label?: string, potentialExceptionTarget?: string): string {
+    // The header holds only the loop test. Clauses evaluated once (for init, for-in/of object) stay
+    // in the pre-loop block; a for update gets its own block, which is also the continue target.
+    const once = node.children.find((child) => child.role === (node.type === "ForStatement" ? "init" : "right"));
+    const updateNode = node.type === "ForStatement" ? node.children.find((child) => child.role === "update") : undefined;
+    if (once !== undefined) this.addClause(block, once, potentialExceptionTarget);
+    const header = this.createBlock();
+    this.addEdge(block, header, "next");
+    this.addNode(header, node);
+    if (potentialExceptionTarget !== undefined && node.children.some((child) => (child.role === "test" || child.role === "left") && hasPotentiallyThrowingEvaluation(child))) {
+      this.addEdge(header, potentialExceptionTarget, "exception");
+    }
+    const body = this.createBlock();
+    const after = this.createBlock();
+    const update = updateNode === undefined ? undefined : this.createBlock();
+    const testNode = node.children.find((child) => child.role === "test");
+    const condition = node.type === "ForStatement" && testNode === undefined ? true : staticBoolean(testNode);
+    if (condition !== false) this.addEdge(header, body, "true");
+    if (condition !== true) this.addEdge(header, after, "false");
+    const continueTarget = update ?? header;
+    const labels = label === undefined ? control?.labels : withLabel(control?.labels, label, { breakTarget: after, continueTarget });
+    const content = node.children.filter((child) => child.role === "body").flatMap(statementChildren);
+    const last = this.buildStatements(content, body, undefined, { ...control, breakTarget: after, continueTarget, labels });
+    if (update !== undefined && updateNode !== undefined) {
+      if (this.block(last).terminator === undefined) this.addEdge(last, update, "next");
+      this.addClause(update, updateNode, potentialExceptionTarget);
+      if (condition !== false) this.addEdge(update, header, "loop-back");
+    } else if (this.block(last).terminator === undefined && condition !== false) {
+      this.addEdge(last, header, "loop-back");
+    }
+    return after;
+  }
+  private addClause(blockId: string, clause: ASTNode, potentialExceptionTarget: string | undefined): void {
+    this.addNode(blockId, clause);
+    if (potentialExceptionTarget !== undefined && hasPotentiallyThrowingEvaluation(clause)) this.addEdge(blockId, potentialExceptionTarget, "exception");
+  }
   private buildSwitch(node: ASTNode, block: string, control: ControlContext | undefined): string { this.addNode(block, node); const after = this.createBlock(); const cases = node.children.filter((child) => child.role === "cases"); if (cases.length === 0) { this.addEdge(block, after, "next"); return after; } const blocks = cases.map(() => this.createBlock()); const hasDefault = cases.some((candidate) => candidate.children.every((child) => child.role !== "test")); for (const [index, branch] of cases.entries()) { const caseBlock = blocks[index]; if (caseBlock === undefined) continue; this.addEdge(block, caseBlock, "case"); const last = this.buildStatements(switchCaseStatements(branch), caseBlock, undefined, { ...control, breakTarget: after, continueTarget: control?.continueTarget }); if (this.block(last).terminator === undefined) { const next = blocks[index + 1] ?? after; this.addEdge(last, next, "next"); } } if (!hasDefault) this.addEdge(block, after, "next"); return after; }
   private buildTry(node: ASTNode, block: string, exit: string, control: ControlContext | undefined): string {
     this.addNode(block, node);
@@ -340,7 +376,7 @@ class FlowState {
       successorIds: (successorsByBlock.get(block.id) ?? []).sort(),
       ...(block.terminator === undefined ? {} : { terminator: block.terminator }),
     }));
-    const dominators = calculateDominators(entry, blocks, activeEdges);
+    const dominators = calculateDominators(entry, blocks, activeEdges, reachable);
     const idomMap = new Map<string, string | undefined>();
     for (const d of dominators) {
       idomMap.set(d.blockId, d.immediateDominatorId);
@@ -445,6 +481,7 @@ function hasPotentiallyThrowingEvaluation(node: ASTNode): boolean {
 }
 function isTerminator(node: ASTNode): boolean { return node.type === "ReturnStatement" || node.type === "ThrowStatement"; }
 function isLoop(node: ASTNode): boolean { return ["WhileStatement", "DoWhileStatement", "ForStatement", "ForInStatement", "ForOfStatement"].includes(node.type); }
+function hasLoopHeader(node: ASTNode): boolean { return isLoop(node) && node.type !== "DoWhileStatement"; }
 function staticBoolean(node: ASTNode | undefined): boolean | undefined { const value = node?.attributes.value; return typeof value === "boolean" ? value : undefined; }
 function reachableBlocks(entry: string, successorsByBlock: ReadonlyMap<string, readonly string[]>): Set<string> {
   const seen = new Set<string>();
@@ -462,7 +499,7 @@ function reachableBlocks(entry: string, successorsByBlock: ReadonlyMap<string, r
   }
   return seen;
 }
-function calculateDominators(entry: string, blocks: readonly BasicBlock[], _edges: readonly ControlFlowEdge[]): readonly { readonly blockId: string; readonly immediateDominatorId?: string }[] {
+function calculateDominators(entry: string, blocks: readonly BasicBlock[], _edges: readonly ControlFlowEdge[], reachable: ReadonlySet<string>): readonly { readonly blockId: string; readonly immediateDominatorId?: string }[] {
   const count = blocks.length;
   if (count === 0) return [];
   const firstBlock = blocks[0];
@@ -485,6 +522,8 @@ function calculateDominators(entry: string, blocks: readonly BasicBlock[], _edge
     const indices: number[] = [];
     if (b !== undefined) {
       for (const predId of b.predecessorIds) {
+        // An unreachable predecessor (e.g. the empty tail after break/return) never constrains a reachable block.
+        if (reachable.has(b.id) && !reachable.has(predId)) continue;
         const idx = blockIndexById.get(predId);
         if (idx !== undefined) indices.push(idx);
       }

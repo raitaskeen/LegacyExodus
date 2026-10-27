@@ -103,7 +103,7 @@ describe("F-14: Control-Flow Finally Graph Bloat & Back-Edge Routing Integrity",
     expect(finalizerBlock).toBeDefined();
   });
 
-  it("T4: loop with continue in try-finally routes back to loop header with 0 false-positive dead nodes", async () => {
+  it("T4: loop with continue in try-finally routes through the update back to loop header with 0 false-positive dead nodes", async () => {
     const code = `
       function loopContinue() {
         for (let i = 0; i < 5; i++) {
@@ -137,11 +137,16 @@ describe("F-14: Control-Flow Finally Graph Bloat & Back-Edge Routing Integrity",
     );
     expect(continueToFinally).toBeDefined();
 
-    // Finalizer routes out to loop header with kind "continue"
-    const finalizerToHeader = cfg.edges.find(
-      (e) => e.fromBlockId === continueToFinally!.toBlockId && e.toBlockId === loop.headerBlockId && e.kind === "continue",
+    // Finalizer routes out to the for update with kind "continue" (F-003); the update loops back to the header
+    const updateBlock = cfg.blocks.find((b) => b.statements.some((s) => s.type === "UpdateExpression"));
+    expect(updateBlock).toBeDefined();
+    const finalizerToUpdate = cfg.edges.find(
+      (e) => e.fromBlockId === continueToFinally!.toBlockId && e.toBlockId === updateBlock!.id && e.kind === "continue",
     );
-    expect(finalizerToHeader).toBeDefined();
+    expect(finalizerToUpdate).toBeDefined();
+    expect(cfg.edges.filter((e) => e.fromBlockId === updateBlock!.id).map((e) => [e.toBlockId, e.kind])).toEqual([[loop.headerBlockId, "loop-back"]]);
+    expect(loop.blockIds).toContain(continueToFinally!.toBlockId);
+    expect(loop.blockIds).toContain(updateBlock!.id);
   });
 
   it("T5: loop with break in try-finally routes to loop exit with 0 false-positive dead nodes", async () => {

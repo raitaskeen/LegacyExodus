@@ -171,9 +171,19 @@ describe("F03-B omitted for-test reachability", () => {
       const loop = nodes.find((node) => node.type === "ForStatement");
       expect(loop?.children.find((node) => node.role === "init")?.type).toBe("VariableDeclaration");
       expect(loop?.children.find((node) => node.role === "update")?.type).toBe("UpdateExpression");
-      // Existing CFG represents these clauses in the loop node, not separate blocks.
+      // F-003: the init runs once in the pre-loop block; the update has its own block that loops back to the header.
       expect(header.statements.map((node) => node.type)).toEqual(["ForStatement"]);
-      expect(graph.blocks.flatMap((block) => block.statements).some((node) => node.type === "UpdateExpression")).toBe(false);
+      const holding = (type: string) => graph.blocks.filter((block) => block.statements.some((node) => node.type === type));
+      expect(holding("VariableDeclaration").map((block) => block.id)).toEqual([graph.entryBlockId]);
+      expect(graph.loops.some((loop) => loop.blockIds.includes(graph.entryBlockId))).toBe(false);
+      const updates = holding("UpdateExpression");
+      expect(updates).toHaveLength(1);
+      const update = updates[0];
+      if (update === undefined) throw new Error("Missing update block");
+      facts(graph, update, true);
+      expect(update.statements.map((node) => node.type)).toEqual(["UpdateExpression"]);
+      expect(outgoing(graph, update)).toEqual([{ toBlockId: header.id, kind: "loop-back" }]);
+      expect(graph.loops.find((loop) => loop.headerBlockId === header.id)?.blockIds).toContain(update.id);
     }
     if (scenario.id.startsWith("T18") || scenario.id.startsWith("T19")) {
       expect(graph.blocks.flatMap((block) => block.statements).some((node) => node.type === "BlockStatement")).toBe(false);
