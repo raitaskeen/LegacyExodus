@@ -27,6 +27,10 @@ export interface AnalyzeProjectReport {
   readonly enumerationFailures?: number;
   readonly discoveryComplete?: boolean;
   readonly durationMs: number;
+  /** True when results were restored from an authenticated `.discovery` snapshot instead of fresh analysis. */
+  readonly reused?: boolean;
+  /** Analysis run that produced the reused snapshot. */
+  readonly snapshotAnalysisRunId?: string;
 }
 
 export interface AnalyzeProjectOptions {
@@ -77,6 +81,10 @@ export async function analyzeProject(
       enumerationFailures: result.analysis.enumerationFailures ?? 0,
       discoveryComplete: result.analysis.discoveryComplete ?? true,
       durationMs: result.analysis.durationMs,
+      reused: result.isReused === true,
+      ...(result.isReused === true && result.snapshotAnalysisRunId !== undefined
+        ? { snapshotAnalysisRunId: result.snapshotAnalysisRunId }
+        : {}),
     };
   } finally {
     await engine.shutdown();

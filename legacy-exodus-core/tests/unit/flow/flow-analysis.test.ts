@@ -152,7 +152,8 @@ describe("control and data flow analysis", () => {
     `;
     const ast = (await new JavaScriptParser().parse({ file: { id: "labels", path: "src/labels.js", language: "javascript", size: source.length }, source })).result;
     const graph = new DeterministicControlFlowGraphBuilder().build(ast);
-    const outerHeader = graph.blocks.find((block) => block.statements.some((statement) => statement.type === "LabeledStatement"));
+    // F-003: the label is evaluated once before the loop; the outer header holds only the outer loop test.
+    const outerHeader = loopHeaders(graph)[0];
     const outerAfter = graph.edges.find((edge) => edge.fromBlockId === outerHeader?.id && edge.kind === "false")?.toBlockId;
     const breakBlock = graph.blocks.find((block) => block.terminator === "BreakStatement");
     const continueBlock = graph.blocks.find((block) => block.terminator === "ContinueStatement");

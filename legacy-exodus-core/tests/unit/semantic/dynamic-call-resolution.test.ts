@@ -146,8 +146,10 @@ describe("Milestone P1.7A — Dynamic & Intermediate Call Resolution", () => {
     expect(listenCall).toBeDefined();
   });
 
-  // ─── 5. Statically Provable this.method() Resolution ──────────────────────
-  it("Scenario 5: resolves this.defaultConfiguration against enclosing prototype methods", async () => {
+  // ─── 5. Contextual this.method() Is Not Statically Provable ──────────────
+  // F-002: app.init can run with any `this` (e.g. after being mixed into another object),
+  // so the enclosing prototype method is a candidate, not a proven target.
+  it("Scenario 5: keeps this.defaultConfiguration on an enclosing prototype UNRESOLVED", async () => {
     const files = [
       {
         path: "src/application.js",
@@ -163,7 +165,7 @@ describe("Milestone P1.7A — Dynamic & Intermediate Call Resolution", () => {
     const { calls } = await buildCallGraph(files);
     const configCall = calls.find((c) => c.calleeName === "this.defaultConfiguration");
     expect(configCall).toBeDefined();
-    expect(configCall?.resolutionState).toBe("RESOLVED");
+    expect(configCall?.resolutionState).toBe("UNRESOLVED");
   });
 
   // ─── 6. Ambiguous Same-Name Receiver Negative Case ────────────────────────

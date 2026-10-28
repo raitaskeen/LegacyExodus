@@ -60,7 +60,9 @@ describe("SEM-08: Contextual this.method() Call Resolution Integrity", () => {
   });
 
   // --- Defect 2: Multi-Container Disambiguation -----------------------------
-  it("Scenario 3 (CONTAINER AFFINITY): disambiguates same-named methods across distinct object containers", async () => {
+  // F-002: public `this` dispatch is never proven. app.init.call(router) runs router.format,
+  // so neither call may claim a target; they must still never be cross-wired.
+  it("Scenario 3 (CONTAINER AFFINITY): never cross-wires same-named container methods; public this dispatch stays UNRESOLVED", async () => {
     const source = `
       const app = {};
       app.format = function() { return "app"; };
@@ -85,16 +87,17 @@ describe("SEM-08: Contextual this.method() Call Resolution Integrity", () => {
     const routerCall = analysis.calls.find((c) => c.callerName === "handle" && c.calleeName === "this.format");
 
     expect(appCall).toBeDefined();
-    expect(appCall?.resolutionState).toBe("RESOLVED");
-    expect(appCall?.targetSymbolId).toBe(appFormat?.id);
+    expect(appCall?.resolutionState).toBe("UNRESOLVED");
+    expect(appCall?.targetSymbolId).toBeUndefined();
 
     expect(routerCall).toBeDefined();
-    expect(routerCall?.resolutionState).toBe("RESOLVED");
-    expect(routerCall?.targetSymbolId).toBe(routerFormat?.id);
+    expect(routerCall?.resolutionState).toBe("UNRESOLVED");
+    expect(routerCall?.targetSymbolId).toBeUndefined();
   });
 
   // --- Defect 3: Anonymous Class Method Resolution --------------------------
-  it("Scenario 4 (ANONYMOUS CLASS): resolves this.method() in export default class declarations", async () => {
+  // F-002: an exported class can be subclassed by any importer that overrides start().
+  it("Scenario 4 (ANONYMOUS CLASS): keeps overridable this.method() in export default classes UNRESOLVED", async () => {
     const source = `
       export default class {
         start() { return 1; }
@@ -109,12 +112,14 @@ describe("SEM-08: Contextual this.method() Call Resolution Integrity", () => {
 
     const call = analysis.calls.find((c) => c.callerName === "run" && c.calleeName === "this.start");
     expect(call).toBeDefined();
-    expect(call?.resolutionState).toBe("RESOLVED");
-    expect(call?.targetSymbolId).toBe(startMethod?.id);
+    expect(call?.resolutionState).toBe("UNRESOLVED");
+    expect(call?.targetSymbolId).toBeUndefined();
   });
 
   // --- Nested Function Scope vs Arrow Function Lexical Binding --------------
-  it("Scenario 5 (LEXICAL SCOPE): isolates nested regular function this while preserving arrow function this in object methods", async () => {
+  // F-002: the arrow and direct calls share init's `this`, which the caller chooses
+  // (app.init.call(other)); only the call structure is asserted, never a target.
+  it("Scenario 5 (LEXICAL SCOPE): attributes nested, arrow and direct this calls without claiming a public this target", async () => {
     const source = `
       const app = {};
       app.format = function() { return 1; };
@@ -142,15 +147,18 @@ describe("SEM-08: Contextual this.method() Call Resolution Integrity", () => {
     expect(nestedCall?.resolutionState).toBe("UNRESOLVED");
     expect(nestedCall?.targetSymbolId).toBeUndefined();
 
-    expect(arrowCall?.resolutionState).toBe("RESOLVED");
-    expect(arrowCall?.targetSymbolId).toBe(appFormat?.id);
+    expect(arrowCall).toBeDefined();
+    expect(arrowCall?.resolutionState).toBe("UNRESOLVED");
+    expect(arrowCall?.targetSymbolId).toBeUndefined();
 
-    expect(initCall?.resolutionState).toBe("RESOLVED");
-    expect(initCall?.targetSymbolId).toBe(appFormat?.id);
+    expect(initCall).toBeDefined();
+    expect(initCall?.resolutionState).toBe("UNRESOLVED");
+    expect(initCall?.targetSymbolId).toBeUndefined();
   });
 
   // --- Prototypal Chain & CommonJS Exports ----------------------------------
-  it("Scenario 6 (COMMONJS EXPORT): resolves this.method() on module.exports receiver methods", async () => {
+  // F-002: exported methods are invoked with whatever receiver the importer supplies.
+  it("Scenario 6 (COMMONJS EXPORT): keeps this.method() on module.exports receiver methods UNRESOLVED", async () => {
     const source = `
       module.exports.setup = function() { return true; };
       module.exports.init = function() {
@@ -163,7 +171,7 @@ describe("SEM-08: Contextual this.method() Call Resolution Integrity", () => {
 
     const call = analysis.calls.find((c) => c.calleeName === "this.setup");
     expect(call).toBeDefined();
-    expect(call?.resolutionState).toBe("RESOLVED");
-    expect(call?.targetSymbolId).toBe(setupSymbol?.id);
+    expect(call?.resolutionState).toBe("UNRESOLVED");
+    expect(call?.targetSymbolId).toBeUndefined();
   });
 });

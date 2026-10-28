@@ -41,7 +41,9 @@ describe("P1 Task 9: Semantic Receiver Resolution Integrity & Anti-Hallucination
       expect(initCall?.targetSymbolId).toBe(initSymbol?.id);
     });
 
-    it("resolves contextual 'this' calls to prototype methods on the same container", async () => {
+    // F-002: `this` is chosen by the caller (app.init.call(other) runs other.defaultConfiguration),
+    // so a contextual public this call is evidence of a call site, not of its target.
+    it("keeps contextual public 'this' calls on a prototype container UNRESOLVED", async () => {
       const source = `
         const app = {};
         app.defaultConfiguration = function() { return true; };
@@ -54,8 +56,9 @@ describe("P1 Task 9: Semantic Receiver Resolution Integrity & Anti-Hallucination
       const configCall = analysis.calls.find((c) => c.calleeName === "this.defaultConfiguration");
 
       expect(configSymbol).toBeDefined();
-      expect(configCall?.resolutionState).toBe("RESOLVED");
-      expect(configCall?.targetSymbolId).toBe(configSymbol?.id);
+      expect(configCall).toBeDefined();
+      expect(configCall?.resolutionState).toBe("UNRESOLVED");
+      expect(configCall?.targetSymbolId).toBeUndefined();
     });
 
     it("resolves class instance constructor-instantiated methods", async () => {
@@ -210,24 +213,26 @@ describe("P1 Task 9: Semantic Receiver Resolution Integrity & Anti-Hallucination
       expect(catchCall?.targetSymbolId).toBeUndefined();
     });
 
+    // F-002: public this dispatch is never proven, so lexical this is exercised with a
+    // private method, whose target is fixed wherever the class's own `this` reaches.
     it("Case G5: isolates this context in nested regular functions while preserving arrow function lexical this", async () => {
       const source = `
         class Controller {
           handle() {
             const arrow = () => {
-              this.validate();
+              this.#validate();
             };
             function regular() {
-              this.validate();
+              this.#validate();
             }
-            this.validate();
+            this.#validate();
           }
-          validate() {}
+          #validate() {}
         }
       `;
       const { analysis, symbolTable } = await analyze(source);
-      const validateSymbol = symbolTable.symbols.find((s) => s.kind === "method" && s.name === "validate" && s.containerName === "Controller");
-      const calls = analysis.calls.filter((c) => c.calleeName === "this.validate");
+      const validateSymbol = symbolTable.symbols.find((s) => s.kind === "method" && s.name === "#validate" && s.containerName === "Controller");
+      const calls = analysis.calls.filter((c) => c.calleeName === "this.#validate");
 
       expect(validateSymbol).toBeDefined();
       expect(calls.length).toBe(3);
