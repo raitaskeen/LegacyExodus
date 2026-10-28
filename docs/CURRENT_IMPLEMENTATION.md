@@ -1,24 +1,21 @@
 # Current Implementation
 
-**Documentation state:** `VERIFIED`
+**Documentation state:** `PARTIAL`. Re-labelled on 2026-10-28 from the [blind audit](https://github.com/raitaskeen/LegacyExodus/pull/203); finding ids (BA-xx) refer to it.
 
-**Synchronized against core integration truth:** `origin/core-foundation` at `204f123ac374c3fefa4ccc0f4d5decb80a1e9b9f`
-
-**Main promotion boundary:** `origin/main` at `6f88ec57d8275c6a367018d3106b537a26cbc2d1`
-
-The core branch contains verified implementation changes that are not yet main-promoted. These include conservative catch reachability, CLI storage-option forwarding, plugin capability containment, run-scoped AST reuse, discovery-manifest diagnostics and provenance isolation, truthful degraded-analysis presentation, standard decorator parsing, streamed scoped storage reads, caller-controlled transient session reset, and bounded/indexed semantic and flow-analysis paths. They are core-integrated at the SHA above but **not main-promoted**.
+**Implementation truth:** `main`. `core-foundation` and `docs-foundation` are retired as integration branches (2026-10-28). No SHA is pinned here; verify the exact revision you review.
 
 This page is the concise status boundary for LegacyExodus. Implementation source, executable tests, and verified runtime behavior remain authoritative if this page drifts.
 
-## Verified current core
+## Current core (implemented; limits below)
 
 - Bun runtime and strict TypeScript contracts.
 - Engine facade, runtime lifecycle, command/orchestrator boundary, event bus/store, and durable event journal. Durable command commit defines success; post-commit synchronous notification failures are separately recorded and logged without implying rollback.
 - Repository discovery with deterministic inventory, source/non-source classification, package/framework signals, and isolated enumeration failures.
-- Babel-based JavaScript/TypeScript/JSX/TSX parsing, including standard decorator syntax, into normalized immutable AST contracts. Decorator semantics are not interpreted.
-- Lexical symbol extraction, selected ESM/CommonJS modeling, module resolution, dependency cycles, and deterministic knowledge graphs.
-- Conservative semantic call/reference analysis, Express route and middleware facts for supported patterns.
-- Function/control-flow and data-flow models, interprocedural transfer for proven targets, conservative taint facts, and deterministic bounded work-queue propagation for the implemented repository-wide flow connections.
+- Babel-based JavaScript/TypeScript/JSX/TSX parsing, including standard decorator syntax, into normalized immutable AST contracts. Decorator semantics are not interpreted. One parser configuration serves every extension, so some valid `.ts` and `.d.ts` files are rejected (BA-01).
+- Lexical symbol extraction, selected ESM/CommonJS modeling, module resolution, dependency cycles, and a knowledge graph of file and symbol nodes with contains/imports edges (BA-19). TypeScript enums, namespaces, interfaces and type aliases are not modelled (BA-02); TS ESM `./x.js` specifiers and `tsconfig.json` files with comments are not resolved (BA-03).
+- Semantic call/reference analysis that resolves a call only when its target is proven. Express route and middleware facts are `INFERRED`: per-router middleware, handlers and mount paths are not yet modelled (BA-08).
+- Function/control-flow and data-flow models, interprocedural transfer for proven targets, taint facts from a built-in policy, and deterministic bounded work-queue propagation for the implemented repository-wide flow connections. Data flow misses loops, `switch`, `try`, short-circuit expressions and direct source arguments, and can over-label conditional values (BA-04 to BA-07).
+- Locale-independent (code-point) ordering of every projected artifact.
 - In-memory and SQLite storage providers, streamed run-scoped queries, analysis-run atomicity, validated snapshot reuse, deep persisted-contract validation, and caller-controlled transient session reset.
 - Contained `.discovery` projections with atomic per-file replacement and integrity manifests. Durable analysis records are canonical; `.discovery` is a derived command deliverable. If fresh-run projection fails after commit, the engine rejects with `DISCOVERY_PROJECTION_FAILED_AFTER_COMMIT` and explicitly reports that the selected storage provider already committed the analysis.
 - CLI commands: `status`, `init`, `analyze`, `test`, `verify`, and `plugins list`.
@@ -67,7 +64,7 @@ Record live results rather than copying historical totals into evergreen documen
 
 ## Verification snapshot
 
-The synchronized boundary is the core SHA above. Verification totals are intentionally not copied into this evergreen page; run the canonical commands and record their live output for the exact revision under review.
+Verification totals are intentionally not copied into this evergreen page; run the canonical commands and record their live output for the exact revision under review.
 
 ## CI and security boundary
 

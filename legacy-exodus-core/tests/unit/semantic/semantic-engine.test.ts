@@ -41,7 +41,8 @@ describe("DeterministicSemanticAnalysisEngine", () => {
     expect(analysis.deadCode.some((finding) => finding.name === "unused")).toBe(true);
     expect(analysis.entryPoints.some((entry) => entry.filePath === "src/server.js")).toBe(true);
     expect(analysis.routes).toEqual([expect.objectContaining({ filePath: "src/server.js", method: "GET", path: "/books" })]);
-    expect(analysis.routes[0]?.state).toBe("CONFIRMED");
+    // INFERRED until per-router middleware, handler and mount paths are modelled (BA-08).
+    expect(analysis.routes[0]?.state).toBe("INFERRED");
     expect(analysis.middlewareChains).toEqual([expect.objectContaining({ filePath: "src/server.js", middleware: ["authenticate"] })]);
     expect(analysis.calls.map((call) => call.id)).toEqual([...analysis.calls].map((call) => call.id).sort());
     expect(Object.isFrozen(analysis)).toBe(true);
@@ -116,7 +117,7 @@ describe("DeterministicSemanticAnalysisEngine", () => {
     const analysis = new DeterministicSemanticAnalysisEngine().analyze({ astResults: [ast], dependencyGraph: graph, symbolTables: [symbols] });
 
     expect(analysis.routes.map((route) => ({ path: route.path, state: route.state }))).toEqual([
-      { path: "/real", state: "CONFIRMED" },
+      { path: "/real", state: "INFERRED" },
     ]);
   });
 
@@ -133,7 +134,7 @@ describe("DeterministicSemanticAnalysisEngine", () => {
     const analysis = new DeterministicSemanticAnalysisEngine().analyze({ astResults: [ast], dependencyGraph: graph, symbolTables: [symbols] });
 
     expect(analysis.routes.map((route) => ({ method: route.method, path: route.path, state: route.state }))).toEqual([
-      { method: "GET", path: "/commonjs", state: "CONFIRMED" },
+      { method: "GET", path: "/commonjs", state: "INFERRED" },
     ]);
   });
 
