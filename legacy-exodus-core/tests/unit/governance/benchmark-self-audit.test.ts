@@ -169,6 +169,90 @@ describe("F-010: benchmark self-audit cannot pass checks that did no work", () =
   }, AUDIT_TIMEOUT_MS);
 });
 
+// BA-20 / A6: a git tag is mutable, so a manifest that names a repository must also pin the
+// commit and tree it resolved to. Manifests without a repository keep the revision-only contract.
+describe("BA-20 / A6: manifest pinning requires a commit and a tree for repository manifests", () => {
+  const COMMIT = "a".repeat(40);
+  const TREE = "b".repeat(40);
+  const REPOSITORY = "https://example.invalid/repo.git";
+
+  async function writeManifest(workspace: string, manifest: Record<string, unknown>): Promise<void> {
+    await writeFile(
+      join(workspace, "benchmarks", "corpus", "tier-1", `${String(manifest.name)}.json`),
+      JSON.stringify(manifest),
+      "utf8",
+    );
+  }
+
+  /** Every finding raised about one manifest, as a single string. */
+  function findingsAbout(report: BenchmarkAuditReport, name: string): string {
+    return report.findings
+      .filter((f) => f.description.includes(`Manifest ${name} `))
+      .map((f) => f.description)
+      .join("\n");
+  }
+
+  it("passes a repository manifest that pins revision, commit and tree (control)", async () => {
+    await withWorkspace(async (workspace) => {
+      await populateGovernedWorkspace(workspace);
+      await writeManifest(workspace, {
+        name: "fully-pinned",
+        repository: REPOSITORY,
+        revision: "v1.0.0",
+        commit: COMMIT,
+        tree: TREE,
+      });
+
+      const report = runBenchmarkSelfAudit(workspace);
+
+      expect(report.findings).toEqual([]);
+      expect(report.verdict).toBe("PASS");
+      expect(passedIds(report)).toEqual(GOVERNED_CHECK_IDS);
+    });
+  }, AUDIT_TIMEOUT_MS);
+
+  it("fails only manifest-pinning, naming each manifest and field, when a repository manifest lacks a valid commit or tree", async () => {
+    await withWorkspace(async (workspace) => {
+      await populateGovernedWorkspace(workspace);
+      await writeManifest(workspace, { name: "tag-only", repository: REPOSITORY, revision: "v1.0.0" });
+      await writeManifest(workspace, { name: "short-commit", repository: REPOSITORY, revision: "v1.0.0", commit: "abc1234", tree: TREE });
+      await writeManifest(workspace, { name: "upper-tree", repository: REPOSITORY, revision: "v1.0.0", commit: COMMIT, tree: TREE.toUpperCase() });
+      await writeManifest(workspace, { name: "missing-tree", repository: REPOSITORY, revision: "v1.0.0", commit: COMMIT });
+      await writeManifest(workspace, { name: "numeric-commit", repository: REPOSITORY, revision: "v1.0.0", commit: 1, tree: TREE });
+
+      const report = runBenchmarkSelfAudit(workspace);
+
+      expect(passedIds(report)).toEqual(GOVERNED_CHECK_IDS.filter((id) => id !== "manifest-pinning"));
+      expect(report.verdict).toBe("PASS_WITH_CONDITIONS");
+      expect(report.findings.every((f) => f.category === "Revision Integrity")).toBe(true);
+
+      expect(findingsAbout(report, "tag-only")).toMatch(/commit and tree/);
+      expect(findingsAbout(report, "short-commit")).toMatch(/\bcommit\b/);
+      expect(findingsAbout(report, "short-commit")).not.toMatch(/\btree\b/);
+      expect(findingsAbout(report, "upper-tree")).toMatch(/\btree\b/);
+      expect(findingsAbout(report, "upper-tree")).not.toMatch(/\bcommit\b/);
+      expect(findingsAbout(report, "missing-tree")).toMatch(/\btree\b/);
+      expect(findingsAbout(report, "missing-tree")).not.toMatch(/\bcommit\b/);
+      expect(findingsAbout(report, "numeric-commit")).toMatch(/\bcommit\b/);
+      // The manifest from populateGovernedWorkspace has no repository, so it stays accepted on revision alone.
+      expect(findingsAbout(report, "pinned")).toBe("");
+    });
+  }, AUDIT_TIMEOUT_MS);
+
+  it("still requires a revision from an external manifest that has no repository (unchanged contract)", async () => {
+    await withWorkspace(async (workspace) => {
+      await populateGovernedWorkspace(workspace);
+      await writeManifest(workspace, { name: "no-revision" });
+
+      const report = runBenchmarkSelfAudit(workspace);
+
+      expect(passedIds(report)).toEqual(GOVERNED_CHECK_IDS.filter((id) => id !== "manifest-pinning"));
+      expect(findingsAbout(report, "no-revision")).toMatch(/missing a pinned git revision/);
+      expect(report.findings).toHaveLength(1);
+    });
+  }, AUDIT_TIMEOUT_MS);
+});
+
 describe("F-010: benchmark audit CLI exit code reflects the governed result", () => {
   it("exits non-zero when checks cannot run", async () => {
     await withWorkspace(async (workspace) => {

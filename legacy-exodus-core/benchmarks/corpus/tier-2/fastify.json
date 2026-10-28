@@ -2,6 +2,8 @@
   "name": "fastify",
   "repository": "https://github.com/fastify/fastify.git",
   "revision": "v5.3.3",
+  "commit": "220b5320b3560bb0f34b3b0c3de16b09d53e1bca",
+  "tree": "9a5ff0c8615a4d2d440f52c4f7a984a3bd826254",
   "tier": "tier-2",
   "languageProfile": ["javascript", "typescript"],
   "frameworkProfile": ["fastify"],

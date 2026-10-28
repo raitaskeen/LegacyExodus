@@ -2,6 +2,8 @@
   "name": "cookie-parser",
   "repository": "https://github.com/expressjs/cookie-parser.git",
   "revision": "1.4.7",
+  "commit": "5d61e1e2f3f18efe8f94e5fad2886b48864d6c78",
+  "tree": "6e65cca2c5ae3b9368bdcbb64b994dab1fd9bd61",
   "tier": "tier-1",
   "languageProfile": ["javascript"],
   "frameworkProfile": ["express"],

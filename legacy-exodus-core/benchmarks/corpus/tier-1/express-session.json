@@ -2,6 +2,8 @@
   "name": "express-session",
   "repository": "https://github.com/expressjs/session.git",
   "revision": "v1.18.1",
+  "commit": "bbeca94e69b93d437c4ca300b111bd59169de925",
+  "tree": "3faa3072918d2805bee9253547502ef8463701a6",
   "tier": "tier-1",
   "languageProfile": ["javascript"],
   "frameworkProfile": ["express"],

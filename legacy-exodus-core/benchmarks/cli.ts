@@ -14,7 +14,8 @@
  *   bun run benchmarks/cli.ts compare <runA.json> <runB.json>
  *   bun run benchmarks/cli.ts report [--results-dir <dir>] [--output <file>]
  *   bun run benchmarks/cli.ts audit [--root <package-dir>] [--json]
- *   bun run benchmarks/cli.ts validate <target>
+ *   bun run benchmarks/cli.ts validate <target> [--cache-dir <dir>]
+ *   bun run benchmarks/cli.ts fidelity [target] [--cache-dir <dir>]
  *   bun run benchmarks/cli.ts fact-diff --base <core-dir> --head <core-dir> <corpus-dir>... [--output <file>] [--fail-on-loss]
  *   bun run benchmarks/cli.ts fact-diff --base-discovery <dir> --head-discovery <dir> [--output <file>] [--fail-on-loss]
  */
@@ -29,6 +30,7 @@ import { executeBenchmarkRun } from "./harness";
 import { diffFacts, extractFacts, formatFactDiff, runFactDiff, type CorpusDiff } from "./fact-diff";
 import { generateMarkdownReport } from "./scripts/report";
 import { runFidelityValidation } from "./fidelity/runner";
+import { ensureCacheEntryVerified } from "./scripts/acquire";
 import { BENCHMARKS_ROOT, CORPUS_DIR, RESULTS_DIR, resolveBenchmarkRepoPath, resolveResultsDir } from "./paths";
 import type { BenchmarkResult } from "./types";
 import { detectTerminalCapabilities } from "../src/cli/presentation/capabilities";
@@ -129,6 +131,8 @@ async function main(): Promise<void> {
       const capabilities = detectTerminalCapabilities();
       const layout = new LayoutRenderer(capabilities);
       const resolvedTarget = resolveBenchmarkRepoPath(target);
+      // A target inside the benchmark cache is a corpus checkout: verify it before analyzing it (BA-20 / A6).
+      await ensureCacheEntryVerified(resolvedTarget, getArgValue(args, "--cache-dir"));
       const runRes = await executeBenchmarkRun(resolvedTarget, 0);
 
       const header = layout.renderHeader("Benchmark Accounting Validation", basename(target));
@@ -185,7 +189,8 @@ async function main(): Promise<void> {
       const target = args[1] ?? resolve(BENCHMARKS_ROOT, ".cache/fastify");
       const resolvedTarget = resolveBenchmarkRepoPath(target);
       console.log(`Running migration fidelity validation for: ${resolvedTarget}`);
-      const report = await runFidelityValidation({ repoPath: resolvedTarget });
+      const cacheDir = getArgValue(args, "--cache-dir");
+      const report = await runFidelityValidation({ repoPath: resolvedTarget, ...(cacheDir === undefined ? {} : { cacheDir }) });
       if (report.overallFalseNegatives > 0 || (report.overallPrecision !== null && report.overallPrecision < 0.9)) {
         console.warn(`\n[FIDELITY WARNING] Found ${report.overallFalseNegatives} False Negatives and ${report.overallFalsePositives} False Positives.`);
       }
