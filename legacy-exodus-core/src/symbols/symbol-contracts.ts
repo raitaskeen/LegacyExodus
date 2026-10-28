@@ -165,6 +165,17 @@ export function createLexicalScopeId(
   return `scope:${type}:${location.start.line}:${location.start.column}`;
 }
 
+/**
+ * Scope in which a named function or class expression binds its own name, visible only inside it.
+ * It sits between the enclosing scope and the expression's own scope.
+ */
+export function createSelfScopeId(
+  type: string,
+  location: CodeSymbol["location"] | undefined,
+): string {
+  return `self:${type}:${location?.start.line ?? 0}:${location?.start.column ?? 0}`;
+}
+
 function freezeCodeSymbol(symbol: CodeSymbol): CodeSymbol {
   return Object.freeze({
     ...symbol,

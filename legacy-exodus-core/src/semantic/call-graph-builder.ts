@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import type { ASTNode, ASTResult } from "@parser/index";
 import { canonicalizePath, ModuleResolver, type DependencyGraph } from "@graph/index";
 import type { SymbolTable } from "@symbols/index";
-import { createLexicalScopeId, type CodeSymbol } from "@symbols/index";
+import { createLexicalScopeId, createSelfScopeId, type CodeSymbol } from "@symbols/index";
 
 import type { SemanticCall, SymbolReference } from "./semantic-contracts";
 import { compareCodePoints } from "@shared/ordering";
@@ -268,7 +268,8 @@ function createScope(id: string, parent?: ScopeFrame, selfName?: string): ScopeF
 }
 
 function createsScope(node: ASTNode): boolean {
-  return node.type === "BlockStatement" || isCallable(node) || node.type === "CatchClause" || isLoop(node) || node.type === "TSModuleDeclaration";
+  return node.type === "BlockStatement" || isCallable(node) || node.type === "CatchClause" || isLoop(node) || node.type === "TSModuleDeclaration"
+    || node.type === "SwitchStatement" || node.type === "StaticBlock";
 }
 
 /**
@@ -282,7 +283,7 @@ function frameFor(node: ASTNode, enclosing: ScopeFrame): ScopeFrame {
     : undefined;
   const outer = selfName === undefined
     ? enclosing
-    : createScope(`self:${node.type}:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`, enclosing, selfName);
+    : createScope(createSelfScopeId(node.type, node.location), enclosing, selfName);
   return createsScope(node) ? createScope(createLexicalScopeId(node.type, node.location), outer) : outer;
 }
 
@@ -459,7 +460,12 @@ function returnsValue(node: ASTNode, isRoot = false): boolean {
 function bindingDeclarations(byScopeAndName: ReadonlyMap<string, readonly CodeSymbol[]>, root: ASTNode): ReadonlyMap<string, readonly CodeSymbol[]> {
   const assignedFunctions = new Set<string>();
   const objectKeys = new Set<string>();
+  const classExpressions = new Set<string>();
   const visit = (node: ASTNode): void => {
+    if (node.type === "ClassExpression") {
+      const anchor = declarationAnchor(node.location);
+      if (anchor !== undefined) classExpressions.add(anchor);
+    }
     if (node.type === "AssignmentExpression" && node.attributes.operator === "=") {
       let right = node.children.find((child) => child.role === "right");
       while (right?.type === "AssignmentExpression") right = right.children.find((child) => child.role === "right");
@@ -479,10 +485,12 @@ function bindingDeclarations(byScopeAndName: ReadonlyMap<string, readonly CodeSy
     const anchor = declarationAnchor(symbol.location) ?? "";
     switch (symbol.kind) {
       case "import":
-      case "class":
       case "enum":
       case "namespace":
         return true;
+      case "class":
+        // A class expression binds nothing in the scope around it: the `const` or key that holds it does.
+        return !classExpressions.has(anchor);
       case "function":
         return !assignedFunctions.has(anchor);
       case "variable":
@@ -770,9 +778,8 @@ const classFieldTypes = new Set(["ClassProperty", "ClassPrivateProperty", "Prope
 
 /**
  * Binding keys of declarations whose real scope the symbol table does not model, so a name
- * resolved to them may mean another binding: lexical declarations in a switch case or a class
- * static block (recorded in the enclosing scope), and `var` or function declarations in a
- * function with parameter expressions (which see the parameter scope, not the body).
+ * resolved to them may mean another binding: `var` or function declarations in a function with
+ * parameter expressions (which see the parameter scope, not the body).
  */
 function collectUnscopedBindings(root: ASTNode, bindingKeyAt: (name: string, scope: ScopeFrame) => string): ReadonlySet<string> {
   const unscoped = new Set<string>();
@@ -801,11 +808,6 @@ function collectUnscopedBindings(root: ASTNode, bindingKeyAt: (name: string, sco
   };
   const visit = (node: ASTNode, scope: ScopeFrame): void => {
     const inner = frameFor(node, scope);
-    if (node.type === "SwitchCase" || node.type === "StaticBlock") {
-      for (const statement of node.children.filter((child) => child.role === "consequent" || child.role === "body")) {
-        for (const name of declaredNames(statement, false)) unscoped.add(bindingKeyAt(name, inner));
-      }
-    }
     if (isCallable(node) && node.children.some((child) => (child.role === "params" || child.role === "param") && hasParameterExpression(child))) {
       for (const name of functionScopedNames(node)) unscoped.add(bindingKeyAt(name, inner));
     }
@@ -1050,10 +1052,9 @@ function createLexicalBindingIndex(
     return [];
   };
   const visit = (node: ASTNode, scopeId: string, functionScopeId: string, parent?: ASTNode): void => {
-    const createsScope = node.type === "BlockStatement" || isCallable(node) || node.type === "CatchClause" || isLoop(node) || node.type === "TSModuleDeclaration";
-    const nestedScope = createsScope ? createLexicalScopeId(node.type, node.location) : scopeId;
-    // A namespace body runs as a function, so `var` declared in it belongs to the namespace.
-    const nestedFunctionScope = isCallable(node) || node.type === "TSModuleDeclaration" ? nestedScope : functionScopeId;
+    const nestedScope = createsScope(node) ? createLexicalScopeId(node.type, node.location) : scopeId;
+    // A namespace body and a class static block run as functions, so `var` declared in them belongs to them.
+    const nestedFunctionScope = isCallable(node) || node.type === "TSModuleDeclaration" || node.type === "StaticBlock" ? nestedScope : functionScopeId;
     if (node.type === "FunctionDeclaration" || node.type === "TSDeclareFunction" || node.type === "ClassDeclaration") {
       const kind = node.type === "ClassDeclaration" ? "class" : "function";
       for (const symbol of anchored(node)) {
@@ -1109,7 +1110,11 @@ function createLexicalBindingIndex(
           const functions = init?.type === "FunctionExpression" || init?.type === "ArrowFunctionExpression"
             ? anchored(init).filter(symbol => symbol.kind === "function" && symbol.name === name && symbol.scopeId === declarationScope)
             : [];
-          if (functions.length <= 1 && imports.length <= 1) addCompanions(canonical, [...functions, ...imports]);
+          const classes = init?.type === "ClassExpression"
+            // The class is the value of this binding, under its own name when it has one.
+            ? anchored(init).filter(symbol => symbol.kind === "class")
+            : [];
+          if (functions.length <= 1 && classes.length <= 1 && imports.length <= 1) addCompanions(canonical, [...functions, ...classes, ...imports]);
           else ambiguous.add(canonical.id);
         } else if (variables.length === 0) {
           for (const symbol of imports) declare(symbol);
@@ -1119,12 +1124,14 @@ function createLexicalBindingIndex(
     // Only matching record kinds can prove a member or implementation role.
     const propertyRole = ["ObjectProperty", "ClassProperty", "ClassPrivateProperty", "PropertyDefinition", "ClassAccessorProperty"].includes(node.type);
     const implementationRole = node.type === "FunctionExpression" || node.type === "ArrowFunctionExpression";
+    const classExpressionRole = node.type === "ClassExpression";
     const memberTarget = (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") && node.role === "left";
     const importOrigin = node.type === "AssignmentExpression" || node.type === "ImportDeclaration";
-    if (propertyRole || implementationRole || memberTarget || importOrigin) {
+    if (propertyRole || implementationRole || classExpressionRole || memberTarget || importOrigin) {
       for (const symbol of anchored(node)) {
         const confirmed = ((propertyRole || memberTarget) && (symbol.kind === "variable" || symbol.kind === "method"))
           || (implementationRole && (symbol.kind === "function" || symbol.kind === "method"))
+          || (classExpressionRole && symbol.kind === "class")
           || (importOrigin && symbol.kind === "import");
         if (confirmed && !classified.has(symbol.id)) nonbindings.add(symbol.id);
       }
@@ -1224,7 +1231,11 @@ function childContext(node: ASTNode, context: ResolutionContext, index: FileSymb
   if (isCallable(node)) callerName = nodeName(node) ?? callerName;
   if (node.type === "ClassDeclaration" || node.type === "ClassExpression") {
     containerId = findClassSymbolId(node, index);
-    containerName = nodeName(node) ?? containerName;
+    // An anonymous class expression is named by what it is assigned to, or anonymous-class: never by the class around it.
+    const expressionName = node.type === "ClassExpression" && node.location !== undefined
+      ? index.classByLocation.get(symbolLocationKey(node.location.start.line, node.location.start.column))?.name
+      : undefined;
+    containerName = nodeName(node) ?? expressionName ?? containerName;
   }
   if (node.type === "ClassMethod" || node.type === "ClassPrivateMethod") {
     // Class members are always visited directly below their ClassDeclaration.
