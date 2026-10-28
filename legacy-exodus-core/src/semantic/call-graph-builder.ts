@@ -294,7 +294,10 @@ function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult, u
   const byAnchor = new Map<string, CodeSymbol[]>();
   const classSymbols: CodeSymbol[] = [];
 
+  const namespaceBlocks: NamespaceBlocks = new Map();
+
   for (const symbol of table?.symbols ?? []) {
+    noteNamespaceMember(namespaceBlocks, symbol);
     const anchor = declarationAnchor(symbol.location);
     if (anchor !== undefined && canonicalizePath(symbol.filePath) === canonicalizePath(ast.metadata.sourcePath)) {
       const anchored = byAnchor.get(anchor) ?? [];
@@ -329,23 +332,25 @@ function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult, u
   const declarationsByScopeAndName = bindingDeclarations(byScopeAndName, ast.root);
   const writes = collectBindingWrites(ast.root, declarationsByScopeAndName);
   const classes = collectClassFacts(ast.root, classSymbols);
-  const reopened = reopenedNamespaces(table?.symbols ?? []);
+  const reopened = reopenedNamespaces(namespaceBlocks);
   return Object.freeze({ byScopeAndName, declarationsByScopeAndName, byName, firstImportByName, classByLocation, lexicalBindings, reopened, writes, unstableExportIds, classes });
 }
 
 const NAMESPACE_BLOCK = "scope:TSModuleDeclaration:";
 
-/** Blocks of one namespace are the scopes whose members share a `containerName` path. */
-function reopenedNamespaces(symbols: readonly CodeSymbol[]): ReadonlyMap<string, ReadonlySet<string>> {
-  const blocks = new Map<string, Map<string, Set<string>>>();
-  for (const symbol of symbols) {
-    if (symbol.scopeId === undefined || !symbol.scopeId.startsWith(NAMESPACE_BLOCK) || symbol.containerName === undefined) continue;
-    const group = blocks.get(symbol.containerName) ?? new Map<string, Set<string>>();
-    const names = group.get(symbol.scopeId) ?? new Set<string>();
-    names.add(symbol.name);
-    group.set(symbol.scopeId, names);
-    blocks.set(symbol.containerName, group);
-  }
+/** Members by namespace path (`containerName`) and block scope: the blocks of one namespace share a path. */
+type NamespaceBlocks = Map<string, Map<string, Set<string>>>;
+
+function noteNamespaceMember(blocks: NamespaceBlocks, symbol: CodeSymbol): void {
+  if (symbol.scopeId === undefined || !symbol.scopeId.startsWith(NAMESPACE_BLOCK) || symbol.containerName === undefined) return;
+  const group = blocks.get(symbol.containerName) ?? new Map<string, Set<string>>();
+  const names = group.get(symbol.scopeId) ?? new Set<string>();
+  names.add(symbol.name);
+  group.set(symbol.scopeId, names);
+  blocks.set(symbol.containerName, group);
+}
+
+function reopenedNamespaces(blocks: NamespaceBlocks): ReadonlyMap<string, ReadonlySet<string>> {
   const reopened = new Map<string, ReadonlySet<string>>();
   for (const group of blocks.values()) {
     if (group.size < 2) continue;
