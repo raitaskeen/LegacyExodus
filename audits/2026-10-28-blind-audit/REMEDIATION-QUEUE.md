@@ -50,6 +50,7 @@ hand-off point: a new session resumes from here.
 | Docs | Docs/governance session (incl. remaining `core-foundation` mentions in GOVERNANCE, CONTRIBUTING, PR template, `.agents`) | BA-23, BA-22 rest | `docs/**`, root docs, `.agents/**` | anytime | queued |
 
 Notes:
+- BA-03 design question: TS importers now resolve to a `.d.ts` sibling over `.js` (TS semantics), which drops runtime call/data-flow facts through that import (pino `test/helper.js`). Consider linking the declaration to its implementation for runtime analysis. Also: surface `getTsConfigDiagnostics()` to users; read `allowJs`.
 - Corpus pinning residual (accepted): a `benchmarks/.cache` entry whose name matches no manifest is skipped, not refused. Consider failing closed on unknown entries.
 - Lead decision (2026-10-28): the hotspot split is dropped. Wave 2 items lock disjoint files, so splitting adds risk without enabling parallelism.
 - BA-01 known limitation: with the Flow plugin, a statement that is only the identifier `type`, `declare` or `opaque` at the end of a line, followed by an assignment on the next line (valid JS via ASI), now misparses as Flow. No corpus hits it. Revisit if a real repository does.
@@ -63,7 +64,6 @@ Agents were stopped deliberately to save usage. Nothing is half-written: both br
   2. `DECLARATION_FILE` regex: `/.d.[mc]?ts$/i` must become `/.d.[mc]?ts$/i` (it currently matches `build.ts`).
   3. Soundness: with reopened namespaces `function a(){}; namespace M{export function a(){}}; namespace M{export function b(){a()}}`, the head resolves `a()` to the module-level `a`, but TS binds it to `M.a`. Rule: an unqualified name in one block of a multi-block namespace that is not bound in that block stays UNRESOLVED if another block declares it.
   Then fact-diff, verify, push, and Sonnet re-review.
-- **#213 BA-03** (head `32b5c68`): Sonnet red team stopped mid-review (it was confirming the new tests fail on base). Restart it on the head with the same 6 checks. Keep long jobs in the background; it stalled once.
 - After both merge: the lead's batched docs update (README rows, CURRENT_IMPLEMENTATION, CLI configuration), then the serial chain BA-13, then BA-10, then BA-12 on the symbol extractor, plus BA-09.
 
 ## How to resume (new session or after a usage limit)
