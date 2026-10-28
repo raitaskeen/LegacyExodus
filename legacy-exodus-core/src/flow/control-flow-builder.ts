@@ -45,6 +45,9 @@ class FlowState {
   private readonly edges: ControlFlowEdge[] = [];
   private sequence = 0;
   private unlocatedStatementSequence = 0;
+  private readonly statementIds = new Set<string>();
+  // Identifies the finally copy being built ("" for the original text), so each copied statement gets a unique id.
+  private copyContext = "";
   public constructor(
     private readonly filePath: string,
     private readonly scopeName: string,
@@ -103,7 +106,7 @@ class FlowState {
     return block;
   }
   private buildIf(node: ASTNode, block: string, control: ControlContext | undefined): string { this.addNode(block, node); const consequent = this.createBlock(); const alternate = this.createBlock(); const join = this.createBlock(); const condition = staticBoolean(node.children.find((child) => child.role === "test")); if (condition !== false) this.addEdge(block, consequent, "true"); if (condition !== true) this.addEdge(block, alternate, "false"); const children = node.children.filter((child) => child.role === "consequent" || child.role === "alternate"); const yes = children.filter((child) => child.role === "consequent").flatMap(statementChildren); const no = children.filter((child) => child.role === "alternate").flatMap(statementChildren); this.buildStatements(yes, consequent, join, control); this.buildStatements(no, alternate, join, control); return join; }
-  private buildLabeled(node: ASTNode, block: string, control: ControlContext | undefined): string { this.addNode(block, node); const label = labelName(node); const body = node.children.find((child) => child.role === "body"); if (body === undefined || label === undefined) return block; if (body.type === "DoWhileStatement") return this.buildDoWhile(body, block, control, label); if (isLoop(body)) return this.buildLoop(body, block, control, label); const after = this.createBlock(); const labels = withLabel(control?.labels, label, { breakTarget: after }); this.buildStatements(statementChildren(body), block, after, { ...control, labels }); return after; }
+  private buildLabeled(node: ASTNode, block: string, control: ControlContext | undefined): string { this.addNode(block, node); const label = labelName(node); const body = node.children.find((child) => child.role === "body"); if (body === undefined || label === undefined) return block; const potentialExceptionTarget = control?.potentialExceptionTarget; if (body.type === "DoWhileStatement") { if (potentialExceptionTarget !== undefined && hasPotentiallyThrowingEvaluation(body)) this.addEdge(block, potentialExceptionTarget, "exception"); return this.buildDoWhile(body, block, control, label); } if (isLoop(body)) return this.buildLoop(body, block, control, label, potentialExceptionTarget); const after = this.createBlock(); const labels = withLabel(control?.labels, label, { breakTarget: after }); this.buildStatements(statementChildren(body), block, after, { ...control, labels }); return after; }
   private buildDoWhile(node: ASTNode, block: string, control: ControlContext | undefined, label?: string): string { const body = this.createBlock(); const conditionBlock = this.createBlock(); const after = this.createBlock(); const condition = staticBoolean(node.children.find((child) => child.role === "test")); this.addNode(block, node); this.addEdge(block, body, "next"); const labels = label === undefined ? control?.labels : withLabel(control?.labels, label, { breakTarget: after, continueTarget: conditionBlock }); const content = node.children.filter((child) => child.role === "body").flatMap(statementChildren); const last = this.buildStatements(content, body, undefined, { ...control, breakTarget: after, continueTarget: conditionBlock, labels }); if (this.block(last).terminator === undefined) this.addEdge(last, conditionBlock, "next"); if (condition !== false) this.addEdge(conditionBlock, body, "true"); if (condition !== true) this.addEdge(conditionBlock, after, "false"); return after; }
   private buildLoop(node: ASTNode, block: string, control: ControlContext | undefined, label?: string, potentialExceptionTarget?: string): string {
     // The header holds only the loop test. Clauses evaluated once (for init, for-in/of object) stay
@@ -234,8 +237,10 @@ class FlowState {
 
       if (thrownFinalizer !== undefined) {
         if (this.hasIncomingEdges(thrownFinalizer)) {
-          this.addNode(thrownFinalizer, finalizer);
-          const thrownLast = this.buildStatements(finalizerStatements, thrownFinalizer, outerExceptionTarget, finalizerControl);
+          const thrownLast = this.inFinalizerCopy("throw", () => {
+            this.addNode(thrownFinalizer, finalizer);
+            return this.buildStatements(finalizerStatements, thrownFinalizer, outerExceptionTarget, finalizerControl);
+          });
           this.retagCompletionEdge(thrownLast, outerExceptionTarget, "next", "throw");
         } else {
           this.removeBlock(thrownFinalizer);
@@ -244,8 +249,10 @@ class FlowState {
 
       if (returnedFinalizer !== undefined) {
         if (this.hasIncomingEdges(returnedFinalizer)) {
-          this.addNode(returnedFinalizer, finalizer);
-          const returnedLast = this.buildStatements(finalizerStatements, returnedFinalizer, outerReturnTarget, finalizerControl);
+          const returnedLast = this.inFinalizerCopy("return", () => {
+            this.addNode(returnedFinalizer, finalizer);
+            return this.buildStatements(finalizerStatements, returnedFinalizer, outerReturnTarget, finalizerControl);
+          });
           this.retagCompletionEdge(returnedLast, outerReturnTarget, "next", "return");
         } else {
           this.removeBlock(returnedFinalizer);
@@ -254,9 +261,11 @@ class FlowState {
 
       if (brokenFinalizer !== undefined && outerBreakTarget !== undefined) {
         if (this.hasIncomingEdges(brokenFinalizer)) {
-          this.addNode(brokenFinalizer, finalizer);
           const breakDestination = control?.breakFinalizerTarget ?? outerBreakTarget;
-          const brokenLast = this.buildStatements(finalizerStatements, brokenFinalizer, breakDestination, finalizerControl);
+          const brokenLast = this.inFinalizerCopy("break", () => {
+            this.addNode(brokenFinalizer, finalizer);
+            return this.buildStatements(finalizerStatements, brokenFinalizer, breakDestination, finalizerControl);
+          });
           this.retagCompletionEdge(brokenLast, breakDestination, "next", "break");
         } else {
           this.removeBlock(brokenFinalizer);
@@ -265,9 +274,11 @@ class FlowState {
 
       if (continuedFinalizer !== undefined && outerContinueTarget !== undefined) {
         if (this.hasIncomingEdges(continuedFinalizer)) {
-          this.addNode(continuedFinalizer, finalizer);
           const continueDestination = control?.continueFinalizerTarget ?? outerContinueTarget;
-          const continuedLast = this.buildStatements(finalizerStatements, continuedFinalizer, continueDestination, finalizerControl);
+          const continuedLast = this.inFinalizerCopy("continue", () => {
+            this.addNode(continuedFinalizer, finalizer);
+            return this.buildStatements(finalizerStatements, continuedFinalizer, continueDestination, finalizerControl);
+          });
           this.retagCompletionEdge(continuedLast, continueDestination, "next", "continue");
         } else {
           this.removeBlock(continuedFinalizer);
@@ -276,9 +287,11 @@ class FlowState {
 
       for (const pending of labeledFinalizers) {
         if (this.hasIncomingEdges(pending.breakFinalizer)) {
-          this.addNode(pending.breakFinalizer as string, finalizer);
           const breakDestination = pending.target.breakFinalizerTarget ?? pending.target.breakTarget;
-          const brokenLast = this.buildStatements(finalizerStatements, pending.breakFinalizer as string, breakDestination, finalizerControl);
+          const brokenLast = this.inFinalizerCopy(`break:${pending.label}`, () => {
+            this.addNode(pending.breakFinalizer as string, finalizer);
+            return this.buildStatements(finalizerStatements, pending.breakFinalizer as string, breakDestination, finalizerControl);
+          });
           this.retagCompletionEdge(brokenLast, breakDestination, "next", "break");
         } else {
           this.removeBlock(pending.breakFinalizer);
@@ -286,9 +299,11 @@ class FlowState {
 
         if (pending.continueFinalizer !== undefined && pending.target.continueTarget !== undefined) {
           if (this.hasIncomingEdges(pending.continueFinalizer)) {
-            this.addNode(pending.continueFinalizer, finalizer);
             const continueDestination = pending.target.continueFinalizerTarget ?? pending.target.continueTarget;
-            const continuedLast = this.buildStatements(finalizerStatements, pending.continueFinalizer, continueDestination, finalizerControl);
+            const continuedLast = this.inFinalizerCopy(`continue:${pending.label}`, () => {
+              this.addNode(pending.continueFinalizer as string, finalizer);
+              return this.buildStatements(finalizerStatements, pending.continueFinalizer as string, continueDestination, finalizerControl);
+            });
             this.retagCompletionEdge(continuedLast, continueDestination, "next", "continue");
           } else {
             this.removeBlock(pending.continueFinalizer);
@@ -313,11 +328,23 @@ class FlowState {
     const position = node.location === undefined
       ? `anon-${this.unlocatedStatementSequence++}`
       : `${node.location.start.line}:${node.location.start.column}`;
+    const origin = `${this.filePath}:${node.type}:${position}`;
+    // The first occurrence keeps its source-position id; a later one (a finally copy) derives its id from the copy
+    // context, probing until unused (a copy holding an original and an original holding a copy can share a context).
+    let id = hash(origin);
+    for (let attempt = 0; this.statementIds.has(id); attempt++) id = hash(`${origin}@${this.copyContext}#${attempt}`);
+    this.statementIds.add(id);
     this.block(blockId).statements.push({
-      id: hash(`${this.filePath}:${node.type}:${position}`),
+      id,
       type: node.type,
       ...(node.location === undefined ? {} : { location: node.location.start }),
     });
+  }
+  // A finally block is emitted once per completion kind (throw, return, break, continue, labelled jumps); nested copies compose.
+  private inFinalizerCopy<T>(copy: string, build: () => T): T {
+    const outer = this.copyContext;
+    this.copyContext = outer === "" ? copy : `${outer}/${copy}`;
+    try { return build(); } finally { this.copyContext = outer; }
   }
   private block(id: string): MutableBlock { const block = this.blocks.find((candidate) => candidate.id === id); if (block === undefined) throw new ControlFlowInvariantError(id); return block; }
   private retagCompletionEdge(fromBlockId: string, toBlockId: string, sourceKind: ControlFlowEdgeKind, targetKind: ControlFlowEdgeKind): void { const edge = this.edges.find((candidate) => candidate.fromBlockId === fromBlockId && candidate.toBlockId === toBlockId && candidate.kind === sourceKind); if (edge === undefined) return; const index = this.edges.indexOf(edge); this.edges[index] = { ...edge, id: hash(`${fromBlockId}:${toBlockId}:${targetKind}`), kind: targetKind }; }
@@ -384,6 +411,8 @@ class FlowState {
     }
     const loopHeaders = new Map<string, Set<string>>();
     for (const edge of activeEdges) {
+      // A back edge out of unreachable code (the dead tail after break/return/continue) closes no natural loop.
+      if (!reachable.has(edge.fromBlockId)) continue;
       if (
         edge.kind === "loop-back" ||
         (isDominator(idomMap, edge.toBlockId, edge.fromBlockId) && (edge.kind === "continue" || edge.kind === "true"))
