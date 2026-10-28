@@ -5,14 +5,14 @@
  *   - run       : Run single manifest, tier, or full corpus
  *   - compare   : Compare two benchmark runs (regression detection)
  *   - report    : Generate Markdown and JSON summary reports
- *   - audit     : Run benchmark system self-audit
+ *   - audit     : Run benchmark system self-audit (non-zero exit unless every check passes)
  *   - validate  : Run mathematical accounting and completeness gate on a target
  *
  * Usage:
  *   bun run benchmarks/cli.ts run <manifest-or-dir> [--runs N]
  *   bun run benchmarks/cli.ts compare <runA.json> <runB.json>
  *   bun run benchmarks/cli.ts report [--results-dir <dir>] [--output <file>]
- *   bun run benchmarks/cli.ts audit
+ *   bun run benchmarks/cli.ts audit [--root <package-dir>] [--json]
  *   bun run benchmarks/cli.ts validate <target>
  */
 
@@ -21,7 +21,7 @@ import { basename, join, resolve } from "node:path";
 
 import { runBenchmark } from "./runner";
 import { compareBenchmarkRuns, formatComparisonMarkdown } from "./compare";
-import { runBenchmarkSelfAudit } from "./audit";
+import { isAuditPassing, runBenchmarkSelfAudit } from "./audit";
 import { executeBenchmarkRun } from "./harness";
 import { generateMarkdownReport } from "./scripts/report";
 import { runFidelityValidation } from "./fidelity/runner";
@@ -90,22 +90,29 @@ async function main(): Promise<void> {
     }
 
     case "audit": {
-      const auditReport = await runBenchmarkSelfAudit();
-      const capabilities = detectTerminalCapabilities();
-      const presenter = new VerificationPresenter(capabilities);
+      const root = getArgValue(args, "--root");
+      const auditReport = await runBenchmarkSelfAudit(root === undefined ? undefined : resolve(root));
 
-      console.log(presenter.renderBenchmarkAudit(auditReport));
+      if (args.includes("--json")) {
+        console.log(JSON.stringify(auditReport));
+      } else {
+        const capabilities = detectTerminalCapabilities();
+        const presenter = new VerificationPresenter(capabilities);
 
-      if (auditReport.findings.length > 0) {
-        console.log(`\nFindings:`);
-        for (const f of auditReport.findings) {
-          console.log(`  [${f.severity}] ${f.category}: ${f.description}`);
-          console.log(`    Evidence: ${f.evidence}`);
-          if (f.remediation) console.log(`    Remediation: ${f.remediation}`);
+        console.log(presenter.renderBenchmarkAudit(auditReport));
+
+        if (auditReport.findings.length > 0) {
+          console.log(`\nFindings:`);
+          for (const f of auditReport.findings) {
+            console.log(`  [${f.severity}] ${f.category}: ${f.description}`);
+            console.log(`    Evidence: ${f.evidence}`);
+            if (f.remediation) console.log(`    Remediation: ${f.remediation}`);
+          }
         }
       }
 
-      if (auditReport.verdict === "NO_GO") process.exit(1);
+      // Gate: any failed or unrunnable check fails the audit. exitCode (not exit()) lets stdout flush.
+      if (!isAuditPassing(auditReport)) process.exitCode = 1;
       break;
     }
 
@@ -184,7 +191,7 @@ function printUsage(): void {
     "    run <manifest-or-dir> [--runs N]   Execute benchmark runs against targets",
     "    compare <runA.json> <runB.json>    Compare baseline vs current benchmark run",
     "    report [--results-dir D]           Generate consolidated Markdown benchmark report",
-    "    audit                              Execute 10-point benchmark system self-audit",
+    "    audit [--root D] [--json]          Run benchmark self-audit; non-zero exit unless all checks pass",
     "    validate <target-path>             Validate mathematical file accounting on target",
     "    fidelity [target-path]             Validate migration discovery fidelity against ground truth",
     "    help                               Show this help message",

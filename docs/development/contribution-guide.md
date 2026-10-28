@@ -105,7 +105,7 @@ $$\text{RECONNAISSANCE} \longrightarrow \text{FAILURE-FIRST TEST} \longrightarro
 Before submitting a Pull Request, confirm that:
 - [ ] **Typecheck Clean:** `bun run typecheck` returns exit code `0` with 0 errors.
 - [ ] **Tests Passing:** `bun test` passes 100% with 0 regressions.
-- [ ] **Governance Green:** `bun run benchmark audit` returns `10 / 10 checks passed (PASS)`.
+- [ ] **Governance Green:** `bun run benchmark audit` reports `Verdict: PASS` with every check passed (currently 8/8) and exits 0.
 - [ ] **Whitespace Clean:** `git diff --check` returns 0 whitespace errors.
 - [ ] **No Speculative Code:** Implementation solves verified requirements without premature abstractions.
 - [ ] **Documentation Synchronized:** Any changes to capabilities, metrics, or invariants are documented in `CHANGELOG.md`, `ROADMAP.md`, and relevant architecture docs.

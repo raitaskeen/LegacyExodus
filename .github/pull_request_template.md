@@ -21,7 +21,7 @@
 
 ## Benchmark & Performance Impact
 
-<!-- Note benchmark audit results (10/10 checks) or memory measurements. -->
+<!-- Note benchmark audit results (passed/total checks and verdict) or memory measurements. -->
 
 ## Security Impact
 

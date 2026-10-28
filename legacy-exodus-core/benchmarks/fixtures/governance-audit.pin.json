@@ -1,0 +1,10 @@
+{
+  "fixture": "governance-audit",
+  "description": "Offline fixture for the benchmark self-audit accounting, determinism and sampling checks. Digests are SHA-256 of each file's content with CRLF normalized to LF; the fixture directory must contain exactly these files.",
+  "files": {
+    "package.json": "bcabcc6f97f5a40966f97846760d599b304fc7222dc526981cadc914ca18cabb",
+    "src/format.js": "849755989303223def7a56d76151625da6e6b15023fe584c7e0dd1e9950109f0",
+    "src/index.js": "e72facee3df4c7a7e973a687e1ec3c444d64e368a7cc778b9f2477e667d21e62",
+    "src/math.js": "93341c60443effbea94bb84db7f64303d6fdc9f7d6bb3b403a6b975dc78090dc"
+  }
+}

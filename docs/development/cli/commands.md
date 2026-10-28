@@ -151,7 +151,7 @@ legacy-exodus test parser --json
 Executes complete 4-gate repository verification `[read-only]`:
 1. **Static Typecheck:** Zero compiler errors (`tsc --noEmit`).
 2. **Test Suite:** All unit, integration, and architecture test suites (`bun test`).
-3. **Benchmark Governance:** 10-point benchmark system self-audit (`bun run benchmark audit`).
+3. **Benchmark Governance:** benchmark system self-audit (`bun run benchmark audit --json`). Passes only when every governed check passed; the dashboard shows the audit's real passed/total count.
 4. **Working Tree Hygiene:** Git diff whitespace and file hygiene check (`git diff --check`).
 
 ```bash

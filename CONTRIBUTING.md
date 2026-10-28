@@ -48,7 +48,7 @@ All contributions must pass the complete core verification suite before opening 
 bun install --frozen-lockfile
 bun run typecheck        # Zero TypeScript compilation errors
 bun test                 # Full test suite execution
-bun run benchmark audit  # 10-point governance benchmark audit
+bun run benchmark audit  # governance self-audit; non-zero exit unless every check passes
 bun run src/cli/index.ts --help
 git diff --check         # Zero whitespace or merge conflict artifacts
 ```

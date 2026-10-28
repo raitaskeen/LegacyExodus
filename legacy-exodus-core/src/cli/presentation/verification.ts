@@ -155,7 +155,7 @@ export class VerificationPresenter {
     ]);
 
     const banner = isPass
-      ? `  ${this.layout.theme.success(this.layout.symbols.success)} ${this.layout.theme.text("All 10 benchmark governance checks passed with zero findings.")}`
+      ? `  ${this.layout.theme.success(this.layout.symbols.success)} ${this.layout.theme.text(`All ${report.totalChecks} benchmark governance checks passed with zero findings.`)}`
       : `  ${this.layout.theme.error(this.layout.symbols.failure)} ${this.layout.theme.error(`${report.failedChecks} benchmark governance check(s) failed.`)}`;
 
     const divider = this.layout.renderDivider();
