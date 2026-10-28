@@ -38,14 +38,14 @@ hand-off point: a new session resumes from here.
 | 5 | Manifest location without plaintext path | BA-26 | `src/storage/projections/**`, `src/discovery/discovery-validator.ts`, `snapshot-trust.ts`, tests | Wave 4 | queued. Design (lead, 2026-10-28): the validator binds reuse to the canonical absolute path (`discovery-validator.ts:280, :405`, the F-001 location binding), so a relative path alone would weaken trust. Replace `repository.path` with `repository.locationDigest = HMAC(localKey, canonicalPath)`, recomputed on validate, and bump the manifest contract so old snapshots refresh |
 | 1 | Parser fallback honours `language: typescript` for unlisted extensions (#210 review; unreachable in production today) | BA-01 | `src/parser/adapters/javascript/**` | #210 | queued (small) |
 | 1 | Fact-diff residual gaps (dominators, lifetimes, unused definitions, first taint hop) | ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â | `benchmarks/fact-diff.ts` | #204 | queued (low) |
-| 2 | TypeScript declarations | BA-02 | symbol extractor, `symbol-contracts.ts`, kind lists in `src/` | Wave 1 | PR #214 (head db83a52): red-team FAIL, 3 fixes pending (see Paused) |
-| 2 | Then class expressions, dynamic import, compiled CJS (serial on the symbol extractor) | BA-13, BA-10, BA-12 | symbol extractor | BA-02 | queued |
+| 2 | TypeScript declarations | BA-02 | symbol extractor, `symbol-contracts.ts`, kind lists in `src/` | Wave 1 | merged #214 `56acd69` (after one FAIL: specifier exports, regex, reopened-namespace soundness) |
+| 2 | Class expressions (then dynamic import, then compiled CJS, serial) | BA-13, BA-10, BA-12 | symbol extractor, call graph | BA-02 | BA-13 in progress |
 | 2 | TS module resolution, then namespace imports | BA-03, BA-09 | `src/graph/**`, tsconfig loader, `command-handler.ts` aliases | Wave 1 | queued |
 | 3 | Data flow rebuilt on the CFG | BA-05, BA-04, BA-06, BA-27, BA-28 | DFG modules | Wave 2 | queued |
 | 3 | Taint policy packs | BA-07 | flow policy module | DFG rebuild | queued |
 | 4 | Express model; dead-code precision; React; discovery policy | BA-08, BA-11, BA-24, BA-15 | semantic modules; `src/discovery/**` | Wave 3 | queued |
 | 5 | Stable identity (ADR first); sharded output | BA-18, BA-17 | ids; projections | Wave 4 | queued |
-| 2 | Docs truth update after BA-02 and BA-03 merge (README rows, CURRENT_IMPLEMENTATION, CLI configuration doc) | BA-21 follow-up | `README.md`, `docs/CURRENT_IMPLEMENTATION.md`, `docs/development/cli/configuration.md` | #213, #214 | queued (lead batches) |
+| 2 | Docs truth update after BA-02 and BA-03 merge (README rows, CURRENT_IMPLEMENTATION, CLI configuration doc) | BA-21 follow-up | `README.md`, `docs/CURRENT_IMPLEMENTATION.md`, `docs/development/cli/configuration.md` | #213, #214 | in progress |
 | 2 | Follow-ups: `.d.ts` module implicit exports; surface tsconfig diagnostics in analysis output; namespace calls through aliases in the call graph; `profile.ts` alias reader | BA-02, BA-03 | per item | #213, #214 | queued |
 | Docs | Docs/governance session (incl. remaining `core-foundation` mentions in GOVERNANCE, CONTRIBUTING, PR template, `.agents`) | BA-23, BA-22 rest | `docs/**`, root docs, `.agents/**` | anytime | queued |
 
@@ -55,16 +55,6 @@ Notes:
 - Lead decision (2026-10-28): the hotspot split is dropped. Wave 2 items lock disjoint files, so splitting adds risk without enabling parallelism.
 - BA-01 known limitation: with the Flow plugin, a statement that is only the identifier `type`, `declare` or `opaque` at the end of a line, followed by an assignment on the next line (valid JS via ASI), now misparses as Flow. No corpus hits it. Revisit if a real repository does.
 - BA-03: since #205 the generic `paths` alias `@/*` beats `@/_internal/*`. ICU order matched tsc's longest-prefix rule only by accident. Implement longest-prefix selection.
-
-## Paused 2026-10-28 (third pause, at the owner's request)
-
-Agents were stopped deliberately to save usage. Nothing is half-written: both branches on origin are clean at their last pushed heads.
-- **#214 BA-02** (head `db83a52`, worktree `C:Projects.w2a02`): red-team FAIL. The writer has not started the fix yet. Required, each with a RED-then-GREEN test:
-  1. `mergeDeclarations` must rank specifier exports (`export { X }`, `export type { X }`), with value specifiers outranking type/namespace/signature exports of the same name, so one `export` survives. The same applies to `export default function` overloads. Repros: `class Baz{go(){}}; export { Baz }; export interface Baz {}` with `new Baz().go()` elsewhere; `function run(){}; export { run }; export namespace run { export const o = 1 }` with `run()` elsewhere. Both must stay RESOLVED.
-  2. `DECLARATION_FILE` regex: `/.d.[mc]?ts$/i` must become `/.d.[mc]?ts$/i` (it currently matches `build.ts`).
-  3. Soundness: with reopened namespaces `function a(){}; namespace M{export function a(){}}; namespace M{export function b(){a()}}`, the head resolves `a()` to the module-level `a`, but TS binds it to `M.a`. Rule: an unqualified name in one block of a multi-block namespace that is not bound in that block stays UNRESOLVED if another block declares it.
-  Then fact-diff, verify, push, and Sonnet re-review.
-- After both merge: the lead's batched docs update (README rows, CURRENT_IMPLEMENTATION, CLI configuration), then the serial chain BA-13, then BA-10, then BA-12 on the symbol extractor, plus BA-09.
 
 ## How to resume (new session or after a usage limit)
 
