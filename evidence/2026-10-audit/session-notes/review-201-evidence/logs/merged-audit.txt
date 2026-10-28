@@ -1,0 +1,17 @@
+﻿bun : $ bun run benchmarks/cli.ts audit
+At line:1 char:739
++ ... TEXITCODE"; bun run benchmark audit *> "$log\merged-audit.log"; "audi ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ($ bun run benchmarks/cli.ts audit:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Benchmark Governance Audit
+  Verdict: PASS_WITH_CONDITIONS
+  Passed: 8/10 checks
+  Engine SHA: uncommitted/local
+
+Findings:
+  [HIGH] Correctness: Failed to execute accounting check on cookie-parser: Discovery path does not exist.
+    Evidence: Discovery path does not exist.
+  [HIGH] Determinism: Failed determinism check: Discovery path does not exist.
+    Evidence: Discovery path does not exist.

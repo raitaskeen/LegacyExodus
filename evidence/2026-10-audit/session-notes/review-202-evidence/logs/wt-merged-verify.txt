@@ -1,0 +1,13 @@
+﻿bun : $ bun run src/cli/index.ts verify
+At line:1 char:586
++ ... us-core"; $t = Get-Date; bun run verify *> "$l\$p-verify.log"; "$p ve ...
++                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ($ bun run src/cli/index.ts verify:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Repository Verification Dashboard
+  [PASS] Static Typecheck: Zero compiler errors (999ms)
+  [PASS] Test Suite: All 1812 tests passing across 152 files (161944ms)
+  [PASS] Benchmark Governance: 8/8 audit checks verified (1563ms)
+  [PASS] Git Working Tree Hygiene: No whitespace/diff issues (165ms)
+Total Time: 164678ms

@@ -1,0 +1,33 @@
+﻿bun : $ bun run src/cli/index.ts verify
+At line:1 char:586
++ ... us-core"; $t = Get-Date; bun run verify *> "$l\$p-verify.log"; "$p ve ...
++                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ($ bun run src/cli/index.ts verify:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Repository Verification Dashboard
+  [PASS] Static Typecheck: Zero compiler errors (1045ms)
+  [FAIL] Test Suite: 1 test(s) failed in suite (510795ms)
+  [PASS] Benchmark Governance: 10/10 audit checks verified (548ms)
+  [PASS] Git Working Tree Hygiene: No whitespace/diff issues (250ms)
+Total Time: 512646ms
+
+--- Verification Failure Diagnostics ---
+
+[Test Suite]
+Actionable Correct: 100.0%
+Actionable Verdict: ACTIONABLE
+Migration Safety:   MIGRATION_SAFETY_NOT_YET_ESTABLISHED
+Category Breakdown:
+-------------------------------------------------------------------------------------------------------------------------
+Category          | Scope        | GT Count | Scoped | Unverified | Unvalidated |   TP |   FP |   FN | Precision | Recall 
+-------------------------------------------------------------------------------------------------------------------------
+file              | SAMPLE       |        1 |      1 |          0 |           0 |    1 |    0 |    0 |       N/A | 100.0%
+-------------------------------------------------------------------------------------------------------------------------
+Limitations:
+  - Representative ground-truth sample (150+ facts) provides deep multi-category evidence across 25 files, but does NOT establish whole-repository migration safety.
+  - Predictions outside the 25 validated files belong to the UNVALIDATED universe and are NOT counted as false positives.
+  - Dynamic plugin registration and runtime decoration are validated via static structural contracts only.
+F07_DETERMINISM_SHA256 a074f1daaa4c230eb4c47cd4fa480aba956d2e6ca2635a1462cda965a48f9dbf
+F08 determinism SHA256: aee195fa2e49c354d3b8040f97f98d278c3e1cc1ec63278a476b601073fa0111 aee195fa2e49c354d3b8040f97f98d278c3e1cc1ec63278a476b601073fa0111 aee195fa2e49c354d3b8040f97f98d278c3e1cc1ec63278a476b601073fa0111
+error: script "verify" exited with code 1

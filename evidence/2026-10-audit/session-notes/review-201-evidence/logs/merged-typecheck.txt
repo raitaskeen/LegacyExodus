@@ -1,0 +1,7 @@
+﻿bun : $ tsc --noEmit
+At line:1 char:590
++ ...  | Out-Null; bun run typecheck *> "$log\merged-typecheck.log"; "typec ...
++                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ($ tsc --noEmit:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

@@ -1,0 +1,664 @@
+﻿bun test v1.4.4 (38afee6c8)
+bun : {"level":30,"component":"runtime","message":"Application stopped"}
+At line:1 char:513
++ ... = Get-Date; bun test *> C:\Projects\.f010-review\logs\wt-main-test-re ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ({"level":30,"co...ation stopped"}:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+{"level":30,"component":"runtime","message":"Application stopped"}
+{"level":30,"component":"runtime","message":"Application stopped"}
+{"level":30,"component":"runtime","message":"Application started"}
+{"level":30,"component":"runtime","message":"Application stopped"}
+[INFO] Starting Discovery (100 files)...
+[PASS] Discovery [100 files] in 50ms
+[INFO] Starting Parsing...
+[PASS] Parsing in 120ms
+[INFO] Starting Storage...
+[PASS] Storage [indexed] in 30ms
+{"level":30,"component":"runtime","message":"Application started"}
+{"level":30,"component":"runtime","message":"Application stopped"}
+{"projectName":"storage-forwarding-fixture","files":1,"filesDiscovered":1,"languages":["json"],"frameworks":[],"dependencies":0,"filesAnalyzed":0,"parserFailures":0,"symbolExtractionFailures":0,"unsupportedFiles":0,"nonSourceArtifacts":1,"unclassifiedArtifacts":0,"enumerationFailures":0,"discoveryComplete":true,"durationMs":8.552800000004936,"reused":false}
+{"projectName":"storage-path-fixture","files":1,"filesDiscovered":1,"languages":["json"],"frameworks":[],"dependencies":0,"filesAnalyzed":0,"parserFailures":0,"symbolExtractionFailures":0,"unsupportedFiles":0,"nonSourceArtifacts":1,"unclassifiedArtifacts":0,"enumerationFailures":0,"discoveryComplete":true,"durationMs":8.693799999993644,"reused":false}
+
+tests\unit\flow\for-loop-reachability.test.ts:
+T01 canonical omitted test: 5211f9056cc44e4a5b91156fa01180c5928512757cc92f5244a806c328c0e339 (3 fresh + 3 reused)
+T05 direct break: cb2d431ee3756c6de6311f195a8c80c8dc806bc3d87dcf3a2fbcf65eb2eb7188 (3 fresh + 3 reused)
+T06 direct continue: 7a6a79328d1da361aa5c26c4d729ab5cd281159513ceee4efaae349b90666cf9 (3 fresh + 3 reused)
+T16 update clause: 5cb8c1294e09dc142d87c4b77f9b7d8ba84001db36cc00b493d26023a67dc4d8 (3 fresh + 3 reused)
+T22 ForIn firewall: 44831a9f8d77945d9f50a9a5c0bf3a13a965fd4c6c65c5b1b0fc595fb5a575e6 (3 fresh + 3 reused)
+T23 ForOf firewall: 8399834fdcda074714c9875fd05ee9e1d709601902bacf118fd32c0bc7ae2ac8 (3 fresh + 3 reused)
+ForInStatement topology: 364ad859e4890e8a324862280b65413e729cab9ea21bab08030ea99cde86e825
+ForOfStatement topology: 89a24e1ab37ed91bf4b46d9b18f3fcf49b5262f3df5c5d40e20a53f1a9264963
+WhileStatement topology: 09c1069a5cf74270376b705f0c2a36b7d177b05847a30f939610162d43fbc9eb
+DoWhileStatement topology: 0b94a51b46c4827c86203f325689700e94cfbf5c82e2ad103ae5e6d8bc53db5c
+
+tests\unit\governance\express-fidelity.test.ts:
+
+╔══════════════════════════════════════════════════════════╗
+║  LegacyExodus — Migration Fidelity Validation Report     ║
+╚══════════════════════════════════════════════════════════╝
+
+Target:             express
+Repository:         express (4.21.2)
+Engine SHA:         7b6f1b33da (0.1.0)
+Freshness:          FRESH
+Evaluation Mode:    SAMPLE-BASED VALIDATION
+Ground Truth Facts: 173
+Total Preds:        20780 (5183 in validated scope [171 TP, 5012 unverified, 0 FP], 15597 unvalidated)
+True Positives:     171
+False Positives:    0 (disproven / closed-world violations)
+False Negatives:    2
+Sample Precision:   N/A (Sample-Based)
+Sample Recall:      98.8%
+Actionable Correct: 100.0%
+Actionable Verdict: ACTIONABLE
+Migration Safety:   MIGRATION_SAFETY_NOT_YET_ESTABLISHED
+
+Category Breakdown:
+-------------------------------------------------------------------------------------------------------------------------
+Category          | Scope        | GT Count | Scoped | Unverified | Unvalidated |   TP |   FP |   FN | Precision | Recall 
+-------------------------------------------------------------------------------------------------------------------------
+file              | SAMPLE       |       25 |     25 |          0 |         209 |   25 |    0 |    0 |       N/A | 100.0%
+dependency        | CLOSED       |       47 |     47 |          0 |           0 |   47 |    0 |    0 |    100.0% | 100.0%
+framework         | CLOSED       |        1 |      1 |          0 |           0 |    1 |    0 |    0 |    100.0% | 100.0%
+symbol            | SAMPLE       |       27 |   2138 |       2112 |        4942 |   26 |    0 |    1 |       N/A |  96.3%
+import            | SAMPLE       |       17 |    111 |         94 |         306 |   17 |    0 |    0 |       N/A | 100.0%
+export            | SAMPLE       |       16 |     39 |         23 |          52 |   16 |    0 |    0 |       N/A | 100.0%
+dependency_edge   | SAMPLE       |       14 |     35 |         21 |         115 |   14 |    0 |    0 |       N/A | 100.0%
+call              | SAMPLE       |       15 |   2057 |       2042 |        7136 |   15 |    0 |    0 |       N/A | 100.0%
+cfg               | SAMPLE       |        6 |    706 |        701 |        2709 |    5 |    0 |    1 |       N/A |  83.3%
+dfg               | SAMPLE       |        5 |     24 |         19 |         128 |    5 |    0 |    0 |       N/A | 100.0%
+-------------------------------------------------------------------------------------------------------------------------
+
+Limitations:
+  - Representative ground-truth sample (150+ facts) provides deep multi-category evidence across 25 files, but does NOT establish whole-repository migration safety.
+  - Predictions outside the 25 validated files belong to the UNVALIDATED universe and are NOT counted as false positives.
+  - Dynamic template engine loading and prototypal method patching are validated via static structural contracts only.
+
+
+tests\unit\governance\fastify-fidelity.test.ts:
+
+╔══════════════════════════════════════════════════════════╗
+║  LegacyExodus — Migration Fidelity Validation Report     ║
+╚══════════════════════════════════════════════════════════╝
+
+Target:             fastify
+Repository:         fastify (5.3.3)
+Engine SHA:         7b6f1b33da (0.1.0)
+Freshness:          FRESH
+Evaluation Mode:    SAMPLE-BASED VALIDATION
+Ground Truth Facts: 193
+Total Preds:        65345 (7739 in validated scope [193 TP, 7546 unverified, 0 FP], 57606 unvalidated)
+True Positives:     193
+False Positives:    0 (disproven / closed-world violations)
+False Negatives:    0
+Sample Precision:   N/A (Sample-Based)
+Sample Recall:      100.0%
+Actionable Correct: 100.0%
+Actionable Verdict: ACTIONABLE
+Migration Safety:   MIGRATION_SAFETY_NOT_YET_ESTABLISHED
+
+Category Breakdown:
+-------------------------------------------------------------------------------------------------------------------------
+Category          | Scope        | GT Count | Scoped | Unverified | Unvalidated |   TP |   FP |   FN | Precision | Recall 
+-------------------------------------------------------------------------------------------------------------------------
+file              | SAMPLE       |       25 |     25 |          0 |         360 |   25 |    0 |    0 |       N/A | 100.0%
+dependency        | CLOSED       |       53 |     53 |          0 |           0 |   53 |    0 |    0 |    100.0% | 100.0%
+symbol            | SAMPLE       |       32 |   3524 |       3492 |       19737 |   32 |    0 |    0 |       N/A | 100.0%
+import            | SAMPLE       |       17 |    317 |        300 |        1413 |   17 |    0 |    0 |       N/A | 100.0%
+export            | SAMPLE       |       18 |    225 |        207 |         138 |   18 |    0 |    0 |       N/A | 100.0%
+dependency_edge   | SAMPLE       |       20 |    283 |        263 |         212 |   20 |    0 |    0 |       N/A | 100.0%
+call              | SAMPLE       |       16 |   2510 |       2494 |       27449 |   16 |    0 |    0 |       N/A | 100.0%
+cfg               | SAMPLE       |        7 |    777 |        770 |        8035 |    7 |    0 |    0 |       N/A | 100.0%
+dfg               | SAMPLE       |        5 |     25 |         20 |         262 |    5 |    0 |    0 |       N/A | 100.0%
+-------------------------------------------------------------------------------------------------------------------------
+
+Limitations:
+  - Representative ground-truth sample (150+ facts) provides deep multi-category evidence across 25 files, but does NOT establish whole-repository migration safety.
+  - Predictions outside the 25 validated files belong to the UNVALIDATED universe and are NOT counted as false positives.
+  - Dynamic plugin registration and runtime decoration are validated via static structural contracts only.
+
+
+╔══════════════════════════════════════════════════════════╗
+
+tests\unit\governance\fidelity-freshness-lock.test.ts:
+║  LegacyExodus — Migration Fidelity Validation Report     ║
+╚══════════════════════════════════════════════════════════╝
+
+Target:             fastify
+Repository:         test-repo (1.2.3)
+Engine SHA:         engine-sha (0.1.0)
+Freshness:          FRESH
+Evaluation Mode:    SAMPLE-BASED VALIDATION
+Ground Truth Facts: 2
+Total Preds:        3 (2 in validated scope [2 TP, 0 unverified, 0 FP], 1 unvalidated)
+True Positives:     2
+False Positives:    0 (disproven / closed-world violations)
+False Negatives:    0
+Sample Precision:   N/A (Sample-Based)
+Sample Recall:      100.0%
+Actionable Correct: 100.0%
+Actionable Verdict: ACTIONABLE
+Migration Safety:   MIGRATION_SAFETY_NOT_YET_ESTABLISHED
+
+Category Breakdown:
+-------------------------------------------------------------------------------------------------------------------------
+Category          | Scope        | GT Count | Scoped | Unverified | Unvalidated |   TP |   FP |   FN | Precision | Recall 
+-------------------------------------------------------------------------------------------------------------------------
+file              | SAMPLE       |        1 |      1 |          0 |           0 |    1 |    0 |    0 |       N/A | 100.0%
+dependency        | CLOSED       |        1 |      1 |          0 |           0 |    1 |    0 |    0 |    100.0% | 100.0%
+symbol            | SAMPLE       |        0 |      0 |          0 |           1 |    0 |    0 |    0 |       N/A |    N/A
+-------------------------------------------------------------------------------------------------------------------------
+
+Limitations:
+  - Representative ground-truth sample (150+ facts) provides deep multi-category evidence across 25 files, but does NOT establish whole-repository migration safety.
+  - Predictions outside the 25 validated files belong to the UNVALIDATED universe and are NOT counted as false positives.
+  - Dynamic plugin registration and runtime decoration are validated via static structural contracts only.
+
+
+╔══════════════════════════════════════════════════════════╗
+║  LegacyExodus — Migration Fidelity Validation Report     ║
+╚══════════════════════════════════════════════════════════╝
+
+Target:             fastify
+Repository:         test-repo (1.2.3)
+Engine SHA:         engine-sha (0.1.0)
+Freshness:          STALE
+Evaluation Mode:    SAMPLE-BASED VALIDATION
+Ground Truth Facts: 2
+Total Preds:        3 (2 in validated scope [2 TP, 0 unverified, 0 FP], 1 unvalidated)
+True Positives:     2
+False Positives:    0 (disproven / closed-world violations)
+False Negatives:    0
+Sample Precision:   N/A (Sample-Based)
+Sample Recall:      100.0%
+Actionable Correct: 100.0%
+Actionable Verdict: ACTIONABLE
+Migration Safety:   MIGRATION_SAFETY_NOT_YET_ESTABLISHED
+
+Category Breakdown:
+-------------------------------------------------------------------------------------------------------------------------
+Category          | Scope        | GT Count | Scoped | Unverified | Unvalidated |   TP |   FP |   FN | Precision | Recall 
+-------------------------------------------------------------------------------------------------------------------------
+file              | SAMPLE       |        1 |      1 |          0 |           0 |    1 |    0 |    0 |       N/A | 100.0%
+dependency        | CLOSED       |        1 |      1 |          0 |           0 |    1 |    0 |    0 |    100.0% | 100.0%
+symbol            | SAMPLE       |        0 |      0 |          0 |           1 |    0 |    0 |    0 |       N/A |    N/A
+-------------------------------------------------------------------------------------------------------------------------
+
+Limitations:
+  - Representative ground-truth sample (150+ facts) provides deep multi-category evidence across 25 files, but does NOT establish whole-repository migration safety.
+  - Predictions outside the 25 validated files belong to the UNVALIDATED universe and are NOT counted as false positives.
+  - Dynamic plugin registration and runtime decoration are validated via static structural contracts only.
+
+
+╔══════════════════════════════════════════════════════════╗
+║  LegacyExodus — Migration Fidelity Validation Report     ║
+╚══════════════════════════════════════════════════════════╝
+
+Target:             fastify
+Repository:         test-repo (1.2.3)
+Engine SHA:         engine-sha (0.1.0)
+Freshness:          STALE
+Evaluation Mode:    SAMPLE-BASED VALIDATION
+Ground Truth Facts: 2
+Total Preds:        3 (2 in validated scope [2 TP, 0 unverified, 0 FP], 1 unvalidated)
+True Positives:     2
+False Positives:    0 (disproven / closed-world violations)
+False Negatives:    0
+Sample Precision:   N/A (Sample-Based)
+Sample Recall:      100.0%
+Actionable Correct: 100.0%
+Actionable Verdict: ACTIONABLE
+Migration Safety:   MIGRATION_SAFETY_NOT_YET_ESTABLISHED
+
+Category Breakdown:
+-------------------------------------------------------------------------------------------------------------------------
+Category          | Scope        | GT Count | Scoped | Unverified | Unvalidated |   TP |   FP |   FN | Precision | Recall 
+-------------------------------------------------------------------------------------------------------------------------
+file              | SAMPLE       |        1 |      1 |          0 |           0 |    1 |    0 |    0 |       N/A | 100.0%
+dependency        | CLOSED       |        1 |      1 |          0 |           0 |    1 |    0 |    0 |    100.0% | 100.0%
+symbol            | SAMPLE       |        0 |      0 |          0 |           1 |    0 |    0 |    0 |       N/A |    N/A
+-------------------------------------------------------------------------------------------------------------------------
+
+Limitations:
+  - Representative ground-truth sample (150+ facts) provides deep multi-category evidence across 25 files, but does NOT establish whole-repository migration safety.
+  - Predictions outside the 25 validated files belong to the UNVALIDATED universe and are NOT counted as false positives.
+  - Dynamic plugin registration and runtime decoration are validated via static structural contracts only.
+
+
+╔══════════════════════════════════════════════════════════╗
+║  LegacyExodus — Migration Fidelity Validation Report     ║
+╚══════════════════════════════════════════════════════════╝
+
+Target:             fastify
+Repository:         test-repo (1.2.3)
+Engine SHA:         engine-sha (0.1.0)
+Freshness:          STALE
+Evaluation Mode:    SAMPLE-BASED VALIDATION
+Ground Truth Facts: 2
+Total Preds:        3 (2 in validated scope [2 TP, 0 unverified, 0 FP], 1 unvalidated)
+True Positives:     2
+False Positives:    0 (disproven / closed-world violations)
+False Negatives:    0
+Sample Precision:   N/A (Sample-Based)
+Sample Recall:      100.0%
+Actionable Correct: 100.0%
+Actionable Verdict: ACTIONABLE
+Migration Safety:   MIGRATION_SAFETY_NOT_YET_ESTABLISHED
+
+Category Breakdown:
+-------------------------------------------------------------------------------------------------------------------------
+Category          | Scope        | GT Count | Scoped | Unverified | Unvalidated |   TP |   FP |   FN | Precision | Recall 
+-------------------------------------------------------------------------------------------------------------------------
+file              | SAMPLE       |        1 |      1 |          0 |           0 |    1 |    0 |    0 |       N/A | 100.0%
+dependency        | CLOSED       |        1 |      1 |          0 |           0 |    1 |    0 |    0 |    100.0% | 100.0%
+symbol            | SAMPLE       |        0 |      0 |          0 |           1 |    0 |    0 |    0 |       N/A |    N/A
+-------------------------------------------------------------------------------------------------------------------------
+
+Limitations:
+  - Representative ground-truth sample (150+ facts) provides deep multi-category evidence across 25 files, but does NOT establish whole-repository migration safety.
+  - Predictions outside the 25 validated files belong to the UNVALIDATED universe and are NOT counted as false positives.
+  - Dynamic plugin registration and runtime decoration are validated via static structural contracts only.
+
+
+╔══════════════════════════════════════════════════════════╗
+║  LegacyExodus — Migration Fidelity Validation Report     ║
+╚══════════════════════════════════════════════════════════╝
+
+Target:             fastify
+Repository:         test-repo (1.2.3)
+Engine SHA:         7b6f1b33da (0.1.0)
+Freshness:          FRESH
+Evaluation Mode:    SAMPLE-BASED VALIDATION
+Ground Truth Facts: 2
+Total Preds:        3 (2 in validated scope [2 TP, 0 unverified, 0 FP], 1 unvalidated)
+True Positives:     2
+False Positives:    0 (disproven / closed-world violations)
+False Negatives:    0
+Sample Precision:   N/A (Sample-Based)
+Sample Recall:      100.0%
+Actionable Correct: 100.0%
+Actionable Verdict: ACTIONABLE
+Migration Safety:   MIGRATION_SAFETY_NOT_YET_ESTABLISHED
+
+Category Breakdown:
+-------------------------------------------------------------------------------------------------------------------------
+Category          | Scope        | GT Count | Scoped | Unverified | Unvalidated |   TP |   FP |   FN | Precision | Recall 
+-------------------------------------------------------------------------------------------------------------------------
+file              | SAMPLE       |        1 |      1 |          0 |           0 |    1 |    0 |    0 |       N/A | 100.0%
+dependency        | CLOSED       |        1 |      1 |          0 |           0 |    1 |    0 |    0 |    100.0% | 100.0%
+symbol            | SAMPLE       |        0 |      0 |          0 |           1 |    0 |    0 |    0 |       N/A |    N/A
+-------------------------------------------------------------------------------------------------------------------------
+
+Limitations:
+  - Representative ground-truth sample (150+ facts) provides deep multi-category evidence across 25 files, but does NOT establish whole-repository migration safety.
+  - Predictions outside the 25 validated files belong to the UNVALIDATED universe and are NOT counted as false positives.
+  - Dynamic plugin registration and runtime decoration are validated via static structural contracts only.
+
+
+╔══════════════════════════════════════════════════════════╗
+║  LegacyExodus — Migration Fidelity Validation Report     ║
+╚══════════════════════════════════════════════════════════╝
+
+Target:             fastify
+Repository:         test-repo (1.2.3)
+Engine SHA:         7b6f1b33da (0.1.0)
+Freshness:          FRESH
+Evaluation Mode:    SAMPLE-BASED VALIDATION
+Ground Truth Facts: 2
+Total Preds:        3 (2 in validated scope [2 TP, 0 unverified, 0 FP], 1 unvalidated)
+True Positives:     2
+False Positives:    0 (disproven / closed-world violations)
+False Negatives:    0
+Sample Precision:   N/A (Sample-Based)
+Sample Recall:      100.0%
+Actionable Correct: 100.0%
+Actionable Verdict: ACTIONABLE
+Migration Safety:   MIGRATION_SAFETY_NOT_YET_ESTABLISHED
+
+Category Breakdown:
+-------------------------------------------------------------------------------------------------------------------------
+Category          | Scope        | GT Count | Scoped | Unverified | Unvalidated |   TP |   FP |   FN | Precision | Recall 
+-------------------------------------------------------------------------------------------------------------------------
+file              | SAMPLE       |        1 |      1 |          0 |           0 |    1 |    0 |    0 |       N/A | 100.0%
+dependency        | CLOSED       |        1 |      1 |          0 |           0 |    1 |    0 |    0 |    100.0% | 100.0%
+symbol            | SAMPLE       |        0 |      0 |          0 |           1 |    0 |    0 |    0 |       N/A |    N/A
+-------------------------------------------------------------------------------------------------------------------------
+
+Limitations:
+  - Representative ground-truth sample (150+ facts) provides deep multi-category evidence across 25 files, but does NOT establish whole-repository migration safety.
+  - Predictions outside the 25 validated files belong to the UNVALIDATED universe and are NOT counted as false positives.
+  - Dynamic plugin registration and runtime decoration are validated via static structural contracts only.
+
+
+╔══════════════════════════════════════════════════════════╗
+║  LegacyExodus — Migration Fidelity Validation Report     ║
+╚══════════════════════════════════════════════════════════╝
+
+Target:             fastify
+Repository:         test-repo (1.2.3)
+Engine SHA:         engine-sha (0.1.0)
+Freshness:          FRESH
+Evaluation Mode:    SAMPLE-BASED VALIDATION
+Ground Truth Facts: 2
+Total Preds:        3 (2 in validated scope [2 TP, 0 unverified, 0 FP], 1 unvalidated)
+True Positives:     2
+False Positives:    0 (disproven / closed-world violations)
+False Negatives:    0
+Sample Precision:   N/A (Sample-Based)
+Sample Recall:      100.0%
+Actionable Correct: 100.0%
+Actionable Verdict: ACTIONABLE
+Migration Safety:   MIGRATION_SAFETY_NOT_YET_ESTABLISHED
+
+Category Breakdown:
+-------------------------------------------------------------------------------------------------------------------------
+Category          | Scope        | GT Count | Scoped | Unverified | Unvalidated |   TP |   FP |   FN | Precision | Recall 
+-------------------------------------------------------------------------------------------------------------------------
+file              | SAMPLE       |        1 |      1 |          0 |           0 |    1 |    0 |    0 |       N/A | 100.0%
+dependency        | CLOSED       |        1 |      1 |          0 |           0 |    1 |    0 |    0 |    100.0% | 100.0%
+symbol            | SAMPLE       |        0 |      0 |          0 |           1 |    0 |    0 |    0 |       N/A |    N/A
+-------------------------------------------------------------------------------------------------------------------------
+
+Limitations:
+  - Representative ground-truth sample (150+ facts) provides deep multi-category evidence across 25 files, but does NOT establish whole-repository migration safety.
+  - Predictions outside the 25 validated files belong to the UNVALIDATED universe and are NOT counted as false positives.
+  - Dynamic plugin registration and runtime decoration are validated via static structural contracts only.
+
+
+tests\unit\governance\repository-boundary-hardening.test.ts:
+
+╔══════════════════════════════════════════════════════════╗
+║  LegacyExodus — Migration Fidelity Validation Report     ║
+╚══════════════════════════════════════════════════════════╝
+
+Target:             boundary-check
+Evaluation Mode:    SAMPLE-BASED VALIDATION
+Ground Truth Facts: 1
+Total Preds:        1 (1 in validated scope [1 TP, 0 unverified, 0 FP], 0 unvalidated)
+True Positives:     1
+False Positives:    0 (disproven / closed-world violations)
+False Negatives:    0
+Sample Precision:   N/A (Sample-Based)
+Sample Recall:      100.0%
+Actionable Correct: 100.0%
+Actionable Verdict: ACTIONABLE
+Migration Safety:   MIGRATION_SAFETY_NOT_YET_ESTABLISHED
+
+Category Breakdown:
+-------------------------------------------------------------------------------------------------------------------------
+Category          | Scope        | GT Count | Scoped | Unverified | Unvalidated |   TP |   FP |   FN | Precision | Recall 
+-------------------------------------------------------------------------------------------------------------------------
+file              | SAMPLE       |        1 |      1 |          0 |           0 |    1 |    0 |    0 |       N/A | 100.0%
+-------------------------------------------------------------------------------------------------------------------------
+
+Limitations:
+  - Representative ground-truth sample (150+ facts) provides deep multi-category evidence across 25 files, but does NOT establish whole-repository migration safety.
+  - Predictions outside the 25 validated files belong to the UNVALIDATED universe and are NOT counted as false positives.
+  - Dynamic plugin registration and runtime decoration are validated via static structural contracts only.
+
+
+tests\unit\graph\f07-module-dependencies.test.ts:
+F07_DETERMINISM_SHA256 a074f1daaa4c230eb4c47cd4fa480aba956d2e6ca2635a1462cda965a48f9dbf
+
+tests\unit\semantic\local-identifier-references.test.ts:
+F08 determinism SHA256: aee195fa2e49c354d3b8040f97f98d278c3e1cc1ec63278a476b601073fa0111 aee195fa2e49c354d3b8040f97f98d278c3e1cc1ec63278a476b601073fa0111 aee195fa2e49c354d3b8040f97f98d278c3e1cc1ec63278a476b601073fa0111
+--------------------------------------------------------------------------------------------------------------|--------
+-|---------|-------------------
+File                                                                                                          | % 
+Funcs | % Lines | Uncovered Line #s
+--------------------------------------------------------------------------------------------------------------|--------
+-|---------|-------------------
+All files                                                                                                     |   
+93.40 |   91.99 |
+ benchmarks\fidelity\express-ground-truth.ts                                                                  |  
+100.00 |  100.00 | 
+ benchmarks\fidelity\fastify-ground-truth.ts                                                                  |  
+100.00 |  100.00 | 
+ benchmarks\fidelity\runner.ts                                                                                |  
+100.00 |   92.67 | 51-52,57-58,62,142-144,150-157,162,375-377,379,391
+ benchmarks\governance.ts                                                                                     |   
+66.67 |   73.78 | 153-154,203-207,209-213,215-222,225-229,231-234,236-237,239-250
+ benchmarks\paths.ts                                                                                          |  
+100.00 |   78.05 | 58,103-105,107,125-127,129
+ src\cli\app.ts                                                                                               |  
+100.00 |   97.06 | 37
+ src\cli\commands\analyze.ts                                                                                  |   
+75.00 |   95.83 | 123-125
+ src\cli\commands\index.ts                                                                                    |  
+100.00 |  100.00 | 
+ src\cli\commands\init.ts                                                                                     |   
+90.00 |   79.76 | 45-48,51,64-67,70-72,91-93,106,131
+ src\cli\commands\plugins.ts                                                                                  |   
+66.67 |   78.79 | 48-51,54-56
+ src\cli\commands\status.ts                                                                                   |   
+66.67 |   81.08 | 56-59,62-64
+ src\cli\commands\test.ts                                                                                     |   
+85.71 |   65.83 | 106-107,109-110,112-115,117,120,150,183,196,235,238-242,245-247,249-254,256-263,265-267,269-270,274-2
+75,277-285,287,290-292,295-297,299-302,306-309,311,314-325,328-329
+ src\cli\commands\verify.ts                                                                                   |   
+64.71 |   60.80 | 
+97-105,135,138-140,144,153,164-167,173-177,180-187,190-196,198-204,207-214,217-224,226-228,230,239-241
+ src\cli\errors.ts                                                                                            |  
+100.00 |  100.00 | 
+ src\cli\output\formatter.ts                                                                                  |   
+50.00 |   74.07 | 17-19,22,41,63-66,69-73
+ src\cli\output\json-output.ts                                                                                |  
+100.00 |  100.00 | 
+ src\cli\presentation\capabilities.ts                                                                         |  
+100.00 |   98.15 | 50
+ src\cli\presentation\errors.ts                                                                               |   
+75.00 |   75.25 | 21,51-54,68-75,78-82,121,124,127,142-145
+ src\cli\presentation\help.ts                                                                                 |   
+95.24 |   95.30 | 107,214-216,443-445,447-450,452-455,457,459
+ src\cli\presentation\layout.ts                                                                               |  
+100.00 |   96.97 | 80-81
+ src\cli\presentation\progress.ts                                                                             |   
+62.50 |   43.42 | 42-43,56-57,61-63,65-69,73-75,77-80,85-86,90-91,93-94,96-99,101-113,116
+ src\cli\presentation\shell.ts                                                                                |   
+93.75 |   90.67 | 38-40,96-99
+ src\cli\presentation\summaries.ts                                                                            |   
+80.00 |   80.00 | 58,65,81-83,86,88-91,94-103,105,114,129-136
+ src\cli\presentation\symbols.ts                                                                              |  
+100.00 |  100.00 | 
+ src\cli\presentation\tables.ts                                                                               |  
+100.00 |   91.74 | 20,142-146,148,186-188
+ src\cli\presentation\test-runner.ts                                                                          |   
+76.92 |   81.02 | 60-65,223-235,245,249,309-318,323,342-350,376-385,390
+ src\cli\presentation\theme.ts                                                                                |   
+62.79 |  100.00 | 
+ src\cli\presentation\verification.ts                                                                         |   
+90.91 |   78.91 | 46-52,83,92-94,113,129-134,159,170-173,175-179,183,196-197
+ src\contracts\commands.ts                                                                                    |  
+100.00 |   90.38 | 93-97
+ src\contracts\discovery-projection.ts                                                                        |  
+100.00 |  100.00 | 
+ src\contracts\discovery-storage.ts                                                                           |  
+100.00 |  100.00 | 
+ src\contracts\discovery.ts                                                                                   |  
+100.00 |   92.31 | 119-123
+ src\contracts\engine.ts                                                                                      |  
+100.00 |  100.00 | 
+ src\contracts\fidelity.ts                                                                                    |  
+100.00 |  100.00 | 
+ src\contracts\provenance.ts                                                                                  |  
+100.00 |  100.00 | 
+ src\core\engine\engine.ts                                                                                    |   
+92.86 |   82.39 | 132-133,139-148,152-155,161-164,190-193,224-227
+ src\core\engine\index.ts                                                                                     |  
+100.00 |  100.00 | 
+ src\core\events\domain-event.ts                                                                              |  
+100.00 |   95.24 | 47
+ src\core\events\durable-event-journal.ts                                                                     |   
+83.33 |   75.00 | 57-59,61-64,66-67,70-74,78,96-97
+ src\core\events\event-bus.ts                                                                                 |  
+100.00 |   95.00 | 18
+ src\core\events\event-reducer.ts                                                                             |  
+100.00 |  100.00 | 
+ src\core\events\event-store.ts                                                                               |  
+100.00 |  100.00 | 
+ src\core\orchestration\command-handler.ts                                                                    |   
+92.31 |   95.08 | 66-75,77,82-89,91,130,193,353,738-745
+ src\core\orchestration\orchestrator.ts                                                                       |   
+92.86 |   89.47 | 88-91,108-113,207-210
+ src\core\orchestration\run-scoped-ast-store.ts                                                               |   
+77.78 |   77.51 | 46-52,61-67,112-113,122-123,143,172,184-188,190-196,246-251
+ src\core\state\project-state.ts                                                                              |  
+100.00 |  100.00 | 
+ src\core\state\state-factory.ts                                                                              |  
+100.00 |  100.00 | 
+ src\core\state\state-schema.ts                                                                               |  
+100.00 |   86.11 | 30-34
+ src\discovery\discovery-engine.ts                                                                            |  
+100.00 |  100.00 | 
+ src\discovery\discovery-manifest.ts                                                                          |  
+100.00 |   98.36 | 70
+ src\discovery\discovery-query-service.ts                                                                     |   
+94.74 |   93.01 | 97-98,140-141,161-165,206,233,245,261,277,293,309
+ src\discovery\discovery-validator.ts                                                                         |  
+100.00 |   80.17 | 
+15,32,37,115-116,187,194-198,200,208-213,217-221,228-232,234,239-244,315-321,328-334,340-346,420-421,495-500,518-521
+ src\discovery\file-scanner.ts                                                                                |  
+100.00 |   94.12 | 179-183,271-276,288-289,291
+ src\discovery\index.ts                                                                                       |  
+100.00 |  100.00 | 
+ src\discovery\project-detector.ts                                                                            |  
+100.00 |   99.22 | 201
+ src\discovery\snapshot-trust.ts                                                                              |   
+71.43 |   87.50 | 40,55-56,68-69,72-74,82
+ src\flow\control-flow-builder.ts                                                                             |   
+98.00 |   97.87 | 178,404,471,474-478,603-604,638
+ src\flow\data-flow-builder.ts                                                                                |   
+94.31 |   97.42 | 428,456-457,544-545,676-678,680,702,733-735,749-750,825-826,851,1109-1110,1112,1156-1157
+ src\flow\flow-analysis-engine.ts                                                                             |  
+100.00 |   98.19 | 175-177
+ src\flow\flow-contracts.ts                                                                                   |  
+100.00 |  100.00 | 
+ src\flow\flow-errors.ts                                                                                      |    
+0.00 |   40.00 | 4-6
+ src\flow\index.ts                                                                                            |  
+100.00 |  100.00 | 
+ src\governance\fidelity\fidelity-matcher.ts                                                                  |  
+100.00 |   96.24 | 28,102-104,135
+ src\governance\fidelity\fidelity-metrics.ts                                                                  |  
+100.00 |   99.20 | 87
+ src\governance\fidelity\fidelity-validator.ts                                                                |  
+100.00 |  100.00 | 
+ src\graph\dependency-graph-builder.ts                                                                        |  
+100.00 |   95.77 | 36,67,118,226,236,249-251
+ src\graph\dependency-graph-contracts.ts                                                                      |  
+100.00 |  100.00 | 
+ src\graph\index.ts                                                                                           |  
+100.00 |  100.00 | 
+ src\graph\module-resolver.ts                                                                                 |  
+100.00 |  100.00 | 
+ src\knowledge\index.ts                                                                                       |  
+100.00 |  100.00 | 
+ src\knowledge\knowledge-graph.ts                                                                             |  
+100.00 |  100.00 | 
+ src\parser\adapters\javascript\index.ts                                                                      |  
+100.00 |  100.00 | 
+ src\parser\adapters\javascript\javascript-node-mapper.ts                                                     |  
+100.00 |   98.20 | 26,213,244
+ src\parser\adapters\javascript\javascript-parser-options.ts                                                  |  
+100.00 |  100.00 | 
+ src\parser\adapters\javascript\javascript-parser.ts                                                          |  
+100.00 |   98.59 | 95
+ src\parser\contracts\ast-node.ts                                                                             |  
+100.00 |   98.86 | 140
+ src\parser\contracts\ast-result.ts                                                                           |  
+100.00 |  100.00 | 
+ src\parser\contracts\parser-metadata.ts                                                                      |  
+100.00 |   87.10 | 35-38
+ src\parser\index.ts                                                                                          |  
+100.00 |  100.00 | 
+ src\parser\manager\parser-manager.ts                                                                         |  
+100.00 |   96.30 | 30
+ src\parser\models\parse-request.ts                                                                           |  
+100.00 |   78.26 | 25-29
+ src\parser\models\parse-response.ts                                                                          |  
+100.00 |  100.00 | 
+ src\parser\models\parser-statistics.ts                                                                       |  
+100.00 |   66.67 | 19-23
+ src\parser\registry\parser-registry-errors.ts                                                                |  
+100.00 |  100.00 | 
+ src\parser\registry\parser-registry.ts                                                                       |  
+100.00 |  100.00 | 
+ src\plugins\index.ts                                                                                         |  
+100.00 |  100.00 | 
+ src\plugins\plugin-errors.ts                                                                                 |   
+75.00 |   76.47 | 28-34,36
+ src\plugins\plugin-loader.ts                                                                                 |  
+100.00 |   76.92 | 18-20
+ src\plugins\plugin-manifest.ts                                                                               |  
+100.00 |  100.00 | 
+ src\plugins\plugin-registry.ts                                                                               |  
+100.00 |  100.00 | 
+ src\runtime\analyzer-fingerprint.ts                                                                          |  
+100.00 |   90.77 | 40-41,97,99-100,109
+ src\runtime\application.ts                                                                                   |  
+100.00 |   99.09 | 87
+ src\runtime\composition\services.ts                                                                          |   
+75.00 |   85.71 | 71,80-91
+ src\runtime\config.ts                                                                                        |  
+100.00 |  100.00 | 
+ src\semantic\call-graph-builder.ts                                                                           |   
+96.86 |   97.09 | 
+605-610,620-621,649,654,740-741,749-750,847,857-858,1060,1248-1249,1358-1359,1533,1551,1562,1600-1603,1613-1616
+ src\semantic\index.ts                                                                                        |  
+100.00 |  100.00 | 
+ src\semantic\semantic-contracts.ts                                                                           |  
+100.00 |  100.00 | 
+ src\semantic\semantic-engine.ts                                                                              |   
+96.88 |   98.89 | 162-163
+ src\shared\errors.ts                                                                                         |  
+100.00 |  100.00 | 
+ src\shared\logger.ts                                                                                         |  
+100.00 |  100.00 | 
+ src\storage\adapters\memory-storage.ts                                                                       |  
+100.00 |   98.53 | 122
+ src\storage\adapters\sqlite-storage.ts                                                                       |  
+100.00 |   99.44 | 85
+ src\storage\index.ts                                                                                         |  
+100.00 |  100.00 | 
+ src\storage\projections\discovery-projection-service.ts                                                      |   
+92.31 |   98.84 | 49,97
+ src\storage\projections\file-discovery-projection.ts                                                         |   
+94.12 |   91.30 | 77,125,229,249-250,258,263-265,271-272,283-284,288,308,321-322,326
+ src\storage\projections\streaming-json-writer.ts                                                             |   
+87.50 |   89.93 | 51-52,203-208,215-220
+ src\storage\storage-errors.ts                                                                                |  
+100.00 |  100.00 | 
+ src\storage\storage-manager.ts                                                                               |  
+100.00 |   60.38 | 14-16,26-28,30-38,41,43-45,48-49
+ src\storage\storage-record.ts                                                                                |   
+85.71 |   89.25 | 112,128-129,131-137
+ src\symbols\index.ts                                                                                         |  
+100.00 |  100.00 | 
+ src\symbols\javascript-symbol-extractor.ts                                                                   |   
+96.08 |   95.45 | 256-257,263-264,335-342,345-352,480-481,542-543,547,652,747,749-751,820,824,887-888,890,930,1007
+ src\symbols\module-reference-contracts.ts                                                                    |  
+100.00 |  100.00 | 
+ src\symbols\symbol-contracts.ts                                                                              |  
+100.00 |   94.62 | 134-138
+ src\symbols\symbol-errors.ts                                                                                 |  
+100.00 |  100.00 | 
+ tests\support\analyzer-identity.ts                                                                           |  
+100.00 |  100.00 | 
+ tests\support\isolated-snapshot-home.ts                                                                      |  
+100.00 |  100.00 | 
+ tests\unit\governance\test-fidelity-helpers.ts                                                               |   
+60.00 |   51.30 | 10-18,22-29,33,35,38-40,43,45-47,49,51-54,56,58-59,61-74,78,141-144,149-150,152
+ ..\..\..\..\Users\TECHPL~1\AppData\Local\Temp\helper-identity-load-yJqWoA\tests\support\analyzer-identity.ts |   
+75.00 |   87.10 | 27-28,44-45
+ ..\..\..\..\Users\TECHPL~1\AppData\Local\Temp\lx-f001-unit-fCarZZ\engine\src\runtime\analyzer-fingerprint.ts |   
+80.00 |   76.92 | 40-41,61,66-67,92-100,109
+--------------------------------------------------------------------------------------------------------------|--------
+-|---------|-------------------
+
+ 1800 pass
+ 1 skip
+ 0 fail
+ 18171 expect() calls
+Ran 1801 tests across 150 files. [151.13s]
