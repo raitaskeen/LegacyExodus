@@ -8,7 +8,7 @@ import { EventBus } from "@core/events/event-bus";
 import { createDurableEventRecord, loadDurableEvents } from "@core/events/durable-event-journal";
 import { reduceProjectState } from "@core/events/event-reducer";
 import { InMemoryEventStore } from "@core/events/event-store";
-import { DiscoveryEngine } from "@discovery/index";
+import { DiscoveryEngine, type DiscoveryValidator } from "@discovery/index";
 import { JavaScriptParser, ParserManager, ParserRegistry } from "@parser/index";
 import { LegacyExodusError } from "@shared/errors";
 import type { StorageManager } from "@storage/index";
@@ -71,13 +71,14 @@ export class Orchestrator implements RuntimeService {
     private readonly reportPostCommitEventDeliveryFailure?: PostCommitEventDeliveryFailureReporter,
     astStoreFactory?: AnalysisAstStoreFactory,
     private readonly reportAstStoreCleanupFailure?: AstStoreCleanupFailureReporter,
+    discoveryValidator?: DiscoveryValidator,
   ) {
     this.initialState = initialState ?? createProjectState("Uninitialized Project");
     this.analyzeProjectHandler = new AnalyzeProjectHandler(
       discoveryEngine,
       parserManager,
       symbolExtractor,
-      undefined,
+      discoveryValidator,
       astStoreFactory,
     );
   }

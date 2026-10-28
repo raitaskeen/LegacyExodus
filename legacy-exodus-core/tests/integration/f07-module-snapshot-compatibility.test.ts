@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { createLegacyExodusEngine } from "@runtime/composition/services";
 import { DiscoveryValidator } from "@discovery/discovery-validator";
 import { DiscoveryQueryService } from "@discovery/discovery-query-service";
+import { computeManifestMac, manifestKeyId, MANIFEST_MAC_ALGORITHM, SnapshotKeyStore } from "@discovery/index";
 import { StorageManager } from "@storage/index";
 import { SqliteStorageProvider } from "@storage/adapters/sqlite-storage";
 import { validateCurrentDependencyGraph } from "@graph/index";
@@ -51,9 +52,13 @@ describe("F07 checksum-valid snapshot graph capability", () => {
           const manifestPath = join(projectPath, ".discovery", "manifest.json");
           const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
           manifest.artifacts["dependency-graph.json"] = { sha256: createHash("sha256").update(bytes).digest("hex"), bytes: Buffer.byteLength(bytes) };
+          // F-001: re-authenticate as this machine's analyzer would, so rejection below comes from the graph contract.
+          const key = await new SnapshotKeyStore().readKey();
+          if (key === undefined) throw new Error("Expected the fresh run to create a local snapshot key.");
+          manifest.integrity = { algorithm: MANIFEST_MAC_ALGORITHM, keyId: manifestKeyId(key), mac: computeManifestMac(manifest, key) };
           await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
         }
-        const validation = await new DiscoveryValidator().validate({ projectPath, verifyFreshness: true });
+        const validation = await new DiscoveryValidator().validate({ projectPath, verifyFreshness: true, authorizeReuse: true });
         expect(validation.valid).toBe(true);
         const second = await analyze();
         expect(second.result.isReused).toBe(mode === "current" ? true : undefined);

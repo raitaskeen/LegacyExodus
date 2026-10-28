@@ -11,5 +11,20 @@ export {
   type DiscoveryValidationStatus,
   type ValidateDiscoveryOptions,
 } from "./discovery-validator";
+export {
+  computeManifestMac,
+  discoveryManifestSchema,
+  manifestKeyId,
+  MANIFEST_MAC_ALGORITHM,
+  verifyManifestMac,
+} from "./discovery-manifest";
 export { FileScanner } from "./file-scanner";
+export {
+  createSnapshotTrust,
+  defaultSnapshotKeyDirectory,
+  SNAPSHOT_KEY_FILE_NAME,
+  SnapshotKeyStore,
+  type SnapshotTrust,
+  type SnapshotTrustOptions,
+} from "./snapshot-trust";
 export { ProjectDetector, type ProjectDetection } from "./project-detector";
