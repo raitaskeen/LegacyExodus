@@ -5,7 +5,6 @@
  * ledger always describes the engine exactly. A fix removes its entries in the same PR.
  */
 const gaps: Readonly<Record<string, readonly string[]>> = {
-  "BA-03 TypeScript module resolution": ["resolve:ts-esm-js-extension", "resolve:jsonc-tsconfig-alias"],
   "BA-04 direct source arguments": ["taint-direct-send:flow", "taint-direct-json-object:flow"],
   "BA-05 F-004 structured joins": [
     "taint-f004-L1:flow", "taint-f004-L2:flow", "taint-f004-L3:flow", "taint-f004-L4:flow",

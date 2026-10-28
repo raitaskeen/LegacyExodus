@@ -20,7 +20,7 @@ import type {
 import { createDomainEvent, type DomainEvent } from "@core/events/domain-event";
 import { validateProjectDiscovery, type FileArtifact } from "@contracts/discovery";
 import { DiscoveryEngine, DiscoveryValidator, type DiscoveryResult } from "@discovery/index";
-import { DeterministicDependencyGraphBuilder, ModuleResolver, canonicalizePath, validateCurrentDependencyGraph, type ModuleResolutionOptions } from "@graph/index";
+import { DeterministicDependencyGraphBuilder, ModuleResolver, canonicalizePath, loadTsConfigResolution, validateCurrentDependencyGraph, type TsConfigDiagnostic } from "@graph/index";
 import { DeterministicControlFlowGraphBuilder, DeterministicDataFlowGraphBuilder, DeterministicFlowAnalysisEngine, createProvenCallTargets, type ControlFlowGraph, type BuildContextResult } from "@flow/index";
 import { DeterministicKnowledgeGraphBuilder } from "@knowledge/index";
 import { readFile } from "node:fs/promises";
@@ -95,6 +95,7 @@ export class UpdateKnowledgeHandler {
 
 export class AnalyzeProjectHandler {
   private astStoreCleanupFailures: AstStoreCleanupFailure[] = [];
+  private tsConfigDiagnostics: readonly TsConfigDiagnostic[] = [];
 
   public constructor(
     private readonly discoveryEngine: DiscoveryEngine,
@@ -108,8 +109,14 @@ export class AnalyzeProjectHandler {
     return Object.freeze([...this.astStoreCleanupFailures]);
   }
 
+  /** What the last run could not use of the project's tsconfig.json / jsconfig.json; empty when it was read in full. */
+  public getTsConfigDiagnostics(): readonly TsConfigDiagnostic[] {
+    return this.tsConfigDiagnostics;
+  }
+
   public async handle(command: AnalyzeProjectCommand): Promise<CommandExecution> {
     this.astStoreCleanupFailures = [];
+    this.tsConfigDiagnostics = [];
     const startedAt = performance.now();
 
     if (!command.payload.refresh) {
@@ -483,8 +490,10 @@ export class AnalyzeProjectHandler {
         );
       }
 
+      const tsConfig = await loadTsConfigResolution(discovery.projectPath);
+      this.tsConfigDiagnostics = tsConfig.diagnostics;
       const dependencyGraph = new DeterministicDependencyGraphBuilder(
-        new ModuleResolver(await readPathAliases(discovery.projectPath)),
+        new ModuleResolver(tsConfig.options),
       ).build(symbolTables, discovery.files);
       records.push(
         createStorageRecord("dependency-graph", {
@@ -731,20 +740,6 @@ export class AnalyzeProjectHandler {
       }
     }
   }
-}
-
-async function readPathAliases(projectPath: string): Promise<ModuleResolutionOptions> {
-  try {
-    const parsed: unknown = JSON.parse(await readFile(resolve(projectPath, "tsconfig.json"), "utf8"));
-    if (typeof parsed !== "object" || parsed === null || !("compilerOptions" in parsed)) return {};
-    const compilerOptions = (parsed as { readonly compilerOptions: unknown }).compilerOptions;
-    if (typeof compilerOptions !== "object" || compilerOptions === null) return {};
-    const options = compilerOptions as { readonly baseUrl?: unknown; readonly paths?: unknown };
-    const paths = typeof options.paths === "object" && options.paths !== null
-      ? Object.fromEntries(Object.entries(options.paths).flatMap(([key, targets]) => Array.isArray(targets) && targets.every((target) => typeof target === "string") ? [[key, Object.freeze([...targets].sort())]] : []))
-      : undefined;
-    return { ...(typeof options.baseUrl === "string" ? { baseUrl: options.baseUrl } : {}), ...(paths === undefined ? {} : { paths }) };
-  } catch { return {}; }
 }
 
 function getErrorCode(error: unknown, fallback = "UNKNOWN_ERROR"): string {
