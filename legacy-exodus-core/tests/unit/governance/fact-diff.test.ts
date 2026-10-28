@@ -61,4 +61,54 @@ describe("fact diff", () => {
     expect(references?.lost).toEqual(["main.js|identifier|b|RESOLVED|function:b@2:0@lib.js ×2"]);
     expect(references?.gained).toEqual(["main.js|identifier|b|RESOLVED|function:b@2:0@lib.js"]);
   });
+
+  // Red-team counterexamples on PR #204: each of these changes must be visible as a lost fact.
+  const lostIn = (base: Record<string, unknown>, head: Record<string, unknown>, category: string): readonly string[] =>
+    diffFacts(extractFacts(discovery(base)), extractFacts(discovery(head))).categories.find((entry) => entry.category === category)?.lost ?? [];
+  const edge = (phase: string, start: number) => ({ sourceFilePath: "use.ts", targetFilePath: "lib.ts", moduleSpecifier: "./lib", form: "esm-binding", sourcePhase: phase, sourceAnchor: { kind: "offset", start, end: start + 20 } });
+
+  it("sees a dropped type-only module edge next to a value edge to the same file", () => {
+    const lost = lostIn(
+      { "dependency-graph.json": { edges: [], cycles: [], moduleGraph: { edges: [edge("type", 0), edge("value", 30)] } } },
+      { "dependency-graph.json": { edges: [], cycles: [], moduleGraph: { edges: [edge("value", 30)] } } },
+      "module-edges",
+    );
+
+    expect(lost).toEqual(["use.ts -> lib.ts|./lib|esm-binding|phase=type|@0-20"]);
+  });
+
+  it("sees one of two identical routes disappear", () => {
+    const route = { filePath: "app.js", method: "GET", path: "/t", handlerName: "h", middleware: [], state: "INFERRED" };
+
+    expect(lostIn({ "semantic.json": { routes: [route, route] } }, { "semantic.json": { routes: [route] } }, "routes"))
+      .toEqual(["app.js|GET /t|handler=h|middleware=[]|INFERRED ×2"]);
+  });
+
+  it("sees a symbol flag change that the summary symbol fact does not carry", () => {
+    expect(lostIn({ "symbols.json": [{ ...symbolA, async: true }] }, { "symbols.json": [{ ...symbolA, async: false }] }, "symbol-details"))
+      .toEqual([expect.stringContaining("|async=true|")]);
+  });
+
+  it("sees swapped CFG edge kinds and a changed taint path", () => {
+    const statement = (type: string, line: number) => ({ id: `s${line}`, type, location: { line, column: 0 } });
+    const cfg = (kinds: readonly [string, string]) => ({ graphs: [{
+      id: "g", filePath: "a.js", scopeName: "module", state: "RESOLVED", entryBlockId: "b0", exitBlockId: "b3",
+      blocks: [{ id: "b0", statements: [statement("IfStatement", 1)] }, { id: "b1", statements: [statement("ReturnStatement", 2)] }, { id: "b2", statements: [statement("ReturnStatement", 3)] }, { id: "b3", statements: [] }],
+      edges: [{ id: "e1", fromBlockId: "b0", toBlockId: "b1", kind: kinds[0] }, { id: "e2", fromBlockId: "b0", toBlockId: "b2", kind: kinds[1] }],
+      dominators: [], loops: [], unreachableBlockIds: [], deadCodeNodeIds: [],
+    }] });
+    expect(lostIn({ "control-flow.json": cfg(["true", "false"]) }, { "control-flow.json": cfg(["false", "true"]) }, "cfg-edges")).toHaveLength(2);
+
+    const dfg = (via: readonly string[]) => ({ graphs: [{
+      id: "d", filePath: "a.js", state: "INFERRED", uses: [], defUseChains: [], lifetimes: [], interproceduralFlows: [], functionSummaries: [], callBindings: [],
+      definitions: [{ id: "x", filePath: "a.js", name: "x", kind: "declaration" }, { id: "y", filePath: "a.js", name: "y", kind: "declaration" }],
+      taintFlows: [{ sourceId: "s".repeat(64), sinkId: "k".repeat(64), path: ["s".repeat(64), ...via, "res.send"], state: "CONFIRMED" }],
+    }] });
+    expect(lostIn({ "data-flow.json": dfg(["x"]) }, { "data-flow.json": dfg(["y"]) }, "taint")).toEqual([expect.stringContaining("via=[x:declaration@a.js]")]);
+  });
+
+  it("refuses an engine root that is not an engine", async () => {
+    const { analyzeWith } = await import("../../../benchmarks/fact-diff");
+    expect(() => analyzeWith(discovery({}), discovery({}))).toThrow("Not an engine root");
+  });
 });
