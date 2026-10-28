@@ -4,13 +4,14 @@ import type { CodeSymbol, SymbolTable } from "@symbols/index";
 
 import { validateCurrentDependencyGraph, type CurrentDependencyGraph, type DependencyGraphEdge, type ModuleDependencyEdge } from "./dependency-graph-contracts";
 import { canonicalizePath, type KnownPathLookup, ModuleResolver } from "./module-resolver";
+import { compareCodePoints } from "@shared/ordering";
 
 export class DeterministicDependencyGraphBuilder {
   public constructor(private readonly resolver: ModuleResolver = new ModuleResolver()) {}
 
   public build(symbolTables: readonly SymbolTable[], files: KnownPathLookup): CurrentDependencyGraph {
     const orderedTables = [...symbolTables].sort((left, right) =>
-      canonicalizePath(left.filePath).localeCompare(canonicalizePath(right.filePath)),
+      compareCodePoints(canonicalizePath(left.filePath), canonicalizePath(right.filePath)),
     );
     const tablesByPath = new Map(orderedTables.map((table) => [canonicalizePath(table.filePath), table]));
     const nodes = orderedTables.flatMap((table) =>
@@ -80,10 +81,10 @@ export class DeterministicDependencyGraphBuilder {
     }
 
     return validateCurrentDependencyGraph({
-      nodes: [...nodes].sort((left, right) => left.id.localeCompare(right.id)),
-      edges: [...edges].sort((left, right) => left.id.localeCompare(right.id)),
+      nodes: [...nodes].sort((left, right) => compareCodePoints(left.id, right.id)),
+      edges: [...edges].sort((left, right) => compareCodePoints(left.id, right.id)),
       cycles: findCycles(moduleEdges),
-      moduleGraph: { contract: "f07-import-relations-v1", edges: moduleEdges.sort((left, right) => left.id.localeCompare(right.id)) },
+      moduleGraph: { contract: "f07-import-relations-v1", edges: moduleEdges.sort((left, right) => compareCodePoints(left.id, right.id)) },
     });
   }
   private resolveExport(
@@ -120,7 +121,7 @@ export class DeterministicDependencyGraphBuilder {
 
     const wildcardExports = table.symbols
       .filter((symbol) => symbol.kind === "export" && symbol.name === "*" && symbol.moduleSpecifier !== undefined)
-      .sort((left, right) => (left.moduleSpecifier ?? "").localeCompare(right.moduleSpecifier ?? "") || left.id.localeCompare(right.id));
+      .sort((left, right) => compareCodePoints(left.moduleSpecifier ?? "", right.moduleSpecifier ?? "") || compareCodePoints(left.id, right.id));
 
     const matches: CodeSymbol[] = [];
     for (const wildcard of wildcardExports) {
@@ -216,7 +217,7 @@ function findCycles(edges: readonly { readonly sourceFilePath: string; readonly 
   return components
     .filter((component) => component.length > 1 || (adjacency.get(component[0] ?? "") ?? []).includes(component[0] ?? ""))
     .map((component) => findCycleInComponent(component, adjacency))
-    .sort((left, right) => left.join("\u0000").localeCompare(right.join("\u0000")));
+    .sort((left, right) => compareCodePoints(left.join("\u0000"), right.join("\u0000")));
 }
 
 function findCycleInComponent(component: readonly string[], adjacency: ReadonlyMap<string, readonly string[]>): readonly string[] {
@@ -257,6 +258,6 @@ function findCycleInComponent(component: readonly string[], adjacency: ReadonlyM
 function canonicalizeCycle(cycle: readonly string[]): readonly string[] {
   const body = cycle.slice(0, -1);
   const rotations = body.map((_, index) => [...body.slice(index), ...body.slice(0, index)]);
-  const canonical = rotations.sort((left, right) => left.join("\u0000").localeCompare(right.join("\u0000")))[0] ?? [];
+  const canonical = rotations.sort((left, right) => compareCodePoints(left.join("\u0000"), right.join("\u0000")))[0] ?? [];
   return Object.freeze([...canonical, canonical[0] ?? ""]);
 }

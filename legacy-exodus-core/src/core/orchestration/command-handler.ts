@@ -30,6 +30,7 @@ import { collectUnstableExportIds, DeterministicCallGraphBuilder, DeterministicS
 import { createStorageRecord, type StorageRecord } from "@storage/index";
 import { JavaScriptSymbolExtractor, validateCodeSymbols, type CodeSymbol, type SymbolTable } from "@symbols/index";
 import { RunScopedAstStore, type AnalysisAstStoreFactory } from "./run-scoped-ast-store";
+import { compareCodePoints } from "@shared/ordering";
 
 export interface CommandExecution {
   readonly events: readonly DomainEvent[];
@@ -510,7 +511,7 @@ export class AnalyzeProjectHandler {
       const allControlFlowGraphs: ControlFlowGraph[] = [];
       let allContexts: BuildContextResult[] | undefined = [];
 
-      const sortedFiles = [...successfullyParsedFiles].sort((left, right) => left.path.localeCompare(right.path));
+      const sortedFiles = [...successfullyParsedFiles].sort((left, right) => compareCodePoints(left.path, right.path));
       const completedFiles: FileArtifact[] = [];
 
       for (const file of sortedFiles) {
