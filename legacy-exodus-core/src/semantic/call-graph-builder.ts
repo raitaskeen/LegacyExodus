@@ -6,6 +6,7 @@ import type { SymbolTable } from "@symbols/index";
 import { createLexicalScopeId, type CodeSymbol } from "@symbols/index";
 
 import type { SemanticCall, SymbolReference } from "./semantic-contracts";
+import { compareCodePoints } from "@shared/ordering";
 
 export class DeterministicCallGraphBuilder {
   private readonly resolver = new ModuleResolver();
@@ -18,7 +19,7 @@ export class DeterministicCallGraphBuilder {
     const calls: SemanticCall[] = [];
     const references: SymbolReference[] = [];
 
-    for (const ast of [...astResults].sort((left, right) => left.metadata.sourcePath.localeCompare(right.metadata.sourcePath))) {
+    for (const ast of [...astResults].sort((left, right) => compareCodePoints(left.metadata.sourcePath, right.metadata.sourcePath))) {
       this.buildForFile(ast, tablesByPath, importsByFile, targetByImportId, unstableExportIds, calls, references);
     }
 
@@ -988,7 +989,7 @@ function createLexicalBindingIndex(
     bindings.set(canonical.id, {
       canonical,
       referenceTargets: [...new Map([canonical, ...targets].map(symbol => [symbol.id, symbol])).values()]
-        .sort((left, right) => left.id.localeCompare(right.id)),
+        .sort((left, right) => compareCodePoints(left.id, right.id)),
     });
   };
   const boundIdentifiers = (node: ASTNode): readonly ASTNode[] => {

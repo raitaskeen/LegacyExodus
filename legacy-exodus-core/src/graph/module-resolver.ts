@@ -1,6 +1,7 @@
 import { dirname, posix } from "node:path";
 
 import type { FileArtifact } from "@contracts/discovery";
+import { compareCodePoints } from "@shared/ordering";
 
 export interface ResolvedImport {
   readonly importerPath: string;
@@ -86,7 +87,7 @@ export class ModuleResolver {
   private resolveAlias(moduleSpecifier: string, knownPaths: ReadonlySet<string>): string | null {
     const normalizedSpecifier = moduleSpecifier.replaceAll("\\", "/");
     const normalizedBaseUrl = canonicalizePath(this.options.baseUrl ?? "");
-    const aliases = Object.entries(this.options.paths ?? {}).sort(([left], [right]) => left.localeCompare(right));
+    const aliases = Object.entries(this.options.paths ?? {}).sort(([left], [right]) => compareCodePoints(left, right));
     for (const [pattern, targets] of aliases) {
       const normalizedPattern = pattern.replaceAll("\\", "/");
       const wildcard = normalizedPattern.indexOf("*");
