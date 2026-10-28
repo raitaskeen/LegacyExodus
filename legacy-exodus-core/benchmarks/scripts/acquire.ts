@@ -1,18 +1,156 @@
 /**
  * Phase 3A — Repository Acquisition Script
  *
- * Reads benchmark manifests from corpus/ directories and clones repositories
- * to the local .cache/ directory at their pinned revisions.
+ * Reads benchmark manifests from corpus/ directories and fetches each repository into the
+ * local .cache/ directory at exactly the commit the manifest pins.
+ *
+ * A manifest's `revision` is a git tag, kept for readability only: tags are mutable. What is
+ * fetched is `commit`, and what every acquired or reused checkout must hash to is `tree`
+ * (the git tree SHA of that commit). A checkout whose HEAD tree differs, or that has no `.git`
+ * to check, is rejected rather than used.
  *
  * Usage:
  *   bun run benchmarks/scripts/acquire.ts [--tier tier-1|tier-2|tier-3] [--name repo-name]
  */
 
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { CACHE_DIR, CORPUS_DIR } from "../paths";
 import type { BenchmarkManifest } from "../types";
+
+const GIT_SHA = /^[0-9a-f]{40}$/;
+
+/** A manifest that is complete enough to fetch and verify: every field is validated. */
+export interface PinnedRepository {
+  readonly name: string;
+  readonly repository: string;
+  readonly commit: string;
+  readonly tree: string;
+}
+
+interface GitResult {
+  readonly code: number;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+/** Runs git with an argument array (never a shell) and never waits for a credential prompt. */
+async function git(args: readonly string[], cwd: string): Promise<GitResult> {
+  const proc = Bun.spawn(["git", ...args], {
+    cwd,
+    stdout: "pipe",
+    stderr: "pipe",
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+  });
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  return { code, stdout, stderr };
+}
+
+/**
+ * Returns the manifest's pin, or throws naming what is missing. A manifest with a
+ * repository but without a 40-hex commit and tree is never fetched.
+ */
+export function requireRepositoryPin(manifest: BenchmarkManifest): PinnedRepository {
+  const { name, repository, commit, tree } = manifest;
+  if (repository === undefined || repository === "") {
+    throw new Error(`Cannot acquire repository '${name}': manifest has no repository URL.`);
+  }
+  if (repository.startsWith("-")) {
+    throw new Error(`Cannot acquire repository '${name}': repository ${JSON.stringify(repository)} could be read as a git option.`);
+  }
+  if (typeof commit !== "string" || !GIT_SHA.test(commit)) {
+    throw new Error(`Cannot acquire repository '${name}': manifest has no 40-hex commit pin (commit: ${JSON.stringify(commit)}).`);
+  }
+  if (typeof tree !== "string" || !GIT_SHA.test(tree)) {
+    throw new Error(`Cannot acquire repository '${name}': manifest has no 40-hex tree pin (tree: ${JSON.stringify(tree)}).`);
+  }
+  return { name, repository, commit, tree };
+}
+
+/**
+ * Fails closed unless `repoDir` is its own git checkout whose HEAD tree equals `expectedTree`.
+ *
+ * The `.git` check is explicit because `git rev-parse` would otherwise walk up out of a
+ * checkout-less cache directory and report the tree of whatever repository encloses it.
+ */
+export async function verifyPinnedTree(repoDir: string, expectedTree: string, label: string): Promise<void> {
+  if (!existsSync(join(repoDir, ".git"))) {
+    throw new Error(
+      `Corpus '${label}' at ${repoDir} has no .git, so its content cannot be verified (expected tree ${expectedTree}). ` +
+      `Remove the directory to re-acquire it.`,
+    );
+  }
+  const result = await git(["rev-parse", "HEAD^{tree}"], repoDir);
+  const actual = result.stdout.trim();
+  if (result.code !== 0 || !GIT_SHA.test(actual)) {
+    throw new Error(
+      `Corpus '${label}' at ${repoDir}: could not read the HEAD tree (expected tree ${expectedTree}): ${result.stderr.trim()}`,
+    );
+  }
+  if (actual !== expectedTree) {
+    throw new Error(
+      `Corpus '${label}' at ${repoDir} does not match its pin: expected tree ${expectedTree}, actual tree ${actual}. ` +
+      `Refusing to use unverified content; remove the directory to re-acquire it.`,
+    );
+  }
+}
+
+async function requireGit(args: readonly string[], cwd: string, pin: PinnedRepository, step: string): Promise<string> {
+  const result = await git(args, cwd);
+  if (result.code !== 0) {
+    throw new Error(
+      `Failed to ${step} for '${pin.name}' (${pin.repository} @ ${pin.commit}), git exit ${result.code}: ${result.stderr.trim()}`,
+    );
+  }
+  return result.stdout;
+}
+
+/**
+ * Fetches exactly `pin.commit` into the not-yet-existing `targetDir` and verifies its tree.
+ * The directory is created here, so a failed acquisition removes it again rather than
+ * leaving something that looks like a cache.
+ */
+async function acquirePinnedRepository(pin: PinnedRepository, targetDir: string): Promise<void> {
+  await mkdir(dirname(targetDir), { recursive: true });
+  await mkdir(targetDir);
+  try {
+    await requireGit(["init", "--quiet"], targetDir, pin, "initialize a repository");
+    await requireGit(["remote", "add", "origin", pin.repository], targetDir, pin, "add the origin remote");
+    await requireGit(["fetch", "--quiet", "--depth", "1", "origin", pin.commit], targetDir, pin, "fetch the pinned commit");
+    await requireGit(["checkout", "--quiet", "--detach", "FETCH_HEAD"], targetDir, pin, "check out the pinned commit");
+    const head = (await requireGit(["rev-parse", "HEAD"], targetDir, pin, "read HEAD")).trim();
+    if (head !== pin.commit) {
+      throw new Error(`Corpus '${pin.name}' checked out ${head} instead of the pinned commit ${pin.commit}.`);
+    }
+    await verifyPinnedTree(targetDir, pin.tree, pin.name);
+  } catch (error: unknown) {
+    await rm(targetDir, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+/**
+ * Makes `targetDir` a verified checkout of the manifest's pinned commit.
+ * An existing directory is reused only after its HEAD tree is verified; a missing one is
+ * fetched by commit SHA and then verified. Anything unverifiable throws.
+ */
+export async function ensurePinnedRepository(
+  manifest: BenchmarkManifest,
+  targetDir: string,
+): Promise<"acquired" | "verified"> {
+  const pin = requireRepositoryPin(manifest);
+  if (existsSync(targetDir)) {
+    await verifyPinnedTree(targetDir, pin.tree, pin.name);
+    return "verified";
+  }
+  await acquirePinnedRepository(pin, targetDir);
+  return "acquired";
+}
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -28,7 +166,9 @@ async function main(): Promise<void> {
   await mkdir(CACHE_DIR, { recursive: true });
 
   let acquired = 0;
+  let verified = 0;
   let skipped = 0;
+  const failed: string[] = [];
 
   for (const tier of tiers) {
     const tierDir = join(CORPUS_DIR, tier);
@@ -59,61 +199,29 @@ async function main(): Promise<void> {
       }
 
       const targetDir = join(CACHE_DIR, manifest.name);
+      console.log(
+        existsSync(targetDir)
+          ? `  [verify] ${manifest.name} → ${targetDir}`
+          : `  [fetch] ${manifest.name} @ ${manifest.revision ?? "?"} (${manifest.commit ?? "unpinned"})`,
+      );
 
-      if (existsSync(targetDir)) {
-        console.log(`  [exists] ${manifest.name} → ${targetDir}`);
-        skipped++;
-        continue;
+      try {
+        const outcome = await ensurePinnedRepository(manifest, targetDir);
+        console.log(outcome === "acquired" ? `    ✓ Acquired` : `    ✓ Verified`);
+        if (outcome === "acquired") acquired++;
+        else verified++;
+      } catch (error: unknown) {
+        console.error(`    ✗ ${error instanceof Error ? error.message : String(error)}`);
+        failed.push(manifest.name);
       }
-
-      console.log(`  [clone] ${manifest.name} @ ${manifest.revision ?? "HEAD"}`);
-
-      const cloneArgs = ["clone", "--depth", "1"];
-      if (manifest.revision) {
-        cloneArgs.push("--branch", manifest.revision);
-      }
-      cloneArgs.push(manifest.repository, targetDir);
-
-      const proc = Bun.spawn(["git", ...cloneArgs], {
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-
-      const exitCode = await proc.exited;
-
-      if (exitCode !== 0) {
-        const stderr = await new Response(proc.stderr).text();
-        console.error(`    ✗ Clone failed (exit ${exitCode}): ${stderr.trim()}`);
-
-        // Retry without --branch for commit SHAs
-        if (manifest.revision && stderr.includes("Could not find remote branch")) {
-          console.log(`    Retrying full clone + checkout for commit SHA...`);
-          const fullClone = Bun.spawn(["git", "clone", manifest.repository, targetDir], {
-            stdout: "pipe",
-            stderr: "pipe",
-          });
-          const fullExitCode = await fullClone.exited;
-          if (fullExitCode === 0) {
-            const checkout = Bun.spawn(["git", "checkout", manifest.revision], {
-              cwd: targetDir,
-              stdout: "pipe",
-              stderr: "pipe",
-            });
-            await checkout.exited;
-            console.log(`    ✓ Acquired at ${manifest.revision}`);
-            acquired++;
-            continue;
-          }
-        }
-        continue;
-      }
-
-      console.log(`    ✓ Acquired`);
-      acquired++;
     }
   }
 
-  console.log(`\nDone: ${acquired} acquired, ${skipped} skipped.`);
+  console.log(`\nDone: ${acquired} acquired, ${verified} verified, ${skipped} skipped, ${failed.length} failed.`);
+  if (failed.length > 0) {
+    console.error(`Failed: ${failed.join(", ")}`);
+    process.exitCode = 1;
+  }
 }
 
 function getArgValue(args: string[], flag: string): string | undefined {
@@ -121,7 +229,9 @@ function getArgValue(args: string[], flag: string): string | undefined {
   return idx >= 0 && idx + 1 < args.length ? args[idx + 1] : undefined;
 }
 
-main().catch((error: unknown) => {
-  console.error("Acquisition failed:", error);
-  process.exit(1);
-});
+if (import.meta.main) {
+  main().catch((error: unknown) => {
+    console.error("Acquisition failed:", error);
+    process.exit(1);
+  });
+}

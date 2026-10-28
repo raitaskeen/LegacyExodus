@@ -2,6 +2,8 @@
   "name": "express",
   "repository": "https://github.com/expressjs/express.git",
   "revision": "4.21.2",
+  "commit": "1faf228935aa0a13111f92c28ee795be64ce3f0f",
+  "tree": "d713ae63b79490e083adf66e5bc434e249ddeece",
   "tier": "tier-3",
   "languageProfile": [
     "javascript"

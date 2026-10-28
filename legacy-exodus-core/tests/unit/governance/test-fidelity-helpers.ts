@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { basename, join, resolve } from "node:path";
 import { createLegacyExodusEngine } from "@runtime/composition/services";
 import { fingerprintAnalyzerSource, loadedAnalyzerFingerprint } from "../../support/analyzer-identity";
 import { CORPUS_DIR } from "../../../benchmarks/paths";
+import { ensurePinnedRepository } from "../../../benchmarks/scripts/acquire";
 import type { BenchmarkManifest } from "../../../benchmarks/types";
 
 async function findCorpusManifest(repoName: string): Promise<BenchmarkManifest | null> {
@@ -35,48 +36,22 @@ async function findCorpusManifest(repoName: string): Promise<BenchmarkManifest |
   return null;
 }
 
-async function acquireRepository(manifest: BenchmarkManifest, targetDir: string): Promise<void> {
-  if (!manifest.repository) {
-    throw new Error(`Cannot acquire repository '${manifest.name}': manifest has no repository URL.`);
-  }
-
-  await mkdir(dirname(targetDir), { recursive: true });
-
-  const cloneArgs = ["clone", "--depth", "1"];
-  if (manifest.revision) {
-    cloneArgs.push("--branch", manifest.revision);
-  }
-  cloneArgs.push(manifest.repository, targetDir);
-
-  const proc = Bun.spawn(["git", ...cloneArgs], {
-    stdout: "ignore",
-    stderr: "pipe",
-  });
-
-  const exitCode = await proc.exited;
-
-  if (exitCode !== 0) {
-    const stderr = await new Response(proc.stderr).text();
-
-    if (manifest.revision && stderr.includes("Could not find remote branch")) {
-      const fullClone = Bun.spawn(["git", "clone", manifest.repository, targetDir], {
-        stdout: "ignore",
-        stderr: "pipe",
-      });
-      const fullExitCode = await fullClone.exited;
-      if (fullExitCode === 0) {
-        const checkout = Bun.spawn(["git", "checkout", manifest.revision], {
-          cwd: targetDir,
-          stdout: "ignore",
-          stderr: "ignore",
-        });
-        await checkout.exited;
-        return;
-      }
+/**
+ * A directory named after a corpus manifest is that corpus. A missing one is fetched at the
+ * manifest's pinned commit; an existing one is reused only after its HEAD tree equals the
+ * manifest's `tree`. A mismatch, or a directory without its own `.git`, throws (BA-20 / A6).
+ * Directories that name no manifest are not corpora and are left alone.
+ */
+async function ensureCorpusCheckout(absPath: string): Promise<void> {
+  const manifest = await findCorpusManifest(basename(absPath));
+  if (manifest === null) return;
+  if (manifest.repository === undefined) {
+    if (!existsSync(absPath)) {
+      throw new Error(`Cannot acquire repository '${manifest.name}': manifest has no repository URL.`);
     }
-
-    throw new Error(`Failed to clone repository '${manifest.name}' from ${manifest.repository}: ${stderr.trim()}`);
+    return;
   }
+  await ensurePinnedRepository(manifest, absPath);
 }
 
 const ANALYZER_ROOT = resolve(import.meta.dir, "../../..");
@@ -101,7 +76,10 @@ async function isRecordedProjectionCurrent(discoveryDir: string, analyzerFingerp
 
 /**
  * Ensures that discovery projections produced by the current analyzer exist on disk for the given repository.
- * If the target repository is not present in .cache, acquires it on-demand from its corpus manifest.
+ * If the target repository is not present in .cache, acquires it on-demand from its corpus manifest, at the
+ * commit the manifest pins. Whenever the target is a corpus repository, existing or new, its HEAD tree is
+ * verified against the manifest's `tree` first, so neither a cached checkout nor a projection derived from
+ * it is reused after the corpus content changed.
  *
  * An existing projection is reused only when the helper itself generated it and recorded, next to it,
  * the analyzer source fingerprint and the digest of the manifest it produced. Git HEAD and the manifest's
@@ -126,6 +104,9 @@ export async function ensureDiscoveryProjections(
     ? loadedAnalyzerFingerprint
     : fingerprintAnalyzerSource(analyzerRoot);
 
+  // Before any reuse: a projection of content that is no longer the pinned content is not evidence.
+  await ensureCorpusCheckout(absPath);
+
   if (
     !options?.force &&
     analyzerFingerprint !== undefined &&
@@ -136,14 +117,6 @@ export async function ensureDiscoveryProjections(
   }
 
   await rm(join(discoveryDir, IDENTITY_RECORD_FILE), { force: true });
-
-  if (!existsSync(absPath)) {
-    const repoName = basename(absPath);
-    const manifest = await findCorpusManifest(repoName);
-    if (manifest) {
-      await acquireRepository(manifest, absPath);
-    }
-  }
 
   if (!existsSync(absPath)) {
     throw new Error(
