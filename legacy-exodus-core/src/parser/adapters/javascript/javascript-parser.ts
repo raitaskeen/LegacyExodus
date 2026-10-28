@@ -7,7 +7,7 @@ import type { ParseRequest } from "@parser/models/parse-request";
 import type { ParseResponse } from "@parser/models/parse-response";
 
 import { mapJavaScriptNode } from "./javascript-node-mapper";
-import { javascriptParserOptions } from "./javascript-parser-options";
+import { javascriptParserOptionsFor } from "./javascript-parser-options";
 
 interface BabelParseError {
   readonly code?: string;
@@ -34,7 +34,7 @@ export class JavaScriptParser implements Parser {
     const startedAt = performance.now();
     try {
       const parsedFile = parse(request.source, {
-        ...javascriptParserOptions,
+        ...javascriptParserOptionsFor(request.file.path),
         sourceFilename: request.file.path,
       });
       const mapping = mapJavaScriptNode(parsedFile.program);
