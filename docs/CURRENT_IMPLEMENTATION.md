@@ -15,7 +15,7 @@ This page is the concise status boundary for LegacyExodus. Implementation source
 - Lexical symbol extraction, selected ESM/CommonJS modeling, module resolution, dependency cycles, and a knowledge graph of file and symbol nodes with contains/imports edges (BA-19). TypeScript enums, namespaces, interfaces and type aliases are not modelled (BA-02); TS ESM `./x.js` specifiers and `tsconfig.json` files with comments are not resolved (BA-03).
 - Semantic call/reference analysis that resolves a call only when its target is proven. Express route and middleware facts are `INFERRED`: per-router middleware, handlers and mount paths are not yet modelled (BA-08).
 - Function/control-flow and data-flow models, interprocedural transfer for proven targets, taint facts from a built-in policy, and deterministic bounded work-queue propagation for the implemented repository-wide flow connections. Data flow misses loops, `switch`, `try`, short-circuit expressions and direct source arguments, and can over-label conditional values (BA-04 to BA-07).
-- Locale-independent (code-point) ordering of every projected artifact.
+- Locale-independent ordering (by UTF-16 code unit) of every projected artifact.
 - In-memory and SQLite storage providers, streamed run-scoped queries, analysis-run atomicity, validated snapshot reuse, deep persisted-contract validation, and caller-controlled transient session reset.
 - Contained `.discovery` projections with atomic per-file replacement and integrity manifests. Durable analysis records are canonical; `.discovery` is a derived command deliverable. If fresh-run projection fails after commit, the engine rejects with `DISCOVERY_PROJECTION_FAILED_AFTER_COMMIT` and explicitly reports that the selected storage provider already committed the analysis.
 - CLI commands: `status`, `init`, `analyze`, `test`, `verify`, and `plugins list`.
@@ -68,7 +68,7 @@ Verification totals are intentionally not copied into this evergreen page; run t
 
 ## CI and security boundary
 
-Current main/core workflow truth includes immutable action SHA pins, least-privilege permissions, disabled checkout credential persistence, Bun 1.4.2, frozen installs, job timeouts, superseded-run cancellation, `CI / Verify Core`, and `Windows Path Smoke`.
+Current `main` workflow truth includes immutable action SHA pins, least-privilege permissions, disabled checkout credential persistence, Bun 1.4.2, frozen installs, job timeouts, superseded-run cancellation, `CI / Verify Core`, and `Windows Path Smoke`.
 
 CodeQL and Dependency Review are unavailable under the current private-repository/account configuration. The unusable historical CodeQL workflow was intentionally removed; its absence is not evidence that application security is complete.
 

@@ -121,7 +121,7 @@ describe("DeterministicSemanticAnalysisEngine", () => {
     ]);
   });
 
-  test("confirms routes from a CommonJS Express binding", async (): Promise<void> => {
+  test("records routes from a CommonJS Express binding", async (): Promise<void> => {
     const source = `
       const express = require("express");
       const app = express();
