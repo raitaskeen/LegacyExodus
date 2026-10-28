@@ -10,7 +10,7 @@
  */
 
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 import { executeBenchmarkRun } from "./harness";
 import { verifyDeterminism } from "./determinism";
@@ -21,6 +21,7 @@ import {
 } from "./governance";
 import { generateQualitySample } from "./sample";
 import { CACHE_DIR, RESULTS_DIR, resolveBenchmarkRepoPath, resolveResultsDir } from "./paths";
+import { ensureCorpusCheckout, ensurePinnedRepository } from "./scripts/acquire";
 import type {
   BenchmarkManifest,
   BenchmarkResult,
@@ -34,10 +35,19 @@ export interface RunnerOptions {
   readonly outputDir?: string;
   readonly sampleSize?: number;
   readonly sampleSeed?: number;
+  /** Directory holding the acquired corpora. Defaults to benchmarks/.cache. */
+  readonly cacheDir?: string;
+}
+
+/** True when `child` is a direct entry of `parent` (not `parent` itself, and not deeper or outside). */
+function isDirectChild(parent: string, child: string): boolean {
+  const rel = relative(parent, child);
+  return rel !== "" && rel !== ".." && !isAbsolute(rel) && !/[\\/]/.test(rel);
 }
 
 export async function runBenchmark(options: RunnerOptions): Promise<BenchmarkResult> {
   const targetPath = resolveBenchmarkRepoPath(options.target);
+  const cacheDir = options.cacheDir === undefined ? CACHE_DIR : resolve(options.cacheDir);
   let manifest: BenchmarkManifest;
   let repoPath: string;
 
@@ -46,7 +56,12 @@ export async function runBenchmark(options: RunnerOptions): Promise<BenchmarkRes
     if (manifest.localPath) {
       repoPath = resolve(dirname(targetPath), manifest.localPath);
     } else {
-      repoPath = resolve(CACHE_DIR, manifest.name);
+      repoPath = resolve(cacheDir, manifest.name);
+      // A manifest with a repository is a pinned corpus (BA-20 / A6): a missing cache is acquired at the
+      // pinned commit and an existing one is verified before any run uses it, exactly as the fidelity tests do.
+      if (manifest.repository !== undefined) {
+        await ensurePinnedRepository(manifest, repoPath);
+      }
     }
   } else {
     const name = basename(targetPath);
@@ -60,6 +75,11 @@ export async function runBenchmark(options: RunnerOptions): Promise<BenchmarkRes
       localPath: targetPath,
     };
     repoPath = targetPath;
+    // A path directly inside the benchmark cache is a corpus checkout however it was named on the command
+    // line, so it is verified against its corpus manifest. Other local repositories are the caller's own.
+    if (isDirectChild(cacheDir, targetPath)) {
+      await ensureCorpusCheckout(targetPath);
+    }
   }
 
   const engineIdentity = await resolveEngineIdentity();

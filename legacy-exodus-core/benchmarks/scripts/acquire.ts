@@ -6,8 +6,9 @@
  *
  * A manifest's `revision` is a git tag, kept for readability only: tags are mutable. What is
  * fetched is `commit`, and what every acquired or reused checkout must hash to is `tree`
- * (the git tree SHA of that commit). A checkout whose HEAD tree differs, or that has no `.git`
- * to check, is rejected rather than used.
+ * (the git tree SHA of that commit). A checkout whose HEAD tree differs, whose working tree
+ * holds modified, deleted, staged, untracked or ignored files (other than the engine's own
+ * output directories), or that has no `.git` to check, is rejected rather than used.
  *
  * Usage:
  *   bun run benchmarks/scripts/acquire.ts [--tier tier-1|tier-2|tier-3] [--name repo-name]
@@ -15,11 +16,20 @@
 
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { CACHE_DIR, CORPUS_DIR } from "../paths";
 import type { BenchmarkManifest } from "../types";
 
 const GIT_SHA = /^[0-9a-f]{40}$/;
+
+/**
+ * Directories, at the checkout root, that the engine writes into an analyzed repository. Untracked
+ * or ignored content under them is the engine's output, not drift; a tracked file there is not exempt.
+ */
+const ENGINE_OUTPUT_DIRS: readonly string[] = [".discovery", ".legacy-exodus"];
+
+/** How many changed paths an integrity error names. */
+const MAX_REPORTED_PATHS = 10;
 
 /** A manifest that is complete enough to fetch and verify: every field is validated. */
 export interface PinnedRepository {
@@ -73,10 +83,43 @@ export function requireRepositoryPin(manifest: BenchmarkManifest): PinnedReposit
 }
 
 /**
- * Fails closed unless `repoDir` is its own git checkout whose HEAD tree equals `expectedTree`.
+ * Working-tree entries that differ from HEAD, as `<status> <path>` (e.g. `M lib/a.js`, `?? extra.js`,
+ * `!! ignored.txt`): modified, deleted, staged, untracked and ignored files. Untracked or ignored
+ * content under an engine output directory is skipped; a tracked file there is reported like any other.
+ */
+async function listChangedPaths(repoDir: string, label: string, expectedTree: string): Promise<readonly string[]> {
+  const result = await git(
+    ["--no-optional-locks", "status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=traditional"],
+    repoDir,
+  );
+  if (result.code !== 0) {
+    throw new Error(
+      `Corpus '${label}' at ${repoDir}: could not read the working-tree status (expected tree ${expectedTree}): ${result.stderr.trim()}`,
+    );
+  }
+  const entries = result.stdout.split("\0");
+  const changed: string[] = [];
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i] ?? "";
+    if (entry === "") continue;
+    const status = entry.slice(0, 2);
+    const path = entry.slice(3);
+    if (/[RC]/.test(status)) i += 1; // a rename or copy is followed by its origin path
+    const outsideIndex = status === "??" || status === "!!";
+    if (outsideIndex && ENGINE_OUTPUT_DIRS.some((dir) => path.startsWith(`${dir}/`))) continue;
+    changed.push(`${status.replaceAll(" ", "")} ${path}`);
+  }
+  return changed;
+}
+
+/**
+ * Fails closed unless `repoDir` is its own git checkout whose HEAD tree equals `expectedTree`
+ * and whose working tree holds nothing but that tree (and the engine's own output directories).
  *
  * The `.git` check is explicit because `git rev-parse` would otherwise walk up out of a
  * checkout-less cache directory and report the tree of whatever repository encloses it.
+ * The working-tree check is needed because the engine analyzes files, not the HEAD tree: an
+ * edited, deleted or extra file leaves HEAD^{tree} untouched.
  */
 export async function verifyPinnedTree(repoDir: string, expectedTree: string, label: string): Promise<void> {
   if (!existsSync(join(repoDir, ".git"))) {
@@ -96,6 +139,16 @@ export async function verifyPinnedTree(repoDir: string, expectedTree: string, la
     throw new Error(
       `Corpus '${label}' at ${repoDir} does not match its pin: expected tree ${expectedTree}, actual tree ${actual}. ` +
       `Refusing to use unverified content; remove the directory to re-acquire it.`,
+    );
+  }
+  const changed = await listChangedPaths(repoDir, label, expectedTree);
+  if (changed.length > 0) {
+    const shown = changed.slice(0, MAX_REPORTED_PATHS).join(", ");
+    const more = changed.length > MAX_REPORTED_PATHS ? `, and ${changed.length - MAX_REPORTED_PATHS} more` : "";
+    throw new Error(
+      `Corpus '${label}' at ${repoDir} has the pinned tree ${expectedTree} at HEAD, but its working tree has ` +
+      `${changed.length} changed path${changed.length === 1 ? "" : "s"}: ${shown}${more}. ` +
+      `Refusing to use modified content; remove the directory to re-acquire it.`,
     );
   }
 }
@@ -150,6 +203,39 @@ export async function ensurePinnedRepository(
   }
   await acquirePinnedRepository(pin, targetDir);
   return "acquired";
+}
+
+/**
+ * The corpus manifest called `name`, from whichever tier directory holds it, or null if there is none.
+ * A manifest that cannot be parsed throws: skipping it would silently skip its verification too.
+ */
+export async function findCorpusManifest(name: string): Promise<BenchmarkManifest | null> {
+  const entries = await readdir(CORPUS_DIR, { withFileTypes: true }).catch(() => []);
+  for (const tier of entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort()) {
+    const manifestPath = join(CORPUS_DIR, tier, `${name}.json`);
+    if (existsSync(manifestPath)) {
+      return JSON.parse(await readFile(manifestPath, "utf8")) as BenchmarkManifest;
+    }
+  }
+  return null;
+}
+
+/**
+ * A directory named after a corpus manifest is that corpus. A missing one is fetched at the manifest's
+ * pinned commit; an existing one is reused only after it is verified (see verifyPinnedTree). Directories
+ * that name no manifest are not corpora and are left alone. Shared by the fidelity test helper and
+ * the benchmark runner, so every consumer of a corpus checkout verifies it the same way.
+ */
+export async function ensureCorpusCheckout(dir: string): Promise<void> {
+  const manifest = await findCorpusManifest(basename(dir));
+  if (manifest === null) return;
+  if (manifest.repository === undefined) {
+    if (!existsSync(dir)) {
+      throw new Error(`Cannot acquire repository '${manifest.name}': manifest has no repository URL.`);
+    }
+    return;
+  }
+  await ensurePinnedRepository(manifest, dir);
 }
 
 async function main(): Promise<void> {

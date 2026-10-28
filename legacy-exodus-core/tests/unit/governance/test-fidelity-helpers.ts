@@ -1,58 +1,10 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { readFile, rm, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { createLegacyExodusEngine } from "@runtime/composition/services";
 import { fingerprintAnalyzerSource, loadedAnalyzerFingerprint } from "../../support/analyzer-identity";
-import { CORPUS_DIR } from "../../../benchmarks/paths";
-import { ensurePinnedRepository } from "../../../benchmarks/scripts/acquire";
-import type { BenchmarkManifest } from "../../../benchmarks/types";
-
-async function findCorpusManifest(repoName: string): Promise<BenchmarkManifest | null> {
-  const tiers = ["tier-1", "tier-2", "tier-3"];
-  for (const tier of tiers) {
-    const manifestPath = join(CORPUS_DIR, tier, `${repoName}.json`);
-    if (existsSync(manifestPath)) {
-      try {
-        const raw = await readFile(manifestPath, "utf8");
-        return JSON.parse(raw) as BenchmarkManifest;
-      } catch {}
-    }
-  }
-
-  try {
-    const entries = await readdir(CORPUS_DIR, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        const candidate = join(CORPUS_DIR, entry.name, `${repoName}.json`);
-        if (existsSync(candidate)) {
-          const raw = await readFile(candidate, "utf8");
-          return JSON.parse(raw) as BenchmarkManifest;
-        }
-      }
-    }
-  } catch {}
-
-  return null;
-}
-
-/**
- * A directory named after a corpus manifest is that corpus. A missing one is fetched at the
- * manifest's pinned commit; an existing one is reused only after its HEAD tree equals the
- * manifest's `tree`. A mismatch, or a directory without its own `.git`, throws (BA-20 / A6).
- * Directories that name no manifest are not corpora and are left alone.
- */
-async function ensureCorpusCheckout(absPath: string): Promise<void> {
-  const manifest = await findCorpusManifest(basename(absPath));
-  if (manifest === null) return;
-  if (manifest.repository === undefined) {
-    if (!existsSync(absPath)) {
-      throw new Error(`Cannot acquire repository '${manifest.name}': manifest has no repository URL.`);
-    }
-    return;
-  }
-  await ensurePinnedRepository(manifest, absPath);
-}
+import { ensureCorpusCheckout } from "../../../benchmarks/scripts/acquire";
 
 const ANALYZER_ROOT = resolve(import.meta.dir, "../../..");
 
@@ -78,8 +30,9 @@ async function isRecordedProjectionCurrent(discoveryDir: string, analyzerFingerp
  * Ensures that discovery projections produced by the current analyzer exist on disk for the given repository.
  * If the target repository is not present in .cache, acquires it on-demand from its corpus manifest, at the
  * commit the manifest pins. Whenever the target is a corpus repository, existing or new, its HEAD tree is
- * verified against the manifest's `tree` first, so neither a cached checkout nor a projection derived from
- * it is reused after the corpus content changed.
+ * verified against the manifest's `tree`, and its working tree must hold no modified, extra or ignored files
+ * beyond the engine's own `.discovery/` and `.legacy-exodus/` output, first, so neither a cached checkout nor
+ * a projection derived from it is reused after the corpus content changed.
  *
  * An existing projection is reused only when the helper itself generated it and recorded, next to it,
  * the analyzer source fingerprint and the digest of the manifest it produced. Git HEAD and the manifest's
