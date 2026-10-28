@@ -38,7 +38,7 @@ hand-off point: a new session resumes from here.
 | 5 | Manifest location without plaintext path | BA-26 | `src/storage/projections/**`, `src/discovery/discovery-validator.ts`, `snapshot-trust.ts`, tests | Wave 4 | queued. Design (lead, 2026-10-28): the validator binds reuse to the canonical absolute path (`discovery-validator.ts:280, :405`, the F-001 location binding), so a relative path alone would weaken trust. Replace `repository.path` with `repository.locationDigest = HMAC(localKey, canonicalPath)`, recomputed on validate, and bump the manifest contract so old snapshots refresh |
 | 1 | Parser fallback honours `language: typescript` for unlisted extensions (#210 review; unreachable in production today) | BA-01 | `src/parser/adapters/javascript/**` | #210 | queued (small) |
 | 1 | Fact-diff residual gaps (dominators, lifetimes, unused definitions, first taint hop) | ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â | `benchmarks/fact-diff.ts` | #204 | queued (low) |
-| 2 | TypeScript declarations | BA-02 | symbol extractor, `symbol-contracts.ts`, kind lists in `src/` | Wave 1 | PR #214 (head db83a52), in Sonnet red team |
+| 2 | TypeScript declarations | BA-02 | symbol extractor, `symbol-contracts.ts`, kind lists in `src/` | Wave 1 | PR #214 (head db83a52): red-team FAIL, 3 fixes pending (see Paused) |
 | 2 | Then class expressions, dynamic import, compiled CJS (serial on the symbol extractor) | BA-13, BA-10, BA-12 | symbol extractor | BA-02 | queued |
 | 2 | TS module resolution, then namespace imports | BA-03, BA-09 | `src/graph/**`, tsconfig loader, `command-handler.ts` aliases | Wave 1 | queued |
 | 3 | Data flow rebuilt on the CFG | BA-05, BA-04, BA-06, BA-27, BA-28 | DFG modules | Wave 2 | queued |
@@ -55,10 +55,16 @@ Notes:
 - BA-01 known limitation: with the Flow plugin, a statement that is only the identifier `type`, `declare` or `opaque` at the end of a line, followed by an assignment on the next line (valid JS via ASI), now misparses as Flow. No corpus hits it. Revisit if a real repository does.
 - BA-03: since #205 the generic `paths` alias `@/*` beats `@/_internal/*`. ICU order matched tsc's longest-prefix rule only by accident. Implement longest-prefix selection.
 
-## Paused 2026-10-28 (second usage limit)
+## Paused 2026-10-28 (third pause, at the owner's request)
 
-In flight. On resume, check `gh pr list --state open` and each branch on origin first.
-- BA-02 #214 in red team; BA-03 #213 writer applying TS extension priority for extensionless imports, then red team.
+Agents were stopped deliberately to save usage. Nothing is half-written: both branches on origin are clean at their last pushed heads.
+- **#214 BA-02** (head `db83a52`, worktree `C:Projects.w2a02`): red-team FAIL. The writer has not started the fix yet. Required, each with a RED-then-GREEN test:
+  1. `mergeDeclarations` must rank specifier exports (`export { X }`, `export type { X }`), with value specifiers outranking type/namespace/signature exports of the same name, so one `export` survives. The same applies to `export default function` overloads. Repros: `class Baz{go(){}}; export { Baz }; export interface Baz {}` with `new Baz().go()` elsewhere; `function run(){}; export { run }; export namespace run { export const o = 1 }` with `run()` elsewhere. Both must stay RESOLVED.
+  2. `DECLARATION_FILE` regex: `/.d.[mc]?ts$/i` must become `/.d.[mc]?ts$/i` (it currently matches `build.ts`).
+  3. Soundness: with reopened namespaces `function a(){}; namespace M{export function a(){}}; namespace M{export function b(){a()}}`, the head resolves `a()` to the module-level `a`, but TS binds it to `M.a`. Rule: an unqualified name in one block of a multi-block namespace that is not bound in that block stays UNRESOLVED if another block declares it.
+  Then fact-diff, verify, push, and Sonnet re-review.
+- **#213 BA-03** (head `32b5c68`): Sonnet red team stopped mid-review (it was confirming the new tests fail on base). Restart it on the head with the same 6 checks. Keep long jobs in the background; it stalled once.
+- After both merge: the lead's batched docs update (README rows, CURRENT_IMPLEMENTATION, CLI configuration), then the serial chain BA-13, then BA-10, then BA-12 on the symbol extractor, plus BA-09.
 
 ## How to resume (new session or after a usage limit)
 
