@@ -329,9 +329,10 @@ class FlowState {
       ? `anon-${this.unlocatedStatementSequence++}`
       : `${node.location.start.line}:${node.location.start.column}`;
     const origin = `${this.filePath}:${node.type}:${position}`;
-    // The first occurrence keeps its source-position id; a later one (a finally copy) derives its id from the copy context.
-    const positionId = hash(origin);
-    const id = this.statementIds.has(positionId) ? hash(`${origin}@${this.copyContext}`) : positionId;
+    // The first occurrence keeps its source-position id; a later one (a finally copy) derives its id from the copy
+    // context, probing until unused (a copy holding an original and an original holding a copy can share a context).
+    let id = hash(origin);
+    for (let attempt = 0; this.statementIds.has(id); attempt++) id = hash(`${origin}@${this.copyContext}#${attempt}`);
     this.statementIds.add(id);
     this.block(blockId).statements.push({
       id,

@@ -127,6 +127,14 @@ describe("BA-14 duplicate ids: every statement occurrence in a graph has a uniqu
     "try/finally inside a copied finalizer": `function f(x){ try { if (x) return 1; } finally { try { g(); } finally { h(); } } }`,
     "catch and finally": `function f(x){ try { if (x) return 1; g(); } catch (e) { r(); } finally { k(); } }`,
     "labelled break through finally": `function f(n){ L: { for(;;){ try { if (n) break L; } finally { k(); } } } }`,
+    // Red-team counterexamples: a copy of the outer finalizer holding the inner original, and the outer original
+    // holding an inner copy, used to get the same context ("return") and collide.
+    "return in a nested finalizer (red-team 1)": `function f(a,b){ try { if (a) return 1; } finally { try { if (b) return 2; } finally { c(); } } }`,
+    "return in a nested finalizer with live statements (red-team 2)": `function g(r,a){ try{ if(a) return use(r); work(r);} finally { try{ flush(r); if(a) return; } finally { close(r); } } }`,
+    "throw in a nested finalizer": `function f(a,b){ try { if (a) throw e; } finally { try { if (b) throw e2; } finally { c(); } } }`,
+    "break in a nested finalizer": `function f(a,b){ for(;;){ try { if (a) break; } finally { try { if (b) break; } finally { c(); } } } }`,
+    "continue in a nested finalizer": `function f(a,b){ for(;;){ try { if (a) continue; } finally { try { if (b) continue; } finally { c(); } } } }`,
+    "labelled jumps in a nested finalizer": `function f(a,b){ L: for(;;){ try { if (a) continue L; } finally { try { if (b) break L; } finally { c(); } } } }`,
   };
   for (const [name, code] of Object.entries(finallyPrograms)) {
     it(`${name}: statement ids are unique within each graph`, async () => {
@@ -135,6 +143,24 @@ describe("BA-14 duplicate ids: every statement occurrence in a graph has a uniqu
         expect(new Set(ids).size).toBe(ids.length);
       }
     });
+  }
+
+  // Every pairing of an outer and an inner abrupt completion, with the inner try in the outer finalizer
+  // (copies of a finalizer that holds a try) and in the outer try body (a copied inner finalizer inside the original).
+  const jumps = ["return 1;", "throw e;", "break;", "continue;"];
+  for (const outer of jumps) {
+    for (const inner of jumps) {
+      const nestedInFinalizer = `function f(a,b){ for(;;){ try { if (a) ${outer} } finally { try { if (b) ${inner} } finally { c(); } } } }`;
+      const nestedInBody = `function f(a,b){ for(;;){ try { try { if (b) ${inner} } finally { c(); } if (a) ${outer} } finally { d(); } } }`;
+      for (const [where, code] of [["finalizer", nestedInFinalizer], ["try body", nestedInBody]] as const) {
+        it(`outer "${outer}" with inner "${inner}" in the ${where}: statement ids are unique within each graph`, async () => {
+          for (const cfg of await cfgsOf(code)) {
+            const ids = statementIds(cfg);
+            expect(new Set(ids).size).toBe(ids.length);
+          }
+        });
+      }
+    }
   }
 
   it("the finalizer is still present once per completion kind that reaches it (probe p02: normal + labelled continue)", async () => {
