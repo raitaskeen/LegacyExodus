@@ -1,7 +1,6 @@
 import { dirname, posix } from "node:path";
 
 import type { FileArtifact } from "@contracts/discovery";
-import { compareCodePoints } from "@shared/ordering";
 
 export interface ResolvedImport {
   readonly importerPath: string;
@@ -9,7 +8,12 @@ export interface ResolvedImport {
   readonly resolvedPath: string | null;
 }
 
-/** Parsed tsconfig alias configuration supplied by the composition boundary. */
+/**
+ * Parsed tsconfig alias configuration supplied by the composition boundary.
+ *
+ * Every path is project-root-relative POSIX. `paths` targets are relative to `baseUrl` when one is
+ * set and to the project root otherwise; their listed order is the order they are tried in.
+ */
 export interface ModuleResolutionOptions {
   readonly baseUrl?: string;
   readonly paths?: Readonly<Record<string, readonly string[]>>;
@@ -43,23 +47,18 @@ export class ModuleResolver {
     const knownPaths = this.getKnownPathSet(files);
     const normalizedImporter = canonicalizePath(importerPath);
     const rawNormalizedSpecifier = moduleSpecifier.replaceAll("\\", "/");
+    const importerIsTypeScript = TYPESCRIPT_IMPORTER.test(normalizedImporter);
 
     if (!rawNormalizedSpecifier.startsWith(".")) {
-      const aliased = this.resolveAlias(rawNormalizedSpecifier, knownPaths);
-      if (aliased !== null) {
-        return Object.freeze({ importerPath, moduleSpecifier, resolvedPath: aliased });
-      }
-      return Object.freeze({ importerPath, moduleSpecifier, resolvedPath: null });
+      const resolvedPath = this.resolveNonRelative(rawNormalizedSpecifier, knownPaths, importerIsTypeScript);
+      return Object.freeze({ importerPath, moduleSpecifier, resolvedPath });
     }
 
     const basePath = canonicalizePath(posix.join(dirname(normalizedImporter), rawNormalizedSpecifier));
-    const candidates = candidatesFor(basePath);
-    const resolvedPath = candidates.find((candidate) => knownPaths.has(candidate)) ?? null;
-
     return Object.freeze({
       importerPath,
       moduleSpecifier,
-      resolvedPath,
+      resolvedPath: firstKnown(candidatesFor(basePath, importerIsTypeScript), knownPaths),
     });
   }
 
@@ -84,34 +83,117 @@ export class ModuleResolver {
     return normalizedSet;
   }
 
-  private resolveAlias(moduleSpecifier: string, knownPaths: ReadonlySet<string>): string | null {
-    const normalizedSpecifier = moduleSpecifier.replaceAll("\\", "/");
-    const normalizedBaseUrl = canonicalizePath(this.options.baseUrl ?? "");
-    const aliases = Object.entries(this.options.paths ?? {}).sort(([left], [right]) => compareCodePoints(left, right));
-    for (const [pattern, targets] of aliases) {
-      const normalizedPattern = pattern.replaceAll("\\", "/");
-      const wildcard = normalizedPattern.indexOf("*");
-      const match = wildcard < 0
-        ? normalizedPattern === normalizedSpecifier ? "" : undefined
-        : normalizedSpecifier.startsWith(normalizedPattern.slice(0, wildcard)) && normalizedSpecifier.endsWith(normalizedPattern.slice(wildcard + 1))
-          ? normalizedSpecifier.slice(wildcard, normalizedSpecifier.length - normalizedPattern.slice(wildcard + 1).length)
-          : undefined;
-      if (match === undefined) continue;
-      for (const target of [...targets].sort()) {
+  /**
+   * Non-relative specifiers follow TypeScript: `paths` first, through the single best-matching
+   * pattern, then `baseUrl`. Anything else (packages, built-ins, URLs) stays unresolved.
+   */
+  private resolveNonRelative(
+    specifier: string,
+    knownPaths: ReadonlySet<string>,
+    importerIsTypeScript: boolean,
+  ): string | null {
+    if (specifier.length === 0) return null;
+    const baseUrl = canonicalizePath(this.options.baseUrl ?? "");
+
+    const best = selectPathsPattern(this.options.paths, specifier);
+    if (best !== undefined) {
+      for (const target of best.targets) {
         const normalizedTarget = target.replaceAll("\\", "/");
-        const candidate = canonicalizePath(posix.join(normalizedBaseUrl, normalizedTarget.replace("*", match)));
-        for (const resolved of candidatesFor(candidate)) {
-          if (knownPaths.has(resolved)) return resolved;
-        }
+        if (isAbsoluteLike(normalizedTarget)) continue;
+        const star = normalizedTarget.indexOf("*");
+        if (star >= 0 && normalizedTarget.indexOf("*", star + 1) >= 0) continue;
+        const substituted = star < 0 || best.captured === undefined
+          ? normalizedTarget
+          : normalizedTarget.slice(0, star) + best.captured + normalizedTarget.slice(star + 1);
+        const resolved = firstKnown(candidatesFor(canonicalizePath(posix.join(baseUrl, substituted)), importerIsTypeScript), knownPaths);
+        if (resolved !== null) return resolved;
       }
+    }
+
+    if (this.options.baseUrl !== undefined && !NOT_BASE_URL_RELATIVE.test(specifier)) {
+      return firstKnown(candidatesFor(canonicalizePath(posix.join(baseUrl, specifier)), importerIsTypeScript), knownPaths);
     }
     return null;
   }
 }
 
-function candidatesFor(basePath: string): readonly string[] {
+/** Importers whose own language is TypeScript; they prefer TypeScript sources for `.js` specifiers. */
+const TYPESCRIPT_IMPORTER = /\.(?:ts|tsx|mts|cts)$/i;
+
+/** Absolute paths, drive letters and URL schemes (`node:fs`, `https://…`) are not relative to a baseUrl. */
+const NOT_BASE_URL_RELATIVE = /^(?:\/|[a-zA-Z][a-zA-Z0-9+.-]*:)/;
+
+function isAbsoluteLike(path: string): boolean {
+  return path.startsWith("/") || /^[a-zA-Z]:/.test(path);
+}
+
+interface PathsMatch {
+  readonly targets: readonly string[];
+  /** The text the `*` of a wildcard pattern matched; undefined for an exact pattern. */
+  readonly captured: string | undefined;
+}
+
+/**
+ * TypeScript's `paths` precedence: an exact pattern wins; otherwise the wildcard pattern with the
+ * longest prefix before `*` wins, earlier declarations winning ties. Only that pattern is used.
+ */
+function selectPathsPattern(
+  paths: Readonly<Record<string, readonly string[]>> | undefined,
+  specifier: string,
+): PathsMatch | undefined {
+  if (paths === undefined) return undefined;
+  let best: PathsMatch | undefined;
+  let bestPrefixLength = -1;
+  for (const [pattern, targets] of Object.entries(paths)) {
+    const normalizedPattern = pattern.replaceAll("\\", "/");
+    const star = normalizedPattern.indexOf("*");
+    if (star < 0) {
+      if (normalizedPattern === specifier) return { targets, captured: undefined };
+      continue;
+    }
+    if (normalizedPattern.indexOf("*", star + 1) >= 0) continue;
+    const prefix = normalizedPattern.slice(0, star);
+    const suffix = normalizedPattern.slice(star + 1);
+    if (specifier.length < prefix.length + suffix.length || !specifier.startsWith(prefix) || !specifier.endsWith(suffix)) continue;
+    if (prefix.length > bestPrefixLength) {
+      best = { targets, captured: specifier.slice(prefix.length, specifier.length - suffix.length) };
+      bestPrefixLength = prefix.length;
+    }
+  }
+  return best;
+}
+
+function firstKnown(candidates: readonly string[], knownPaths: ReadonlySet<string>): string | null {
+  return candidates.find((candidate) => knownPaths.has(candidate)) ?? null;
+}
+
+/** TypeScript source files that a JavaScript-extension specifier stands for, in TypeScript's order. */
+const TYPESCRIPT_SOURCE_SUBSTITUTES: ReadonlyArray<readonly [string, readonly string[]]> = [
+  [".js", [".ts", ".tsx", ".d.ts"]],
+  [".jsx", [".tsx"]],
+  [".mjs", [".mts", ".d.mts"]],
+  [".cjs", [".cts", ".d.cts"]],
+];
+
+function typeScriptSubstitutes(clean: string): readonly string[] {
+  for (const [extension, replacements] of TYPESCRIPT_SOURCE_SUBSTITUTES) {
+    if (!clean.endsWith(extension)) continue;
+    const stem = clean.slice(0, clean.length - extension.length);
+    if (stem.length === 0 || stem.endsWith("/")) return [];
+    return replacements.map((replacement) => `${stem}${replacement}`);
+  }
+  return [];
+}
+
+/**
+ * Files a module path can name, most preferred first. The extensionless order is the established
+ * one. A specifier written with a JavaScript extension (`./a.js`, which TypeScript's NodeNext and
+ * Bundler modes require for `a.ts`) also names the TypeScript source: a TypeScript importer tries
+ * those sources before the literal file, a JavaScript importer after it.
+ */
+function candidatesFor(basePath: string, importerIsTypeScript: boolean): readonly string[] {
   const clean = canonicalizePath(basePath);
-  return Object.freeze([
+  const extensionless = [
     clean,
     `${clean}.js`,
     `${clean}.jsx`,
@@ -119,11 +201,20 @@ function candidatesFor(basePath: string): readonly string[] {
     `${clean}.tsx`,
     `${clean}.mjs`,
     `${clean}.cjs`,
+    `${clean}.mts`,
+    `${clean}.cts`,
+    `${clean}.d.ts`,
     posix.join(clean, "index.js"),
     posix.join(clean, "index.jsx"),
     posix.join(clean, "index.ts"),
     posix.join(clean, "index.tsx"),
     posix.join(clean, "index.mjs"),
     posix.join(clean, "index.cjs"),
-  ]);
+    posix.join(clean, "index.d.ts"),
+  ];
+  const substitutes = typeScriptSubstitutes(clean);
+  if (substitutes.length === 0) return Object.freeze(extensionless);
+  return Object.freeze(importerIsTypeScript
+    ? [...substitutes, ...extensionless]
+    : [clean, ...substitutes, ...extensionless.slice(1)]);
 }
