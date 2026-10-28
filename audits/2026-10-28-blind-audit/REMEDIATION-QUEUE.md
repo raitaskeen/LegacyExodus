@@ -20,24 +20,24 @@ hand-off point: a new session resumes from here.
   - each fix removes its own ledger entries.
 
   Then `gh pr merge <n> --auto --squash --match-head-commit <sha>`. `main` requires up-to-date branches, so after another PR merges, merge `origin/main` into the waiting branch, push, and re-arm.
-- **Red-team FAIL â†’ Path A:** fix on the same branch, then send the fixed head back to the same reviewer. After two FAILs, go back to design.
+- **Red-team FAIL Ã¢â€ â€™ Path A:** fix on the same branch, then send the fixed head back to the same reviewer. After two FAILs, go back to design.
 
 ## Status
 
 | Wave | Item | Findings | Allowlist (lock) | Depends on | Status |
 |---|---|---|---|---|---|
-| 0 | Fact-diff tool | â€” | `benchmarks/fact-diff.ts`, `benchmarks/cli.ts`, its test | â€” | merged #204 `6c14e0d` |
-| 0 | Code-point ordering | BA-16 | sort comparators in `src/**`, `src/shared/ordering.ts` | â€” | merged #205 `9b31888` |
+| 0 | Fact-diff tool | Ã¢â‚¬â€ | `benchmarks/fact-diff.ts`, `benchmarks/cli.ts`, its test | Ã¢â‚¬â€ | merged #204 `6c14e0d` |
+| 0 | Code-point ordering | BA-16 | sort comparators in `src/**`, `src/shared/ordering.ts` | Ã¢â‚¬â€ | merged #205 `9b31888` |
 | 0 | Truth-label reset | BA-21, BA-22, BA-08 label | `README.md`, `docs/CURRENT_IMPLEMENTATION.md`, route state + test | #205 | merged #207 `5a95e9f` |
 | 0 | Conformance corpus + ledger | BA-20 (1) | `tests/conformance/**` | #204 | merged #206 `5ba1e21` |
-| 1 | Parser dialect per extension | BA-01 | `src/parser/adapters/javascript/**`, parser tests, BA-01 ledger group | #206 | in progress |
+| 1 | Parser dialect per extension | BA-01 | `src/parser/adapters/javascript/**`, parser tests, BA-01 ledger group | #206 | PR #210, in red team |
 | 1 | CFG adjacents (A2, A3, `finally` ids) | BA-14 | `src/flow/control-flow-builder.ts`, CFG tests, BA-14 ledger group | #206 | in progress |
 | 1 | CI fact-diff job (PR summary of facts lost/gained) | BA-20 | `.github/workflows/ci.yml`, workflow tests | #204 | merged #208 `5ef17de` |
-| 1 | Pin corpora by commit and tree hash | BA-20 (2) | `benchmarks/corpus/**`, `tests/unit/governance/test-fidelity-helpers.ts` | â€” | queued |
-| 1 | Harden conformance (#206 review): an `analyzed` companion for every `lacks` case; callee/state in `cjs:indirect-call-recorded`; taint state where it matters | BA-20 (3) | `tests/conformance/cases.ts` | #206 | in progress (Haiku) |
+| 1 | Pin corpora by commit and tree hash | BA-20 (2) | `benchmarks/corpus/**`, `tests/unit/governance/test-fidelity-helpers.ts` | Ã¢â‚¬â€ | queued |
+| 1 | Harden conformance (#206 review): an `analyzed` companion for every `lacks` case; callee/state in `cjs:indirect-call-recorded`; taint state where it matters | BA-20 (3) | `tests/conformance/cases.ts` | #206 | merged #209 `0ffd0c2` |
 | 5 | Manifest location without plaintext path | BA-26 | `src/storage/projections/**`, `src/discovery/discovery-validator.ts`, `snapshot-trust.ts`, tests | Wave 4 | queued. Design (lead, 2026-10-28): the validator binds reuse to the canonical absolute path (`discovery-validator.ts:280, :405`, the F-001 location binding), so a relative path alone would weaken trust. Replace `repository.path` with `repository.locationDigest = HMAC(localKey, canonicalPath)`, recomputed on validate, and bump the manifest contract so old snapshots refresh |
-| 1 | Fact-diff residual gaps (dominators, lifetimes, unused definitions, first taint hop) | â€” | `benchmarks/fact-diff.ts` | #204 | queued (low) |
-| 2 | Split hotspot files (behaviour-preserving, fact-diff 0/0) | â€” | symbol extractor, `src/semantic/*` | Wave 1 | queued |
+| 1 | Fact-diff residual gaps (dominators, lifetimes, unused definitions, first taint hop) | Ã¢â‚¬â€ | `benchmarks/fact-diff.ts` | #204 | queued (low) |
+| 2 | Split hotspot files (behaviour-preserving, fact-diff 0/0) | Ã¢â‚¬â€ | symbol extractor, `src/semantic/*` | Wave 1 | queued |
 | 2 | TypeScript declarations, then class expressions, then dynamic import, then compiled CJS | BA-02, BA-13, BA-10, BA-12 | symbol extractor (serial chain) | split | queued |
 | 2 | TS module resolution, then namespace imports | BA-03, BA-09 | `src/graph/**`, tsconfig loader, `command-handler.ts` aliases | Wave 1 | queued |
 | 3 | Data flow rebuilt on the CFG | BA-05, BA-04, BA-06, BA-27, BA-28 | DFG modules | Wave 2 | queued |
@@ -65,8 +65,8 @@ Notes:
 Wave <n> of the audit remediation (audit: #203), finding <BA-xx>.
 **Problem** <one paragraph from FINDINGS.md>
 **Change** <what and where>
-**Evidence** RED on main (test + failing output) Â· GREEN Â· full suite (pass/fail/files) Â·
-typecheck Â· benchmark audit Â· conformance (ledger entries removed) Â· fact-diff mainâ†’head on
+**Evidence** RED on main (test + failing output) Ã‚Â· GREEN Ã‚Â· full suite (pass/fail/files) Ã‚Â·
+typecheck Ã‚Â· benchmark audit Ã‚Â· conformance (ledger entries removed) Ã‚Â· fact-diff mainÃ¢â€ â€™head on
 corpora (lost/gained with explanation)
-ðŸ¤– Generated with [Claude Code](https://claude.com/claude-code)
+Ã°Å¸Â¤â€“ Generated with [Claude Code](https://claude.com/claude-code)
 ```
