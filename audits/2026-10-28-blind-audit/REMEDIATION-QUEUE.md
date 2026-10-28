@@ -31,7 +31,7 @@ hand-off point: a new session resumes from here.
 | 0 | Truth-label reset | BA-21, BA-22, BA-08 label | `README.md`, `docs/CURRENT_IMPLEMENTATION.md`, route state + test | #205 | merged #207 `5a95e9f` |
 | 0 | Conformance corpus + ledger | BA-20 (1) | `tests/conformance/**` | #204 | merged #206 `5ba1e21` |
 | 1 | Parser dialect per extension | BA-01 | `src/parser/adapters/javascript/**`, parser tests, BA-01 ledger group | #206 | merged #210 `24c3d3b` |
-| 1 | CFG adjacents (A2, A3, `finally` ids) | BA-14 | `src/flow/control-flow-builder.ts`, CFG tests, BA-14 ledger group | #206 | PR #211 (head e41810c), in red team. Lead decisions: keep the dead-tail `loop-back` edge (two tests rely on it; the block is marked unreachable); loops wholly in dead code are no longer natural loops |
+| 1 | CFG adjacents (A2, A3, `finally` ids) | BA-14 | `src/flow/control-flow-builder.ts`, CFG tests, BA-14 ledger group | #206 | merged #211 `d7e51f1` (after one FAIL on nested `finally` ids; fixed by collision-free probing). Lead decisions: keep dead-tail `loop-back`; loops wholly in dead code are not natural loops |
 | 1 | CI fact-diff job (PR summary of facts lost/gained) | BA-20 | `.github/workflows/ci.yml`, workflow tests | #204 | merged #208 `5ef17de` |
 | 1 | Pin corpora by commit and tree hash | BA-20 (2) | `benchmarks/corpus/**`, `tests/unit/governance/test-fidelity-helpers.ts` | ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â | queued |
 | 1 | Harden conformance (#206 review): an `analyzed` companion for every `lacks` case; callee/state in `cjs:indirect-call-recorded`; taint state where it matters | BA-20 (3) | `tests/conformance/cases.ts` | #206 | merged #209 `0ffd0c2` |
@@ -50,15 +50,6 @@ hand-off point: a new session resumes from here.
 Notes:
 - BA-01 known limitation: with the Flow plugin, a statement that is only the identifier `type`, `declare` or `opaque` at the end of a line, followed by an assignment on the next line (valid JS via ASI), now misparses as Flow. No corpus hits it. Revisit if a real repository does.
 - BA-03: since #205 the generic `paths` alias `@/*` beats `@/_internal/*`. ICU order matched tsc's longest-prefix rule only by accident. Implement longest-prefix selection.
-
-## Paused 2026-10-28 (usage limit)
-
-In flight when paused:
-- #210 BA-01: red-team verdict pending.
-- #211 BA-14: red-team verdict pending.
-- Corpus pinning: Sonnet writer, branch `test/pin-corpora`, worktree `C:\Projects\.w1\pin`; check whether a PR exists.
-
-On resume: for each, follow the checklist below. A missing verdict means re-running the red team on the PR head; a missing PR means re-running the writer from its row.
 
 ## How to resume (new session or after a usage limit)
 
