@@ -530,22 +530,58 @@ describe("ModuleResolver relative specifiers", () => {
     expect(resolveWith({}, "src/x.ts", "./sub/dir/a.js", "src/sub/dir/a.ts")).toBe("src/sub/dir/a.ts");
   });
 
-  test("keeps every existing extensionless candidate and adds .mts, .cts, .d.ts and index.d.ts", () => {
-    for (const [file, expected] of [
-      ["src/a.js", "src/a.js"], ["src/a.jsx", "src/a.jsx"], ["src/a.ts", "src/a.ts"], ["src/a.tsx", "src/a.tsx"],
-      ["src/a.mjs", "src/a.mjs"], ["src/a.cjs", "src/a.cjs"], ["src/a.mts", "src/a.mts"], ["src/a.cts", "src/a.cts"],
-      ["src/a.d.ts", "src/a.d.ts"], ["src/a/index.js", "src/a/index.js"], ["src/a/index.jsx", "src/a/index.jsx"],
-      ["src/a/index.ts", "src/a/index.ts"], ["src/a/index.tsx", "src/a/index.tsx"], ["src/a/index.mjs", "src/a/index.mjs"],
-      ["src/a/index.cjs", "src/a/index.cjs"], ["src/a/index.d.ts", "src/a/index.d.ts"],
-    ] as const) {
-      expect(resolveWith({}, "src/i.ts", "./a", file)).toBe(expected);
+  test("keeps every extensionless candidate for both kinds of importer and adds .mts, .cts, .d.ts, .d.mts, .d.cts and index.d.ts", () => {
+    for (const importer of ["src/i.ts", "src/i.js"]) {
+      for (const file of [
+        "src/a.js", "src/a.jsx", "src/a.ts", "src/a.tsx", "src/a.mjs", "src/a.cjs", "src/a.mts", "src/a.cts",
+        "src/a.d.ts", "src/a.d.mts", "src/a.d.cts", "src/a/index.js", "src/a/index.jsx", "src/a/index.ts",
+        "src/a/index.tsx", "src/a/index.mjs", "src/a/index.cjs", "src/a/index.d.ts",
+      ]) {
+        expect(resolveWith({}, importer, "./a", file)).toBe(file);
+      }
     }
   });
 
-  test("keeps the established order among extensionless candidates", () => {
-    expect(resolveWith({}, "src/i.ts", "./a", "src/a.ts", "src/a.js")).toBe("src/a.js");
-    expect(resolveWith({}, "src/i.ts", "./a", "src/a.d.ts", "src/a/index.js")).toBe("src/a.d.ts");
-    expect(resolveWith({}, "src/i.ts", "./a", "src/a/index.d.ts", "src/a/index.ts")).toBe("src/a/index.ts");
+  test("a TypeScript importer prefers .ts, .tsx and .d.ts to .js and .jsx for an extensionless specifier", () => {
+    for (const importer of ["src/i.ts", "src/i.tsx", "src/i.mts", "src/i.cts", "src/i.d.ts"]) {
+      expect(resolveWith({}, importer, "./a", "src/a.js", "src/a.ts")).toBe("src/a.ts");
+      expect(resolveWith({}, importer, "./a", "src/a.jsx", "src/a.tsx")).toBe("src/a.tsx");
+      expect(resolveWith({}, importer, "./a", "src/a.js", "src/a.d.ts")).toBe("src/a.d.ts");
+      expect(resolveWith({}, importer, "./a", "src/a.js", "src/a.jsx", "src/a.d.ts", "src/a.tsx", "src/a.ts")).toBe("src/a.ts");
+      expect(resolveWith({}, importer, "./a", "src/a.js", "src/a.jsx", "src/a.d.ts", "src/a.tsx")).toBe("src/a.tsx");
+      expect(resolveWith({}, importer, "./a", "src/a.mjs", "src/a.mts")).toBe("src/a.mts");
+      expect(resolveWith({}, importer, "./a", "src/a.cjs", "src/a.cts")).toBe("src/a.cts");
+      expect(resolveWith({}, importer, "./a", "src/a.mjs", "src/a.d.mts")).toBe("src/a.d.mts");
+      expect(resolveWith({}, importer, "./a", "src/a.cjs", "src/a.d.cts")).toBe("src/a.d.cts");
+    }
+  });
+
+  test("a JavaScript importer keeps the established order: .js before .ts for an extensionless specifier", () => {
+    for (const importer of ["src/i.js", "src/i.jsx", "src/i.mjs", "src/i.cjs"]) {
+      expect(resolveWith({}, importer, "./a", "src/a.ts", "src/a.js")).toBe("src/a.js");
+      expect(resolveWith({}, importer, "./a", "src/a.tsx", "src/a.jsx")).toBe("src/a.jsx");
+      expect(resolveWith({}, importer, "./a", "src/a.mts", "src/a.mjs")).toBe("src/a.mjs");
+      expect(resolveWith({}, importer, "./a", "src/a.cts", "src/a.cjs")).toBe("src/a.cjs");
+      expect(resolveWith({}, importer, "./a", "src/a.d.ts", "src/a.ts")).toBe("src/a.ts");
+    }
+  });
+
+  test("directory index modules follow the importer's priority too, and a file still beats a directory", () => {
+    expect(resolveWith({}, "src/i.ts", "./a", "src/a/index.js", "src/a/index.ts")).toBe("src/a/index.ts");
+    expect(resolveWith({}, "src/i.ts", "./a", "src/a/index.jsx", "src/a/index.tsx")).toBe("src/a/index.tsx");
+    expect(resolveWith({}, "src/i.ts", "./a", "src/a/index.js", "src/a/index.d.ts")).toBe("src/a/index.d.ts");
+    expect(resolveWith({}, "src/i.js", "./a", "src/a/index.ts", "src/a/index.js")).toBe("src/a/index.js");
+    expect(resolveWith({}, "src/i.js", "./a", "src/a/index.d.ts", "src/a/index.ts")).toBe("src/a/index.ts");
+    for (const importer of ["src/i.ts", "src/i.js"]) {
+      expect(resolveWith({}, importer, "./a", "src/a/index.ts", "src/a.js")).toBe("src/a.js");
+      expect(resolveWith({}, importer, "./a", "src/a/index.js", "src/a.ts")).toBe("src/a.ts");
+    }
+  });
+
+  test("an exact file and an explicit extension still win over every extensionless candidate", () => {
+    expect(resolveWith({}, "src/i.ts", "./a.js", "src/a.js")).toBe("src/a.js");
+    expect(resolveWith({}, "src/i.ts", "./a.ts", "src/a.ts", "src/a.ts.ts")).toBe("src/a.ts");
+    expect(resolveWith({}, "src/i.ts", "./a", "src/a")).toBe("src/a");
   });
 
   test("an exact path to an existing file still wins and nothing resolves outside the known file set", () => {
@@ -653,6 +689,15 @@ describe("ModuleResolver non-relative specifiers", () => {
     expect(resolveWith(options, "pkg/i.ts", "@lib/a.js", "pkg/src/a.ts", "pkg/src/a.js")).toBe("pkg/src/a.ts");
     expect(resolveWith(options, "pkg/i.js", "@lib/a.js", "pkg/src/a.ts", "pkg/src/a.js")).toBe("pkg/src/a.js");
     expect(resolveWith(options, "pkg/i.ts", "@lib/dir", "pkg/src/dir/index.d.ts")).toBe("pkg/src/dir/index.d.ts");
+  });
+
+  test("alias and baseUrl lookups use the importer's extension priority for an extensionless specifier", () => {
+    const options = { baseUrl: "pkg", paths: { "@lib/*": ["src/*"] } };
+    expect(resolveWith(options, "pkg/i.ts", "@lib/a", "pkg/src/a.js", "pkg/src/a.ts")).toBe("pkg/src/a.ts");
+    expect(resolveWith(options, "pkg/i.js", "@lib/a", "pkg/src/a.js", "pkg/src/a.ts")).toBe("pkg/src/a.js");
+    expect(resolveWith(options, "pkg/i.ts", "@lib/dir", "pkg/src/dir/index.js", "pkg/src/dir/index.ts")).toBe("pkg/src/dir/index.ts");
+    expect(resolveWith(options, "pkg/i.ts", "shared/b", "pkg/shared/b.js", "pkg/shared/b.tsx")).toBe("pkg/shared/b.tsx");
+    expect(resolveWith(options, "pkg/i.js", "shared/b", "pkg/shared/b.js", "pkg/shared/b.tsx")).toBe("pkg/shared/b.js");
   });
 
   test("a baseUrl alone resolves non-relative imports against it", () => {

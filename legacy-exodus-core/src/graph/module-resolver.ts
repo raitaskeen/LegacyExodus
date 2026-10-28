@@ -186,31 +186,28 @@ function typeScriptSubstitutes(clean: string): readonly string[] {
 }
 
 /**
- * Files a module path can name, most preferred first. The extensionless order is the established
- * one. A specifier written with a JavaScript extension (`./a.js`, which TypeScript's NodeNext and
- * Bundler modes require for `a.ts`) also names the TypeScript source: a TypeScript importer tries
- * those sources before the literal file, a JavaScript importer after it.
+ * Extensions an extensionless module path can name, most preferred first. TypeScript tries its own
+ * sources before JavaScript files, so a TypeScript importer does too; a JavaScript importer keeps the
+ * established order, in which `.js` comes before `.ts`.
+ */
+const FILE_EXTENSIONS_FOR_TYPESCRIPT = [".ts", ".tsx", ".d.ts", ".mts", ".cts", ".d.mts", ".d.cts", ".js", ".jsx", ".mjs", ".cjs"] as const;
+const FILE_EXTENSIONS_FOR_JAVASCRIPT = [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts", ".d.ts", ".d.mts", ".d.cts"] as const;
+const INDEX_FILES_FOR_TYPESCRIPT = ["index.ts", "index.tsx", "index.d.ts", "index.js", "index.jsx", "index.mjs", "index.cjs"] as const;
+const INDEX_FILES_FOR_JAVASCRIPT = ["index.js", "index.jsx", "index.ts", "index.tsx", "index.mjs", "index.cjs", "index.d.ts"] as const;
+
+/**
+ * Files a module path can name, most preferred first: the path itself, then the path with each
+ * extension, then its directory index files; files always come before directory indexes. A
+ * specifier written with a JavaScript extension (`./a.js`, which TypeScript's NodeNext and Bundler
+ * modes require for `a.ts`) also names the TypeScript source: a TypeScript importer tries those
+ * sources before the literal file, a JavaScript importer after it.
  */
 function candidatesFor(basePath: string, importerIsTypeScript: boolean): readonly string[] {
   const clean = canonicalizePath(basePath);
   const extensionless = [
     clean,
-    `${clean}.js`,
-    `${clean}.jsx`,
-    `${clean}.ts`,
-    `${clean}.tsx`,
-    `${clean}.mjs`,
-    `${clean}.cjs`,
-    `${clean}.mts`,
-    `${clean}.cts`,
-    `${clean}.d.ts`,
-    posix.join(clean, "index.js"),
-    posix.join(clean, "index.jsx"),
-    posix.join(clean, "index.ts"),
-    posix.join(clean, "index.tsx"),
-    posix.join(clean, "index.mjs"),
-    posix.join(clean, "index.cjs"),
-    posix.join(clean, "index.d.ts"),
+    ...(importerIsTypeScript ? FILE_EXTENSIONS_FOR_TYPESCRIPT : FILE_EXTENSIONS_FOR_JAVASCRIPT).map((extension) => `${clean}${extension}`),
+    ...(importerIsTypeScript ? INDEX_FILES_FOR_TYPESCRIPT : INDEX_FILES_FOR_JAVASCRIPT).map((index) => posix.join(clean, index)),
   ];
   const substitutes = typeScriptSubstitutes(clean);
   if (substitutes.length === 0) return Object.freeze(extensionless);
