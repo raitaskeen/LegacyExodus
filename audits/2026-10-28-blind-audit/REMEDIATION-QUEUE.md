@@ -48,6 +48,7 @@ hand-off point: a new session resumes from here.
 | Docs | Docs/governance session (incl. remaining `core-foundation` mentions in GOVERNANCE, CONTRIBUTING, PR template, `.agents`) | BA-23, BA-22 rest | `docs/**`, root docs, `.agents/**` | anytime | queued |
 
 Notes:
+- Corpus pinning residual (accepted): a `benchmarks/.cache` entry whose name matches no manifest is skipped, not refused. Consider failing closed on unknown entries.
 - Lead decision (2026-10-28): the hotspot split is dropped. Wave 2 items lock disjoint files, so splitting adds risk without enabling parallelism.
 - BA-01 known limitation: with the Flow plugin, a statement that is only the identifier `type`, `declare` or `opaque` at the end of a line, followed by an assignment on the next line (valid JS via ASI), now misparses as Flow. No corpus hits it. Revisit if a real repository does.
 - BA-03: since #205 the generic `paths` alias `@/*` beats `@/_internal/*`. ICU order matched tsc's longest-prefix rule only by accident. Implement longest-prefix selection.
@@ -55,11 +56,6 @@ Notes:
 ## Paused 2026-10-28 (second usage limit)
 
 In flight. On resume, check `gh pr list --state open` and each branch on origin first.
-- **#212 corpus pinning** (branch `test/pin-corpora`, worktree `C:Projects.w1pin`). The writer was fixing the red-team FAIL:
-  1. Compare against a temp index built from HEAD, which closes the assume-unchanged / skip-worktree / restored-mtime bypasses.
-  2. Verify any `benchmarks/.cache` path in `runner.ts`, `validate` and `fidelity`.
-  3. Merge `origin/main`.
-  If no new commit is on origin, redo these. Then run a Haiku re-review on the new head.
 - **BA-02 TS declarations** (branch `fix/ba02-ts-declarations`, worktree `C:Projects.w2a02`): Sonnet writer. Spec: new kinds enum/namespace/interface/type-alias; namespace scope (no module export for members); import-equals and export-assignment; remove the BA-02 ledger group. If no PR exists, resume or restart the writer; then run a Sonnet red team.
 - **BA-03 TS resolution** (branch `fix/ba03-ts-resolution`, worktree `C:Projects.w2a03`): Sonnet writer. Spec: `tsconfig-loader.ts` (JSONC, extends string/array/package); `.js`→`.ts` substitution (TS importers first); `.mts`/`.cts`/`.d.ts` candidates; paths precedence (exact, then longest prefix); baseUrl-only; remove the BA-03 ledger group. Same resume rule.
 
