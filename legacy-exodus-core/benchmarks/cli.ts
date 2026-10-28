@@ -7,6 +7,7 @@
  *   - report    : Generate Markdown and JSON summary reports
  *   - audit     : Run benchmark system self-audit (non-zero exit unless every check passes)
  *   - validate  : Run mathematical accounting and completeness gate on a target
+ *   - fact-diff : Compare the projected facts of two engines (or two .discovery dirs)
  *
  * Usage:
  *   bun run benchmarks/cli.ts run <manifest-or-dir> [--runs N]
@@ -14,6 +15,8 @@
  *   bun run benchmarks/cli.ts report [--results-dir <dir>] [--output <file>]
  *   bun run benchmarks/cli.ts audit [--root <package-dir>] [--json]
  *   bun run benchmarks/cli.ts validate <target>
+ *   bun run benchmarks/cli.ts fact-diff --base <core-dir> --head <core-dir> <corpus-dir>... [--output <file>] [--fail-on-loss]
+ *   bun run benchmarks/cli.ts fact-diff --base-discovery <dir> --head-discovery <dir> [--output <file>] [--fail-on-loss]
  */
 
 import { readdir, readFile, writeFile } from "node:fs/promises";
@@ -23,6 +26,7 @@ import { runBenchmark } from "./runner";
 import { compareBenchmarkRuns, formatComparisonMarkdown } from "./compare";
 import { isAuditPassing, runBenchmarkSelfAudit } from "./audit";
 import { executeBenchmarkRun } from "./harness";
+import { diffFacts, extractFacts, formatFactDiff, runFactDiff, type CorpusDiff } from "./fact-diff";
 import { generateMarkdownReport } from "./scripts/report";
 import { runFidelityValidation } from "./fidelity/runner";
 import { BENCHMARKS_ROOT, CORPUS_DIR, RESULTS_DIR, resolveBenchmarkRepoPath, resolveResultsDir } from "./paths";
@@ -151,6 +155,32 @@ async function main(): Promise<void> {
       break;
     }
 
+    case "fact-diff": {
+      const baseDiscovery = getArgValue(args, "--base-discovery");
+      const headDiscovery = getArgValue(args, "--head-discovery");
+      let results: readonly CorpusDiff[];
+      if (baseDiscovery !== undefined && headDiscovery !== undefined) {
+        results = [{ corpus: `${baseDiscovery} vs ${headDiscovery}`, baseMs: 0, headMs: 0, ...diffFacts(extractFacts(resolve(baseDiscovery)), extractFacts(resolve(headDiscovery))) }];
+      } else {
+        const base = getArgValue(args, "--base");
+        const head = getArgValue(args, "--head");
+        // Positional arguments are corpora; a value that follows a valued flag belongs to that flag.
+        const valuedFlags = new Set(["--base", "--head", "--output"]);
+        const corpora = args.slice(1).filter((arg, index, rest) => !arg.startsWith("--") && !valuedFlags.has(rest[index - 1] ?? ""));
+        if (base === undefined || head === undefined || corpora.length === 0) {
+          console.error("Usage: bun run benchmarks/cli.ts fact-diff --base <core-dir> --head <core-dir> <corpus-dir>... [--output <file>] [--fail-on-loss]");
+          process.exit(1);
+        }
+        results = runFactDiff(base, head, corpora);
+      }
+      const markdown = formatFactDiff(results);
+      const output = getArgValue(args, "--output");
+      if (output !== undefined) await writeFile(resolve(output), markdown, "utf8");
+      console.log(markdown);
+      if (args.includes("--fail-on-loss") && results.some((result) => result.lost > 0)) process.exitCode = 1;
+      break;
+    }
+
     case "fidelity": {
       const target = args[1] ?? resolve(BENCHMARKS_ROOT, ".cache/fastify");
       const resolvedTarget = resolveBenchmarkRepoPath(target);
@@ -194,6 +224,7 @@ function printUsage(): void {
     "    audit [--root D] [--json]          Run benchmark self-audit; non-zero exit unless all checks pass",
     "    validate <target-path>             Validate mathematical file accounting on target",
     "    fidelity [target-path]             Validate migration discovery fidelity against ground truth",
+    "    fact-diff --base D --head D C...   Diff projected facts of two engines on corpus dirs",
     "    help                               Show this help message",
     "",
     layout.renderDivider(),
