@@ -5,6 +5,7 @@ import { relative, resolve, sep } from "node:path";
 
 import type { DiscoveryEnumerationFailure, FileArtifact, FileScanResult } from "@contracts/discovery";
 import { LegacyExodusError } from "@shared/errors";
+import { compareCodePoints } from "@shared/ordering";
 
 export type { FileScanResult };
 
@@ -189,7 +190,7 @@ export class FileScanner {
     await this.scanDirectory(resolvedProjectPath, resolvedProjectPath, files, enumerationFailures);
 
     enumerationFailures.sort((left, right) =>
-      left.path.localeCompare(right.path) || left.kind.localeCompare(right.kind) || left.code.localeCompare(right.code),
+      compareCodePoints(left.path, right.path) || compareCodePoints(left.kind, right.kind) || compareCodePoints(left.code, right.code),
     );
 
     return Object.freeze({
@@ -217,7 +218,7 @@ export class FileScanner {
       return;
     }
 
-    for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+    for (const entry of entries.sort((left, right) => compareCodePoints(left.name, right.name))) {
       const entryPath = resolve(currentPath, entry.name);
 
       // Intentional traversal policy: Symbolic links are skipped to protect against

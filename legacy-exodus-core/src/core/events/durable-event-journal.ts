@@ -4,6 +4,7 @@ import type { StorageManager, StorageRecord } from "@storage/index";
 import { createStorageRecord, deepFreeze } from "@storage/index";
 
 import type { DomainEvent } from "./domain-event";
+import { compareCodePoints } from "@shared/ordering";
 
 export const DURABLE_EVENT_RECORD_TYPE = "domain-event";
 
@@ -93,8 +94,8 @@ export async function loadDurableEvents(
   const parsed = records.map((record) => durableEventPayloadSchema.parse(record.payload));
   parsed.sort((left, right) =>
     left.sequence - right.sequence ||
-    left.event.timestamp.localeCompare(right.event.timestamp) ||
-    left.event.id.localeCompare(right.event.id),
+    compareCodePoints(left.event.timestamp, right.event.timestamp) ||
+    compareCodePoints(left.event.id, right.event.id),
   );
 
   return Object.freeze(parsed.map((entry) => deepFreeze({

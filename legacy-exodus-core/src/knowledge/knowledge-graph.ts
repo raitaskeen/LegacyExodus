@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import type { DependencyGraph } from "@graph/index";
 import type { SymbolTable } from "@symbols/index";
+import { compareCodePoints } from "@shared/ordering";
 
 export type KnowledgeNodeKind = "file" | "symbol";
 export type KnowledgeRelationship = "contains" | "imports";
@@ -50,8 +51,8 @@ export class DeterministicKnowledgeGraphBuilder {
     }
     const parsed = graphSchema.parse({ nodes, edges });
     return Object.freeze({
-      nodes: Object.freeze(parsed.nodes.sort((left, right) => left.id.localeCompare(right.id)).map((node) => Object.freeze(node))),
-      edges: Object.freeze(parsed.edges.sort((left, right) => left.id.localeCompare(right.id)).map((edge) => Object.freeze(edge))),
+      nodes: Object.freeze(parsed.nodes.sort((left, right) => compareCodePoints(left.id, right.id)).map((node) => Object.freeze(node))),
+      edges: Object.freeze(parsed.edges.sort((left, right) => compareCodePoints(left.id, right.id)).map((edge) => Object.freeze(edge))),
     });
   }
 }

@@ -8,6 +8,7 @@ import { createLexicalScopeId, type SymbolTable } from "@symbols/index";
 import { DeterministicCallGraphBuilder } from "./call-graph-builder";
 import { createSemanticAnalysis, type DeadCodeFinding, type ExpressRoute, type MiddlewareChain, type ScopeAnalysis, type SemanticAnalysis, type SemanticCall, type SemanticEntryPoint, type SymbolReference } from "./semantic-contracts";
 import type { SemanticContext } from "./semantic-context";
+import { compareCodePoints } from "@shared/ordering";
 
 export class DeterministicSemanticAnalysisEngine {
   public constructor(public readonly callGraphBuilder: DeterministicCallGraphBuilder = new DeterministicCallGraphBuilder()) {}
@@ -231,7 +232,7 @@ function uniqueSorted(values: readonly string[]): readonly string[] {
 function uniqueByKey<T>(items: readonly T[], key: (item: T) => string): readonly T[] {
   const unique = new Map<string, T>();
   for (const item of items) unique.set(key(item), item);
-  return [...unique.values()].sort((left, right) => key(left).localeCompare(key(right)));
+  return [...unique.values()].sort((left, right) => compareCodePoints(key(left), key(right)));
 }
 
 function hash(value: string): string {

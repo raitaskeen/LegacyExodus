@@ -17,6 +17,7 @@ import type { StorageRecord } from "@storage/storage-record";
 import type { StorageManager } from "@storage/storage-manager";
 
 import { FileDiscoveryProjectionAdapter } from "./file-discovery-projection";
+import { compareCodePoints } from "@shared/ordering";
 
 type RunScopedPayload = { readonly projectId: string; readonly analysisRunId?: string };
 
@@ -81,7 +82,7 @@ export class DiscoveryProjectionService implements RuntimeService {
         return matchesRun(parsed.data, payload.projectId, payload.analysisRunId) ? parsed.data : undefined;
       })
       .filter((candidate): candidate is z.infer<typeof symbolTableStoragePayloadSchema> => candidate !== undefined)
-      .sort((left, right) => left.path.localeCompare(right.path));
+      .sort((left, right) => compareCodePoints(left.path, right.path));
     const symbols = tables.flatMap((candidate) => candidate.symbols);
     // Historical discovery/analysis projections remain readable. Only an exact,
     // unambiguous current completed run can authorize the R01 capability.

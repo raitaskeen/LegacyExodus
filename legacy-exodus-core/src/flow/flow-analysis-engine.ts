@@ -6,12 +6,13 @@ import type { BuildContextResult } from "./data-flow-builder";
 import { DeterministicControlFlowGraphBuilder } from "./control-flow-builder";
 import { DeterministicDataFlowGraphBuilder } from "./data-flow-builder";
 import { createDataFlowGraph, createProvenCallTargets, type ControlFlowGraph, type DataFlowGraph, type InterproceduralFlow } from "./flow-contracts";
+import { compareCodePoints } from "@shared/ordering";
 
 export interface FlowAnalysisResult { readonly controlFlowGraphs: readonly ControlFlowGraph[]; readonly dataFlowGraphs: readonly DataFlowGraph[]; }
 export class DeterministicFlowAnalysisEngine {
   public constructor(public readonly controlFlowBuilder: DeterministicControlFlowGraphBuilder = new DeterministicControlFlowGraphBuilder(), public readonly dataFlowBuilder: DeterministicDataFlowGraphBuilder = new DeterministicDataFlowGraphBuilder()) {}
   public analyze(astResults: readonly ASTResult[], semanticCalls?: readonly SemanticCall[], symbolTables: readonly SymbolTable[] = []): FlowAnalysisResult {
-    const results = [...astResults].sort((left, right) => left.metadata.sourcePath.localeCompare(right.metadata.sourcePath));
+    const results = [...astResults].sort((left, right) => compareCodePoints(left.metadata.sourcePath, right.metadata.sourcePath));
     const symbolsByPath = new Map(symbolTables.map((table) => [table.filePath, table.symbols]));
     const contexts = results.map((ast) =>
       this.dataFlowBuilder.buildContext(
@@ -96,7 +97,7 @@ export class DeterministicFlowAnalysisEngine {
     const allTransfers = [
       ...contexts.flatMap(({ state }) => state.transfers),
       ...allCrossFileTransfers,
-    ].sort((left, right) => `${left.sourceDefinitionId}:${left.targetDefinitionId}`.localeCompare(`${right.sourceDefinitionId}:${right.targetDefinitionId}`));
+    ].sort((left, right) => compareCodePoints(`${left.sourceDefinitionId}:${left.targetDefinitionId}`, `${right.sourceDefinitionId}:${right.targetDefinitionId}`));
 
     const transferIndexesBySource = new Map<string, number[]>();
     let currentQueue: number[] = [];
@@ -146,7 +147,7 @@ export class DeterministicFlowAnalysisEngine {
 
     const connected = contexts.map(({ graph, state }) => {
       const transfers = crossFileTransfersByGraph.get(graph.filePath) ?? [...graph.interproceduralFlows];
-      const unique = [...new Map(transfers.map((transfer) => [transfer.id, transfer] as const)).values()].sort((left, right) => left.id.localeCompare(right.id));
+      const unique = [...new Map(transfers.map((transfer) => [transfer.id, transfer] as const)).values()].sort((left, right) => compareCodePoints(left.id, right.id));
       const taintFlows = this.dataFlowBuilder.computeTaintFlows(state, globalTaintPaths);
 
       return createDataFlowGraph({
