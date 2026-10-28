@@ -100,7 +100,9 @@ export function findHttpCalls(root: ASTNode, filePath: string, symbolTable: Symb
       if (isExpressReceiver && method !== undefined && ["get", "post", "put", "patch", "delete", "all"].includes(method)) {
         const path = argumentsNodes.map(readString).find((value): value is string => value !== undefined) ?? "/";
         const handlerName = argumentsNodes.map(readName).find((name): name is string => name !== undefined && name.trim().length > 0 && name !== path);
-        routes.push({ id: hash(`route:${filePath}:${method}:${path}:${node.location?.start.line ?? 0}`), filePath, method: method.toUpperCase(), path, ...(handlerName === undefined ? {} : { handlerName }), middleware: uniqueSorted(middleware), state: "CONFIRMED" });
+        // The receiver is proven Express, but middleware, handler and mount path are not yet modelled
+        // per router (BA-08), so the route fact as a whole is inferred.
+        routes.push({ id: hash(`route:${filePath}:${method}:${path}:${node.location?.start.line ?? 0}`), filePath, method: method.toUpperCase(), path, ...(handlerName === undefined ? {} : { handlerName }), middleware: uniqueSorted(middleware), state: "INFERRED" });
       }
     }
     const nestedScope = createsLexicalScope(node)

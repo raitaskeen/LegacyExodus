@@ -13,17 +13,21 @@ It is intended to evolve into a governed legacy-modernization platform. Code tra
 | Capability | State | Evidence boundary |
 |---|---|---|
 | Bun + strict TypeScript runtime, lifecycle, CLI | `VERIFIED` | Current source and automated tests |
-| JavaScript/TypeScript discovery and Babel-based parsing | `VERIFIED` | Supported static syntax; parser failures remain explicit |
-| Lexical symbols, ESM/CommonJS relationships, module/dependency graphs | `VERIFIED` | Conservative resolution; ambiguous/dynamic targets remain unresolved |
-| Knowledge graph, semantic call analysis, CFG, DFG, conservative taint facts | `VERIFIED` | Static analysis only; not runtime or behavioral proof |
+| JavaScript/TypeScript discovery and Babel-based parsing | `PARTIAL` | Parser failures remain explicit, but one parser configuration serves every extension, so some valid `.ts` and `.d.ts` files are rejected (BA-01) |
+| Lexical symbols, ESM/CommonJS relationships, module/dependency graphs | `PARTIAL` | JavaScript lexical scoping and conservative resolution mostly hold, but class-expression members lose their class and namespace imports bind to an arbitrary export (BA-13, BA-09); TypeScript enums, namespaces, interfaces and type aliases, TS ESM `./x.js` specifiers, commented `tsconfig.json` aliases and dynamic `import()` are not modelled (BA-02, BA-03, BA-10) |
+| Semantic call analysis and CFG | `PARTIAL` | Call targets are resolved only when proven; the CFG is oracle-checked for loops and exceptions, with known adjacents (BA-14) |
+| DFG and taint facts | `PARTIAL` | Flows through loops, `switch`, `try` and short-circuit expressions and direct source arguments are missed, conditional values can be over-labelled, and the taint policy is narrow (BA-04 to BA-07) |
+| Knowledge graph | `PARTIAL` | File and symbol nodes with contains/imports edges only (BA-19) |
 | In-memory and SQLite storage, run isolation, snapshot reuse | `VERIFIED` | Persisted artifacts are schema- and integrity-validated before reuse |
-| Deterministic `.discovery/*.json` projections | `VERIFIED` | Atomic, contained publication with manifest hashes |
+| Deterministic `.discovery/*.json` projections | `VERIFIED` | Atomic, contained publication with manifest hashes; locale-independent ordering |
 | Plugin runtime contracts | `IMPLEMENTED` | No marketplace, dynamic package loading, or sandboxed third-party execution |
 | Migration planning and code transformation | `NOT IMPLEMENTED` | Target architecture |
 | AI gateway and multi-agent generation | `NOT IMPLEMENTED` | Target architecture |
 | Rust/Axum/SQLx generation and equivalence verification | `NOT IMPLEMENTED` | Target architecture |
 
-The exact synchronized implementation boundary is recorded in [Current Implementation](docs/CURRENT_IMPLEMENTATION.md).
+Finding ids (BA-xx) refer to the [2026-10-28 blind audit](https://github.com/raitaskeen/LegacyExodus/pull/203) (an open draft PR that holds the audit reports). Static analysis is evidence about source structure, not runtime or behavioral proof.
+
+The current capability boundary, with its limits, is recorded in [Current Implementation](docs/CURRENT_IMPLEMENTATION.md).
 
 <table>
   <tr>
@@ -39,7 +43,7 @@ The exact synchronized implementation boundary is recorded in [Current Implement
 - First-class analysis targets are repository-local JavaScript and TypeScript, including JSX/TSX and supported ESM/CommonJS patterns.
 - Discovery also inventories non-source artifacts; they are not misreported as unsupported source.
 - Resolution is deliberately conservative. Dynamic dispatch, runtime metaprogramming, framework behavior, and unsupported syntax may remain unresolved.
-- Framework-specific semantics are currently narrow and Express-focused; comprehensive React, NestJS, Angular, Vue, Fastify, and other framework runtime models are future work.
+- Framework-specific semantics are currently narrow and Express-focused, and Express route facts are `INFERRED`: per-router middleware, handlers and mount paths are not yet modelled (BA-08). Comprehensive React, NestJS, Angular, Vue, Fastify, and other framework runtime models are future work.
 - Taint propagation uses built-in deterministic source, sink, and sanitizer rules; project-configurable or plugin-extensible policy is not implemented.
 - Module resolution covers repository-local relative modules and proven `tsconfig` aliases, not full Node, `node_modules`, package `exports`/`imports`, or npm/pnpm/Yarn workspace semantics.
 - Static graphs are evidence about source structure, not proof of runtime behavior, vulnerability absence, or migration safety.
@@ -71,15 +75,7 @@ bun run benchmark audit
 bun run src/cli/index.ts --help
 ```
 
-### Synchronized checkpoint
-
-| Evidence | Result |
-|---|---|
-| Core integration truth | `origin/core-foundation` at `204f123ac374c3fefa4ccc0f4d5decb80a1e9b9f` |
-| Main promotion truth | `origin/main` at `6f88ec57d8275c6a367018d3106b537a26cbc2d1` |
-| Verification evidence | Run the canonical commands above for the exact revision under review; live command and hosted-CI output are authoritative. |
-
-The SHAs are synchronization markers, not permanent capability promises.
+`main` is the implementation truth. Run the commands above on the exact revision under review; live command and hosted-CI output are authoritative.
 
 ## Toolchain snapshot
 
@@ -130,10 +126,8 @@ See the [documentation index](docs/README.md), [system overview](docs/architectu
 
 ## Repository governance
 
-- `core-foundation`: implementation integration truth.
-- `docs-foundation`: documentation integration truth.
-- `main`: integrated/release truth.
-- All changes use temporary task branches.
+- `main` is the single implementation, documentation and release truth. `core-foundation` and `docs-foundation` are retired as integration branches (2026-10-28).
+- All changes use temporary task branches and pull requests into `main`.
 - Documentation follows verified implementation; it never changes engine behavior by assertion.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [Security](SECURITY.md). Development agents on the implementation branch also follow the repository's root `AGENTS.md` and `.agents/` skills.
