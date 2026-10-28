@@ -160,6 +160,12 @@ interface FileSymbolIndex {
   readonly firstImportByName: ReadonlyMap<string, CodeSymbol>;
   readonly classByLocation: ReadonlyMap<string, CodeSymbol>;
   readonly lexicalBindings: ReadonlyMap<string, LexicalResolution>;
+  /**
+   * For each block of a namespace that is declared in more than one block, the names declared in its
+   * other blocks. TypeScript merges the exports of those blocks, so an unqualified name that this
+   * block does not bind may mean a member of another block; it must not resolve to an outer binding.
+   */
+  readonly reopened: ReadonlyMap<string, ReadonlySet<string>>;
   readonly writes: BindingWrites;
   /** Export symbols (of any module) whose value can change after definition. */
   readonly unstableExportIds: ReadonlySet<string>;
@@ -262,7 +268,7 @@ function createScope(id: string, parent?: ScopeFrame, selfName?: string): ScopeF
 }
 
 function createsScope(node: ASTNode): boolean {
-  return node.type === "BlockStatement" || isCallable(node) || node.type === "CatchClause" || isLoop(node);
+  return node.type === "BlockStatement" || isCallable(node) || node.type === "CatchClause" || isLoop(node) || node.type === "TSModuleDeclaration";
 }
 
 /**
@@ -288,7 +294,10 @@ function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult, u
   const byAnchor = new Map<string, CodeSymbol[]>();
   const classSymbols: CodeSymbol[] = [];
 
+  const namespaceBlocks: NamespaceBlocks = new Map();
+
   for (const symbol of table?.symbols ?? []) {
+    noteNamespaceMember(namespaceBlocks, symbol);
     const anchor = declarationAnchor(symbol.location);
     if (anchor !== undefined && canonicalizePath(symbol.filePath) === canonicalizePath(ast.metadata.sourcePath)) {
       const anchored = byAnchor.get(anchor) ?? [];
@@ -323,7 +332,38 @@ function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult, u
   const declarationsByScopeAndName = bindingDeclarations(byScopeAndName, ast.root);
   const writes = collectBindingWrites(ast.root, declarationsByScopeAndName);
   const classes = collectClassFacts(ast.root, classSymbols);
-  return Object.freeze({ byScopeAndName, declarationsByScopeAndName, byName, firstImportByName, classByLocation, lexicalBindings, writes, unstableExportIds, classes });
+  const reopened = reopenedNamespaces(namespaceBlocks);
+  return Object.freeze({ byScopeAndName, declarationsByScopeAndName, byName, firstImportByName, classByLocation, lexicalBindings, reopened, writes, unstableExportIds, classes });
+}
+
+const NAMESPACE_BLOCK = "scope:TSModuleDeclaration:";
+
+/** Members by namespace path (`containerName`) and block scope: the blocks of one namespace share a path. */
+type NamespaceBlocks = Map<string, Map<string, Set<string>>>;
+
+function noteNamespaceMember(blocks: NamespaceBlocks, symbol: CodeSymbol): void {
+  if (symbol.scopeId === undefined || !symbol.scopeId.startsWith(NAMESPACE_BLOCK) || symbol.containerName === undefined) return;
+  const group = blocks.get(symbol.containerName) ?? new Map<string, Set<string>>();
+  const names = group.get(symbol.scopeId) ?? new Set<string>();
+  names.add(symbol.name);
+  group.set(symbol.scopeId, names);
+  blocks.set(symbol.containerName, group);
+}
+
+function reopenedNamespaces(blocks: NamespaceBlocks): ReadonlyMap<string, ReadonlySet<string>> {
+  const reopened = new Map<string, ReadonlySet<string>>();
+  for (const group of blocks.values()) {
+    if (group.size < 2) continue;
+    for (const scopeId of group.keys()) {
+      reopened.set(scopeId, new Set([...group].filter(([other]) => other !== scopeId).flatMap(([, names]) => [...names])));
+    }
+  }
+  return reopened;
+}
+
+/** Whether `name` is unbound in this reopened-namespace block but declared in another block of it. */
+function mayBelongToOtherBlock(index: FileSymbolIndex, scopeId: string, name: string): boolean {
+  return index.reopened.get(scopeId)?.has(name) === true && (index.byScopeAndName.get(lexicalBindingKey(scopeId, name)) ?? []).length === 0;
 }
 
 function collectClassFacts(root: ASTNode, symbols: readonly CodeSymbol[]): ClassFacts {
@@ -408,8 +448,9 @@ function returnsValue(node: ASTNode, isRoot = false): boolean {
 }
 
 /**
- * byScopeAndName restricted to symbols that declare a binding: imports, classes, functions
- * and declared variables (declarators, parameters, catch parameters). The extractor records
+ * byScopeAndName restricted to symbols that declare a binding: imports, classes, enums, namespaces,
+ * functions and declared variables (declarators, parameters, catch parameters). Interfaces and type
+ * aliases are type-only and declare none; they may share a name with a value. The extractor records
  * more under the same scope and name: members (methods, class properties, `o.p = …`, object
  * literal keys), export records, and `f = () => …` as a function named f, which writes f's
  * real declaration. Binding lookups that decide what a write or call refers to must skip
@@ -439,6 +480,8 @@ function bindingDeclarations(byScopeAndName: ReadonlyMap<string, readonly CodeSy
     switch (symbol.kind) {
       case "import":
       case "class":
+      case "enum":
+      case "namespace":
         return true;
       case "function":
         return !assignedFunctions.has(anchor);
@@ -913,6 +956,7 @@ function provenReceiverClass(index: FileSymbolIndex, receiver: string, context: 
 function declaredBindingFrame(index: FileSymbolIndex, name: string, scope: ScopeFrame): ScopeFrame | undefined {
   for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
     if (current.selfName === name) return undefined;
+    if (mayBelongToOtherBlock(index, current.id, name)) return undefined;
     if ((index.declarationsByScopeAndName.get(lexicalBindingKey(current.id, name)) ?? []).length > 0) {
       return index.writes.unscopedBindings.has(bindingWriteKey(current.id, name)) ? undefined : current;
     }
@@ -1006,11 +1050,12 @@ function createLexicalBindingIndex(
     return [];
   };
   const visit = (node: ASTNode, scopeId: string, functionScopeId: string, parent?: ASTNode): void => {
-    const createsScope = node.type === "BlockStatement" || isCallable(node) || node.type === "CatchClause" || isLoop(node);
+    const createsScope = node.type === "BlockStatement" || isCallable(node) || node.type === "CatchClause" || isLoop(node) || node.type === "TSModuleDeclaration";
     const nestedScope = createsScope ? createLexicalScopeId(node.type, node.location) : scopeId;
-    const nestedFunctionScope = isCallable(node) ? nestedScope : functionScopeId;
-    if (node.type === "FunctionDeclaration" || node.type === "ClassDeclaration") {
-      const kind = node.type === "FunctionDeclaration" ? "function" : "class";
+    // A namespace body runs as a function, so `var` declared in it belongs to the namespace.
+    const nestedFunctionScope = isCallable(node) || node.type === "TSModuleDeclaration" ? nestedScope : functionScopeId;
+    if (node.type === "FunctionDeclaration" || node.type === "TSDeclareFunction" || node.type === "ClassDeclaration") {
+      const kind = node.type === "ClassDeclaration" ? "class" : "function";
       for (const symbol of anchored(node)) {
         if (symbol.kind === kind && symbol.name === nodeName(node) && symbol.scopeId === scopeId) declare(symbol);
       }
@@ -1039,6 +1084,13 @@ function createLexicalBindingIndex(
       const local = node.children.find(child => child.role === "local");
       for (const symbol of anchored(node)) {
         if (symbol.kind === "import" && symbol.name === identifier(local) && symbol.scopeId === "scope:module") declare(symbol);
+      }
+    }
+    if (node.type === "TSImportEqualsDeclaration") {
+      // `import x = require("m")` binds an import and `import A = NS.B` a variable alias.
+      const name = identifier(node.children.find(child => child.role === "id"));
+      for (const symbol of anchored(node)) {
+        if (symbol.name === name && ((symbol.kind === "import" && symbol.scopeId === "scope:module") || (symbol.kind === "variable" && symbol.scopeId === scopeId))) declare(symbol);
       }
     }
     if (node.type === "VariableDeclarator" && parent?.type === "VariableDeclaration") {
@@ -1109,6 +1161,7 @@ function resolveLexicalBinding(index: FileSymbolIndex, name: string, scope: Scop
     if (current.selfName === name) return { state: "NO_BINDING" };
     const resolution = index.lexicalBindings.get(lexicalBindingKey(current.id, name));
     if (resolution !== undefined && resolution.state !== "NO_BINDING") return resolution;
+    if (mayBelongToOtherBlock(index, current.id, name)) return { state: "BLOCKED_AMBIGUOUS" };
   }
   return { state: "NO_BINDING" };
 }
@@ -1133,10 +1186,10 @@ function isLexicalReference(node: ASTNode, parent: ASTNode | undefined): boolean
 
 function isBindingPosition(parent: ASTNode, child: ASTNode, parentIsBinding: boolean): boolean {
   if (["ImportSpecifier", "ImportDefaultSpecifier", "ImportNamespaceSpecifier"].includes(parent.type)) return true;
-  if (["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ClassPrivateMethod", "ObjectMethod"].includes(parent.type)) {
+  if (["FunctionDeclaration", "TSDeclareFunction", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ClassPrivateMethod", "ObjectMethod"].includes(parent.type)) {
     return child.role === "id" || child.role === "param" || child.role === "params";
   }
-  if ((parent.type === "ClassDeclaration" || parent.type === "ClassExpression" || parent.type === "VariableDeclarator") && child.role === "id") return true;
+  if ((parent.type === "ClassDeclaration" || parent.type === "ClassExpression" || parent.type === "VariableDeclarator" || parent.type === "TSImportEqualsDeclaration") && child.role === "id") return true;
   if (parent.type === "CatchClause" && child.role === "param") return true;
   if (!parentIsBinding) return false;
   if (parent.type === "AssignmentPattern") return child.role === "left";
@@ -1751,6 +1804,7 @@ function isDefinedOnBinding(index: FileSymbolIndex, member: CodeSymbol, receiver
 function nearestScoped(index: FileSymbolIndex, name: string, context: ResolutionContext): CodeSymbol | undefined {
   for (let current: ScopeFrame | undefined = context.scope; current !== undefined; current = current.parent) {
     if (current.selfName === name) return undefined;
+    if (mayBelongToOtherBlock(index, current.id, name)) return undefined;
     const matchingSymbols = index.declarationsByScopeAndName.get(lexicalBindingKey(current.id, name)) ?? [];
     if (matchingSymbols.length > 0 && index.writes.unscopedBindings.has(bindingWriteKey(current.id, name))) return undefined;
     const callableSymbols = matchingSymbols.filter((symbol) => symbol.kind === "function" || symbol.kind === "class");
@@ -1769,7 +1823,7 @@ function isLexicallyShadowed(name: string, context: ResolutionContext, index: Fi
     if (current.id === "scope:module") {
       break;
     }
-    if (current.selfName === name || context.receiverTypes.has(receiverKey(current, name))) {
+    if (current.selfName === name || context.receiverTypes.has(receiverKey(current, name)) || mayBelongToOtherBlock(index, current.id, name)) {
       return true;
     }
     if (context.constantBindings.has(bindingKey(current, name))) {
