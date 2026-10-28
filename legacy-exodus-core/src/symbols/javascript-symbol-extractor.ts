@@ -47,7 +47,7 @@ const initialContext: ExtractionContext = Object.freeze({
 });
 
 const supportedLanguages = new Set(["javascript", "typescript"]);
-const DECLARATION_FILE = /.d.[mc]?ts$/i;
+const DECLARATION_FILE = /\.d\.[mc]?ts$/i;
 
 /**
  * How strongly a declaration owns the export symbol of its name. TypeScript lets several declarations
@@ -67,8 +67,11 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
   private moduleReferences: ModuleReference[] = [];
   /** Ids of function symbols created from overload or ambient signatures (`TSDeclareFunction`). */
   private signatureIds = new Set<string>();
-  /** Rank of each export symbol created from a declaration (`export <declaration>`), by symbol id. */
-  private declaredExports = new Map<string, ExportRank>();
+  /**
+   * Rank of each export symbol created from a declaration (`export <declaration>`), by symbol id. An
+   * `export { X }` specifier has no rank of its own: it takes the strongest rank of the local `X`.
+   */
+  private declaredExports = new Map<string, ExportRank | { readonly local: string }>();
 
   public extract(ast: ASTResult): SymbolTable {
     const validatedAst = validateASTResult(ast);
@@ -122,14 +125,27 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       signed.add(key);
     }
 
+    const localRank = new Map<string, ExportRank>();
+    for (const symbol of symbols) {
+      if (symbol.scopeId !== "scope:module") continue;
+      const rank: ExportRank | undefined = symbol.kind === "class" || symbol.kind === "variable" || symbol.kind === "import" ? VALUE_DECLARATION
+        : symbol.kind === "function" ? (this.signatureIds.has(symbol.id) ? MERGEABLE_DECLARATION : VALUE_DECLARATION)
+        : symbol.kind === "enum" || symbol.kind === "namespace" ? MERGEABLE_DECLARATION
+        : symbol.kind === "interface" || symbol.kind === "type-alias" ? TYPE_DECLARATION : undefined;
+      if (rank !== undefined && rank < (localRank.get(symbol.name) ?? 3)) localRank.set(symbol.name, rank);
+    }
+    const rankOf = (id: string): ExportRank | undefined => {
+      const declared = this.declaredExports.get(id);
+      return typeof declared === "object" ? localRank.get(declared.local) ?? VALUE_DECLARATION : declared;
+    };
     const strongest = new Map<string, ExportRank>();
     for (const symbol of symbols) {
-      const rank = this.declaredExports.get(symbol.id);
+      const rank = rankOf(symbol.id);
       if (rank !== undefined && rank < (strongest.get(symbol.name) ?? 3)) strongest.set(symbol.name, rank);
     }
     const kept = new Set<string>();
     for (const symbol of symbols) {
-      const rank = this.declaredExports.get(symbol.id);
+      const rank = rankOf(symbol.id);
       if (rank === undefined) continue;
       const winner = strongest.get(symbol.name)!;
       // Several value declarations of one name stay as they were; weaker ones yield, and a tie keeps the first.
@@ -628,7 +644,11 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       if (defaultExport) {
         const decl = node.children.find((child) => child.role === "declaration");
         const localName = decl ? (readIdentifierName(decl) ?? getName(decl)) : undefined;
-        this.addExport(node, ast, "default", true, moduleSpecifier, localName, symbols);
+        const defaultExported = this.addExport(node, ast, "default", true, moduleSpecifier, localName, symbols);
+        // Overloads of `export default function f`: the implementation owns the default export.
+        const declarationRank = decl === undefined || moduleSpecifier !== undefined ? undefined
+          : decl.type === "TSDeclareFunction" || decl.type === "FunctionDeclaration" ? declarationRanks.get(decl.type) : undefined;
+        if (declarationRank !== undefined) this.declaredExports.set(defaultExported.id, declarationRank);
         if (localName !== undefined && moduleSpecifier === undefined) {
           pendingExports.push({ name: localName, scopeChain: context.scopeChain });
         }
@@ -650,7 +670,10 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         : readStringAttribute(specifier, "sourceSymbolName")
           ?? readIdentifierName(specifier.children.find((child) => child.role === "local"));
       const isDefault = defaultExport || exportedName === "default";
-      this.addExport(node, ast, defaultExport ? "default" : exportedName, isDefault, moduleSpecifier, sourceSymbolName, symbols);
+      const specified = this.addExport(node, ast, defaultExport ? "default" : exportedName, isDefault, moduleSpecifier, sourceSymbolName, symbols);
+      if (!isDefault && moduleSpecifier === undefined && sourceSymbolName !== undefined && sourceSymbolName !== "*") {
+        this.declaredExports.set(specified.id, { local: sourceSymbolName });
+      }
       if (sourceSymbolName !== undefined && sourceSymbolName !== "*" && moduleSpecifier === undefined) {
         pendingExports.push({ name: sourceSymbolName, scopeChain: context.scopeChain });
       }

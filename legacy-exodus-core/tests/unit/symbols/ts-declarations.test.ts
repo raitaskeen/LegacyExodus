@@ -613,3 +613,96 @@ describe("BA-02 module and call graphs", () => {
     for (const name of ["E", "N", "I", "T"]) expect(dead).not.toContain(name);
   });
 });
+
+describe("BA-02 red-team fixes", () => {
+  const builder = new DeterministicDependencyGraphBuilder();
+  const engine = new DeterministicSemanticAnalysisEngine();
+
+  async function analyze(sources: Readonly<Record<string, string>>) {
+    const files = Object.entries(sources).map(([path, source]) => fileOf(path, source));
+    const asts = await Promise.all(Object.entries(sources).map(([path, source]) => parseFile(path, source)));
+    const tables = asts.map((ast) => extractor.extract(ast));
+    const analysis = engine.analyze({ astResults: asts, symbolTables: tables, dependencyGraph: builder.build(tables, files) });
+    return { tables, analysis };
+  }
+
+  it("a specifier export of a value outranks a type or namespace export of the same name", async () => {
+    const { tables, analysis } = await analyze({
+      "src/a.ts": [
+        "class Baz { go() { return 1; } }",
+        "export { Baz };",
+        "export interface Baz { m: string }",
+        "function run() { return 1; }",
+        "export { run };",
+        "export namespace run { export const o = 1; }",
+        "function later() { return 1; }",
+        "export namespace later { export const o = 1; }",
+        "export { later };",
+      ].join("\n"),
+      "src/b.ts": 'import { Baz, run, later } from "./a";\nexport function main() { run(); later(); return new Baz(); }\n',
+    });
+
+    for (const name of ["Baz", "run", "later"]) {
+      const exports = ofKind(tables[0]!, "export", name);
+      expect(exports).toHaveLength(1);
+      expect(exports[0]?.sourceSymbolName).toBe(name === "later" ? "later" : name);
+    }
+    for (const name of ["run", "later"]) {
+      const call = analysis.calls.find((candidate) => candidate.callerName === "main" && candidate.calleeName === name);
+      expect(call?.resolutionState).toBe("RESOLVED");
+      expect(call?.targetSymbolId).toBe(ofKind(tables[0]!, "export", name)[0]?.id);
+    }
+  });
+
+  it("export default overloads yield one default export", async () => {
+    const withBody = await extract("export default function f(a: string): void;\nexport default function f(a: any) {}\n");
+    expect(ofKind(withBody, "export", "default")).toHaveLength(1);
+    expect(ofKind(withBody, "export", "default")[0]?.location?.start).toEqual({ line: 2, column: 0 });
+    const ambient = await extract("export default function f(a: string): void;\nexport default function f(a: number): void;\n");
+    expect(ofKind(ambient, "export", "default")).toHaveLength(1);
+    expect(ofKind(ambient, "export", "default")[0]?.location?.start).toEqual({ line: 1, column: 0 });
+  });
+
+  it("only declaration files are ambient; build.ts is not", async () => {
+    const source = "namespace N { const hidden = 1; }\n";
+    for (const [path, exported] of [["src/build.ts", false], ["src/load.ts", false], ["src/record.ts", false], ["types/x.d.ts", true], ["types/x.d.cts", true]] as const) {
+      expect([path, one(await extract(source, path), "variable", "hidden")?.exported]).toEqual([path, exported]);
+    }
+  });
+
+  it("a name bound only in another block of a reopened namespace is never resolved to an outer binding", async () => {
+    const { tables, analysis } = await analyze({
+      "src/ns.ts": [
+        "function a() { return 'module'; }",
+        "const v = 1;",
+        "namespace M { export function a() { return 'M'; } export const v = 2; }",
+        "namespace M { export function b() { return a(); } export function c() { return v; } }",
+        "namespace P { export function a() {} }",
+        "namespace P { export function inner() { return a(); } }",
+        "namespace Outer { export namespace In { export function a() {} } }",
+        "namespace Outer { export namespace In { export function d() { return a(); } } }",
+        "namespace Solo { export function solo() { return a(); } }",
+        "export function top() { return a(); }",
+      ].join("\n"),
+    });
+
+    const moduleA = ofKind(tables[0]!, "function", "a").find((symbol) => symbol.scopeId === "scope:module");
+    const state = (caller: string) => analysis.calls.find((call) => call.callerName === caller && call.calleeName === "a");
+    for (const caller of ["b", "inner", "d"]) {
+      expect([caller, state(caller)?.resolutionState, state(caller)?.targetSymbolId]).toEqual([caller, "UNRESOLVED", undefined]);
+    }
+    // Control: plain module code still sees the module binding.
+    expect(state("top")?.targetSymbolId).toBe(moduleA?.id);
+    const moduleV = ofKind(tables[0]!, "variable", "v").find((symbol) => symbol.scopeId === "scope:module");
+    const resolvedV = analysis.references.filter((reference) => reference.name === "v" && reference.resolutionState === "RESOLVED").map((reference) => reference.resolvedSymbolId);
+    expect(resolvedV).not.toContain(moduleV?.id);
+  });
+
+  it("a single-block namespace still resolves to the module binding it does not shadow", async () => {
+    const { tables, analysis } = await analyze({
+      "src/ns.ts": "function a() { return 1; }\nnamespace Solo { export function b() { return a(); } }\n",
+    });
+    const call = analysis.calls.find((candidate) => candidate.callerName === "b" && candidate.calleeName === "a");
+    expect(call?.targetSymbolId).toBe(ofKind(tables[0]!, "function", "a")[0]?.id);
+  });
+});

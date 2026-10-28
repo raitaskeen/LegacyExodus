@@ -160,6 +160,12 @@ interface FileSymbolIndex {
   readonly firstImportByName: ReadonlyMap<string, CodeSymbol>;
   readonly classByLocation: ReadonlyMap<string, CodeSymbol>;
   readonly lexicalBindings: ReadonlyMap<string, LexicalResolution>;
+  /**
+   * For each block of a namespace that is declared in more than one block, the names declared in its
+   * other blocks. TypeScript merges the exports of those blocks, so an unqualified name that this
+   * block does not bind may mean a member of another block; it must not resolve to an outer binding.
+   */
+  readonly reopened: ReadonlyMap<string, ReadonlySet<string>>;
   readonly writes: BindingWrites;
   /** Export symbols (of any module) whose value can change after definition. */
   readonly unstableExportIds: ReadonlySet<string>;
@@ -323,7 +329,36 @@ function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult, u
   const declarationsByScopeAndName = bindingDeclarations(byScopeAndName, ast.root);
   const writes = collectBindingWrites(ast.root, declarationsByScopeAndName);
   const classes = collectClassFacts(ast.root, classSymbols);
-  return Object.freeze({ byScopeAndName, declarationsByScopeAndName, byName, firstImportByName, classByLocation, lexicalBindings, writes, unstableExportIds, classes });
+  const reopened = reopenedNamespaces(table?.symbols ?? []);
+  return Object.freeze({ byScopeAndName, declarationsByScopeAndName, byName, firstImportByName, classByLocation, lexicalBindings, reopened, writes, unstableExportIds, classes });
+}
+
+const NAMESPACE_BLOCK = "scope:TSModuleDeclaration:";
+
+/** Blocks of one namespace are the scopes whose members share a `containerName` path. */
+function reopenedNamespaces(symbols: readonly CodeSymbol[]): ReadonlyMap<string, ReadonlySet<string>> {
+  const blocks = new Map<string, Map<string, Set<string>>>();
+  for (const symbol of symbols) {
+    if (symbol.scopeId === undefined || !symbol.scopeId.startsWith(NAMESPACE_BLOCK) || symbol.containerName === undefined) continue;
+    const group = blocks.get(symbol.containerName) ?? new Map<string, Set<string>>();
+    const names = group.get(symbol.scopeId) ?? new Set<string>();
+    names.add(symbol.name);
+    group.set(symbol.scopeId, names);
+    blocks.set(symbol.containerName, group);
+  }
+  const reopened = new Map<string, ReadonlySet<string>>();
+  for (const group of blocks.values()) {
+    if (group.size < 2) continue;
+    for (const scopeId of group.keys()) {
+      reopened.set(scopeId, new Set([...group].filter(([other]) => other !== scopeId).flatMap(([, names]) => [...names])));
+    }
+  }
+  return reopened;
+}
+
+/** Whether `name` is unbound in this reopened-namespace block but declared in another block of it. */
+function mayBelongToOtherBlock(index: FileSymbolIndex, scopeId: string, name: string): boolean {
+  return index.reopened.get(scopeId)?.has(name) === true && (index.byScopeAndName.get(lexicalBindingKey(scopeId, name)) ?? []).length === 0;
 }
 
 function collectClassFacts(root: ASTNode, symbols: readonly CodeSymbol[]): ClassFacts {
@@ -916,6 +951,7 @@ function provenReceiverClass(index: FileSymbolIndex, receiver: string, context: 
 function declaredBindingFrame(index: FileSymbolIndex, name: string, scope: ScopeFrame): ScopeFrame | undefined {
   for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
     if (current.selfName === name) return undefined;
+    if (mayBelongToOtherBlock(index, current.id, name)) return undefined;
     if ((index.declarationsByScopeAndName.get(lexicalBindingKey(current.id, name)) ?? []).length > 0) {
       return index.writes.unscopedBindings.has(bindingWriteKey(current.id, name)) ? undefined : current;
     }
@@ -1120,6 +1156,7 @@ function resolveLexicalBinding(index: FileSymbolIndex, name: string, scope: Scop
     if (current.selfName === name) return { state: "NO_BINDING" };
     const resolution = index.lexicalBindings.get(lexicalBindingKey(current.id, name));
     if (resolution !== undefined && resolution.state !== "NO_BINDING") return resolution;
+    if (mayBelongToOtherBlock(index, current.id, name)) return { state: "BLOCKED_AMBIGUOUS" };
   }
   return { state: "NO_BINDING" };
 }
@@ -1762,6 +1799,7 @@ function isDefinedOnBinding(index: FileSymbolIndex, member: CodeSymbol, receiver
 function nearestScoped(index: FileSymbolIndex, name: string, context: ResolutionContext): CodeSymbol | undefined {
   for (let current: ScopeFrame | undefined = context.scope; current !== undefined; current = current.parent) {
     if (current.selfName === name) return undefined;
+    if (mayBelongToOtherBlock(index, current.id, name)) return undefined;
     const matchingSymbols = index.declarationsByScopeAndName.get(lexicalBindingKey(current.id, name)) ?? [];
     if (matchingSymbols.length > 0 && index.writes.unscopedBindings.has(bindingWriteKey(current.id, name))) return undefined;
     const callableSymbols = matchingSymbols.filter((symbol) => symbol.kind === "function" || symbol.kind === "class");
@@ -1780,7 +1818,7 @@ function isLexicallyShadowed(name: string, context: ResolutionContext, index: Fi
     if (current.id === "scope:module") {
       break;
     }
-    if (current.selfName === name || context.receiverTypes.has(receiverKey(current, name))) {
+    if (current.selfName === name || context.receiverTypes.has(receiverKey(current, name)) || mayBelongToOtherBlock(index, current.id, name)) {
       return true;
     }
     if (context.constantBindings.has(bindingKey(current, name))) {
