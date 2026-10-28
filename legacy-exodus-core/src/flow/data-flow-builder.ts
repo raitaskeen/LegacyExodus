@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { ASTNode, ASTResult } from "@parser/index";
 import type { CodeSymbol } from "@symbols/index";
 import { createDataFlowGraph, createProvenCallTargets, type CallFlowBinding, type DataFlowGraph, type FunctionFlowSummary, type InterproceduralFlow, type ProvenCallTarget, type TaintFlow, type VariableDefinition, type VariableUse } from "./flow-contracts";
+import { compareCodePoints } from "@shared/ordering";
 
 export interface Scope { readonly parent?: Scope; readonly definitions: Map<string, VariableDefinition>; }
 export interface FunctionRecord { readonly name: string; readonly parameters: VariableDefinition[][]; readonly returns: VariableDefinition[]; readonly symbolId?: string; }
@@ -146,7 +147,7 @@ export class DeterministicDataFlowGraphBuilder {
     }
     return Object.freeze(
       [...unique.values()].sort((left, right) =>
-        `${left.sourceId}:${left.sinkId}`.localeCompare(`${right.sourceId}:${right.sinkId}`),
+        compareCodePoints(`${left.sourceId}:${left.sinkId}`, `${right.sourceId}:${right.sinkId}`),
       ),
     );
   }
@@ -995,7 +996,7 @@ export class DeterministicDataFlowGraphBuilder {
   }
 
   private propagateTaint(state: FlowState): void {
-    const transfers = state.transfers.sort((left, right) => `${left.sourceDefinitionId}:${left.targetDefinitionId}`.localeCompare(`${right.sourceDefinitionId}:${right.targetDefinitionId}`));
+    const transfers = state.transfers.sort((left, right) => compareCodePoints(`${left.sourceDefinitionId}:${left.targetDefinitionId}`, `${right.sourceDefinitionId}:${right.targetDefinitionId}`));
     for (let changed = true; changed;) {
       changed = false;
       for (const transfer of transfers) for (const [sourceId, path] of state.taintPaths.get(transfer.sourceDefinitionId) ?? []) {
@@ -1070,12 +1071,12 @@ function memberBase(node: ASTNode | undefined): string | undefined { if (node?.t
 function literalValue(node: ASTNode | undefined): string | number | boolean | null | undefined { const value = node?.attributes.value; return typeof value === "string" || typeof value === "number" || typeof value === "boolean" || value === null ? value : undefined; }
 function stringValue(node: ASTNode | undefined): string | undefined { return typeof node?.attributes.value === "string" ? node.attributes.value : undefined; }
 function sanitized(node: ASTNode): boolean { if (node.type !== "CallExpression") return false; const callee = node.children.find((child) => child.role === "callee"); const name = memberPath(callee) ?? identifierName(callee); return name !== undefined && sanitizers.has(name); }
-function byId<T extends { readonly id: string }>(left: T, right: T): number { return left.id.localeCompare(right.id); }
+function byId<T extends { readonly id: string }>(left: T, right: T): number { return compareCodePoints(left.id, right.id); }
 function hash(value: string): string { return createHash("sha256").update(value).digest("hex"); }
 function callLocationKey(filePath: string, location: { readonly line: number; readonly column: number }): string { return `${filePath}:${location.line}:${location.column}`; }
 function sameLocation(symbolLocation: CodeSymbol["location"] | undefined, nodeLocation: ASTNode["location"] | undefined): boolean { return symbolLocation !== undefined && nodeLocation !== undefined && symbolLocation.start.line === nodeLocation.start.line && symbolLocation.start.column === nodeLocation.start.column; }
-function functionSummaries(state: FlowState, filePath: string): readonly FunctionFlowSummary[] { return [...state.functions.values()].flatMap((record) => record.symbolId === undefined ? [] : [{ symbolId: record.symbolId, filePath, parameterDefinitionIds: record.parameters.map((slot) => slot.map((definition) => definition.id)), returnDefinitionIds: record.returns.map((definition) => definition.id) }]).sort((left, right) => left.symbolId.localeCompare(right.symbolId)); }
-function callBindings(state: FlowState): readonly CallFlowBinding[] { return state.pendingCalls.flatMap((call) => call.targetSymbolId === undefined ? [] : [{ callId: call.id, targetSymbolId: call.targetSymbolId, argumentDefinitionIds: call.argumentDefinitionIds, ...(call.receiverDefinitionId === undefined ? {} : { receiverDefinitionId: call.receiverDefinitionId }) }]).sort((left, right) => left.callId.localeCompare(right.callId)); }
+function functionSummaries(state: FlowState, filePath: string): readonly FunctionFlowSummary[] { return [...state.functions.values()].flatMap((record) => record.symbolId === undefined ? [] : [{ symbolId: record.symbolId, filePath, parameterDefinitionIds: record.parameters.map((slot) => slot.map((definition) => definition.id)), returnDefinitionIds: record.returns.map((definition) => definition.id) }]).sort((left, right) => compareCodePoints(left.symbolId, right.symbolId)); }
+function callBindings(state: FlowState): readonly CallFlowBinding[] { return state.pendingCalls.flatMap((call) => call.targetSymbolId === undefined ? [] : [{ callId: call.id, targetSymbolId: call.targetSymbolId, argumentDefinitionIds: call.argumentDefinitionIds, ...(call.receiverDefinitionId === undefined ? {} : { receiverDefinitionId: call.receiverDefinitionId }) }]).sort((left, right) => compareCodePoints(left.callId, right.callId)); }
 
 function extractBoundNames(node: ASTNode | undefined): readonly string[] {
   if (!node) return [];

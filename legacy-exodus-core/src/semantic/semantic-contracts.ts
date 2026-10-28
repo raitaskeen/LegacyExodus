@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { compareCodePoints } from "@shared/ordering";
 
 export interface SemanticCall {
   readonly id: string;
@@ -89,7 +90,7 @@ export function createSemanticAnalysis(analysis: SemanticAnalysis): SemanticAnal
 }
 
 function freezeSorted<T extends { readonly id?: string; readonly filePath?: string; readonly name?: string }>(items: readonly T[]): readonly T[] {
-  return Object.freeze([...items].sort((left, right) => stableKey(left).localeCompare(stableKey(right))).map((item) => Object.freeze({ ...item })));
+  return Object.freeze([...items].sort((left, right) => compareCodePoints(stableKey(left), stableKey(right))).map((item) => Object.freeze({ ...item })));
 }
 
 function stableKey(item: { readonly id?: string; readonly filePath?: string; readonly name?: string }): string {

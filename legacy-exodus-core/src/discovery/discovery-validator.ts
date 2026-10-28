@@ -7,6 +7,7 @@ import type { FileArtifact } from "@contracts/discovery";
 import { discoveryManifestSchema, verifyManifestMac, type DiscoveryManifest } from "./discovery-manifest";
 import { FileScanner } from "./file-scanner";
 import { createSnapshotTrust, type SnapshotTrust } from "./snapshot-trust";
+import { compareCodePoints } from "@shared/ordering";
 
 export type { DiscoveryManifest };
 
@@ -117,7 +118,7 @@ export async function computeWorkspaceDigest(
     }
   }
 
-  const sortedFiles = [...fileList].sort((a, b) => a.path.localeCompare(b.path));
+  const sortedFiles = [...fileList].sort((a, b) => compareCodePoints(a.path, b.path));
   const hasher = createHash("sha256");
 
   for (const file of sortedFiles) {

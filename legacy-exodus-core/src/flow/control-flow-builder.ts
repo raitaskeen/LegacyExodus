@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { ASTNode, ASTResult } from "@parser/index";
 import { createControlFlowGraph, type BasicBlock, type ControlFlowEdge, type ControlFlowEdgeKind, type ControlFlowGraph, type ControlFlowNode } from "./flow-contracts";
 import { ControlFlowInvariantError } from "./flow-errors";
+import { compareCodePoints } from "@shared/ordering";
 
 interface MutableBlock { readonly id: string; readonly statements: ControlFlowNode[]; terminator?: string; }
 interface LabelTarget { readonly breakTarget: string; readonly continueTarget?: string; readonly breakFinalizerTarget?: string; readonly continueFinalizerTarget?: string; }
@@ -27,7 +28,7 @@ export class DeterministicControlFlowGraphBuilder {
     return Object.freeze([
       this.build(ast),
       ...functions.map((candidate) => this.buildScope(ast.metadata.sourcePath, candidate.name, statementChildren(candidate.node.children.find((child) => child.role === "body") ?? candidate.node))),
-    ].sort((left, right) => left.id.localeCompare(right.id)));
+    ].sort((left, right) => compareCodePoints(left.id, right.id)));
   }
 
   private buildScope(filePath: string, scopeName: string, nodes: readonly ASTNode[]): ControlFlowGraph {
@@ -401,8 +402,8 @@ class FlowState {
       }))
       .sort((left, right) =>
         left.headerBlockId === right.headerBlockId
-          ? left.blockIds.join(",").localeCompare(right.blockIds.join(","))
-          : left.headerBlockId.localeCompare(right.headerBlockId),
+          ? compareCodePoints(left.blockIds.join(","), right.blockIds.join(","))
+          : compareCodePoints(left.headerBlockId, right.headerBlockId),
       );
     const unreachableBlockIds = blocks.filter((block) => !reachable.has(block.id)).map((block) => block.id).sort();
     return createControlFlowGraph({
@@ -412,8 +413,8 @@ class FlowState {
       state: this.hasUnsupportedExpressionControl ? "UNSUPPORTED" : "RESOLVED",
       entryBlockId: entry,
       exitBlockId: exit,
-      blocks: blocks.sort((left, right) => left.id.localeCompare(right.id)),
-      edges: activeEdges.sort((left, right) => left.id.localeCompare(right.id)),
+      blocks: blocks.sort((left, right) => compareCodePoints(left.id, right.id)),
+      edges: activeEdges.sort((left, right) => compareCodePoints(left.id, right.id)),
       dominators,
       loops,
       unreachableBlockIds,
@@ -438,7 +439,7 @@ function collectFunctions(root: ASTNode): readonly { readonly name: string; read
     for (const child of node.children) visit(child);
   };
   for (const child of root.children) visit(child);
-  return functions.sort((left, right) => left.name.localeCompare(right.name));
+  return functions.sort((left, right) => compareCodePoints(left.name, right.name));
 }
 function functionName(node: ASTNode): string { const name = node.children.find((child) => child.role === "id" || child.role === "key")?.attributes.name; return typeof name === "string" ? name : node.type === "ClassMethod" ? "method" : "anonymous"; }
 function statementChildren(node: ASTNode): readonly ASTNode[] { return node.type === "BlockStatement" || node.type === "Program" ? node.children : [node]; }
@@ -626,7 +627,7 @@ function calculateDominators(entry: string, blocks: readonly BasicBlock[], _edge
     });
   }
 
-  return result.sort((left, right) => left.blockId.localeCompare(right.blockId));
+  return result.sort((left, right) => compareCodePoints(left.blockId, right.blockId));
 }
 function computeNaturalLoopBlocks(
   headerId: string,

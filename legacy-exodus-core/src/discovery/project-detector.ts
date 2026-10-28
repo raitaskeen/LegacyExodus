@@ -8,6 +8,7 @@ import type {
   FileArtifact,
   FrameworkArtifact,
 } from "@contracts/discovery";
+import { compareCodePoints } from "@shared/ordering";
 
 interface ProjectManifest {
   readonly name?: string;
@@ -129,7 +130,7 @@ export class ProjectDetector {
     }));
 
     return [...dependencies, ...developmentDependencies]
-      .sort((left, right) => left.name.localeCompare(right.name))
+      .sort((left, right) => compareCodePoints(left.name, right.name))
       .map((dependency) => Object.freeze(dependency));
   }
 
@@ -166,7 +167,7 @@ export class ProjectDetector {
       "component directory pattern",
     );
 
-    return frameworks.sort((left, right) => left.name.localeCompare(right.name));
+    return frameworks.sort((left, right) => compareCodePoints(left.name, right.name));
   }
 
   private addFramework(
