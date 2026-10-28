@@ -2,6 +2,8 @@
   "name": "debug",
   "repository": "https://github.com/debug-js/debug.git",
   "revision": "4.4.0",
+  "commit": "7e3814cc603bf64fdd69e714e0cf5611ec31f43b",
+  "tree": "e472c9d30f5c106996b09eaab078bf7bc4882924",
   "tier": "tier-1",
   "languageProfile": ["javascript"],
   "frameworkProfile": [],

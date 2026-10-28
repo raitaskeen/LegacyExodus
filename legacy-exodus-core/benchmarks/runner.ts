@@ -21,6 +21,7 @@ import {
 } from "./governance";
 import { generateQualitySample } from "./sample";
 import { CACHE_DIR, RESULTS_DIR, resolveBenchmarkRepoPath, resolveResultsDir } from "./paths";
+import { ensureCacheEntryVerified, ensurePinnedRepository } from "./scripts/acquire";
 import type {
   BenchmarkManifest,
   BenchmarkResult,
@@ -34,10 +35,13 @@ export interface RunnerOptions {
   readonly outputDir?: string;
   readonly sampleSize?: number;
   readonly sampleSeed?: number;
+  /** Directory holding the acquired corpora. Defaults to benchmarks/.cache. */
+  readonly cacheDir?: string;
 }
 
 export async function runBenchmark(options: RunnerOptions): Promise<BenchmarkResult> {
   const targetPath = resolveBenchmarkRepoPath(options.target);
+  const cacheDir = options.cacheDir === undefined ? CACHE_DIR : resolve(options.cacheDir);
   let manifest: BenchmarkManifest;
   let repoPath: string;
 
@@ -46,7 +50,12 @@ export async function runBenchmark(options: RunnerOptions): Promise<BenchmarkRes
     if (manifest.localPath) {
       repoPath = resolve(dirname(targetPath), manifest.localPath);
     } else {
-      repoPath = resolve(CACHE_DIR, manifest.name);
+      repoPath = resolve(cacheDir, manifest.name);
+      // A manifest with a repository is a pinned corpus (BA-20 / A6): a missing cache is acquired at the
+      // pinned commit and an existing one is verified before any run uses it, exactly as the fidelity tests do.
+      if (manifest.repository !== undefined) {
+        await ensurePinnedRepository(manifest, repoPath);
+      }
     }
   } else {
     const name = basename(targetPath);
@@ -61,6 +70,12 @@ export async function runBenchmark(options: RunnerOptions): Promise<BenchmarkRes
     };
     repoPath = targetPath;
   }
+
+  // Whatever the manifest says, a path that lands inside the benchmark cache is a corpus checkout and is
+  // verified against its corpus manifest before any run uses it (BA-20 / A6). A localPath into the cache, a
+  // manifest without a repository, and a bare directory argument all end up here. Other local repositories
+  // are the caller's own.
+  await ensureCacheEntryVerified(repoPath, cacheDir);
 
   const engineIdentity = await resolveEngineIdentity();
   const repoIdentity = resolveRepositoryIdentity(manifest, repoPath);
