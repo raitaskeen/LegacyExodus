@@ -38,8 +38,8 @@ hand-off point: a new session resumes from here.
 | 5 | Manifest location without plaintext path | BA-26 | `src/storage/projections/**`, `src/discovery/discovery-validator.ts`, `snapshot-trust.ts`, tests | Wave 4 | queued. Design (lead, 2026-10-28): the validator binds reuse to the canonical absolute path (`discovery-validator.ts:280, :405`, the F-001 location binding), so a relative path alone would weaken trust. Replace `repository.path` with `repository.locationDigest = HMAC(localKey, canonicalPath)`, recomputed on validate, and bump the manifest contract so old snapshots refresh |
 | 1 | Parser fallback honours `language: typescript` for unlisted extensions (#210 review; unreachable in production today) | BA-01 | `src/parser/adapters/javascript/**` | #210 | queued (small) |
 | 1 | Fact-diff residual gaps (dominators, lifetimes, unused definitions, first taint hop) | ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â | `benchmarks/fact-diff.ts` | #204 | queued (low) |
-| 2 | Split hotspot files (behaviour-preserving, fact-diff 0/0) | ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â | symbol extractor, `src/semantic/*` | Wave 1 | queued |
-| 2 | TypeScript declarations, then class expressions, then dynamic import, then compiled CJS | BA-02, BA-13, BA-10, BA-12 | symbol extractor (serial chain) | split | queued |
+| 2 | TypeScript declarations | BA-02 | symbol extractor, `symbol-contracts.ts`, kind lists in `src/` | Wave 1 | in progress |
+| 2 | Then class expressions, dynamic import, compiled CJS (serial on the symbol extractor) | BA-13, BA-10, BA-12 | symbol extractor | BA-02 | queued |
 | 2 | TS module resolution, then namespace imports | BA-03, BA-09 | `src/graph/**`, tsconfig loader, `command-handler.ts` aliases | Wave 1 | queued |
 | 3 | Data flow rebuilt on the CFG | BA-05, BA-04, BA-06, BA-27, BA-28 | DFG modules | Wave 2 | queued |
 | 3 | Taint policy packs | BA-07 | flow policy module | DFG rebuild | queued |
@@ -48,6 +48,7 @@ hand-off point: a new session resumes from here.
 | Docs | Docs/governance session (incl. remaining `core-foundation` mentions in GOVERNANCE, CONTRIBUTING, PR template, `.agents`) | BA-23, BA-22 rest | `docs/**`, root docs, `.agents/**` | anytime | queued |
 
 Notes:
+- Lead decision (2026-10-28): the hotspot split is dropped. Wave 2 items lock disjoint files, so splitting adds risk without enabling parallelism.
 - BA-01 known limitation: with the Flow plugin, a statement that is only the identifier `type`, `declare` or `opaque` at the end of a line, followed by an assignment on the next line (valid JS via ASI), now misparses as Flow. No corpus hits it. Revisit if a real repository does.
 - BA-03: since #205 the generic `paths` alias `@/*` beats `@/_internal/*`. ICU order matched tsc's longest-prefix rule only by accident. Implement longest-prefix selection.
 
