@@ -145,6 +145,9 @@ export async function runBenchmarkSelfAudit(baseDir = PACKAGE_ROOT): Promise<Ben
         if (corpusFiles.length === 0) {
           throw new Error(`No benchmark corpus manifests found under ${corpusDir}`);
         }
+        // A tag is mutable, so a manifest that names a repository must also pin the exact commit
+        // and the git tree of that commit (BA-20 / A6); acquisition verifies content against them.
+        const fullGitSha = /^[0-9a-f]{40}$/;
         const unpinned: AuditFinding[] = [];
         for (const cf of corpusFiles) {
           const manifest = JSON.parse(await readFile(cf, "utf8")) as BenchmarkManifest;
@@ -157,10 +160,29 @@ export async function runBenchmarkSelfAudit(baseDir = PACKAGE_ROOT): Promise<Ben
               remediation: "Pin an exact git tag or commit SHA in manifest.revision",
             });
           }
+          if (manifest.repository !== undefined) {
+            const invalid = (["commit", "tree"] as const).filter(
+              (field) => typeof manifest[field] !== "string" || !fullGitSha.test(manifest[field]),
+            );
+            if (invalid.length > 0) {
+              unpinned.push({
+                category: "Revision Integrity",
+                severity: "HIGH",
+                description: `Manifest ${manifest.name} names a repository but has no valid 40-hex ${invalid.join(" and ")} pin`,
+                evidence: `File: ${cf}; commit: ${JSON.stringify(manifest.commit)}; tree: ${JSON.stringify(manifest.tree)}`,
+                remediation:
+                  "Record the commit manifest.revision resolves to in manifest.commit and its git tree " +
+                  "(git rev-parse <commit>^{tree}) in manifest.tree, both as 40 lowercase hex characters",
+              });
+            }
+          }
         }
         const [first, ...rest] = unpinned;
         if (first === undefined) {
-          return pass(`${corpusFiles.length} corpus manifests checked; every external manifest pins a revision`);
+          return pass(
+            `${corpusFiles.length} corpus manifests checked; every external manifest pins a revision, ` +
+            `and every manifest with a repository pins a 40-hex commit and tree`,
+          );
         }
         return fail(`${unpinned.length} of ${corpusFiles.length} corpus manifests are unpinned`, first, ...rest);
       },

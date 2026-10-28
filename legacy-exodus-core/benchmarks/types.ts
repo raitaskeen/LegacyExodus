@@ -21,8 +21,18 @@ export interface BenchmarkManifest {
   readonly name: string;
   /** Git clone URL. Omitted for local-only benchmarks (e.g. self-analysis). */
   readonly repository?: string;
-  /** Pinned git revision (tag, branch, or commit SHA). */
+  /** Human-readable git revision (tag, branch, or commit SHA). A tag is mutable; `commit` and `tree` are the pin. */
   readonly revision?: string;
+  /**
+   * Full 40-hex SHA of the commit `revision` resolved to (peeled for annotated tags).
+   * Required whenever `repository` is set; acquisition fetches exactly this commit.
+   */
+  readonly commit?: string;
+  /**
+   * 40-hex git tree SHA of `commit`. Required whenever `repository` is set; the content of every
+   * acquired or cached checkout must have this tree, or it is rejected.
+   */
+  readonly tree?: string;
   /** Tier classification. */
   readonly tier?: CorpusTier;
   /** Primary languages in the repository. */
