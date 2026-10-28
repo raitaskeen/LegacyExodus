@@ -89,7 +89,8 @@ const taintCases: readonly ConformanceCase[] = Object.entries(taintSnippets).map
   runtime: snippet.runtime,
   expectations: [snippet.runtime === "flow"
     ? { id: `taint-${id}:flow`, category: "taint", has: /^p\.js\|/ }
-    : { id: `taint-${id}:no-flow`, category: "taint", lacks: /^p\.js\|/ }],
+    : { id: `taint-${id}:no-flow`, category: "taint", lacks: /^p\.js\|/ },
+    { id: `taint-${id}:analyzed`, category: "dispositions", has: /^p\.js\|analyzed$/ }],
 }));
 
 export const conformanceCases: readonly ConformanceCase[] = [
@@ -110,6 +111,7 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "parse:tsx-jsx", category: "dispositions", has: analyzed("src/view.tsx") },
       { id: "parse:js-relational-is-not-generic-call", category: "calls", lacks: /^src\/relational\.js@[^|]*\|[^|]*\|a\|/ },
       { id: "parse:syntax-error-fails", category: "dispositions", has: /^src\/broken\.js\|initial-parser-failure\|/ },
+      { id: "parse:relational-js-analyzed", category: "dispositions", has: analyzed("src/relational.js") },
     ],
   },
   {
@@ -140,6 +142,7 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "ts:namespace-member-is-not-module-export", category: "symbols", lacks: /^src\/defs\.ts\|export\|f@/ },
       { id: "ts:enum-import-edge", category: "import-edges", has: /^import:Color@\S*@src\/use\.ts -> export:Color@\S*@src\/defs\.ts$/ },
       { id: "ts:class-import-edge", category: "import-edges", has: /^import:Base@\S*@src\/use\.ts -> export:Base@\S*@src\/defs\.ts$/ },
+      { id: "ts:defs-analyzed", category: "dispositions", has: analyzed("src/defs.ts") },
     ],
   },
   {
@@ -194,6 +197,7 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "namespace:call-resolves", category: "calls", has: /^main\.js@[^|]*\|module\|lib\.b\|RESOLVED\|export:b@/ },
       { id: "namespace:used-export-not-unused", category: "unusedExports", lacks: /\|export:b@\S*@lib\.js\|/ },
       { id: "namespace:no-arbitrary-export-edge", category: "import-edges", lacks: /^import:lib@\S*@main\.js -> export:a@/ },
+      { id: "namespace:files-analyzed", category: "dispositions", has: analyzed("lib.js") },
     ],
   },
   {
@@ -205,6 +209,8 @@ export const conformanceCases: readonly ConformanceCase[] = [
     expectations: [
       { id: "dynamic:literal-import-edge", category: "module-edges", has: /^main\.js -> lib\.js\|\.\/lib\.js\|/ },
       { id: "dynamic:target-not-unused", category: "unusedExports", lacks: /\|export:lazy@\S*@lib\.js\|/ },
+      { id: "dynamic:lib-analyzed", category: "dispositions", has: analyzed("lib.js") },
+      { id: "dynamic:main-analyzed", category: "dispositions", has: analyzed("main.js") },
     ],
   },
   {
@@ -223,7 +229,7 @@ export const conformanceCases: readonly ConformanceCase[] = [
     },
     expectations: [
       { id: "cjs:compiled-member-call-resolves", category: "calls", has: /^main\.js@4:0\|module\|lib_1\.hello\|RESOLVED\|/ },
-      { id: "cjs:indirect-call-recorded", category: "calls", has: /^main\.js@3:/ },
+      { id: "cjs:indirect-call-recorded", category: "calls", has: /^main\.js@3:\d+\|module\|lib_1\.hello\|/ },
     ],
   },
   {
@@ -238,6 +244,7 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "discovery:no-express-from-directory-name", category: "frameworks", lacks: /^express\|/ },
       { id: "discovery:no-react-from-directory-name", category: "frameworks", lacks: /^react\|/ },
       { id: "discovery:build-output-not-analyzed", category: "dispositions", lacks: /^dist\/bundle\.min\.js\|analyzed$/ },
+      { id: "discovery:ruby-file-discovered", category: "files", has: /^app\/controllers\/users_controller\.rb\|ruby\|/ },
     ],
   },
   {
@@ -249,6 +256,7 @@ export const conformanceCases: readonly ConformanceCase[] = [
     expectations: [
       { id: "cfg:loop-body-that-always-returns-has-no-loop", category: "cfg", has: /^loops\.js\|early@[^|]*\|[^|]*\|[^|]*\|[^|]*\|loops=0\|/ },
       { id: "cfg:statement-ids-unique-per-graph", check: (directory) => uniqueStatementIds(directory) },
+      { id: "cfg:finally-graph-built", category: "cfg", has: /^finally\.js\|f@/ },
     ],
   },
   {
