@@ -42,7 +42,7 @@ export class DeterministicSemanticAnalysisEngine {
     const scopes = params.symbolTables.map((table) => createScope(table.filePath, table.symbols.map((symbol) => symbol.name), params.references.filter((reference) => reference.filePath === table.filePath).map((reference) => reference.name)));
     const unusedImports = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => isLexicalImportBinding(symbol) && !referencedSymbolIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unused-import")));
     const unusedExports = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => symbol.kind === "export" && !exportedIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unused-export")));
-    const deadCode = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => ["function", "method", "class", "variable"].includes(symbol.kind) && !symbol.exported && !referencedSymbolIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unreferenced-local-symbol")));
+    const deadCode = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => ["function", "method", "class", "variable"].includes(symbol.kind) && symbol.expression !== true && !symbol.exported && !referencedSymbolIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unreferenced-local-symbol")));
 
     return createSemanticAnalysis({
       calls: params.calls,

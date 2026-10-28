@@ -218,6 +218,11 @@ interface BindingWrites {
   readonly scopeFrames: ReadonlyMap<string, ScopeFrame>;
   /** Binding keys whose declaration the symbol table places in the wrong scope (see collectUnscopedBindings). */
   readonly unscopedBindings: ReadonlySet<string>;
+  /**
+   * Binding keys, in every frame from a block up to its function, of names that a function declared in a nested
+   * block or case also binds in the function (Annex B, non-strict code only): the outer name may hold that function.
+   */
+  readonly blockFunctionVars: ReadonlySet<string>;
 }
 
 interface SourcePoint {
@@ -579,6 +584,7 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
     return bindingWriteKey(scope.id, name);
   };
   const unscopedBindings = collectUnscopedBindings(root, bindingKeyAt);
+  const blockFunctionVars = collectBlockFunctionVars(root, bindingKeyAt);
   const recordSite = (sitesByKey: Map<string, WriteSite[]>, key: string, site: ASTNode, walk: WriteWalk, constructed?: WriteSite["constructed"]): void => {
     const sites = sitesByKey.get(key) ?? [];
     sitesByKey.set(key, sites);
@@ -771,7 +777,7 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
     }
   };
   visit(root, { scope: createScope(MODULE_SCOPE_ID), contextId: MODULE_SCOPE_ID, loopIds: [], unconditional: true }, undefined);
-  return Object.freeze({ reboundBindings, propertyWrites, unknownPropertyWrites, propertyWriteSites, declaredValues, writeSites, declaringContext, callSites, scopeFrames, unscopedBindings });
+  return Object.freeze({ reboundBindings, propertyWrites, unknownPropertyWrites, propertyWriteSites, declaredValues, writeSites, declaringContext, callSites, scopeFrames, unscopedBindings, blockFunctionVars });
 }
 
 const classFieldTypes = new Set(["ClassProperty", "ClassPrivateProperty", "PropertyDefinition", "ClassAccessorProperty"]);
@@ -815,6 +821,43 @@ function collectUnscopedBindings(root: ASTNode, bindingKeyAt: (name: string, sco
   };
   visit(root, createScope(MODULE_SCOPE_ID));
   return unscoped;
+}
+
+function hasUseStrict(node: ASTNode | undefined): boolean {
+  return node?.children.some((child) => child.type === "Directive" && child.children.some((literal) => literal.attributes.value === "use strict")) === true;
+}
+
+/**
+ * In sloppy code a function declared in a nested block or case also creates a var binding in the enclosing
+ * function (Annex B.3.3), so the same name read outside the block may be that function. Strict code (an ES module,
+ * a "use strict" directive, a class body) keeps the declaration block-scoped. Strictness is read from the module
+ * source type and the directives, which the parser reports; a function whose strictness cannot be read as strict
+ * is treated as sloppy, never the reverse.
+ */
+function collectBlockFunctionVars(root: ASTNode, bindingKeyAt: (name: string, scope: ScopeFrame) => string): ReadonlySet<string> {
+  const names = new Set<string>();
+  const visit = (node: ASTNode, scope: ScopeFrame, functionFrame: ScopeFrame, strict: boolean, parent?: ASTNode, grandparent?: ASTNode): void => {
+    const inner = frameFor(node, scope);
+    const isFunction = isCallable(node) || node.type === "StaticBlock";
+    const nestedStrict = strict || node.type === "ClassDeclaration" || node.type === "ClassExpression"
+      || (node.type === "Program" && (node.attributes.sourceType === "module" || hasUseStrict(node)))
+      || (isCallable(node) && hasUseStrict(node.children.find((child) => child.role === "body")));
+    if (node.type === "FunctionDeclaration" && !strict && parent !== undefined) {
+      const functionBody = parent.type === "BlockStatement" && parent.role === "body" && grandparent !== undefined && (isCallable(grandparent) || grandparent.type === "StaticBlock");
+      const inBlock = (parent.type === "BlockStatement" && !functionBody) || parent.type === "SwitchCase";
+      const name = nodeName(node);
+      if (inBlock && name !== undefined) {
+        for (let frame: ScopeFrame | undefined = scope.parent; frame !== undefined; frame = frame.parent) {
+          names.add(bindingKeyAt(name, frame));
+          if (frame === functionFrame) break;
+        }
+      }
+    }
+    for (const child of node.children) visit(child, inner, isFunction ? inner : functionFrame, nestedStrict, node, parent);
+  };
+  const module = createScope(MODULE_SCOPE_ID);
+  visit(root, module, module, false);
+  return names;
 }
 
 function hasParameterExpression(node: ASTNode): boolean {
@@ -959,6 +1002,7 @@ function declaredBindingFrame(index: FileSymbolIndex, name: string, scope: Scope
   for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
     if (current.selfName === name) return undefined;
     if (mayBelongToOtherBlock(index, current.id, name)) return undefined;
+    if (index.writes.blockFunctionVars.has(bindingWriteKey(current.id, name))) return undefined;
     if ((index.declarationsByScopeAndName.get(lexicalBindingKey(current.id, name)) ?? []).length > 0) {
       return index.writes.unscopedBindings.has(bindingWriteKey(current.id, name)) ? undefined : current;
     }
@@ -1818,6 +1862,7 @@ function nearestScoped(index: FileSymbolIndex, name: string, context: Resolution
     if (mayBelongToOtherBlock(index, current.id, name)) return undefined;
     const matchingSymbols = index.declarationsByScopeAndName.get(lexicalBindingKey(current.id, name)) ?? [];
     if (matchingSymbols.length > 0 && index.writes.unscopedBindings.has(bindingWriteKey(current.id, name))) return undefined;
+    if (index.writes.blockFunctionVars.has(bindingWriteKey(current.id, name))) return undefined;
     const callableSymbols = matchingSymbols.filter((symbol) => symbol.kind === "function" || symbol.kind === "class");
     const nonCallableSymbols = matchingSymbols.filter((symbol) => symbol.kind !== "function" && symbol.kind !== "class");
     // A rebound function or class binding may name another callee when the call runs; a decorator may replace a class.

@@ -316,7 +316,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         const className = ownName ?? this.classBindingNames.get(node) ?? "anonymous-class";
         // A class expression's own name is bound only inside the class, not in the enclosing scope.
         const classContext = ownName === undefined ? context : { ...context, scopeId: createSelfScopeId(node.type, node.location) };
-        const classSymbol = this.createSymbol("class", className, node, ast, classContext);
+        const classSymbol = this.createSymbol("class", className, node, ast, classContext, { expression: true });
         symbols.push(classSymbol);
         this.visitChildren(node, ast, { ...context, containerName: className, containerId: classSymbol.id }, symbols, pendingExports);
         return;

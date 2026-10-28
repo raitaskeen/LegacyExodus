@@ -151,6 +151,7 @@ describe("BA-13 switch statements are block scopes", () => {
 
   it("resolves a call to a function declared in a case only inside the switch", async () => {
     const { table, analysis, lines } = await analyze([
+      "'use strict';", // block functions are block-scoped only in strict code (Annex B otherwise)
       "function inner() { return 0; }",
       "function run(k) {",
       "  switch (k) {",
@@ -166,7 +167,7 @@ describe("BA-13 switch statements are block scopes", () => {
     const inCase = target("@in");
     expect(inCase?.location?.start.line).toBe(lineOf(lines, "@decl"));
     // After the switch the name is the module function again.
-    expect(target("@out")?.location?.start.line).toBe(1);
+    expect(target("@out")?.location?.start.line).toBe(2);
   });
 });
 
@@ -204,5 +205,77 @@ describe("BA-13 static blocks are function-like scopes", () => {
     const target = (marker: string) => table.symbols.find((s) => s.id === call(marker).targetSymbolId);
     expect(target("@in")?.location?.start.line).toBe(lineOf(lines, "@decl"));
     expect(target("@out")?.location?.start.line).toBe(1);
+  });
+});
+
+describe("BA-13 class expressions are never dead code", () => {
+  const forms: Record<string, string> = {
+    assignment: "let X; X = class {}; new X();",
+    "module.exports": "module.exports = class {};",
+    "returned from a function": "function f() { return class {}; }\nf();",
+    "extends": "class Z extends class {} {}\nnew Z();",
+    argument: "use(class {});",
+    "immediately constructed": "new (class { m() {} })().m();",
+    "object key": "const obj = { K: class {} };\nnew obj.K();",
+  };
+  for (const [label, source] of Object.entries(forms)) {
+    it(`reports no class symbol of a class expression: ${label}`, async () => {
+      const { table, analysis } = await analyze(`${source}\n`);
+      const classIds = new Set(table.symbols.filter((s) => s.kind === "class" && s.expression === true).map((s) => s.id));
+      expect(classIds.size).toBeGreaterThan(0);
+      expect(analysis.deadCode.filter((finding) => classIds.has(finding.symbolId))).toEqual([]);
+    });
+  }
+
+  it("still reports an unused const that holds a class expression, as the variable", async () => {
+    const { table, analysis } = await analyze("const Unused = class {};\n");
+    const variable = table.symbols.find((s) => s.kind === "variable" && s.name === "Unused")!;
+    expect(analysis.deadCode.map((finding) => finding.symbolId)).toEqual([variable.id]);
+  });
+});
+
+describe("BA-13 Annex B: block-level functions in sloppy code", () => {
+  const call = (analysis: Awaited<ReturnType<typeof analyze>>["analysis"], lines: readonly string[], marker: string) =>
+    analysis.calls.find((c) => c.calleeName === "f" && c.location?.line === lineOf(lines, marker))!;
+
+  it("leaves f() UNRESOLVED after a switch case that declares f (sloppy)", async () => {
+    const { analysis, lines } = await analyze("function f() { return 0; }\nswitch (1) { case 1: function f() { return 1; } }\nf(); // OUT\n");
+    expect(call(analysis, lines, "// OUT").resolutionState).toBe("UNRESOLVED");
+  });
+
+  it("leaves f() UNRESOLVED after a plain block that declares f (sloppy)", async () => {
+    const { analysis, lines } = await analyze("function f() { return 0; }\n{ function f() { return 1; } }\nf(); // OUT\n");
+    expect(call(analysis, lines, "// OUT").resolutionState).toBe("UNRESOLVED");
+  });
+
+  it("applies inside nested functions, to a name declared in an outer function", async () => {
+    const { analysis, lines } = await analyze([
+      "function f() { return 0; }",
+      "function run(k) {",
+      "  switch (k) { case 1: function f() { return 1; } }",
+      "  f(); // OUT",
+      "}",
+    ].join("\n"));
+    expect(call(analysis, lines, "// OUT").resolutionState).toBe("UNRESOLVED");
+  });
+
+  it("still resolves a call made inside the block to the block's function", async () => {
+    const { analysis, lines } = await analyze("function f() { return 0; }\n{ function f() { return 1; } f(); // IN\n}\n");
+    expect(call(analysis, lines, "// IN").resolutionState).toBe("RESOLVED");
+  });
+
+  it("keeps resolving when the code is strict: use strict directive", async () => {
+    const { analysis, lines } = await analyze("'use strict';\nfunction f() { return 0; }\n{ function f() { return 1; } }\nf(); // OUT\n");
+    expect(call(analysis, lines, "// OUT").resolutionState).toBe("RESOLVED");
+  });
+
+  it("keeps resolving in a function with its own use strict directive", async () => {
+    const { analysis, lines } = await analyze("function f() { return 0; }\nfunction run() {\n  'use strict';\n  { function f() { return 1; } }\n  f(); // OUT\n}\n");
+    expect(call(analysis, lines, "// OUT").resolutionState).toBe("RESOLVED");
+  });
+
+  it("keeps resolving in an ES module", async () => {
+    const { analysis, lines } = await analyze("export {};\nfunction f() { return 0; }\nswitch (1) { case 1: function f() { return 1; } }\nf(); // OUT\n");
+    expect(call(analysis, lines, "// OUT").resolutionState).toBe("RESOLVED");
   });
 });
