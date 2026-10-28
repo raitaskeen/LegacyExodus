@@ -164,8 +164,9 @@ async function main(): Promise<void> {
       } else {
         const base = getArgValue(args, "--base");
         const head = getArgValue(args, "--head");
-        const flagValues = new Set(["--base", "--head", "--output"].map((flag) => getArgValue(args, flag)));
-        const corpora = args.slice(1).filter((arg) => !arg.startsWith("--") && !flagValues.has(arg));
+        // Positional arguments are corpora; a value that follows a valued flag belongs to that flag.
+        const valuedFlags = new Set(["--base", "--head", "--output"]);
+        const corpora = args.slice(1).filter((arg, index, rest) => !arg.startsWith("--") && !valuedFlags.has(rest[index - 1] ?? ""));
         if (base === undefined || head === undefined || corpora.length === 0) {
           console.error("Usage: bun run benchmarks/cli.ts fact-diff --base <core-dir> --head <core-dir> <corpus-dir>... [--output <file>] [--fail-on-loss]");
           process.exit(1);

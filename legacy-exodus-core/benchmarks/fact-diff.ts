@@ -49,6 +49,12 @@ function at(location: { readonly line?: number; readonly column?: number; readon
   return point?.line === undefined ? "@?" : `@${point.line}:${point.column ?? 0}`;
 }
 
+function anchor(sourceAnchor: any): string {
+  if (sourceAnchor?.kind === "offset") return `@${sourceAnchor.start}-${sourceAnchor.end}`;
+  if (sourceAnchor?.kind === "location") return `@${sourceAnchor.start?.line}:${sourceAnchor.start?.column}`;
+  return "@?";
+}
+
 /** Reduces one `.discovery` directory to its facts, by category. */
 export function extractFacts(discoveryDirectory: string): FactSet {
   const facts = new Map<string, Set<string>>();
@@ -80,33 +86,78 @@ export function extractFacts(discoveryDirectory: string): FactSet {
   for (const symbol of symbols) {
     add("symbols", `${symbol.filePath}|${symbol.kind}|${symbol.name}${at(symbol.location)}|${symbol.exported ? "exported" : "local"}|${symbol.containerName ?? "-"}`);
   }
+  // Every other symbol field, so flag regressions (async, default, parameters, …) are visible.
+  addCounted("symbol-details", symbols.map((symbol) => [
+    `${symbol.filePath}|${symbol.kind}|${symbol.name}${at(symbol.location)}${symbol.location?.end === undefined ? "" : `-${symbol.location.end.line}:${symbol.location.end.column}`}`,
+    `async=${symbol.async === true}`, `default=${symbol.defaultExport === true}`, `anonymous=${symbol.anonymous === true}`,
+    `visibility=${symbol.visibility ?? "-"}`, `params=[${(symbol.parameters ?? []).join(",")}]`,
+    `source=${symbol.sourceSymbolName ?? "-"}`, `module=${symbol.moduleSpecifier ?? "-"}`, `declaration=${symbol.declarationKind ?? "-"}`,
+    `value=${symbol.value === undefined ? "-" : JSON.stringify(symbol.value)}`, `container=${describe(symbol.containerId)}`,
+  ].join("|")));
 
   const graph = readArtifact(discoveryDirectory, "dependency-graph.json");
-  for (const edge of graph?.moduleGraph?.edges ?? []) add("module-edges", `${edge.sourceFilePath} -> ${edge.targetFilePath}|${edge.moduleSpecifier}|${edge.form}`);
-  for (const edge of graph?.edges ?? []) add("import-edges", `${describe(edge.importSymbolId)} -> ${describe(edge.targetExportSymbolId)}`);
+  addCounted("module-edges", (graph?.moduleGraph?.edges ?? []).map((edge: any) =>
+    `${edge.sourceFilePath} -> ${edge.targetFilePath}|${edge.moduleSpecifier}|${edge.form}|phase=${edge.sourcePhase ?? "-"}|${anchor(edge.sourceAnchor)}`));
+  addCounted("import-edges", (graph?.edges ?? []).map((edge: any) => `${describe(edge.importSymbolId)} -> ${describe(edge.targetExportSymbolId)}`));
   for (const cycle of graph?.cycles ?? []) add("cycles", cycle.join(" > "));
 
   const semantic = readArtifact(discoveryDirectory, "semantic.json");
-  for (const call of semantic?.calls ?? []) {
-    add("calls", `${call.sourceFilePath}${at(call.location)}|${call.callerName}|${call.calleeName}|${call.resolutionState}|${describe(call.targetSymbolId)}`);
-  }
+  addCounted("calls", (semantic?.calls ?? []).map((call: any) =>
+    `${call.sourceFilePath}${at(call.location)}|${call.callerName}|${call.calleeName}|${call.resolutionState}|${describe(call.targetSymbolId)}`));
   addCounted("references", (semantic?.references ?? []).map((reference: any) =>
     `${reference.filePath}|${reference.kind}|${reference.name}|${reference.resolutionState}|${describe(reference.resolvedSymbolId)}`));
   for (const kind of ["deadCode", "unusedImports", "unusedExports"] as const) {
-    for (const finding of semantic?.[kind] ?? []) add(kind, `${finding.reason}|${describe(finding.symbolId)}|${finding.state}`);
+    addCounted(kind, (semantic?.[kind] ?? []).map((finding: any) => `${finding.reason}|${describe(finding.symbolId)}|${finding.state}`));
   }
   for (const entry of semantic?.entryPoints ?? []) add("entryPoints", `${entry.filePath}|${entry.reason}`);
-  for (const route of semantic?.routes ?? []) {
-    add("routes", `${route.filePath}|${route.method} ${route.path}|handler=${route.handlerName ?? "-"}|middleware=[${(route.middleware ?? []).join(",")}]|${route.state}`);
+  addCounted("routes", (semantic?.routes ?? []).map((route: any) =>
+    `${route.filePath}|${route.method} ${route.path}|handler=${route.handlerName ?? "-"}|middleware=[${(route.middleware ?? []).join(",")}]|${route.state}`));
+  addCounted("middlewareChains", (semantic?.middlewareChains ?? []).map((chain: any) => `${chain.filePath}|[${(chain.middleware ?? []).join(",")}]`));
+  for (const scope of semantic?.scopes ?? []) {
+    add("scopes", `${scope.filePath}|${scope.name}|declared=[${(scope.declaredSymbols ?? []).join(",")}]|referenced=[${(scope.referencedNames ?? []).join(",")}]`);
   }
-  for (const chain of semantic?.middlewareChains ?? []) add("middlewareChains", `${chain.filePath}|[${chain.middleware.join(",")}]`);
 
   for (const cfg of readArtifact(discoveryDirectory, "control-flow.json")?.graphs ?? []) {
-    add("cfg", `${cfg.filePath}|${cfg.scopeName}|#${String(cfg.id).slice(0, 8)}|blocks=${cfg.blocks.length}|edges=${cfg.edges.length}|loops=${cfg.loops.length}|unreachable=${cfg.unreachableBlockIds.length}`);
+    const blocks = new Map<string, any>((cfg.blocks ?? []).map((block: any) => [block.id, block]));
+    // A block is named by its first statement, which is stable across engines; empty blocks by role.
+    const label = (id: string): string => {
+      const first = blocks.get(id)?.statements?.[0];
+      return first !== undefined ? `${first.type}${at(first.location)}` : id === cfg.entryBlockId ? "entry" : id === cfg.exitBlockId ? "exit" : "empty";
+    };
+    add("cfg", `${cfg.filePath}|${cfg.scopeName}|#${String(cfg.id).slice(0, 8)}|blocks=${blocks.size}|edges=${(cfg.edges ?? []).length}|loops=${(cfg.loops ?? []).length}|unreachable=${(cfg.unreachableBlockIds ?? []).length}|dead=${(cfg.deadCodeNodeIds ?? []).length}|state=${cfg.state}`);
+    addCounted("cfg-edges", (cfg.edges ?? []).map((edge: any) => `${cfg.filePath}|${cfg.scopeName}|${label(edge.fromBlockId)} -> ${label(edge.toBlockId)}|${edge.kind}`));
+    addCounted("cfg-loops", (cfg.loops ?? []).map((loop: any) => `${cfg.filePath}|${cfg.scopeName}|header=${label(loop.headerBlockId)}|blocks=[${(loop.blockIds ?? []).map(label).sort(compare).join(",")}]`));
   }
-  for (const dfg of readArtifact(discoveryDirectory, "data-flow.json")?.graphs ?? []) {
-    add("dfg", `${dfg.filePath}|definitions=${dfg.definitions.length}|uses=${dfg.uses.length}|interprocedural=${dfg.interproceduralFlows.length}|bindings=${dfg.callBindings.length}`);
-    for (const flow of dfg.taintFlows) add("taint", `${dfg.filePath}|source=#${flow.sourceId.slice(0, 8)}|sink=#${flow.sinkId.slice(0, 8)}:${flow.path.at(-1)}|${flow.state}`);
+
+  const dataFlowGraphs: any[] = readArtifact(discoveryDirectory, "data-flow.json")?.graphs ?? [];
+  const definitionById = new Map<string, any>(dataFlowGraphs.flatMap((dfg) => (dfg.definitions ?? []).map((definition: any) => [definition.id, definition] as const)));
+  const definition = (id: string | null | undefined): string => {
+    if (id === undefined || id === null) return "-";
+    const found = definitionById.get(id);
+    return found === undefined ? `#${id.slice(0, 8)}` : `${found.name}:${found.kind}${found.constantValue === undefined ? "" : `=${JSON.stringify(found.constantValue)}`}@${found.filePath}`;
+  };
+  for (const dfg of dataFlowGraphs) {
+    add("dfg", `${dfg.filePath}|definitions=${(dfg.definitions ?? []).length}|uses=${(dfg.uses ?? []).length}|interprocedural=${(dfg.interproceduralFlows ?? []).length}|bindings=${(dfg.callBindings ?? []).length}|state=${dfg.state}`);
+    addCounted("dfg-uses", (dfg.uses ?? []).map((use: any) => `${dfg.filePath}|${use.name} -> ${use.definitionId === undefined ? "unbound" : definition(use.definitionId)}`));
+    addCounted("dfg-interprocedural", (dfg.interproceduralFlows ?? []).map((flow: any) => `${dfg.filePath}|${flow.kind}|${definition(flow.sourceDefinitionId)} -> ${definition(flow.targetDefinitionId)}`));
+    addCounted("dfg-bindings", (dfg.callBindings ?? []).map((binding: any) =>
+      `${dfg.filePath}|-> ${describe(binding.targetSymbolId)}|args=[${(binding.argumentDefinitionIds ?? []).map(definition).join(",")}]|receiver=${definition(binding.receiverDefinitionId)}`));
+    addCounted("dfg-summaries", (dfg.functionSummaries ?? []).map((summary: any) =>
+      `${summary.filePath}|${describe(summary.symbolId)}|params=[${(summary.parameterDefinitionIds ?? []).map((slot: any) => (Array.isArray(slot) ? slot : [slot]).map(definition).join("&")).join(",")}]|returns=${(summary.returnDefinitionIds ?? []).length}`));
+    addCounted("taint", (dfg.taintFlows ?? []).map((flow: any) =>
+      `${dfg.filePath}|source=#${flow.sourceId.slice(0, 8)}|via=[${(flow.path ?? []).slice(1, -1).map(definition).join(" > ")}]|sink=#${flow.sinkId.slice(0, 8)}:${(flow.path ?? []).at(-1)}|${flow.state}`));
+  }
+
+  const knowledge = readArtifact(discoveryDirectory, "knowledge.json");
+  const node = (id: string): string => (id.startsWith("symbol:") ? describe(id.slice("symbol:".length)) : id);
+  addCounted("knowledge", [
+    ...(knowledge?.nodes ?? []).map((entry: any) => `node|${entry.kind}|${node(entry.id)}`),
+    ...(knowledge?.edges ?? []).map((edge: any) => `edge|${edge.relationship}|${node(edge.from)} -> ${node(edge.to)}`),
+  ]);
+
+  const summary = readArtifact(discoveryDirectory, "summary.json");
+  if (summary !== undefined) {
+    add("summary", `files=${summary.fileCount}|dependencies=${summary.dependencyCount}|frameworks=${summary.frameworkCount}|enumerationFailures=${summary.enumerationFailureCount}|manifestFailures=${summary.manifestFailureCount ?? "-"}|discoveryComplete=${summary.discoveryComplete}`);
   }
 
   return facts;
@@ -134,18 +185,22 @@ export function diffFacts(base: FactSet, head: FactSet): FactDiff {
 
 /** Analyzes a fresh copy of `corpus` with the engine at `engineRoot` and returns its facts. */
 export function analyzeWith(engineRoot: string, corpus: string): { readonly facts: FactSet; readonly durationMs: number } {
+  const cli = join(engineRoot, "src/cli/index.ts");
+  if (!existsSync(cli)) throw new Error(`Not an engine root (missing ${cli}): ${engineRoot}`);
   const work = mkdtempSync(join(tmpdir(), "lx-fact-diff-"));
   try {
     const copy = join(work, basename(resolve(corpus)));
     cpSync(resolve(corpus), copy, { recursive: true, filter: (path) => !/[\\/](\.discovery|\.git)([\\/]|$)/.test(path) });
-    const run = spawnSync(process.execPath, ["run", join(engineRoot, "src/cli/index.ts"), "analyze", copy, "--refresh", "--json"], {
+    const run = spawnSync(process.execPath, ["run", cli, "analyze", copy, "--refresh", "--json"], {
       cwd: engineRoot,
       encoding: "utf8",
       maxBuffer: 1 << 26,
       env: { ...process.env, LEGACY_EXODUS_HOME: join(work, "home"), NO_COLOR: "1" },
     });
-    if (run.status !== 0) throw new Error(`analyze failed for ${corpus} with ${engineRoot}: ${run.stderr.slice(0, 2000)}`);
+    if (run.status !== 0) throw new Error(`analyze failed for ${corpus} with ${engineRoot}: ${String(run.stderr ?? run.error ?? "").slice(0, 2000)}`);
     const report = JSON.parse(run.stdout) as { readonly durationMs: number };
+    // No projection means no evidence; reporting "no change" for it would hide a broken engine.
+    if (!existsSync(join(copy, ".discovery", "manifest.json"))) throw new Error(`analyze wrote no .discovery/manifest.json for ${corpus} with ${engineRoot}`);
     return { facts: extractFacts(join(copy, ".discovery")), durationMs: report.durationMs };
   } finally {
     rmSync(work, { recursive: true, force: true });
