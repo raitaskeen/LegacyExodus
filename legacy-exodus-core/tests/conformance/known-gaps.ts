@@ -5,12 +5,6 @@
  * ledger always describes the engine exactly. A fix removes its entries in the same PR.
  */
 const gaps: Readonly<Record<string, readonly string[]>> = {
-  "BA-01 parser dialect per extension": [
-    "parse:ts-angle-bracket-cast",
-    "parse:ts-generic-arrow",
-    "parse:dts-declaration-without-initializer",
-    "parse:js-relational-is-not-generic-call",
-  ],
   "BA-02 TypeScript declarations": [
     "ts:enum-export",
     "ts:namespace-export",
