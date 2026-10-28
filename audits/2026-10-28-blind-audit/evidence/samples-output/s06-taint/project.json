@@ -1,0 +1,8 @@
+{
+  "name": "s06",
+  "path": "C:\\Projects\\.audit\\samples\\s06-taint",
+  "languages": [
+    "javascript",
+    "json"
+  ]
+}

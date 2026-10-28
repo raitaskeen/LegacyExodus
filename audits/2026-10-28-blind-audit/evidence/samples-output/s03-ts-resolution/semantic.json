@@ -1,0 +1,163 @@
+{
+  "calls": [
+    {
+      "id": "4970899177f8a9962dbd131d2305810f38c6389ec2fcdf7adcadbbdcfa06b268",
+      "sourceFilePath": "src/b.ts",
+      "callerName": "module",
+      "calleeName": "hello",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 2,
+        "column": 22
+      }
+    },
+    {
+      "id": "6c122464040582d0637c1345df6e0c833f7b5ca6ab7c6ce0215dd080be75f27b",
+      "sourceFilePath": "src/d.ts",
+      "callerName": "module",
+      "calleeName": "hello",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "267342a0c960d3d98bbbcb678bad8e1f19267b3bf7cc03bd9f658a486d41ffff",
+      "location": {
+        "line": 2,
+        "column": 21
+      }
+    },
+    {
+      "id": "bc70c4aedc1c366160a14d4a22eb5660e080cfe43f628e3b153383c36c91669e",
+      "sourceFilePath": "src/c.ts",
+      "callerName": "module",
+      "calleeName": "hello",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 2,
+        "column": 25
+      }
+    }
+  ],
+  "references": [
+    {
+      "id": "107a7f9c929c7b95fc596711b7523113164829efec33e2f468996223b72e28ca",
+      "filePath": "src/b.ts",
+      "name": "hello",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "9887b179d9609fdda077692b85e62e99761c32fbf93edd99c89949cc7ebaa0d5"
+    },
+    {
+      "id": "38612c9b3d267067be8ef4ba63871a433d1be3d12f14a18a74c00d764ec930d6",
+      "filePath": "src/c.ts",
+      "name": "hello",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "d3d126efdd37d95c6d81e7c35e028eb36cbb193ab60f69180ec78283ba232308"
+    },
+    {
+      "id": "ac4768112db7ae8ddb224131b4ada15e789942b89a04e0c677fd4a1854011835",
+      "filePath": "src/d.ts",
+      "name": "hello",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "cd8dc5e0fa1f3a0fdb75faa00961adfa12db526609c90136d255d66b5d5764eb"
+    },
+    {
+      "id": "b3a4e7ca07501eb5221c8481c3634546a9f78b3853140bcdee77ebb32a65cd17",
+      "filePath": "src/c.ts",
+      "name": "hello",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "dd181b667c04a93c827f6d4aebed202352e679c764403470da222301c3501a05",
+      "filePath": "src/d.ts",
+      "name": "hello",
+      "kind": "call",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "267342a0c960d3d98bbbcb678bad8e1f19267b3bf7cc03bd9f658a486d41ffff"
+    },
+    {
+      "id": "fe00b30a37b6bdbb3fe73f4e7e8561f4658b8e3885cfa553605dd5e861841928",
+      "filePath": "src/b.ts",
+      "name": "hello",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    }
+  ],
+  "scopes": [
+    {
+      "id": "9d4d8a915b7189a05948c07102eac34156eae1b542879ef906ff74660d60c5d0",
+      "filePath": "src/d.ts",
+      "name": "module",
+      "declaredSymbols": [
+        "hello",
+        "plain"
+      ],
+      "referencedNames": [
+        "hello"
+      ]
+    },
+    {
+      "id": "a97ec7440a175cdf48b72296823b6608bf75d9d5d9f59d6a464d0166ef384f61",
+      "filePath": "src/b.ts",
+      "name": "module",
+      "declaredSymbols": [
+        "fromJs",
+        "hello"
+      ],
+      "referencedNames": [
+        "hello"
+      ]
+    },
+    {
+      "id": "b91353570eff8c3da06886d3b908a666c654f944eedd2d41fc98962ed9d28db0",
+      "filePath": "src/c.ts",
+      "name": "module",
+      "declaredSymbols": [
+        "fromAlias",
+        "hello"
+      ],
+      "referencedNames": [
+        "hello"
+      ]
+    },
+    {
+      "id": "e274d03e4b69dce61b11a3a8425421e1f86afe5b1d030eba1062ee334802e4c7",
+      "filePath": "src/a.ts",
+      "name": "module",
+      "declaredSymbols": [
+        "hello"
+      ],
+      "referencedNames": []
+    }
+  ],
+  "deadCode": [],
+  "unusedImports": [],
+  "unusedExports": [
+    {
+      "symbolId": "d18719432c52916e818123fbcf082e17f922f6c943feab55a892cd29a286baa0",
+      "filePath": "src/b.ts",
+      "name": "fromJs",
+      "reason": "unused-export",
+      "state": "INFERRED"
+    },
+    {
+      "symbolId": "d34315ad29f19ef2627342ca0445024cc2850edaaa839f13db37402d19cf9162",
+      "filePath": "src/c.ts",
+      "name": "fromAlias",
+      "reason": "unused-export",
+      "state": "INFERRED"
+    },
+    {
+      "symbolId": "4b7414c832a6566c2180ecb019756770d23c7c32b6853f731b9d856d1a09b489",
+      "filePath": "src/d.ts",
+      "name": "plain",
+      "reason": "unused-export",
+      "state": "INFERRED"
+    }
+  ],
+  "entryPoints": [],
+  "routes": [],
+  "middlewareChains": [],
+  "projectId": "64643a0d-7b57-4980-82d7-3c9cd6ba87e3",
+  "analysisRunId": "c113764e-dee3-4f8b-ae1b-71cfeff56fdf"
+}

@@ -1,0 +1,47 @@
+{
+  "projectId": "d91e6ef4-bcfb-4129-b9c1-4467d01e2708",
+  "analysisRunId": "d4c1012f-407d-4985-8d83-41d73319e886",
+  "nodes": [
+    {
+      "id": "symbol:16328a1e93a004036f840bad1a2783be82e9cbd2e456c1f35928a1890311d95d",
+      "filePath": "main.js",
+      "symbolId": "16328a1e93a004036f840bad1a2783be82e9cbd2e456c1f35928a1890311d95d"
+    },
+    {
+      "id": "symbol:5889d6eb90ede7d7db0c248f33e08a74b037a3f3ceeec9118f38cca27615a07c",
+      "filePath": "main.js",
+      "symbolId": "5889d6eb90ede7d7db0c248f33e08a74b037a3f3ceeec9118f38cca27615a07c"
+    },
+    {
+      "id": "symbol:6fbca76aa4b6a40ca3eaadf193f923259fd07a7383c674e43d919978df0afc4b",
+      "filePath": "cjs.js",
+      "symbolId": "6fbca76aa4b6a40ca3eaadf193f923259fd07a7383c674e43d919978df0afc4b"
+    },
+    {
+      "id": "symbol:800564105f74db6a13c4c4af2033fa52a937125c4a52a6324201556a577a4f15",
+      "filePath": "main.js",
+      "symbolId": "800564105f74db6a13c4c4af2033fa52a937125c4a52a6324201556a577a4f15"
+    },
+    {
+      "id": "symbol:8e3e7a29c8ba6fda4fbd91026b3cb037f2ef414b307b46e5ede327fe4d128f2d",
+      "filePath": "lib.js",
+      "symbolId": "8e3e7a29c8ba6fda4fbd91026b3cb037f2ef414b307b46e5ede327fe4d128f2d"
+    },
+    {
+      "id": "symbol:cab75585f8ee3ab52a8b97eb6bcff849bd8400023da1f6acd3c77bb88134dc1d",
+      "filePath": "cjs.js",
+      "symbolId": "cab75585f8ee3ab52a8b97eb6bcff849bd8400023da1f6acd3c77bb88134dc1d"
+    },
+    {
+      "id": "symbol:fec2808b3a8e953b3d6318da6537af80d5889d50df01e4cf51b3918f6efd4f62",
+      "filePath": "lib.js",
+      "symbolId": "fec2808b3a8e953b3d6318da6537af80d5889d50df01e4cf51b3918f6efd4f62"
+    }
+  ],
+  "edges": [],
+  "cycles": [],
+  "moduleGraph": {
+    "contract": "f07-import-relations-v1",
+    "edges": []
+  }
+}

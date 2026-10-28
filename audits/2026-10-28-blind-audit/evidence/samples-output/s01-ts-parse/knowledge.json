@@ -1,0 +1,152 @@
+{
+  "projectId": "3e507ced-934f-48fd-9be2-568448d16e1f",
+  "analysisRunId": "ada53b84-474b-4181-8030-1ebe7dfe521e",
+  "nodes": [
+    {
+      "id": "file:dist/bundle.min.js",
+      "kind": "file",
+      "name": "dist/bundle.min.js",
+      "filePath": "dist/bundle.min.js"
+    },
+    {
+      "id": "file:src/ok.ts",
+      "kind": "file",
+      "name": "src/ok.ts",
+      "filePath": "src/ok.ts"
+    },
+    {
+      "id": "file:src/ok.tsx",
+      "kind": "file",
+      "name": "src/ok.tsx",
+      "filePath": "src/ok.tsx"
+    },
+    {
+      "id": "file:src/top-await.mts",
+      "kind": "file",
+      "name": "src/top-await.mts",
+      "filePath": "src/top-await.mts"
+    },
+    {
+      "id": "symbol:18e6711a17566ff742aad811309151940cdf49994a13cdbf8f864a66a052c352",
+      "kind": "symbol",
+      "name": "View",
+      "filePath": "src/ok.tsx"
+    },
+    {
+      "id": "symbol:1d56f3e349b1a1d9237e52ada5e3176d154eafba0c1175f1f63b490362caf415",
+      "kind": "symbol",
+      "name": "ok",
+      "filePath": "src/ok.ts"
+    },
+    {
+      "id": "symbol:1f1b4cacf85b57e834c217ea7db85261102cd149b738f940ec42f9623dc6fc87",
+      "kind": "symbol",
+      "name": "x",
+      "filePath": "src/ok.ts"
+    },
+    {
+      "id": "symbol:39d6c7f7f27f09d1d1b481a06c61f304955a7e876273410ca955c67309c378ce",
+      "kind": "symbol",
+      "name": "b",
+      "filePath": "dist/bundle.min.js"
+    },
+    {
+      "id": "symbol:3eab7ee724bcaf75a8edb4d1e1d80037cd011b510d98a67780535bce85816c02",
+      "kind": "symbol",
+      "name": "a",
+      "filePath": "dist/bundle.min.js"
+    },
+    {
+      "id": "symbol:5bf546cba91c2772cb41dfd7d83eb9ef667860d7e52d005d1b10dec3494c2c30",
+      "kind": "symbol",
+      "name": "b",
+      "filePath": "dist/bundle.min.js"
+    },
+    {
+      "id": "symbol:b5b0459b0f6a807f2fec4ca6f8edc73717279e3e2cac05daabfc87bd550ccc8d",
+      "kind": "symbol",
+      "name": "ok",
+      "filePath": "src/ok.ts"
+    },
+    {
+      "id": "symbol:d605eef2ac45b96651af2394b13d4edfab261854a454c949a26ca4ed73aab09e",
+      "kind": "symbol",
+      "name": "ok",
+      "filePath": "src/ok.ts"
+    },
+    {
+      "id": "symbol:ddd371f3beb1784158a249bd411d51121ea05eb5fcb25d5fd6c929e6562a1f87",
+      "kind": "symbol",
+      "name": "View",
+      "filePath": "src/ok.tsx"
+    },
+    {
+      "id": "symbol:f0c9a0aebb86907165e6d29e64573f73f4eec55fa063ee6668054ad7bd62c2b7",
+      "kind": "symbol",
+      "name": "View",
+      "filePath": "src/ok.tsx"
+    }
+  ],
+  "edges": [
+    {
+      "id": "251b00b601fe27ae1f13cfc585c2df9aad649c7ce6710655e0d54af9ab0a17b8",
+      "from": "file:dist/bundle.min.js",
+      "to": "symbol:3eab7ee724bcaf75a8edb4d1e1d80037cd011b510d98a67780535bce85816c02",
+      "relationship": "contains"
+    },
+    {
+      "id": "4beba8134ec509a32d8cae7a52eb1c491f874bab76e36c96febb0f98bf40ed8e",
+      "from": "file:src/ok.ts",
+      "to": "symbol:d605eef2ac45b96651af2394b13d4edfab261854a454c949a26ca4ed73aab09e",
+      "relationship": "contains"
+    },
+    {
+      "id": "529f5f7998537246b0fcf58997409ffa7e6d362062b54dc8d653de759ba4dea7",
+      "from": "file:src/ok.tsx",
+      "to": "symbol:18e6711a17566ff742aad811309151940cdf49994a13cdbf8f864a66a052c352",
+      "relationship": "contains"
+    },
+    {
+      "id": "806a2eae46a5f0a836236f1a8c5335e2b2e67f0c4a8de23c92e2809997135f14",
+      "from": "file:src/ok.tsx",
+      "to": "symbol:ddd371f3beb1784158a249bd411d51121ea05eb5fcb25d5fd6c929e6562a1f87",
+      "relationship": "contains"
+    },
+    {
+      "id": "9ae9091f0f7f4ed3a8c68209ed0514eddc0486a28262646816d97357e3a2b4e9",
+      "from": "file:src/ok.ts",
+      "to": "symbol:1d56f3e349b1a1d9237e52ada5e3176d154eafba0c1175f1f63b490362caf415",
+      "relationship": "contains"
+    },
+    {
+      "id": "c25ad1da0cf3e2d7f52f7f4aaf4a321b48c9120a8dc6592455427da469f26635",
+      "from": "file:dist/bundle.min.js",
+      "to": "symbol:39d6c7f7f27f09d1d1b481a06c61f304955a7e876273410ca955c67309c378ce",
+      "relationship": "contains"
+    },
+    {
+      "id": "c98fcf9c2eea08e176f13615957909c80c490fbc6fec692a7b6813a432e1a040",
+      "from": "file:dist/bundle.min.js",
+      "to": "symbol:5bf546cba91c2772cb41dfd7d83eb9ef667860d7e52d005d1b10dec3494c2c30",
+      "relationship": "contains"
+    },
+    {
+      "id": "d49af5a8fb0a9da8fbc23b5b519992d967e081dae87b35d422e5153fed673cd7",
+      "from": "file:src/ok.tsx",
+      "to": "symbol:f0c9a0aebb86907165e6d29e64573f73f4eec55fa063ee6668054ad7bd62c2b7",
+      "relationship": "contains"
+    },
+    {
+      "id": "ea871ebf778519ff3732c93d6653fc9408a646367cb4d703102d44df745c6fa9",
+      "from": "file:src/ok.ts",
+      "to": "symbol:1f1b4cacf85b57e834c217ea7db85261102cd149b738f940ec42f9623dc6fc87",
+      "relationship": "contains"
+    },
+    {
+      "id": "ffd2e8e433498a16d950fb0df51809add5f744ff0fecccc8332718047ff1a97f",
+      "from": "file:src/ok.ts",
+      "to": "symbol:b5b0459b0f6a807f2fec4ca6f8edc73717279e3e2cac05daabfc87bd550ccc8d",
+      "relationship": "contains"
+    }
+  ]
+}

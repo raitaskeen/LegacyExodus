@@ -1,0 +1,32 @@
+[
+  {
+    "path": "dist/bundle.min.js",
+    "language": "javascript",
+    "fileKind": "source"
+  },
+  {
+    "path": "src/cast.ts",
+    "language": "typescript",
+    "fileKind": "source"
+  },
+  {
+    "path": "src/generic-arrow.ts",
+    "language": "typescript",
+    "fileKind": "source"
+  },
+  {
+    "path": "src/ok.ts",
+    "language": "typescript",
+    "fileKind": "source"
+  },
+  {
+    "path": "src/ok.tsx",
+    "language": "typescript",
+    "fileKind": "source"
+  },
+  {
+    "path": "src/top-await.mts",
+    "language": "typescript",
+    "fileKind": "source"
+  }
+]

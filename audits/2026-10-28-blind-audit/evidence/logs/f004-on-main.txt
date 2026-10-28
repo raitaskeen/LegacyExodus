@@ -1,0 +1,28 @@
+﻿MISS runtime=flow engine=none  L1 for-of loop-carried (audit)
+MISS runtime=flow engine=none  L2 while loop-carried
+MISS runtime=flow engine=none  L3 classic for loop-carried
+MISS runtime=flow engine=none  L4 do-while loop-carried
+MISS runtime=flow engine=none  L5 for-of zero iterations
+MISS runtime=flow engine=none  L6 while zero iterations
+MISS runtime=flow engine=none  L7 for-in zero iterations
+MISS runtime=flow engine=none  L8 for update runs after body
+MISS runtime=flow engine=none  L9 break carries state out
+MISS runtime=flow engine=none  L10 continue carries state back
+MISS runtime=flow engine=none  L11 labeled break of outer loop
+ok   runtime=flow engine=CONFIRMED  L12 for-of over tainted then safe
+MISS runtime=flow engine=none  S1 switch tainted case then safe case (audit)
+MISS runtime=flow engine=none  S2 switch no matching case
+MISS runtime=flow engine=none  S3 switch fallthrough
+MISS runtime=flow engine=none  S4 switch case skipped into default
+MISS runtime=flow engine=none  T1 try assigns, catch overwrites (audit)
+MISS runtime=flow engine=none  T2 catch sees intermediate state
+MISS runtime=flow engine=none  T3 catch sees pre-try state
+MISS runtime=flow engine=none  T4 finally after throw
+MISS runtime=flow engine=none  E1 logical && skips assignment
+MISS runtime=flow engine=none  E2 conditional expression
+MISS runtime=flow engine=none  E3 logical assignment ??=
+MISS runtime=flow engine=none  E4 logical assignment ||=
+ok   runtime=none engine=none  C1 straight-line overwrite (no flow)
+ok   runtime=flow engine=INFERRED  C2 if/else join (flow)
+ok   runtime=none engine=none  C3 loop body sanitizes before use (no flow)
+missed flows: 23; flows with no runtime flow: 0

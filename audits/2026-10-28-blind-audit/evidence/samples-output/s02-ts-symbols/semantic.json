@@ -1,0 +1,197 @@
+{
+  "calls": [
+    {
+      "id": "6b5d11581bd57c7136c16ae22d2f683204165a046294c5e7b44861b7d85a276b",
+      "sourceFilePath": "src/use.ts",
+      "callerName": "module",
+      "calleeName": "NS.f",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 4,
+        "column": 31
+      }
+    },
+    {
+      "id": "a6240ab7a8cc47eeab39b6e551cea234af6b06d4a963c5f573fe9ff14dfeacc6",
+      "sourceFilePath": "src/use.ts",
+      "callerName": "module",
+      "calleeName": "console.log",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 4,
+        "column": 0
+      }
+    },
+    {
+      "id": "f233338bf46847ff9e9f2a46532f41ae0b9f13580262bdc3a3e215cdd46a1fdd",
+      "sourceFilePath": "src/legacy.ts",
+      "callerName": "module",
+      "calleeName": "console.log",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 4,
+        "column": 0
+      }
+    }
+  ],
+  "references": [
+    {
+      "id": "366b03fd961c63385973ada3b2cc1c7fc841bbb38943359050060e4f79b51e0a",
+      "filePath": "src/legacy.ts",
+      "name": "console.log",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "3ec4bd6fc71f4b3cdc912df916430a42630dc3d102ce9e4c7e376f123292e838",
+      "filePath": "src/use.ts",
+      "name": "Color",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "5d59595ecfea1ceaabf3535c328483796bdb9eba8d10235e219e1b553a57b653"
+    },
+    {
+      "id": "56a20a663132fc1023fc1ce2a39143dd5e7cda6410224677d3fe174d6f170f11",
+      "filePath": "src/use.ts",
+      "name": "console.log",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "6458b70c949a6d6b8cda10652defe8f0ce41e9fca4a6312a6ae502bbc4bf9ea0",
+      "filePath": "src/use.ts",
+      "name": "Base",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "ceeee4260050edb5623c24ed4c607438eb507cd24c9f30a068796dfa95157d48"
+    },
+    {
+      "id": "6f7103ca61b847ad7bfa4b8ff067561a5d639192e65dd1752c3bf1c65810025b",
+      "filePath": "src/use.ts",
+      "name": "Shape",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "77751d35fd93bc4b3d0d6e73f3d7f316af5ef11df56c64c65209fda47c582898"
+    },
+    {
+      "id": "7c58be6af9893d8765e27d47a75a5cff9144d340c35bb20cbc956c0fbc4f4fbf",
+      "filePath": "src/use.ts",
+      "name": "Dir",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "e313d1fb5bcf97782b09ce0317159bfb7b00b36fc834de99e851fc09060ee5c9"
+    },
+    {
+      "id": "93ecafaab9bea22e6b48f6e55c3a32d5f116ccef89b070b3a00f8a23c47d18cd",
+      "filePath": "src/use.ts",
+      "name": "Id",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "3f6c37f19796ca3ed095e192365f8b53f4425d0b3098075bd1561f005531a4ca"
+    },
+    {
+      "id": "a5d131068def59c83b54d0466c091ce42ef5e62c321b01204f0c65117e38d2ef",
+      "filePath": "src/use.ts",
+      "name": "i",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "240bec2b96c771e8cd4d30a87c518bd3f1d3eb181088917c1ba843a9891992bd"
+    },
+    {
+      "id": "c9094218afd16632a80c4419ef316e4db4969effc27165745dc4ae0658c884ad",
+      "filePath": "src/use.ts",
+      "name": "NS",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "2a3a4e2481aa91a707c68ed6b13d24697cd2f35bbdf1e72d32db2bdbe3ba3e47"
+    },
+    {
+      "id": "ce03601dd1bf7311d1009abece2a054bfc6418c305590da32505d37bc0bd2162",
+      "filePath": "src/use.ts",
+      "name": "s",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "ae485ad35961eb420e9a79251cb62bab2f6e1716282d63c14f6bba0c87cc6871"
+    },
+    {
+      "id": "d5b0d57d855a2a7419ccaed7353771652573150dbf85af88ec54d56850f4e6ec",
+      "filePath": "src/use.ts",
+      "name": "NS.f",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    }
+  ],
+  "scopes": [
+    {
+      "id": "8ce53cc2f3a94d8e06c8dc514f771bd48e6d0b4bbc2de90113b6e17ab3f12935",
+      "filePath": "src/legacy.ts",
+      "name": "module",
+      "declaredSymbols": [],
+      "referencedNames": [
+        "console.log"
+      ]
+    },
+    {
+      "id": "90cce4d19b88541171e4daaf055b90fbf1f84b946d4c0d5dd7e59f3f787d3b46",
+      "filePath": "src/defs.ts",
+      "name": "module",
+      "declaredSymbols": [
+        "Base",
+        "f"
+      ],
+      "referencedNames": []
+    },
+    {
+      "id": "b7cfcba645db37d11ec529dc288a51e295ed2d859df0d802ba3db0d6ed779424",
+      "filePath": "src/use.ts",
+      "name": "module",
+      "declaredSymbols": [
+        "Base",
+        "Color",
+        "Dir",
+        "Id",
+        "Impl",
+        "NS",
+        "Shape",
+        "i",
+        "run",
+        "s"
+      ],
+      "referencedNames": [
+        "Base",
+        "Color",
+        "Dir",
+        "Id",
+        "NS",
+        "NS.f",
+        "Shape",
+        "console.log",
+        "i",
+        "s"
+      ]
+    }
+  ],
+  "deadCode": [],
+  "unusedImports": [],
+  "unusedExports": [
+    {
+      "symbolId": "4d5c054a746e175c734495b85f42a74ac8c3d16744be9bfc3a728446f17cf619",
+      "filePath": "src/defs.ts",
+      "name": "f",
+      "reason": "unused-export",
+      "state": "INFERRED"
+    },
+    {
+      "symbolId": "c03f261690f6440a82b5f366cdbb07c691ac74c1e28bd1d12bea13d31c2289d3",
+      "filePath": "src/use.ts",
+      "name": "Impl",
+      "reason": "unused-export",
+      "state": "INFERRED"
+    }
+  ],
+  "entryPoints": [],
+  "routes": [],
+  "middlewareChains": [],
+  "projectId": "6c528306-ecfe-4061-8df9-56dffc05f876",
+  "analysisRunId": "41dfe04c-813d-4a36-a291-4640c86332ea"
+}

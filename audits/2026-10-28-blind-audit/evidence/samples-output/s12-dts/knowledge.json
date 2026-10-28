@@ -1,0 +1,32 @@
+{
+  "projectId": "fbe55fa0-8f7a-4627-9995-3ad125acac60",
+  "analysisRunId": "21c9d7be-24d2-465a-9b77-554eaffb2a1c",
+  "nodes": [
+    {
+      "id": "file:types.d.ts",
+      "kind": "file",
+      "name": "types.d.ts",
+      "filePath": "types.d.ts"
+    },
+    {
+      "id": "file:use.ts",
+      "kind": "file",
+      "name": "use.ts",
+      "filePath": "use.ts"
+    },
+    {
+      "id": "symbol:2165cee90672111a3532ca43b483fa7619803520b872cff9b6b8d9378d094201",
+      "kind": "symbol",
+      "name": "f",
+      "filePath": "use.ts"
+    }
+  ],
+  "edges": [
+    {
+      "id": "19dbe348872b0af2409be5d9c52385b6786952d63a0a90f1039e10eb531375fc",
+      "from": "file:use.ts",
+      "to": "symbol:2165cee90672111a3532ca43b483fa7619803520b872cff9b6b8d9378d094201",
+      "relationship": "contains"
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "projectId": "35f7cafe-ef64-4fbe-891e-64221543af89",
+  "analysisRunId": "1a8b805f-627d-485d-aafa-0da4153e7f03",
+  "nodes": [
+    {
+      "id": "symbol:034a4f474ac6c0f5c154500b8ab0aa15f3040e9c8a1b25acdb0c95aa5c22a3f1",
+      "filePath": "lib.js",
+      "symbolId": "034a4f474ac6c0f5c154500b8ab0aa15f3040e9c8a1b25acdb0c95aa5c22a3f1"
+    },
+    {
+      "id": "symbol:09309203d18623768f84c4a0e91d108ca7ed7a156d7e27a63b9c777de369c077",
+      "filePath": "main.js",
+      "symbolId": "09309203d18623768f84c4a0e91d108ca7ed7a156d7e27a63b9c777de369c077"
+    },
+    {
+      "id": "symbol:17001d2a827b4d727ed6f635e89e072e337d1e4fadab21bf4ebb5f1882de6850",
+      "filePath": "lib.js",
+      "symbolId": "17001d2a827b4d727ed6f635e89e072e337d1e4fadab21bf4ebb5f1882de6850"
+    },
+    {
+      "id": "symbol:18e12a2fda52e1d5dee45d3e582717e3743725e8e17964acd2b7b69f5d9fca41",
+      "filePath": "lib.js",
+      "symbolId": "18e12a2fda52e1d5dee45d3e582717e3743725e8e17964acd2b7b69f5d9fca41"
+    },
+    {
+      "id": "symbol:21bbe366d0b3624ade3c16506c6cbf2290de573961bfec27f73fc653938a84f8",
+      "filePath": "lib.js",
+      "symbolId": "21bbe366d0b3624ade3c16506c6cbf2290de573961bfec27f73fc653938a84f8"
+    }
+  ],
+  "edges": [
+    {
+      "id": "ace7eaa043b0d7171d6fb24f7eef3259bfe8a73fe33820d3b5db97571a4532bb",
+      "sourceFilePath": "main.js",
+      "targetFilePath": "lib.js",
+      "importSymbolId": "09309203d18623768f84c4a0e91d108ca7ed7a156d7e27a63b9c777de369c077",
+      "targetExportSymbolId": "18e12a2fda52e1d5dee45d3e582717e3743725e8e17964acd2b7b69f5d9fca41",
+      "moduleSpecifier": "./lib.js"
+    }
+  ],
+  "cycles": [],
+  "moduleGraph": {
+    "contract": "f07-import-relations-v1",
+    "edges": [
+      {
+        "id": "eb76f103fbe824e4f818bcbe9de51e05d54412e18696bb5df618da12bfcba18e",
+        "sourceFilePath": "main.js",
+        "targetFilePath": "lib.js",
+        "moduleSpecifier": "./lib.js",
+        "sourceAnchor": {
+          "kind": "offset",
+          "start": 0,
+          "end": 32
+        },
+        "form": "esm-binding",
+        "sourcePhase": "value"
+      }
+    ]
+  }
+}

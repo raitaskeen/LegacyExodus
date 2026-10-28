@@ -1,0 +1,95 @@
+{
+  "calls": [],
+  "references": [],
+  "scopes": [
+    {
+      "id": "019aa7cb983a480b02141e9548ee65c92c3a2573c0d0c0149d9dc72f3f84f3b1",
+      "filePath": "Z.js",
+      "name": "module",
+      "declaredSymbols": [
+        "z"
+      ],
+      "referencedNames": []
+    },
+    {
+      "id": "0824ad17527bd1949b970458a4319fea8e6073b9a28d08ddc6472c0c8008761c",
+      "filePath": "B.js",
+      "name": "module",
+      "declaredSymbols": [
+        "b"
+      ],
+      "referencedNames": []
+    },
+    {
+      "id": "a1c750bb56b1c584cd8eafe753b82a6b829b19b88da2adf18f6aa8214db75828",
+      "filePath": "_x.js",
+      "name": "module",
+      "declaredSymbols": [
+        "x"
+      ],
+      "referencedNames": []
+    },
+    {
+      "id": "bb5119e436073b93382f1e54261954386d67287b56231b5db58839a5fc444fed",
+      "filePath": "a.js",
+      "name": "module",
+      "declaredSymbols": [
+        "a"
+      ],
+      "referencedNames": []
+    },
+    {
+      "id": "c43271d9d0f73a772dc825e91061522154994bcb20f5a3e44ea03bb237e2829d",
+      "filePath": "ä.js",
+      "name": "module",
+      "declaredSymbols": [
+        "ae"
+      ],
+      "referencedNames": []
+    }
+  ],
+  "deadCode": [],
+  "unusedImports": [],
+  "unusedExports": [
+    {
+      "symbolId": "26fcf3c9f314d8534e7cfdd065e90c528d9d8ec46b025306dbb0798fed6c871b",
+      "filePath": "_x.js",
+      "name": "x",
+      "reason": "unused-export",
+      "state": "INFERRED"
+    },
+    {
+      "symbolId": "1502468d0b803609c4fe2dd3d39849c8388bcf09b748567f6cfab4289ae96b76",
+      "filePath": "a.js",
+      "name": "a",
+      "reason": "unused-export",
+      "state": "INFERRED"
+    },
+    {
+      "symbolId": "c1014560e23da5b8c370321db9900849d599d88845c3004c922251abd67dafd3",
+      "filePath": "ä.js",
+      "name": "ae",
+      "reason": "unused-export",
+      "state": "INFERRED"
+    },
+    {
+      "symbolId": "940765f9d2f198d4e078f2e25f15c5cf5c9b0ad399da31ba61735a3079727d55",
+      "filePath": "B.js",
+      "name": "b",
+      "reason": "unused-export",
+      "state": "INFERRED"
+    },
+    {
+      "symbolId": "bd05e8995751432deb582042631d7d7d3e92e35d5e86f7359e660ec48e9664cd",
+      "filePath": "Z.js",
+      "name": "z",
+      "reason": "unused-export",
+      "state": "INFERRED"
+    }
+  ],
+  "entryPoints": [],
+  "routes": [],
+  "middlewareChains": [],
+  "projectId": "eea416b8-723b-4c5e-b13e-3c0b7760d414",
+  "analysisRunId": "de1753ae-460a-4b76-be5d-a7929bc3b60f"
+}

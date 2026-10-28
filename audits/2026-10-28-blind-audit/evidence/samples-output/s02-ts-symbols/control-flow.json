@@ -1,0 +1,385 @@
+{
+  "projectId": "6c528306-ecfe-4061-8df9-56dffc05f876",
+  "analysisRunId": "41dfe04c-813d-4a36-a291-4640c86332ea",
+  "graphs": [
+    {
+      "id": "2e58bac4cd3abbf153c5db59de89eeaa4db10396777d4bea9f0e8487c2222e48",
+      "filePath": "src/defs.ts",
+      "scopeName": "module",
+      "state": "RESOLVED",
+      "entryBlockId": "9fec4cf805e8033b4a195cebe9e87f3fb6a19ad7be2cb12abd960e4c2cf6069e",
+      "exitBlockId": "04d8b4ad6905be028bedfee2a5c937244a595a068f0cdd6dd9fb903a2281ccb5",
+      "blocks": [
+        {
+          "id": "04d8b4ad6905be028bedfee2a5c937244a595a068f0cdd6dd9fb903a2281ccb5",
+          "statements": [],
+          "predecessorIds": [
+            "9fec4cf805e8033b4a195cebe9e87f3fb6a19ad7be2cb12abd960e4c2cf6069e"
+          ],
+          "successorIds": []
+        },
+        {
+          "id": "9fec4cf805e8033b4a195cebe9e87f3fb6a19ad7be2cb12abd960e4c2cf6069e",
+          "statements": [
+            {
+              "id": "47d912269ec3fa349dd3fc899cf4c494773eee5ae0a850ef0977554bc26a8927",
+              "type": "ExportNamedDeclaration",
+              "location": {
+                "line": 1,
+                "column": 0
+              }
+            },
+            {
+              "id": "dc64c11c6069f75f07f7710bebbd9e720bcf9a5e47d2c02fa09eeec6579d956d",
+              "type": "ExportNamedDeclaration",
+              "location": {
+                "line": 2,
+                "column": 0
+              }
+            },
+            {
+              "id": "3e6dd5f124f2e00893cba778a7277c4554e21e6cc42dd6bd82b3fbe11f36a13a",
+              "type": "ExportNamedDeclaration",
+              "location": {
+                "line": 3,
+                "column": 0
+              }
+            },
+            {
+              "id": "66be09585330ca63ce5af76e5b49058685cbb9154e1b2b6c05da9defb5709842",
+              "type": "ExportNamedDeclaration",
+              "location": {
+                "line": 4,
+                "column": 0
+              }
+            },
+            {
+              "id": "62c785928b25f1fb1bf391b759679b233f9b8960915f02b43f7aa7c2da391922",
+              "type": "ExportNamedDeclaration",
+              "location": {
+                "line": 5,
+                "column": 0
+              }
+            },
+            {
+              "id": "f3ef41b02f579fb9d3109e3e86c1e894566c430046cc3dbe8715efe5d1af343a",
+              "type": "ExportNamedDeclaration",
+              "location": {
+                "line": 6,
+                "column": 0
+              }
+            },
+            {
+              "id": "74e6fe7bf0b510d703b2d86d57bcc5463908c179bbc8909bf7f20e96da7838a6",
+              "type": "ExportNamedDeclaration",
+              "location": {
+                "line": 7,
+                "column": 0
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "04d8b4ad6905be028bedfee2a5c937244a595a068f0cdd6dd9fb903a2281ccb5"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "5b81b2bc48ab25034f3ac63c62d49464af4d7d8a686c92c0b2bbabeca3c119e2",
+          "fromBlockId": "9fec4cf805e8033b4a195cebe9e87f3fb6a19ad7be2cb12abd960e4c2cf6069e",
+          "toBlockId": "04d8b4ad6905be028bedfee2a5c937244a595a068f0cdd6dd9fb903a2281ccb5",
+          "kind": "next"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "04d8b4ad6905be028bedfee2a5c937244a595a068f0cdd6dd9fb903a2281ccb5",
+          "immediateDominatorId": "9fec4cf805e8033b4a195cebe9e87f3fb6a19ad7be2cb12abd960e4c2cf6069e"
+        },
+        {
+          "blockId": "9fec4cf805e8033b4a195cebe9e87f3fb6a19ad7be2cb12abd960e4c2cf6069e"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    },
+    {
+      "id": "9d8fc695dede19ffdc214c9051f809e7148bd5939e6efef1d0af2f56b0b14a9f",
+      "filePath": "src/defs.ts",
+      "scopeName": "f@3:29",
+      "state": "RESOLVED",
+      "entryBlockId": "7551792e1af8b8c7c8e53387615df5ae75d4f98afc54e4a5becbc9f2548d488e",
+      "exitBlockId": "29c11e50a4c44420d5fc8e174377ff7f6ca5ad76d594e7cab5e415dcd3454af4",
+      "blocks": [
+        {
+          "id": "29c11e50a4c44420d5fc8e174377ff7f6ca5ad76d594e7cab5e415dcd3454af4",
+          "statements": [],
+          "predecessorIds": [
+            "7551792e1af8b8c7c8e53387615df5ae75d4f98afc54e4a5becbc9f2548d488e"
+          ],
+          "successorIds": []
+        },
+        {
+          "id": "7551792e1af8b8c7c8e53387615df5ae75d4f98afc54e4a5becbc9f2548d488e",
+          "statements": [
+            {
+              "id": "a682673ac5b7be7904c326b6c1947cadd6b5d73e408858253687d670e16ecfee",
+              "type": "ReturnStatement",
+              "location": {
+                "line": 3,
+                "column": 52
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "29c11e50a4c44420d5fc8e174377ff7f6ca5ad76d594e7cab5e415dcd3454af4"
+          ],
+          "terminator": "ReturnStatement"
+        }
+      ],
+      "edges": [
+        {
+          "id": "175f6fc35c1c1ccced9dbb9f9cd5b5890f2e1d86fa8224e57241ccebddd86946",
+          "fromBlockId": "7551792e1af8b8c7c8e53387615df5ae75d4f98afc54e4a5becbc9f2548d488e",
+          "toBlockId": "29c11e50a4c44420d5fc8e174377ff7f6ca5ad76d594e7cab5e415dcd3454af4",
+          "kind": "return"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "29c11e50a4c44420d5fc8e174377ff7f6ca5ad76d594e7cab5e415dcd3454af4",
+          "immediateDominatorId": "7551792e1af8b8c7c8e53387615df5ae75d4f98afc54e4a5becbc9f2548d488e"
+        },
+        {
+          "blockId": "7551792e1af8b8c7c8e53387615df5ae75d4f98afc54e4a5becbc9f2548d488e"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    },
+    {
+      "id": "0d09dd6f01810bc7046e70a3937f59755f259ac8b8b6135e32f8fc39ae169bdf",
+      "filePath": "src/legacy.ts",
+      "scopeName": "module",
+      "state": "RESOLVED",
+      "entryBlockId": "ff360e3266f97e1cf141550c2e7a0a4f3f8cba75fe84f9c0baad328473a490fa",
+      "exitBlockId": "78dbcc8b1c07965b135a5ea62157f64b71d4434f9062ef4931e868d70960de76",
+      "blocks": [
+        {
+          "id": "78dbcc8b1c07965b135a5ea62157f64b71d4434f9062ef4931e868d70960de76",
+          "statements": [],
+          "predecessorIds": [
+            "ff360e3266f97e1cf141550c2e7a0a4f3f8cba75fe84f9c0baad328473a490fa"
+          ],
+          "successorIds": []
+        },
+        {
+          "id": "ff360e3266f97e1cf141550c2e7a0a4f3f8cba75fe84f9c0baad328473a490fa",
+          "statements": [
+            {
+              "id": "c191fad32204c9e7f722a4c8fabee07500fcbbc64839483f5dfba6674672a97a",
+              "type": "TSImportEqualsDeclaration",
+              "location": {
+                "line": 1,
+                "column": 0
+              }
+            },
+            {
+              "id": "6cd4d046bfdcd2a6a6c180e8f7ab4bb16d10d8c37c94d6444924cb28e551ab39",
+              "type": "TSImportEqualsDeclaration",
+              "location": {
+                "line": 2,
+                "column": 0
+              }
+            },
+            {
+              "id": "520a2b513b385c0e8508185b9a6e37e0fd0de0f96275d1357d05365eb5920cec",
+              "type": "TSExportAssignment",
+              "location": {
+                "line": 3,
+                "column": 0
+              }
+            },
+            {
+              "id": "3ebd95bc4b29567d2a540f0f913132179ef867eccc91625b284a3a02554ec143",
+              "type": "ExpressionStatement",
+              "location": {
+                "line": 4,
+                "column": 0
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "78dbcc8b1c07965b135a5ea62157f64b71d4434f9062ef4931e868d70960de76"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "0942a5ff176174ca0d5cd174688852d87821b186c10e3e178c0cdd347fe8a6d2",
+          "fromBlockId": "ff360e3266f97e1cf141550c2e7a0a4f3f8cba75fe84f9c0baad328473a490fa",
+          "toBlockId": "78dbcc8b1c07965b135a5ea62157f64b71d4434f9062ef4931e868d70960de76",
+          "kind": "next"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "78dbcc8b1c07965b135a5ea62157f64b71d4434f9062ef4931e868d70960de76",
+          "immediateDominatorId": "ff360e3266f97e1cf141550c2e7a0a4f3f8cba75fe84f9c0baad328473a490fa"
+        },
+        {
+          "blockId": "ff360e3266f97e1cf141550c2e7a0a4f3f8cba75fe84f9c0baad328473a490fa"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    },
+    {
+      "id": "4dee65cc390603f41c97931f3c75b7d8e96fa5b2d954ab28bf185b10584978dd",
+      "filePath": "src/use.ts",
+      "scopeName": "module",
+      "state": "RESOLVED",
+      "entryBlockId": "e079efa59c1d2cc0c89d357a4a5368b39c81b886958155b58020ed85a6373f9f",
+      "exitBlockId": "2d1e6d912a39598253f3a3099c93fcd852cdf8b7a30651fea6fcee64261a875a",
+      "blocks": [
+        {
+          "id": "2d1e6d912a39598253f3a3099c93fcd852cdf8b7a30651fea6fcee64261a875a",
+          "statements": [],
+          "predecessorIds": [
+            "e079efa59c1d2cc0c89d357a4a5368b39c81b886958155b58020ed85a6373f9f"
+          ],
+          "successorIds": []
+        },
+        {
+          "id": "e079efa59c1d2cc0c89d357a4a5368b39c81b886958155b58020ed85a6373f9f",
+          "statements": [
+            {
+              "id": "c952d7b0e3b95f39d1406128de484561be7ea47899f8166d114eeff268395d82",
+              "type": "ImportDeclaration",
+              "location": {
+                "line": 1,
+                "column": 0
+              }
+            },
+            {
+              "id": "a6664de9d4fec7e24d5b789e7b8041667a373f2f9ba79deccfcdc8214fc00e34",
+              "type": "ImportDeclaration",
+              "location": {
+                "line": 2,
+                "column": 0
+              }
+            },
+            {
+              "id": "5294b3008ae650c76179154d489d8ffc9ee2549845218c8c6c9f77ca2e8ca5f8",
+              "type": "VariableDeclaration",
+              "location": {
+                "line": 3,
+                "column": 0
+              }
+            },
+            {
+              "id": "a388eb173b161f61241a9fa0280139025aef493524eccc5b064d35c136796e15",
+              "type": "VariableDeclaration",
+              "location": {
+                "line": 3,
+                "column": 40
+              }
+            },
+            {
+              "id": "d0dd233e2f1249a82178d1c26c80d723121b46e1ead657d0f95e3a7cb8409d59",
+              "type": "ExpressionStatement",
+              "location": {
+                "line": 4,
+                "column": 0
+              }
+            },
+            {
+              "id": "764bd452e2b13fc63336554f617cc1a2c620311609ebb3ce06d02a525a80823a",
+              "type": "ExportNamedDeclaration",
+              "location": {
+                "line": 5,
+                "column": 0
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "2d1e6d912a39598253f3a3099c93fcd852cdf8b7a30651fea6fcee64261a875a"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "9283ed9e749d6ca7469ff74d03463fcd739178896db1519b74c347ae375ea2b7",
+          "fromBlockId": "e079efa59c1d2cc0c89d357a4a5368b39c81b886958155b58020ed85a6373f9f",
+          "toBlockId": "2d1e6d912a39598253f3a3099c93fcd852cdf8b7a30651fea6fcee64261a875a",
+          "kind": "next"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "2d1e6d912a39598253f3a3099c93fcd852cdf8b7a30651fea6fcee64261a875a",
+          "immediateDominatorId": "e079efa59c1d2cc0c89d357a4a5368b39c81b886958155b58020ed85a6373f9f"
+        },
+        {
+          "blockId": "e079efa59c1d2cc0c89d357a4a5368b39c81b886958155b58020ed85a6373f9f"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    },
+    {
+      "id": "cb688d911568ba591e35c7114e5824f140d2bd43ea406c2a0c531f6fcc6e0b2f",
+      "filePath": "src/use.ts",
+      "scopeName": "run@5:33",
+      "state": "RESOLVED",
+      "entryBlockId": "cae7e821f56ead04f59de9f0a0e805b494d0d84a4cf6edd55d801d29c270d41b",
+      "exitBlockId": "b012990f4bd18b04aca00f319f85bff95ae59d8422e9d140d3ebf625070b8f07",
+      "blocks": [
+        {
+          "id": "b012990f4bd18b04aca00f319f85bff95ae59d8422e9d140d3ebf625070b8f07",
+          "statements": [],
+          "predecessorIds": [
+            "cae7e821f56ead04f59de9f0a0e805b494d0d84a4cf6edd55d801d29c270d41b"
+          ],
+          "successorIds": []
+        },
+        {
+          "id": "cae7e821f56ead04f59de9f0a0e805b494d0d84a4cf6edd55d801d29c270d41b",
+          "statements": [],
+          "predecessorIds": [],
+          "successorIds": [
+            "b012990f4bd18b04aca00f319f85bff95ae59d8422e9d140d3ebf625070b8f07"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "eec6827a42dba1fab0c5226630c3c0fc8ba70aa3c99254fa1334d0444a61fe2e",
+          "fromBlockId": "cae7e821f56ead04f59de9f0a0e805b494d0d84a4cf6edd55d801d29c270d41b",
+          "toBlockId": "b012990f4bd18b04aca00f319f85bff95ae59d8422e9d140d3ebf625070b8f07",
+          "kind": "next"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "b012990f4bd18b04aca00f319f85bff95ae59d8422e9d140d3ebf625070b8f07",
+          "immediateDominatorId": "cae7e821f56ead04f59de9f0a0e805b494d0d84a4cf6edd55d801d29c270d41b"
+        },
+        {
+          "blockId": "cae7e821f56ead04f59de9f0a0e805b494d0d84a4cf6edd55d801d29c270d41b"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    }
+  ]
+}

@@ -1,0 +1,99 @@
+{
+  "projectId": "81f62af1-7820-4e3d-85c3-40ec268559f1",
+  "analysisRunId": "35ce8d21-e8a0-49ea-acc2-72426e588c7b",
+  "graphs": [
+    {
+      "id": "409af6693c091b208109fd57b3b22c3b6728ed0ca1c5d585fb6b0b56afbccee3",
+      "filePath": "x.js",
+      "state": "INFERRED",
+      "definitions": [
+        {
+          "id": "2add8b64cf8e7aa255a06396bf3242634baf48be290ee16deccf5993ab76f714",
+          "filePath": "x.js",
+          "name": "n:return",
+          "kind": "return"
+        },
+        {
+          "id": "a6e7022c4208ace5a30a0ad15d549530edae3c5696791c21e38e05093bdf3d00",
+          "filePath": "x.js",
+          "name": "Inner",
+          "kind": "declaration"
+        },
+        {
+          "id": "eb2cdffccb25fc3ae5e69712f59a5fb7cded4af3f245c16162ae9dd1ac16b0ad",
+          "filePath": "x.js",
+          "name": "m:return",
+          "kind": "return"
+        }
+      ],
+      "uses": [
+        {
+          "id": "14564fa8980c62bf279090e67d05be1c0e613b419f3321aadcf36e06a0c08b80",
+          "filePath": "x.js",
+          "name": "Outer"
+        }
+      ],
+      "defUseChains": [
+        {
+          "definitionId": "2add8b64cf8e7aa255a06396bf3242634baf48be290ee16deccf5993ab76f714",
+          "useIds": []
+        },
+        {
+          "definitionId": "a6e7022c4208ace5a30a0ad15d549530edae3c5696791c21e38e05093bdf3d00",
+          "useIds": []
+        },
+        {
+          "definitionId": "eb2cdffccb25fc3ae5e69712f59a5fb7cded4af3f245c16162ae9dd1ac16b0ad",
+          "useIds": []
+        }
+      ],
+      "lifetimes": [
+        {
+          "name": "n:return",
+          "filePath": "x.js",
+          "declarationId": "2add8b64cf8e7aa255a06396bf3242634baf48be290ee16deccf5993ab76f714",
+          "useIds": []
+        },
+        {
+          "name": "Inner",
+          "filePath": "x.js",
+          "declarationId": "a6e7022c4208ace5a30a0ad15d549530edae3c5696791c21e38e05093bdf3d00",
+          "useIds": []
+        },
+        {
+          "name": "m:return",
+          "filePath": "x.js",
+          "declarationId": "eb2cdffccb25fc3ae5e69712f59a5fb7cded4af3f245c16162ae9dd1ac16b0ad",
+          "useIds": []
+        }
+      ],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [
+        {
+          "symbolId": "3628ff01c6900b9b40a89b2e4bc116cf9cec49df19e648859a388f92f3f0aad0",
+          "filePath": "x.js",
+          "parameterDefinitionIds": [],
+          "returnDefinitionIds": [
+            "2add8b64cf8e7aa255a06396bf3242634baf48be290ee16deccf5993ab76f714"
+          ]
+        },
+        {
+          "symbolId": "ecde191bb89194291ec66bb8322e1aba12dcbc6ac19626f27f7382badbd2dcec",
+          "filePath": "x.js",
+          "parameterDefinitionIds": [],
+          "returnDefinitionIds": [
+            "eb2cdffccb25fc3ae5e69712f59a5fb7cded4af3f245c16162ae9dd1ac16b0ad"
+          ]
+        }
+      ],
+      "callBindings": [
+        {
+          "callId": "91fe2c19cf816872d0765573b46feccbb6a527b5ba7017d0aadb5c7a5a5a0e45",
+          "targetSymbolId": "ddd6bfc2888f1c54086ae718187c4598648749a7860a3b1c738648624a921a8f",
+          "argumentDefinitionIds": []
+        }
+      ]
+    }
+  ]
+}

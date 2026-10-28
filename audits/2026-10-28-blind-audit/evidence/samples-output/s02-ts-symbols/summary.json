@@ -1,0 +1,34 @@
+{
+  "analysisDisposition": {
+    "contract": "r01-analysis-disposition-v1",
+    "files": [
+      {
+        "fileId": "bdcae43b52ad67cae0ad43f03232b3e223d3337a656a612ec9082d72ddf04984",
+        "path": "src/defs.ts",
+        "kind": "analyzed",
+        "symbolCount": 4
+      },
+      {
+        "fileId": "f695935d5aa1752126d7fe80d7bc5d556fbf56310423b2d6052f3ce97895c97d",
+        "path": "src/legacy.ts",
+        "kind": "analyzed",
+        "symbolCount": 0
+      },
+      {
+        "fileId": "b806346f997bc11d93b9fcab0d6e89546ef1fb4caf3afa1d96cd324064499226",
+        "path": "src/use.ts",
+        "kind": "analyzed",
+        "symbolCount": 11
+      }
+    ]
+  },
+  "projectName": "s02-ts-symbols",
+  "fileCount": 3,
+  "dependencyCount": 0,
+  "frameworkCount": 0,
+  "languages": [
+    "typescript"
+  ],
+  "enumerationFailureCount": 0,
+  "discoveryComplete": true
+}

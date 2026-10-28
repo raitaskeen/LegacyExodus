@@ -1,0 +1,466 @@
+{
+  "calls": [
+    {
+      "id": "165447c59e5c8f74a1e9289c66acbe1d788687c53920f0146d6b6c7536e68136",
+      "sourceFilePath": "app.js",
+      "callerName": "module",
+      "calleeName": "pass",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "c1466d683c0ef8e9b0aaae4bba8a983ab1c329143e7988937c951bb223326e46",
+      "location": {
+        "line": 6,
+        "column": 41
+      }
+    },
+    {
+      "id": "16610a4e950528002c612093f3ca433d543270924430d0882d919c756cb00147",
+      "sourceFilePath": "app.js",
+      "callerName": "module",
+      "calleeName": "app.post",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 5,
+        "column": 0
+      }
+    },
+    {
+      "id": "5ac87c10e87e8a294d6981eeb98b99f6eff18f12eb3acca0d1fd9ddc6f0400c8",
+      "sourceFilePath": "app.js",
+      "callerName": "module",
+      "calleeName": "res.json",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 7,
+        "column": 31
+      }
+    },
+    {
+      "id": "8fb38c8769957b42c2746f5d706980abc4e704082d63970b54e48bde4fd99e3f",
+      "sourceFilePath": "helpers.js",
+      "callerName": "reply",
+      "calleeName": "res.send",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 1,
+        "column": 36
+      }
+    },
+    {
+      "id": "9b9a7b42ee43f3b7e3f2db041dbd8e5c9b540433829529b5d863b5eb988c547b",
+      "sourceFilePath": "app.js",
+      "callerName": "module",
+      "calleeName": "express",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 3,
+        "column": 12
+      }
+    },
+    {
+      "id": "9c2734916553e3b58ef965a7be7f762d80524801e26b9178a7a66b8089da2d6a",
+      "sourceFilePath": "app.js",
+      "callerName": "module",
+      "calleeName": "app.post",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 4,
+        "column": 0
+      }
+    },
+    {
+      "id": "a61124cda7d6827a0f3bb60dd79b2cb8632e116ff61b7230c7c5e9947009393b",
+      "sourceFilePath": "app.js",
+      "callerName": "module",
+      "calleeName": "app.post",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 6,
+        "column": 0
+      }
+    },
+    {
+      "id": "ace837ffbc7fbfa367ddecad8b9ac0e8fad075bc25ca1e9bafe2063f2c784207",
+      "sourceFilePath": "app.js",
+      "callerName": "module",
+      "calleeName": "res.send",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 4,
+        "column": 51
+      }
+    },
+    {
+      "id": "eeda6d47eb9d81d39f24166d71837e594cdf5f5dc72b58b541404900d7ffb7ed",
+      "sourceFilePath": "app.js",
+      "callerName": "module",
+      "calleeName": "res.send",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 6,
+        "column": 57
+      }
+    },
+    {
+      "id": "f50e125cb57a991c3f8b7783869f34d649dd9b8387cd4cd4f7669cef4dca0d94",
+      "sourceFilePath": "app.js",
+      "callerName": "module",
+      "calleeName": "reply",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "eca3f12486b4d8877432f93b0443fadaf75afe3553451b533dea9849fc3226ce",
+      "location": {
+        "line": 5,
+        "column": 51
+      }
+    },
+    {
+      "id": "f848bbc9155179125b085359d79d472bc8f820e9dd9d47b23b0f881c0600c17c",
+      "sourceFilePath": "app.js",
+      "callerName": "module",
+      "calleeName": "app.post",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 7,
+        "column": 0
+      }
+    }
+  ],
+  "references": [
+    {
+      "id": "05004def89dac84072cfe4398ad8c5cc2f91080512dffb4abcc799242a9e856d",
+      "filePath": "app.js",
+      "name": "express",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "06b010675181948d319a092ddf7d8dd51dcf7c7487282cb909840c3abacab660",
+      "filePath": "app.js",
+      "name": "res.send",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "09324377bddc032eb67a7a745a0e9394e5493aa88815c60acc1fdc4dc3202bcf",
+      "filePath": "app.js",
+      "name": "reply",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "4b14d00c6e08c9cd5d5d39f415d1599e685838c04813e60163ebf6dcae38e9c2"
+    },
+    {
+      "id": "16780ec684d55f4b7c4d87b846d6fec8d7507fd4aef0c28d7afc97f57d20c975",
+      "filePath": "app.js",
+      "name": "app.post",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "2548c5bc6a17dc9d514471af3f6659f3fa63314dfb7d02b8d5a291a9836c54a4",
+      "filePath": "helpers.js",
+      "name": "value",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "e23298764f44af0d83f11258dc4862a208e62184c2b93192f8fb9f948d42d444"
+    },
+    {
+      "id": "3d147d10a8ff03ae67ce6c414d708f63011614974c5bc8229439269b42063432",
+      "filePath": "app.js",
+      "name": "app",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "4582073143854d0efb1253de98c75dc0d20d2f92f34aa3629531cd246612e307"
+    },
+    {
+      "id": "46b3f9c31f8509540e68e3e8921c04b054715b3be243dd968de5f695531be3d5",
+      "filePath": "app.js",
+      "name": "req",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "3d7050646820e95bf94a009050d91f6b9b4527b50715e372165f5f2e2efa05a1"
+    },
+    {
+      "id": "4bb980211fb20bef64448e018a0f311e9de0839790744d717d040697bcd2cd5f",
+      "filePath": "app.js",
+      "name": "v",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "5b8f19bc7652c87bd1be5af04371239d0a50cc3da784d42528e56418d5d222e2"
+    },
+    {
+      "id": "4f35576ae90416166378bf53433695abc62893f561632860ac1833d20eda8647",
+      "filePath": "app.js",
+      "name": "app.post",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "5db43ab084ed717c443024db0e03662b76007abcabd0074b0b28aa1c162c075e",
+      "filePath": "app.js",
+      "name": "res",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "6738d557c9ef5b25f33e297b854a1fb1a69bcc2869725fba0799be97a2dd06d7"
+    },
+    {
+      "id": "6fc97ee07ded1731caccc4d8ebbb301cbc055ddadb678ce07ef6df016899f296",
+      "filePath": "app.js",
+      "name": "v",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "73b1d553e0525aee74c209bf313a2c9468ed39896ef95bc4101de5c4e0cfaf6f"
+    },
+    {
+      "id": "80ac14831ad6154cbf970e7ce76ef56e29789394c6c849aebd80f8600246688e",
+      "filePath": "app.js",
+      "name": "reply",
+      "kind": "call",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "eca3f12486b4d8877432f93b0443fadaf75afe3553451b533dea9849fc3226ce"
+    },
+    {
+      "id": "902c1a14e0155ff07f5abb2e104b42c37745b24bd019c57d5084a60082391816",
+      "filePath": "app.js",
+      "name": "req",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "b2a7ace76b93aeca197824c6e7c1219eb8c32a6530f81b87970608ab38081ffe"
+    },
+    {
+      "id": "96acbeccb75a0388da05891b74ea4f91144b81a03c10fb70e01b1f7391d70a05",
+      "filePath": "app.js",
+      "name": "express",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "de82729fb38a102ace1739aae40efad3fb4d107cdd056d21252d90032f0d8dd4"
+    },
+    {
+      "id": "976083cd75a37b79652b2b6203ad6b0a7e76974fe462e0ebb16f5cfe72a5a5ba",
+      "filePath": "app.js",
+      "name": "app",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "4582073143854d0efb1253de98c75dc0d20d2f92f34aa3629531cd246612e307"
+    },
+    {
+      "id": "a7e36273e1efa833a18fcaf6716db243f61125d9093117a8d85c344644ad56f3",
+      "filePath": "app.js",
+      "name": "res",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "971902156d9fd1da8792476e0fde536fba96f43b2c90e5e536da50690ffc92c5"
+    },
+    {
+      "id": "ac2d03c6fc6585072d803bededc7bad8fbdde068d56228114220aa0047d39014",
+      "filePath": "helpers.js",
+      "name": "value",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "0ab173f2d46953bed58233152ec26913b2ee91c8ddb8bbd68506d0bc00300c70"
+    },
+    {
+      "id": "ad991d0c85f8e11f701aed1a5c72f08091e30f11d527b3192009e7ae57d17e39",
+      "filePath": "app.js",
+      "name": "req",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "c4ba235a2a4baf33c8bbfd71b1a7a2d5dd1ff4fee1dc05cc3a1842a694858556"
+    },
+    {
+      "id": "be7da2936030cbc7801e0a121e316db2c1a19ea7db0e1a1d4cde3f539baa7f46",
+      "filePath": "app.js",
+      "name": "app.post",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "bf7dc18db2047dff98bece88003394ca6e471abe6e109710636cfd2e74e98f3b",
+      "filePath": "app.js",
+      "name": "pass",
+      "kind": "call",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "c1466d683c0ef8e9b0aaae4bba8a983ab1c329143e7988937c951bb223326e46"
+    },
+    {
+      "id": "c02f984f5b3b4679d99c23a842913a71b8dea839b03d520d83c60fed13746a21",
+      "filePath": "app.js",
+      "name": "app.post",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "c2cb472387824929ac244cb7b5838884d12d21eba950091bfa9ce49af06656d7",
+      "filePath": "app.js",
+      "name": "v",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "aa81c3b48c07591de0d5fd7c838cfd23f7b49b279cc2069cd25d972f4a95b8d8"
+    },
+    {
+      "id": "cfdcdf64313657e67aa87135562da940b49bfaae13e0385a3f5e3e549aecfec2",
+      "filePath": "app.js",
+      "name": "res",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "de17002734caf0765e36bcdbb0c4f31cde0d30a25750a6bdbd1e7a7775606c77"
+    },
+    {
+      "id": "d2899e5a3f2b4e2e4510215f5247b2a9a98179773723d09e8910febcc45a5abd",
+      "filePath": "helpers.js",
+      "name": "res",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "5ab1b8e24bb02c2baa0ce45bcd1971097aabefa38701460132965181bf2f1506"
+    },
+    {
+      "id": "e26a1a6e795953284dfdb49335737b119d4704b60583ff9c685c82e113c0bf77",
+      "filePath": "app.js",
+      "name": "pass",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "a1196c32cb59fe82111cc354e55e22af3959747a84ead828c15ff0074644d3ea"
+    },
+    {
+      "id": "e4874f0313e97f6181990b78a0edd41f367d1d74779944e75a1283c4196b0dce",
+      "filePath": "app.js",
+      "name": "app",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "4582073143854d0efb1253de98c75dc0d20d2f92f34aa3629531cd246612e307"
+    },
+    {
+      "id": "eede37c6bf5343abe213c9514281b1fc4e25bfaf9dd581c9b917c6acb8f37aee",
+      "filePath": "app.js",
+      "name": "req",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "e3ee5c938ccc43e38db1723b87683a5c2cf06b09e7d50734fca4f9b42808b027"
+    },
+    {
+      "id": "f0b06c0af4c99fca5c365f04e5d62a07863f3db8e8bc66ed9a2bc8fb15cb03b9",
+      "filePath": "app.js",
+      "name": "res.json",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "f71467fc19009005fd4829f5c0d152edc5b231a8ca2ec49c6f0b243e33f736c2",
+      "filePath": "app.js",
+      "name": "res",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "60ac67b0d5be92385f662b68f30d62f337eef0cc88f85b51df21ede9ae0f62dc"
+    },
+    {
+      "id": "f9051779c41f87274f55affae8d608e0a26c4c3b754e258b1d012f75f3b46ba4",
+      "filePath": "app.js",
+      "name": "app",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "4582073143854d0efb1253de98c75dc0d20d2f92f34aa3629531cd246612e307"
+    },
+    {
+      "id": "f95375a9cca3d8da509a160e780c8bb533eff47e5ba10ab57aadf8a1b61e0532",
+      "filePath": "helpers.js",
+      "name": "res.send",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "fb6ed2264194da29de9d46e2f5ff2ebba134077e04f8f649a9560427797ae7b2",
+      "filePath": "app.js",
+      "name": "res.send",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    }
+  ],
+  "scopes": [
+    {
+      "id": "628f4719fb373387820e3cd42259da22aa6b2e02ca411e7c39f3f6cd94109eff",
+      "filePath": "app.js",
+      "name": "module",
+      "declaredSymbols": [
+        "app",
+        "express",
+        "pass",
+        "reply",
+        "req",
+        "res",
+        "v"
+      ],
+      "referencedNames": [
+        "app",
+        "app.post",
+        "express",
+        "pass",
+        "reply",
+        "req",
+        "res",
+        "res.json",
+        "res.send",
+        "v"
+      ]
+    },
+    {
+      "id": "b7acfdcac4556fb982ad65dd4208ae0049b69d5716aae8a53e86009524a32052",
+      "filePath": "helpers.js",
+      "name": "module",
+      "declaredSymbols": [
+        "pass",
+        "reply",
+        "res",
+        "value"
+      ],
+      "referencedNames": [
+        "res",
+        "res.send",
+        "value"
+      ]
+    }
+  ],
+  "deadCode": [],
+  "unusedImports": [],
+  "unusedExports": [],
+  "entryPoints": [
+    {
+      "filePath": "app.js",
+      "reason": "conventional-file"
+    }
+  ],
+  "routes": [
+    {
+      "id": "1b1d077f7aa2db51b511d5886267f5c7db4abdd7dd34a0add5a491210cccef7d",
+      "filePath": "app.js",
+      "method": "POST",
+      "path": "/z",
+      "middleware": [],
+      "state": "CONFIRMED"
+    },
+    {
+      "id": "5b884b78bdfe11a843300dfd9b03a9b71624ab816fa2b59e99738c49de2927ec",
+      "filePath": "app.js",
+      "method": "POST",
+      "path": "/y",
+      "middleware": [],
+      "state": "CONFIRMED"
+    },
+    {
+      "id": "c83be42c2f9f88d2cab7e39dc6e7c90b1f64316da0f649f7e73551941015e623",
+      "filePath": "app.js",
+      "method": "POST",
+      "path": "/v",
+      "middleware": [],
+      "state": "CONFIRMED"
+    },
+    {
+      "id": "dc34e72719f917c4ab4403a1c370b7e389f3dc911c4ef2d4837cf4669cfdcaae",
+      "filePath": "app.js",
+      "method": "POST",
+      "path": "/x",
+      "middleware": [],
+      "state": "CONFIRMED"
+    }
+  ],
+  "middlewareChains": [],
+  "projectId": "14869e1c-8c6a-4949-a201-f83134ac1efb",
+  "analysisRunId": "b04ab568-6791-4115-9e93-409f33c9f7c2"
+}

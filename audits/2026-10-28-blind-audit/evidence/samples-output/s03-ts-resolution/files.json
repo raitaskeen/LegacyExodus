@@ -1,0 +1,37 @@
+[
+  {
+    "id": "072fc23b941d05af2383888f292b78e406e0e82a4a3f8ee698113dd9bcc79e5f",
+    "path": "src/a.ts",
+    "language": "typescript",
+    "fileKind": "source",
+    "size": 46
+  },
+  {
+    "id": "363f5941f4d8df68d4bd5a6a9fa72f57f452e7ea9880d3a622cdaae065f1b5fb",
+    "path": "src/b.ts",
+    "language": "typescript",
+    "fileKind": "source",
+    "size": 63
+  },
+  {
+    "id": "15e6fde2f92fb1046b74289914adae4ea200fa03e2d195ab04d237c0899c2b1c",
+    "path": "src/c.ts",
+    "language": "typescript",
+    "fileKind": "source",
+    "size": 66
+  },
+  {
+    "id": "b1b2e48a852b545a78b4beace2c58c494e614184d203f31c5aff30edb9dfbdb1",
+    "path": "src/d.ts",
+    "language": "typescript",
+    "fileKind": "source",
+    "size": 59
+  },
+  {
+    "id": "b55cdbef4907b7045f32cc5360d48d262cca5f94062e353089f189f4460039e0",
+    "path": "tsconfig.json",
+    "language": "json",
+    "fileKind": "configuration",
+    "size": 127
+  }
+]

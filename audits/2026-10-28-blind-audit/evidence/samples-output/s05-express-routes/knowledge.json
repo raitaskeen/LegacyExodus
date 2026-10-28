@@ -1,0 +1,146 @@
+{
+  "projectId": "9988916d-f59e-464e-a753-1d63b6276106",
+  "analysisRunId": "842db048-7827-45eb-aac9-0312949b7742",
+  "nodes": [
+    {
+      "id": "file:app.js",
+      "kind": "file",
+      "name": "app.js",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:0a74c95166723f39a46a95c1c423a191c07820254b464e05ba47fc164cda5593",
+      "kind": "symbol",
+      "name": "next",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:0fc4b48c61f7ea2bc228c12183f610bab54f0361ebc0972fae2aae93c8fb51be",
+      "kind": "symbol",
+      "name": "res",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:10454bc2578fd6807856efe0186b6bad6565e3bca83081fa89dbe1348e853e55",
+      "kind": "symbol",
+      "name": "app",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:240f04a368010bb9ba29c6d8caa8d56c24f0a16ad211d8ca79892a025834d40e",
+      "kind": "symbol",
+      "name": "admin",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:56f4bf3c6f20177791c12d974757ec78e50186f4a8d78337cf3954f8cc5d1602",
+      "kind": "symbol",
+      "name": "express",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:6a706d4d3d26f5669766b98a66d73e746fe68d18b1b38efff57bb1fd559b6713",
+      "kind": "symbol",
+      "name": "res",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:ab0e61d4f625be779c17b32b464d2d41feadf9e1779d911d85d563a794db6798",
+      "kind": "symbol",
+      "name": "req",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:b987caf3601cef5d58cf97cdbc6bf1386e8a3b89a967872b69cc78266b06c546",
+      "kind": "symbol",
+      "name": "req",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:d0084b8bedac0db76f23abb0661d655e4e970b98d935cda7ee57add8b7ccb17b",
+      "kind": "symbol",
+      "name": "express",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:dcd707e9ca5fda638eb0a035c12d17595c04f047478b2abdd9c60e3a3482dd41",
+      "kind": "symbol",
+      "name": "auth",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:f8c6e3468b65becdcdfb044399155c187ddeb7461ddf0b91d692823490dd1eab",
+      "kind": "symbol",
+      "name": "handler",
+      "filePath": "app.js"
+    }
+  ],
+  "edges": [
+    {
+      "id": "15ab27cb2d2b4cd25870623d32096b4d6d9a9855fefd00365d9de1d9d757fd47",
+      "from": "file:app.js",
+      "to": "symbol:f8c6e3468b65becdcdfb044399155c187ddeb7461ddf0b91d692823490dd1eab",
+      "relationship": "contains"
+    },
+    {
+      "id": "215fd27b979ad15a9f4a280ee8d338e03c2b896bc4f90ec879ebfd20d7d74adb",
+      "from": "file:app.js",
+      "to": "symbol:6a706d4d3d26f5669766b98a66d73e746fe68d18b1b38efff57bb1fd559b6713",
+      "relationship": "contains"
+    },
+    {
+      "id": "44b7240c3eb38a00bd019c6e67952116cdd009e1a66eb3a1336cd8c3d3978d12",
+      "from": "file:app.js",
+      "to": "symbol:dcd707e9ca5fda638eb0a035c12d17595c04f047478b2abdd9c60e3a3482dd41",
+      "relationship": "contains"
+    },
+    {
+      "id": "57c6d1be656abbb4d88f15c4cb091713c60e83c109c5d223ade13eaafa0409d8",
+      "from": "file:app.js",
+      "to": "symbol:10454bc2578fd6807856efe0186b6bad6565e3bca83081fa89dbe1348e853e55",
+      "relationship": "contains"
+    },
+    {
+      "id": "58f6bf40f0318fe701cf5c6083e611b609c37ba134c2c594c179d065aa6460c2",
+      "from": "file:app.js",
+      "to": "symbol:240f04a368010bb9ba29c6d8caa8d56c24f0a16ad211d8ca79892a025834d40e",
+      "relationship": "contains"
+    },
+    {
+      "id": "6600263cb3df9be73b2c65c3fc8b7dcbbbddb8954a3d9fe5d2587df8b58c2364",
+      "from": "file:app.js",
+      "to": "symbol:d0084b8bedac0db76f23abb0661d655e4e970b98d935cda7ee57add8b7ccb17b",
+      "relationship": "contains"
+    },
+    {
+      "id": "6ae90c2febc9e65827ad72836e5006ffe814a8d4d9b54697264c8b263fd33ded",
+      "from": "file:app.js",
+      "to": "symbol:0a74c95166723f39a46a95c1c423a191c07820254b464e05ba47fc164cda5593",
+      "relationship": "contains"
+    },
+    {
+      "id": "75bfd1f8a7adb970a8ce55cde355c76aaf887f0a9e0ca16abac73e7ad9748be3",
+      "from": "file:app.js",
+      "to": "symbol:0fc4b48c61f7ea2bc228c12183f610bab54f0361ebc0972fae2aae93c8fb51be",
+      "relationship": "contains"
+    },
+    {
+      "id": "8f1b904b01ce65a55caf4ebec2ddcef22bc69a2c2c0ae3dee4e890bbf518a632",
+      "from": "file:app.js",
+      "to": "symbol:ab0e61d4f625be779c17b32b464d2d41feadf9e1779d911d85d563a794db6798",
+      "relationship": "contains"
+    },
+    {
+      "id": "e5de0c79bad0f8bee091ff5a9e2ebd60a3e4bd620f9de79e7e5899cb815e50fe",
+      "from": "file:app.js",
+      "to": "symbol:56f4bf3c6f20177791c12d974757ec78e50186f4a8d78337cf3954f8cc5d1602",
+      "relationship": "contains"
+    },
+    {
+      "id": "e9727e6d8d4a5ea0538e85db940242cb8b18e61e587f4ae8ed4031fac559a9a5",
+      "from": "file:app.js",
+      "to": "symbol:b987caf3601cef5d58cf97cdbc6bf1386e8a3b89a967872b69cc78266b06c546",
+      "relationship": "contains"
+    }
+  ]
+}

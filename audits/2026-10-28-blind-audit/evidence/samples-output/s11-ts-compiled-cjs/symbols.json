@@ -1,0 +1,177 @@
+[
+  {
+    "id": "01fbc294d59d3c1820dc6aa40139cfeaad64e3f5191f908a24e4c8522862199b",
+    "kind": "export",
+    "name": "hello",
+    "filePath": "lib.js",
+    "language": "javascript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 3,
+        "column": 0
+      },
+      "end": {
+        "line": 3,
+        "column": 22
+      }
+    }
+  },
+  {
+    "id": "efaca52b5d2344095881737adc3374f1bebbc4c3ed8262192ecacb0780bb0dd7",
+    "kind": "variable",
+    "name": "hello",
+    "filePath": "lib.js",
+    "language": "javascript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "sourceSymbolName": "hello",
+    "scopeId": "scope:module",
+    "containerName": "exports",
+    "location": {
+      "start": {
+        "line": 3,
+        "column": 0
+      },
+      "end": {
+        "line": 3,
+        "column": 13
+      }
+    }
+  },
+  {
+    "id": "16467f517265fccd06758d4b9a2d367fa4cf0bbaee989bc37de6ece1f1ec1046",
+    "kind": "function",
+    "name": "hello",
+    "filePath": "lib.js",
+    "language": "javascript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 4,
+        "column": 0
+      },
+      "end": {
+        "line": 4,
+        "column": 30
+      }
+    }
+  },
+  {
+    "id": "96438121dec3205ec94b8247d60bba5b83ad54a27be677247d0bb531c2fe1100",
+    "kind": "export",
+    "name": "hello",
+    "filePath": "lib.js",
+    "language": "javascript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "sourceSymbolName": "hello",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 5,
+        "column": 0
+      },
+      "end": {
+        "line": 5,
+        "column": 21
+      }
+    }
+  },
+  {
+    "id": "f4cf66dcb9c84eff317885d5095685bcde077bdd68bde864be18903a502ffeea",
+    "kind": "variable",
+    "name": "hello",
+    "filePath": "lib.js",
+    "language": "javascript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "sourceSymbolName": "hello",
+    "scopeId": "scope:module",
+    "containerName": "exports",
+    "location": {
+      "start": {
+        "line": 5,
+        "column": 0
+      },
+      "end": {
+        "line": 5,
+        "column": 13
+      }
+    }
+  },
+  {
+    "id": "4de00da3c5fd27da67f60b39e00e6e6045e29344069c4f99425f375a421b71e1",
+    "kind": "variable",
+    "name": "lib_1",
+    "filePath": "main.js",
+    "language": "javascript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "declarationKind": "const",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 2,
+        "column": 6
+      },
+      "end": {
+        "line": 2,
+        "column": 30
+      }
+    }
+  },
+  {
+    "id": "beba15762ea01b4ff90ad0f5b34b8d0a2571ff2a1a4478c8c42595ed25f8602e",
+    "kind": "import",
+    "name": "lib_1",
+    "filePath": "main.js",
+    "language": "javascript",
+    "exported": false,
+    "defaultExport": true,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "moduleSpecifier": "./lib",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 2,
+        "column": 6
+      },
+      "end": {
+        "line": 2,
+        "column": 30
+      }
+    }
+  }
+]

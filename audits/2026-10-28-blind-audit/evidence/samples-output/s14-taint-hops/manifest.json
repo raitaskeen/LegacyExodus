@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "repository": {
+    "name": "s14",
+    "path": "C:\\Projects\\.audit\\samples\\s14-taint-hops",
+    "sourceDigest": "5595afa63cd2234bf09b4adaf8cd17e8c3daab0642dbc8291baf83cfb1aae4c7"
+  },
+  "engine": {
+    "packageVersion": "0.1.0",
+    "commitSha": "c694d6451ebd8457d7c0eb808286cf19d2c665d3",
+    "bunVersion": "bun-1.4.4"
+  },
+  "analysis": {
+    "projectId": "14869e1c-8c6a-4949-a201-f83134ac1efb",
+    "analysisRunId": "b04ab568-6791-4115-9e93-409f33c9f7c2",
+    "generatedAt": "2026-10-28T04:50:43.183Z"
+  },
+  "requiredArtifacts": [
+    "control-flow.json",
+    "data-flow.json",
+    "dependencies.json",
+    "dependency-graph.json",
+    "files.json",
+    "frameworks.json",
+    "knowledge.json",
+    "modules.json",
+    "project.json",
+    "semantic.json",
+    "summary.json",
+    "symbols.json"
+  ],
+  "artifacts": {
+    "project.json": {
+      "sha256": "b84911bc9b8010d689c95514d022dd1d85a0338e2db0931f8a4468fe522b5a86",
+      "bytes": 130
+    },
+    "files.json": {
+      "sha256": "77c7f85f03f22803b6fe2a9de1ee206b1dd5b9d3dd08408171d38c765b101e87",
+      "bytes": 551
+    },
+    "dependencies.json": {
+      "sha256": "5106f4f6fc833d713b54d77710727cc929109cd0b8e5ea3589f69a4cfaa01090",
+      "bytes": 85
+    },
+    "frameworks.json": {
+      "sha256": "3d679a5fb3d2ae276d38a94beb909f8510f01306433fa78016f8520f813cff20",
+      "bytes": 77
+    },
+    "summary.json": {
+      "sha256": "ca670f66b9d55f33b83a7545f85ccec7456a1d95f17bf0f2fbf3f60fad81ceac",
+      "bytes": 672
+    },
+    "dependency-graph.json": {
+      "sha256": "c35eb2d9ba4718fde7cc0b93c2b90b022f37101d14315f6080b898cd54ecd497",
+      "bytes": 6146
+    },
+    "modules.json": {
+      "sha256": "1f83b0b3d32b452b6de44a6de96ae9ed5654c5724d792f6ffc520a5fd333924d",
+      "bytes": 267
+    },
+    "symbols.json": {
+      "sha256": "18af61a33059aefe096966ba69afe502481e3c5dd7a0ec1888c259a976edf481",
+      "bytes": 12674
+    },
+    "knowledge.json": {
+      "sha256": "a4222a456b29dc103d35bdb388596349f6d7d6cecb8effc5b3d78933a333dfb4",
+      "bytes": 10166
+    },
+    "semantic.json": {
+      "sha256": "4c18aa202dcc0e05fef96485a09a4d8e25bb7fa7bbdd989d9cee4d4125dfa332",
+      "bytes": 14276
+    },
+    "control-flow.json": {
+      "sha256": "5b18cf77082657149b3303e36efd8e039ff1cb70865a5a8d33c270e47758b0d7",
+      "bytes": 18766
+    },
+    "data-flow.json": {
+      "sha256": "a2aee4749f28cfa66e9b66f3225fac368839cde6d8406c413e45f847c654b4d1",
+      "bytes": 21178
+    }
+  },
+  "analyzer": {
+    "fingerprint": "lx-analyzer-v1:12eea42d44bcfaf05dc542a50c42b30da2a0defd4958d5b6db4e92b34f6108ff"
+  },
+  "integrity": {
+    "algorithm": "hmac-sha256",
+    "keyId": "c028506bcf9e8ef6",
+    "mac": "427edacfe1fe087d5f257c8f828ac33a50f3ea837f5fd99b3623a37902f775d5"
+  }
+}

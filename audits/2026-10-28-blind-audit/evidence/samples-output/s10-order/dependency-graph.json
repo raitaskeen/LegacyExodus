@@ -1,0 +1,62 @@
+{
+  "projectId": "eea416b8-723b-4c5e-b13e-3c0b7760d414",
+  "analysisRunId": "de1753ae-460a-4b76-be5d-a7929bc3b60f",
+  "nodes": [
+    {
+      "id": "symbol:1502468d0b803609c4fe2dd3d39849c8388bcf09b748567f6cfab4289ae96b76",
+      "filePath": "a.js",
+      "symbolId": "1502468d0b803609c4fe2dd3d39849c8388bcf09b748567f6cfab4289ae96b76"
+    },
+    {
+      "id": "symbol:26fcf3c9f314d8534e7cfdd065e90c528d9d8ec46b025306dbb0798fed6c871b",
+      "filePath": "_x.js",
+      "symbolId": "26fcf3c9f314d8534e7cfdd065e90c528d9d8ec46b025306dbb0798fed6c871b"
+    },
+    {
+      "id": "symbol:46dbd6f0880242593d6893bcb20c2ac5b2c65cd4f926d5c3181d0e436ade449e",
+      "filePath": "_x.js",
+      "symbolId": "46dbd6f0880242593d6893bcb20c2ac5b2c65cd4f926d5c3181d0e436ade449e"
+    },
+    {
+      "id": "symbol:5537e01b8351cf4d254a545f1ef1475164e5d6f6e75f4f14da65f691ae3810df",
+      "filePath": "a.js",
+      "symbolId": "5537e01b8351cf4d254a545f1ef1475164e5d6f6e75f4f14da65f691ae3810df"
+    },
+    {
+      "id": "symbol:60c807e472fd6f400ff295332c0e9548c09774cc5593fa34d8859fee026e9e36",
+      "filePath": "B.js",
+      "symbolId": "60c807e472fd6f400ff295332c0e9548c09774cc5593fa34d8859fee026e9e36"
+    },
+    {
+      "id": "symbol:940765f9d2f198d4e078f2e25f15c5cf5c9b0ad399da31ba61735a3079727d55",
+      "filePath": "B.js",
+      "symbolId": "940765f9d2f198d4e078f2e25f15c5cf5c9b0ad399da31ba61735a3079727d55"
+    },
+    {
+      "id": "symbol:b87d3181ad00665e0e6472536c460311a340de86709ff24865a1c2807ec2a27f",
+      "filePath": "ä.js",
+      "symbolId": "b87d3181ad00665e0e6472536c460311a340de86709ff24865a1c2807ec2a27f"
+    },
+    {
+      "id": "symbol:bd05e8995751432deb582042631d7d7d3e92e35d5e86f7359e660ec48e9664cd",
+      "filePath": "Z.js",
+      "symbolId": "bd05e8995751432deb582042631d7d7d3e92e35d5e86f7359e660ec48e9664cd"
+    },
+    {
+      "id": "symbol:c1014560e23da5b8c370321db9900849d599d88845c3004c922251abd67dafd3",
+      "filePath": "ä.js",
+      "symbolId": "c1014560e23da5b8c370321db9900849d599d88845c3004c922251abd67dafd3"
+    },
+    {
+      "id": "symbol:f7e2ea262c8ffdaaec708d7943d73725834821892431988ca44bbbc3d8242ce9",
+      "filePath": "Z.js",
+      "symbolId": "f7e2ea262c8ffdaaec708d7943d73725834821892431988ca44bbbc3d8242ce9"
+    }
+  ],
+  "edges": [],
+  "cycles": [],
+  "moduleGraph": {
+    "contract": "f07-import-relations-v1",
+    "edges": []
+  }
+}

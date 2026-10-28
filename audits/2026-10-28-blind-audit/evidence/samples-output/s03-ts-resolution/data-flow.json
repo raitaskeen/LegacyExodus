@@ -1,0 +1,207 @@
+{
+  "projectId": "64643a0d-7b57-4980-82d7-3c9cd6ba87e3",
+  "analysisRunId": "c113764e-dee3-4f8b-ae1b-71cfeff56fdf",
+  "graphs": [
+    {
+      "id": "bdc281f8798189efe5a155c753d7afa917425b2459c9d50b48e219e56570d30f",
+      "filePath": "src/a.ts",
+      "state": "INFERRED",
+      "definitions": [
+        {
+          "id": "04ac10cac8bd8ecf8df33ff4e1f8b8b2a8a7c78cb7d8bd560f2ee18c9d3a3c52",
+          "filePath": "src/a.ts",
+          "name": "hello",
+          "kind": "declaration"
+        },
+        {
+          "id": "b6621b25ae0375e2aa79865b5adab1879947d482992df5b7202111e609bad9f5",
+          "filePath": "src/a.ts",
+          "name": "hello:return",
+          "kind": "return"
+        }
+      ],
+      "uses": [],
+      "defUseChains": [
+        {
+          "definitionId": "04ac10cac8bd8ecf8df33ff4e1f8b8b2a8a7c78cb7d8bd560f2ee18c9d3a3c52",
+          "useIds": []
+        },
+        {
+          "definitionId": "b6621b25ae0375e2aa79865b5adab1879947d482992df5b7202111e609bad9f5",
+          "useIds": []
+        }
+      ],
+      "lifetimes": [
+        {
+          "name": "hello",
+          "filePath": "src/a.ts",
+          "declarationId": "04ac10cac8bd8ecf8df33ff4e1f8b8b2a8a7c78cb7d8bd560f2ee18c9d3a3c52",
+          "useIds": []
+        },
+        {
+          "name": "hello:return",
+          "filePath": "src/a.ts",
+          "declarationId": "b6621b25ae0375e2aa79865b5adab1879947d482992df5b7202111e609bad9f5",
+          "useIds": []
+        }
+      ],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [
+        {
+          "symbolId": "e1a2bd6b694c65cf036c5987930107bcebca93d7695c5b9b0e3215ca6352e4af",
+          "filePath": "src/a.ts",
+          "parameterDefinitionIds": [],
+          "returnDefinitionIds": [
+            "b6621b25ae0375e2aa79865b5adab1879947d482992df5b7202111e609bad9f5"
+          ]
+        }
+      ],
+      "callBindings": []
+    },
+    {
+      "id": "498f6c6ed0cc949586d61412474ed2e7d1f7923ff7623451614985f70853d753",
+      "filePath": "src/b.ts",
+      "state": "INFERRED",
+      "definitions": [
+        {
+          "id": "19add2ccb60ca16fc82cbe91ce967428e5b58191150b6a2f2ab76e02c921118b",
+          "filePath": "src/b.ts",
+          "name": "fromJs",
+          "kind": "declaration"
+        }
+      ],
+      "uses": [
+        {
+          "id": "1a32144b90820467949421931324f1a84b8af33bc6fdda050e000844e0d4faeb",
+          "filePath": "src/b.ts",
+          "name": "hello"
+        },
+        {
+          "id": "1a32144b90820467949421931324f1a84b8af33bc6fdda050e000844e0d4faeb",
+          "filePath": "src/b.ts",
+          "name": "hello"
+        }
+      ],
+      "defUseChains": [
+        {
+          "definitionId": "19add2ccb60ca16fc82cbe91ce967428e5b58191150b6a2f2ab76e02c921118b",
+          "useIds": []
+        }
+      ],
+      "lifetimes": [
+        {
+          "name": "fromJs",
+          "filePath": "src/b.ts",
+          "declarationId": "19add2ccb60ca16fc82cbe91ce967428e5b58191150b6a2f2ab76e02c921118b",
+          "useIds": []
+        }
+      ],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [],
+      "callBindings": []
+    },
+    {
+      "id": "b12844881341a6ffb8645b517162b5225b95a2362747a55ff3ca18efad6f9111",
+      "filePath": "src/c.ts",
+      "state": "INFERRED",
+      "definitions": [
+        {
+          "id": "a10b8c9fb135705a9ebd007c3f1cf9c84262c1b2f57793e8f391043475cb71cc",
+          "filePath": "src/c.ts",
+          "name": "fromAlias",
+          "kind": "declaration"
+        }
+      ],
+      "uses": [
+        {
+          "id": "253a31fbc92aace9823fd4c85b95da749bdc3fab4b1d44f95b594f95876c8976",
+          "filePath": "src/c.ts",
+          "name": "hello"
+        },
+        {
+          "id": "253a31fbc92aace9823fd4c85b95da749bdc3fab4b1d44f95b594f95876c8976",
+          "filePath": "src/c.ts",
+          "name": "hello"
+        }
+      ],
+      "defUseChains": [
+        {
+          "definitionId": "a10b8c9fb135705a9ebd007c3f1cf9c84262c1b2f57793e8f391043475cb71cc",
+          "useIds": []
+        }
+      ],
+      "lifetimes": [
+        {
+          "name": "fromAlias",
+          "filePath": "src/c.ts",
+          "declarationId": "a10b8c9fb135705a9ebd007c3f1cf9c84262c1b2f57793e8f391043475cb71cc",
+          "useIds": []
+        }
+      ],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [],
+      "callBindings": []
+    },
+    {
+      "id": "b51eba37923864146ac2ba52275123dbee3ce34a87bdee87dee4294e58d5ff8a",
+      "filePath": "src/d.ts",
+      "state": "INFERRED",
+      "definitions": [
+        {
+          "id": "467a7f002fda29216bf412cb3668c986f7bb00ea638be4ae38a26b378d2679b2",
+          "filePath": "src/d.ts",
+          "name": "plain",
+          "kind": "declaration"
+        }
+      ],
+      "uses": [
+        {
+          "id": "b655fb3fe288d88d59e7793a596b9687f54270fcee8c4790908529b4b0164e9c",
+          "filePath": "src/d.ts",
+          "name": "hello"
+        },
+        {
+          "id": "b655fb3fe288d88d59e7793a596b9687f54270fcee8c4790908529b4b0164e9c",
+          "filePath": "src/d.ts",
+          "name": "hello"
+        }
+      ],
+      "defUseChains": [
+        {
+          "definitionId": "467a7f002fda29216bf412cb3668c986f7bb00ea638be4ae38a26b378d2679b2",
+          "useIds": []
+        }
+      ],
+      "lifetimes": [
+        {
+          "name": "plain",
+          "filePath": "src/d.ts",
+          "declarationId": "467a7f002fda29216bf412cb3668c986f7bb00ea638be4ae38a26b378d2679b2",
+          "useIds": []
+        }
+      ],
+      "taintFlows": [],
+      "interproceduralFlows": [
+        {
+          "id": "12ed4b68d2e47dcd4a77ff63d4d5a80b6ded4c961065b50428c50e557578c295",
+          "callId": "6c122464040582d0637c1345df6e0c833f7b5ca6ab7c6ce0215dd080be75f27b",
+          "kind": "return-to-receiver",
+          "sourceDefinitionId": "b6621b25ae0375e2aa79865b5adab1879947d482992df5b7202111e609bad9f5",
+          "targetDefinitionId": "467a7f002fda29216bf412cb3668c986f7bb00ea638be4ae38a26b378d2679b2"
+        }
+      ],
+      "functionSummaries": [],
+      "callBindings": [
+        {
+          "callId": "6c122464040582d0637c1345df6e0c833f7b5ca6ab7c6ce0215dd080be75f27b",
+          "targetSymbolId": "267342a0c960d3d98bbbcb678bad8e1f19267b3bf7cc03bd9f658a486d41ffff",
+          "argumentDefinitionIds": [],
+          "receiverDefinitionId": "467a7f002fda29216bf412cb3668c986f7bb00ea638be4ae38a26b378d2679b2"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+[
+  {
+    "path": "types.d.ts",
+    "language": "typescript",
+    "fileKind": "source"
+  },
+  {
+    "path": "use.ts",
+    "language": "typescript",
+    "fileKind": "source"
+  }
+]

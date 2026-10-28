@@ -1,0 +1,124 @@
+[
+  {
+    "id": "18e12a2fda52e1d5dee45d3e582717e3743725e8e17964acd2b7b69f5d9fca41",
+    "kind": "export",
+    "name": "a",
+    "filePath": "lib.js",
+    "language": "javascript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 0
+      },
+      "end": {
+        "line": 1,
+        "column": 33
+      }
+    }
+  },
+  {
+    "id": "17001d2a827b4d727ed6f635e89e072e337d1e4fadab21bf4ebb5f1882de6850",
+    "kind": "function",
+    "name": "a",
+    "filePath": "lib.js",
+    "language": "javascript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 7
+      },
+      "end": {
+        "line": 1,
+        "column": 33
+      }
+    }
+  },
+  {
+    "id": "21bbe366d0b3624ade3c16506c6cbf2290de573961bfec27f73fc653938a84f8",
+    "kind": "export",
+    "name": "b",
+    "filePath": "lib.js",
+    "language": "javascript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 2,
+        "column": 0
+      },
+      "end": {
+        "line": 2,
+        "column": 33
+      }
+    }
+  },
+  {
+    "id": "034a4f474ac6c0f5c154500b8ab0aa15f3040e9c8a1b25acdb0c95aa5c22a3f1",
+    "kind": "function",
+    "name": "b",
+    "filePath": "lib.js",
+    "language": "javascript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 2,
+        "column": 7
+      },
+      "end": {
+        "line": 2,
+        "column": 33
+      }
+    }
+  },
+  {
+    "id": "09309203d18623768f84c4a0e91d108ca7ed7a156d7e27a63b9c777de369c077",
+    "kind": "import",
+    "name": "lib",
+    "filePath": "main.js",
+    "language": "javascript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "moduleSpecifier": "./lib.js",
+    "sourceSymbolName": "*",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 7
+      },
+      "end": {
+        "line": 1,
+        "column": 15
+      }
+    }
+  }
+]

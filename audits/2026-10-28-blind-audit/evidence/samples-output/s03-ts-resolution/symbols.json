@@ -1,0 +1,275 @@
+[
+  {
+    "id": "267342a0c960d3d98bbbcb678bad8e1f19267b3bf7cc03bd9f658a486d41ffff",
+    "kind": "export",
+    "name": "hello",
+    "filePath": "src/a.ts",
+    "language": "typescript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 0
+      },
+      "end": {
+        "line": 1,
+        "column": 45
+      }
+    }
+  },
+  {
+    "id": "e1a2bd6b694c65cf036c5987930107bcebca93d7695c5b9b0e3215ca6352e4af",
+    "kind": "function",
+    "name": "hello",
+    "filePath": "src/a.ts",
+    "language": "typescript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 7
+      },
+      "end": {
+        "line": 1,
+        "column": 45
+      }
+    }
+  },
+  {
+    "id": "9887b179d9609fdda077692b85e62e99761c32fbf93edd99c89949cc7ebaa0d5",
+    "kind": "import",
+    "name": "hello",
+    "filePath": "src/b.ts",
+    "language": "typescript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "moduleSpecifier": "./a.js",
+    "sourceSymbolName": "hello",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 9
+      },
+      "end": {
+        "line": 1,
+        "column": 14
+      }
+    }
+  },
+  {
+    "id": "d18719432c52916e818123fbcf082e17f922f6c943feab55a892cd29a286baa0",
+    "kind": "export",
+    "name": "fromJs",
+    "filePath": "src/b.ts",
+    "language": "typescript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 2,
+        "column": 0
+      },
+      "end": {
+        "line": 2,
+        "column": 30
+      }
+    }
+  },
+  {
+    "id": "5c90290968f03a78d74873abe3b1569d407c9fe2bf4461d77ca9ac3e2f5af894",
+    "kind": "variable",
+    "name": "fromJs",
+    "filePath": "src/b.ts",
+    "language": "typescript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "declarationKind": "const",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 2,
+        "column": 13
+      },
+      "end": {
+        "line": 2,
+        "column": 29
+      }
+    }
+  },
+  {
+    "id": "d3d126efdd37d95c6d81e7c35e028eb36cbb193ab60f69180ec78283ba232308",
+    "kind": "import",
+    "name": "hello",
+    "filePath": "src/c.ts",
+    "language": "typescript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "moduleSpecifier": "@lib/a",
+    "sourceSymbolName": "hello",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 9
+      },
+      "end": {
+        "line": 1,
+        "column": 14
+      }
+    }
+  },
+  {
+    "id": "d34315ad29f19ef2627342ca0445024cc2850edaaa839f13db37402d19cf9162",
+    "kind": "export",
+    "name": "fromAlias",
+    "filePath": "src/c.ts",
+    "language": "typescript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 2,
+        "column": 0
+      },
+      "end": {
+        "line": 2,
+        "column": 33
+      }
+    }
+  },
+  {
+    "id": "76f82e6833b5e83036574e1a8bb251eec1a9f7cb62497d88042fe671f22413f8",
+    "kind": "variable",
+    "name": "fromAlias",
+    "filePath": "src/c.ts",
+    "language": "typescript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "declarationKind": "const",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 2,
+        "column": 13
+      },
+      "end": {
+        "line": 2,
+        "column": 32
+      }
+    }
+  },
+  {
+    "id": "cd8dc5e0fa1f3a0fdb75faa00961adfa12db526609c90136d255d66b5d5764eb",
+    "kind": "import",
+    "name": "hello",
+    "filePath": "src/d.ts",
+    "language": "typescript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "moduleSpecifier": "./a",
+    "sourceSymbolName": "hello",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 9
+      },
+      "end": {
+        "line": 1,
+        "column": 14
+      }
+    }
+  },
+  {
+    "id": "4b7414c832a6566c2180ecb019756770d23c7c32b6853f731b9d856d1a09b489",
+    "kind": "export",
+    "name": "plain",
+    "filePath": "src/d.ts",
+    "language": "typescript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 2,
+        "column": 0
+      },
+      "end": {
+        "line": 2,
+        "column": 29
+      }
+    }
+  },
+  {
+    "id": "b7c57c1ce78b07f9ac0f3915136fcdbcebcc014db23858e6f6db397c24597b7d",
+    "kind": "variable",
+    "name": "plain",
+    "filePath": "src/d.ts",
+    "language": "typescript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "declarationKind": "const",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 2,
+        "column": 13
+      },
+      "end": {
+        "line": 2,
+        "column": 28
+      }
+    }
+  }
+]
