@@ -1,4 +1,4 @@
-﻿# Remediation queue and resume guide
+# Remediation queue and resume guide
 
 The live plan for fixing the audit findings ([FINDINGS.md](FINDINGS.md)). This file is the
 hand-off point: a new session resumes from here.
@@ -32,9 +32,9 @@ hand-off point: a new session resumes from here.
 | 0 | Conformance corpus + ledger | BA-20 (1) | `tests/conformance/**` | #204 | merged #206 `5ba1e21` |
 | 1 | Parser dialect per extension | BA-01 | `src/parser/adapters/javascript/**`, parser tests, BA-01 ledger group | #206 | in progress |
 | 1 | CFG adjacents (A2, A3, `finally` ids) | BA-14 | `src/flow/control-flow-builder.ts`, CFG tests, BA-14 ledger group | #206 | in progress |
-| 1 | CI fact-diff job (PR summary of facts lost/gained) | BA-20 | `.github/workflows/ci.yml`, workflow tests | #204 | in progress |
+| 1 | CI fact-diff job (PR summary of facts lost/gained) | BA-20 | `.github/workflows/ci.yml`, workflow tests | #204 | merged #208 `5ef17de` |
 | 1 | Pin corpora by commit and tree hash | BA-20 (2) | `benchmarks/corpus/**`, `tests/unit/governance/test-fidelity-helpers.ts` | â€” | queued |
-| 1 | Harden conformance (#206 review): an `analyzed` companion for every `lacks` case; callee/state in `cjs:indirect-call-recorded`; taint state where it matters | BA-20 (3) | `tests/conformance/cases.ts` | #206 | queued (Haiku) |
+| 1 | Harden conformance (#206 review): an `analyzed` companion for every `lacks` case; callee/state in `cjs:indirect-call-recorded`; taint state where it matters | BA-20 (3) | `tests/conformance/cases.ts` | #206 | in progress (Haiku) |
 | 5 | Manifest location without plaintext path | BA-26 | `src/storage/projections/**`, `src/discovery/discovery-validator.ts`, `snapshot-trust.ts`, tests | Wave 4 | queued. Design (lead, 2026-10-28): the validator binds reuse to the canonical absolute path (`discovery-validator.ts:280, :405`, the F-001 location binding), so a relative path alone would weaken trust. Replace `repository.path` with `repository.locationDigest = HMAC(localKey, canonicalPath)`, recomputed on validate, and bump the manifest contract so old snapshots refresh |
 | 1 | Fact-diff residual gaps (dominators, lifetimes, unused definitions, first taint hop) | â€” | `benchmarks/fact-diff.ts` | #204 | queued (low) |
 | 2 | Split hotspot files (behaviour-preserving, fact-diff 0/0) | â€” | symbol extractor, `src/semantic/*` | Wave 1 | queued |
