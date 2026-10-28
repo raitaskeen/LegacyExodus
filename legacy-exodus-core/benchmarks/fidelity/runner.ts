@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import type { DiscoveryArtifactProvenance, FidelityValidationReport, GroundTruthFact } from "@contracts/fidelity";
 import { MigrationFidelityValidator, type PredictionPayload } from "@governance/fidelity/fidelity-validator";
 import { resolveBenchmarkRepoPath, resolveFidelityResultsDir } from "../paths";
+import { ensureCacheEntryVerified } from "../scripts/acquire";
 import { fastifyGroundTruth } from "./fastify-ground-truth";
 import { expressGroundTruth } from "./express-ground-truth";
 
@@ -21,10 +22,15 @@ export interface RunFidelityOptions {
   readonly expectedRepositoryRevision?: string;
   readonly expectedEngineCommitSha?: string;
   readonly expectedAnalysisRunId?: string;
+  /** Directory holding the acquired corpora. Defaults to benchmarks/.cache. */
+  readonly cacheDir?: string;
 }
 
 export async function runFidelityValidation(options: RunFidelityOptions): Promise<FidelityValidationReport> {
   const absRepoPath = resolveBenchmarkRepoPath(options.repoPath);
+  // Ground truth describes the pinned corpus: a repository inside the benchmark cache is verified against
+  // its manifest before anything is read from it (BA-20 / A6). Other repositories are the caller's own.
+  await ensureCacheEntryVerified(absRepoPath, options.cacheDir);
   const isExpress = absRepoPath.toLowerCase().includes("express");
   const discoveryDir = join(absRepoPath, ".discovery");
 

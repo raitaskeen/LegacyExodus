@@ -190,4 +190,61 @@ describe("BA-20 / A6: benchmark run verifies its cache", () => {
       expect(outcome.stderr).toContain("no .git");
     }, RUN_TIMEOUT_MS);
   });
+
+  // What gets verified follows where the analyzed path lands, not which manifest fields are present.
+  describe("a manifest that resolves into the benchmark cache", () => {
+    const msTree = (): string =>
+      (JSON.parse(readFileSync(join(PACKAGE_ROOT, "benchmarks", "corpus", "tier-1", "ms.json"), "utf8")) as BenchmarkManifest)
+        .tree as string;
+
+    /** A cache whose `ms` entry is a git repository holding something other than the pinned ms corpus. */
+    async function cacheWithImpostorMs(): Promise<{ readonly cacheDir: string; readonly ms: string; readonly root: string }> {
+      const { cacheDir } = await scenario();
+      const ms = join(cacheDir, "ms");
+      await mkdir(ms, { recursive: true });
+      await cp(FIXTURE_DIR, ms, { recursive: true });
+      git(ms, "init", "--quiet");
+      git(ms, "add", "-A");
+      git(ms, "commit", "--quiet", "-m", "not the ms corpus");
+      return { cacheDir, ms, root: join(cacheDir, "..") };
+    }
+
+    it("is verified although the manifest names no repository", async () => {
+      const { cacheDir, root } = await cacheWithImpostorMs();
+      const manifestPath = join(root, "ms-without-repository.json");
+      await writeFile(
+        manifestPath,
+        JSON.stringify({ name: "ms", languageProfile: ["javascript"], frameworkProfile: [], sizeClass: "small", license: "MIT", reason: "no repository" }),
+        "utf8",
+      );
+
+      const outcome = runBenchmarkInChild({ target: manifestPath, runs: 2, cacheDir, outputDir: join(root, "results") });
+
+      expect(outcome.code).not.toBe(0);
+      expect(outcome.stderr).toContain(`expected tree ${msTree()}`);
+    }, RUN_TIMEOUT_MS);
+
+    it("is verified when its localPath points into a cache entry", async () => {
+      const { cacheDir, ms, root } = await cacheWithImpostorMs();
+      const manifestPath = join(root, "local-path.json");
+      await writeFile(
+        manifestPath,
+        JSON.stringify({
+          name: "somewhere-else",
+          localPath: join(ms, "src"),
+          languageProfile: ["javascript"],
+          frameworkProfile: [],
+          sizeClass: "small",
+          license: "MIT",
+          reason: "localPath into the cache",
+        }),
+        "utf8",
+      );
+
+      const outcome = runBenchmarkInChild({ target: manifestPath, runs: 2, cacheDir, outputDir: join(root, "results") });
+
+      expect(outcome.code).not.toBe(0);
+      expect(outcome.stderr).toContain(`expected tree ${msTree()}`);
+    }, RUN_TIMEOUT_MS);
+  });
 });

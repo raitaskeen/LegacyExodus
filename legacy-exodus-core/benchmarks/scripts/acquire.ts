@@ -15,8 +15,9 @@
  */
 
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, rm } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { CACHE_DIR, CORPUS_DIR } from "../paths";
 import type { BenchmarkManifest } from "../types";
 
@@ -45,13 +46,32 @@ interface GitResult {
   readonly stderr: string;
 }
 
+/** Variables that redirect git to a different repository, index or object store than `cwd` names. */
+const REPOSITORY_REDIRECTING_ENV = [
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_INDEX_FILE",
+  "GIT_COMMON_DIR",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_NAMESPACE",
+  "GIT_PREFIX",
+];
+
+/** The inherited environment minus anything that would point git elsewhere (e.g. when run from a git hook). */
+function gitEnvironment(extra: Readonly<Record<string, string>>): Record<string, string | undefined> {
+  const env: Record<string, string | undefined> = { ...process.env };
+  for (const name of REPOSITORY_REDIRECTING_ENV) delete env[name];
+  return { ...env, GIT_TERMINAL_PROMPT: "0", ...extra };
+}
+
 /** Runs git with an argument array (never a shell) and never waits for a credential prompt. */
-async function git(args: readonly string[], cwd: string): Promise<GitResult> {
+async function git(args: readonly string[], cwd: string, extraEnv: Readonly<Record<string, string>> = {}): Promise<GitResult> {
   const proc = Bun.spawn(["git", ...args], {
     cwd,
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+    env: gitEnvironment(extraEnv),
   });
   const [stdout, stderr, code] = await Promise.all([
     new Response(proc.stdout).text(),
@@ -83,21 +103,47 @@ export function requireRepositoryPin(manifest: BenchmarkManifest): PinnedReposit
 }
 
 /**
- * Working-tree entries that differ from HEAD, as `<status> <path>` (e.g. `M lib/a.js`, `?? extra.js`,
- * `!! ignored.txt`): modified, deleted, staged, untracked and ignored files. Untracked or ignored
- * content under an engine output directory is skipped; a tracked file there is reported like any other.
+ * Working-tree entries that differ from `expectedTree`, as `<status> <path>` (e.g. `M lib/a.js`,
+ * `D lib/b.js`, `?? extra.js`, `!! ignored.txt`): modified, deleted, untracked and ignored files.
+ * Untracked or ignored content under an engine output directory is skipped; a tracked file there is
+ * reported like any other.
+ *
+ * The comparison runs against a throw-away index built from `expectedTree`, never the checkout's own
+ * index. The checkout's index is only a cache of what git last saw: it trusts a file whose size and
+ * mtime are unchanged, and it can carry assume-unchanged or skip-worktree flags that make git skip a
+ * file altogether, so an edit can be invisible to it. A fresh index records no stat data and no flags,
+ * which forces git to read every file and compare its content. The checkout's index is left untouched.
  */
 async function listChangedPaths(repoDir: string, label: string, expectedTree: string): Promise<readonly string[]> {
-  const result = await git(
-    ["--no-optional-locks", "status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=traditional"],
-    repoDir,
-  );
-  if (result.code !== 0) {
-    throw new Error(
-      `Corpus '${label}' at ${repoDir}: could not read the working-tree status (expected tree ${expectedTree}): ${result.stderr.trim()}`,
+  const scratch = await mkdtemp(join(tmpdir(), "lx-pin-index-"));
+  let stdout: string;
+  try {
+    const env = { GIT_INDEX_FILE: join(scratch, "index") };
+    const read = await git(["read-tree", expectedTree], repoDir, env);
+    if (read.code !== 0) {
+      throw new Error(
+        `Corpus '${label}' at ${repoDir}: could not read the pinned tree ${expectedTree}: ${read.stderr.trim()}`,
+      );
+    }
+    const result = await git(
+      [
+        "-c", "core.fsmonitor=false",
+        "-c", "core.untrackedCache=false",
+        "status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=traditional",
+      ],
+      repoDir,
+      env,
     );
+    if (result.code !== 0) {
+      throw new Error(
+        `Corpus '${label}' at ${repoDir}: could not read the working-tree status (expected tree ${expectedTree}): ${result.stderr.trim()}`,
+      );
+    }
+    stdout = result.stdout;
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
   }
-  const entries = result.stdout.split("\0");
+  const entries = stdout.split("\0");
   const changed: string[] = [];
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i] ?? "";
@@ -114,7 +160,8 @@ async function listChangedPaths(repoDir: string, label: string, expectedTree: st
 
 /**
  * Fails closed unless `repoDir` is its own git checkout whose HEAD tree equals `expectedTree`
- * and whose working tree holds nothing but that tree (and the engine's own output directories).
+ * and whose working tree holds nothing but that tree's files (and the engine's own output
+ * directories), judged by content rather than by the checkout's index (see listChangedPaths).
  *
  * The `.git` check is explicit because `git rev-parse` would otherwise walk up out of a
  * checkout-less cache directory and report the tree of whatever repository encloses it.
@@ -236,6 +283,39 @@ export async function ensureCorpusCheckout(dir: string): Promise<void> {
     return;
   }
   await ensurePinnedRepository(manifest, dir);
+}
+
+async function realPathOrSelf(path: string): Promise<string> {
+  try {
+    return await realpath(path);
+  } catch {
+    return path;
+  }
+}
+
+/**
+ * If `path` lies inside `cacheDir`, verifies (or acquires) the cache entry that contains it with
+ * ensureCorpusCheckout, whatever the caller is about to do with the path and whichever manifest
+ * fields it has. A path outside the cache is the caller's own repository and is left alone.
+ *
+ * Both the path as written and its real location are considered, so a link into the cache
+ * (a junction, a symlink) is not a way around the check. Every consumer of a cache path calls this:
+ * the benchmark runner, `validate`, `fidelity` and the fidelity runner. (The path `cacheDir` itself
+ * names no single entry and is not covered.)
+ */
+export async function ensureCacheEntryVerified(path: string, cacheDir: string = CACHE_DIR): Promise<void> {
+  const lexical = [resolve(cacheDir), resolve(path)] as const;
+  const real = [await realPathOrSelf(lexical[0]), await realPathOrSelf(lexical[1])] as const;
+  const entries = new Set<string>();
+  for (const [base, target] of [lexical, real]) {
+    const rel = relative(base, target);
+    if (rel === "" || rel === ".." || rel.startsWith("..\\") || rel.startsWith("../") || isAbsolute(rel)) continue;
+    const [entry] = rel.split(/[\\/]/);
+    if (entry !== undefined && entry !== "") entries.add(join(base, entry));
+  }
+  for (const entry of entries) {
+    await ensureCorpusCheckout(entry);
+  }
 }
 
 async function main(): Promise<void> {

@@ -8,8 +8,8 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync, readdirSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -21,6 +21,8 @@ import {
 import type { BenchmarkManifest } from "../../../benchmarks/types";
 
 const WRONG_TREE = "0123456789abcdef0123456789abcdef01234567";
+// Tests that acquire several checkouts spawn many git processes; Bun's 5 s default is too tight under load.
+const GIT_TEST_TIMEOUT_MS = 30_000;
 const COMMITTER = ["-c", "user.name=Pin Test", "-c", "user.email=pin-test@example.com", "-c", "commit.gpgsign=false"];
 
 function git(cwd: string, ...args: readonly string[]): string {
@@ -315,7 +317,7 @@ describe("BA-20 / A6: working-tree integrity", () => {
     git(staged, "add", "lib.js");
     expect(git(staged, "rev-parse", "HEAD^{tree}")).toBe(source.first.tree);
     expect(await rejection(verify(staged))).toContain("M lib.js");
-  });
+  }, GIT_TEST_TIMEOUT_MS);
 
   it("rejects an untracked file, including one in a new directory", async () => {
     const top = await acquire();
@@ -326,7 +328,7 @@ describe("BA-20 / A6: working-tree integrity", () => {
     await mkdir(join(nested, "lib", "deep"), { recursive: true });
     await writeFile(join(nested, "lib", "deep", "extra.js"), "module.exports = 'extra';", "utf8");
     expect(await rejection(verify(nested))).toContain("?? lib/deep/extra.js");
-  });
+  }, GIT_TEST_TIMEOUT_MS);
 
   it("accepts untracked engine output under .discovery/ and .legacy-exodus/", async () => {
     const target = await acquire();
@@ -341,15 +343,18 @@ describe("BA-20 / A6: working-tree integrity", () => {
   });
 
   it("does not exempt look-alikes of the engine output directories", async () => {
+    const target = await acquire();
     const lookAlikes: readonly string[] = [".discovery-old/x.json", "sub/.discovery/x.json", ".discoveryx", ".discovery"];
     for (const lookAlike of lookAlikes) {
-      const target = await acquire();
       await mkdir(dirname(join(target, lookAlike)), { recursive: true });
       await writeFile(join(target, lookAlike), "{}", "utf8");
 
       expect(await rejection(verify(target))).toContain(`?? ${lookAlike}`);
+
+      await rm(join(target, lookAlike.split("/")[0] ?? lookAlike), { recursive: true, force: true });
+      await verify(target); // clean again: the next look-alike is judged on its own
     }
-  });
+  }, GIT_TEST_TIMEOUT_MS);
 
   it("still reports a tracked file that lives inside an engine output directory", async () => {
     const tracked = await createSourceRepo({ "lib.js": "module.exports = 1;", ".discovery/x.json": "{\"tracked\":true}" });
@@ -361,7 +366,7 @@ describe("BA-20 / A6: working-tree integrity", () => {
 
     await writeFile(join(target, ".discovery", "x.json"), "{\"tracked\":false}", "utf8");
     expect(await rejection(verify(target, tracked.tree))).toContain("M .discovery/x.json");
-  });
+  }, GIT_TEST_TIMEOUT_MS);
 
   it("reports ignored files, except ignored engine output", async () => {
     const ignoring = await createSourceRepo({ "lib.js": "module.exports = 1;", ".gitignore": "ignored.txt\n.discovery/\n" });
@@ -396,5 +401,62 @@ describe("BA-20 / A6: working-tree integrity", () => {
 
     expect(await rejection(ensurePinnedRepository(manifestFor(), target))).toContain("M lib.js");
     expect(await readFile(join(target, "lib.js"), "utf8")).toBe("module.exports = 'edited';");
+  });
+
+  // `git status` trusts the index's stat cache and its assume-unchanged / skip-worktree flags, so an
+  // edit can be invisible to it. The check must compare the files with the pinned tree itself.
+  describe("an index that vouches for a file cannot hide an edit", () => {
+    const PAST = new Date("2020-01-01T00:00:00Z");
+
+    it("catches a same-size edit whose modification time was restored", async () => {
+      const target = await acquire();
+      git(target, "config", "core.trustctime", "false"); // the index is trusted on size and mtime alone
+      const file = join(target, "lib.js");
+      await utimes(file, PAST, PAST);
+      git(target, "update-index", "--refresh"); // the index now records this size and mtime as clean
+      const original = await readFile(file, "utf8");
+      const edited = original.replace("first", "FIRST");
+      expect(edited).not.toBe(original);
+      expect(edited.length).toBe(original.length);
+      await writeFile(file, edited, "utf8");
+      await utimes(file, PAST, PAST);
+
+      expect(await rejection(verify(target))).toContain("M lib.js");
+    });
+
+    it("catches an edit hidden by update-index --assume-unchanged", async () => {
+      const target = await acquire();
+      git(target, "update-index", "--assume-unchanged", "lib.js");
+      await writeFile(join(target, "lib.js"), "module.exports = 'hidden';", "utf8");
+
+      expect(await rejection(verify(target))).toContain("M lib.js");
+    });
+
+    it("catches an edit and a deletion hidden by update-index --skip-worktree", async () => {
+      const edited = await acquire();
+      git(edited, "update-index", "--skip-worktree", "lib.js");
+      await writeFile(join(edited, "lib.js"), "module.exports = 'hidden';", "utf8");
+      expect(await rejection(verify(edited))).toContain("M lib.js");
+
+      const deleted = await acquire();
+      git(deleted, "update-index", "--skip-worktree", "lib.js");
+      await rm(join(deleted, "lib.js"));
+      expect(await rejection(verify(deleted))).toContain("D lib.js");
+    }, GIT_TEST_TIMEOUT_MS);
+
+    it("never touches the checkout's own index and leaves no temporary index behind", async () => {
+      const leftovers = (): string[] => readdirSync(tmpdir()).filter((name) => name.startsWith("lx-pin-index-"));
+      const before = new Set(leftovers());
+      const target = await acquire();
+      const indexPath = join(target, ".git", "index");
+      const indexBefore = await readFile(indexPath);
+
+      await verify(target);
+      await writeFile(join(target, "lib.js"), "module.exports = 'edited';", "utf8");
+      await rejection(verify(target));
+
+      expect((await readFile(indexPath)).equals(indexBefore)).toBe(true);
+      expect(leftovers().filter((name) => !before.has(name))).toEqual([]);
+    });
   });
 });

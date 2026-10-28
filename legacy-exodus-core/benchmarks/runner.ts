@@ -10,7 +10,7 @@
  */
 
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 import { executeBenchmarkRun } from "./harness";
 import { verifyDeterminism } from "./determinism";
@@ -21,7 +21,7 @@ import {
 } from "./governance";
 import { generateQualitySample } from "./sample";
 import { CACHE_DIR, RESULTS_DIR, resolveBenchmarkRepoPath, resolveResultsDir } from "./paths";
-import { ensureCorpusCheckout, ensurePinnedRepository } from "./scripts/acquire";
+import { ensureCacheEntryVerified, ensurePinnedRepository } from "./scripts/acquire";
 import type {
   BenchmarkManifest,
   BenchmarkResult,
@@ -37,12 +37,6 @@ export interface RunnerOptions {
   readonly sampleSeed?: number;
   /** Directory holding the acquired corpora. Defaults to benchmarks/.cache. */
   readonly cacheDir?: string;
-}
-
-/** True when `child` is a direct entry of `parent` (not `parent` itself, and not deeper or outside). */
-function isDirectChild(parent: string, child: string): boolean {
-  const rel = relative(parent, child);
-  return rel !== "" && rel !== ".." && !isAbsolute(rel) && !/[\\/]/.test(rel);
 }
 
 export async function runBenchmark(options: RunnerOptions): Promise<BenchmarkResult> {
@@ -75,12 +69,13 @@ export async function runBenchmark(options: RunnerOptions): Promise<BenchmarkRes
       localPath: targetPath,
     };
     repoPath = targetPath;
-    // A path directly inside the benchmark cache is a corpus checkout however it was named on the command
-    // line, so it is verified against its corpus manifest. Other local repositories are the caller's own.
-    if (isDirectChild(cacheDir, targetPath)) {
-      await ensureCorpusCheckout(targetPath);
-    }
   }
+
+  // Whatever the manifest says, a path that lands inside the benchmark cache is a corpus checkout and is
+  // verified against its corpus manifest before any run uses it (BA-20 / A6). A localPath into the cache, a
+  // manifest without a repository, and a bare directory argument all end up here. Other local repositories
+  // are the caller's own.
+  await ensureCacheEntryVerified(repoPath, cacheDir);
 
   const engineIdentity = await resolveEngineIdentity();
   const repoIdentity = resolveRepositoryIdentity(manifest, repoPath);
