@@ -24,6 +24,13 @@ interface ExtractionContext {
   readonly scopeId: string;
   readonly functionScopeId?: string;
   readonly scopeChain: readonly string[];
+  /**
+   * True while visiting the body of a namespace or module declaration. An `export` there exports the
+   * member from that namespace or ambient module; it is never an export of the file itself.
+   */
+  readonly namespaceBody?: boolean;
+  /** True inside `declare` code and declaration files, where a namespace body may export its members implicitly. */
+  readonly ambient?: boolean;
 }
 
 interface PendingExportBinding {
@@ -40,10 +47,28 @@ const initialContext: ExtractionContext = Object.freeze({
 });
 
 const supportedLanguages = new Set(["javascript", "typescript"]);
+const DECLARATION_FILE = /.d.[mc]?ts$/i;
+
+/**
+ * How strongly a declaration owns the export symbol of its name. TypeScript lets several declarations
+ * (a function and a namespace, a value and a type, two interfaces) share one name, which is still one
+ * export: the strongest declaration, then the earliest, keeps the export symbol.
+ */
+type ExportRank = 0 | 1 | 2;
+/** Class, function implementation, variable: the declarations that had export symbols before BA-02. */
+const VALUE_DECLARATION: ExportRank = 0;
+/** Enum, namespace, import-equals, overload signature without an implementation. */
+const MERGEABLE_DECLARATION: ExportRank = 1;
+/** Interface, type alias: type-only. */
+const TYPE_DECLARATION: ExportRank = 2;
 
 export class JavaScriptSymbolExtractor implements SymbolExtractor {
   private unlocatedSequence = 0;
   private moduleReferences: ModuleReference[] = [];
+  /** Ids of function symbols created from overload or ambient signatures (`TSDeclareFunction`). */
+  private signatureIds = new Set<string>();
+  /** Rank of each export symbol created from a declaration (`export <declaration>`), by symbol id. */
+  private declaredExports = new Map<string, ExportRank>();
 
   public extract(ast: ASTResult): SymbolTable {
     const validatedAst = validateASTResult(ast);
@@ -54,9 +79,12 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
 
     this.unlocatedSequence = 0;
     this.moduleReferences = [];
-    const symbols: CodeSymbol[] = [];
+    this.signatureIds = new Set();
+    this.declaredExports = new Map();
+    const extracted: CodeSymbol[] = [];
     const pendingExports: PendingExportBinding[] = [];
-    this.visit(validatedAst.root, validatedAst, initialContext, symbols, pendingExports);
+    this.visit(validatedAst.root, validatedAst, initialContext, extracted, pendingExports);
+    const symbols = this.mergeDeclarations(extracted);
 
     for (const pending of pendingExports) {
       this.markLocalSymbolAsExported(pending.name, symbols, pending.scopeChain);
@@ -71,6 +99,47 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     });
   }
 
+  /**
+   * Collapses declarations that TypeScript merges into one entity so each is modelled once:
+   * - overload signatures and their implementation are one function: the implementation owns the
+   *   function symbol, or the first signature when the function has no implementation (ambient code);
+   * - declarations sharing an exported name are one export: a value declaration owns the export symbol
+   *   (so its identity is what it was before types had symbols), otherwise the strongest then earliest.
+   * Order in the file never changes the result. Declaration symbols themselves are never merged.
+   */
+  private mergeDeclarations(symbols: readonly CodeSymbol[]): CodeSymbol[] {
+    const dropped = new Set<string>();
+
+    const implemented = new Set<string>();
+    for (const symbol of symbols) {
+      if (symbol.kind === "function" && !this.signatureIds.has(symbol.id)) implemented.add(`${symbol.scopeId}\u0000${symbol.name}`);
+    }
+    const signed = new Set<string>();
+    for (const symbol of symbols) {
+      if (!this.signatureIds.has(symbol.id)) continue;
+      const key = `${symbol.scopeId}\u0000${symbol.name}`;
+      if (implemented.has(key) || signed.has(key)) dropped.add(symbol.id);
+      signed.add(key);
+    }
+
+    const strongest = new Map<string, ExportRank>();
+    for (const symbol of symbols) {
+      const rank = this.declaredExports.get(symbol.id);
+      if (rank !== undefined && rank < (strongest.get(symbol.name) ?? 3)) strongest.set(symbol.name, rank);
+    }
+    const kept = new Set<string>();
+    for (const symbol of symbols) {
+      const rank = this.declaredExports.get(symbol.id);
+      if (rank === undefined) continue;
+      const winner = strongest.get(symbol.name)!;
+      // Several value declarations of one name stay as they were; weaker ones yield, and a tie keeps the first.
+      if (rank > winner || (winner > VALUE_DECLARATION && kept.has(symbol.name))) dropped.add(symbol.id);
+      else kept.add(symbol.name);
+    }
+
+    return dropped.size === 0 ? [...symbols] : symbols.filter((symbol) => !dropped.has(symbol.id));
+  }
+
   private visit(
     node: ASTNode,
     ast: ASTResult,
@@ -80,14 +149,24 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
   ): void {
     switch (node.type) {
       case "ExportNamedDeclaration":
+        if (context.namespaceBody === true) {
+          this.addNamespaceExport(node, ast, false, symbols, context, pendingExports);
+          return;
+        }
         this.addExportSymbol(node, ast, false, symbols, context, pendingExports);
         this.visitChildren(node, ast, { ...context, exported: true }, symbols, pendingExports);
         return;
       case "ExportDefaultDeclaration":
+        if (context.namespaceBody === true) {
+          this.addNamespaceExport(node, ast, true, symbols, context, pendingExports);
+          return;
+        }
         this.addExportSymbol(node, ast, true, symbols, context, pendingExports);
         this.visitChildren(node, ast, { ...context, exported: true, defaultExport: true }, symbols, pendingExports);
         return;
       case "ExportAllDeclaration":
+        // `export * from` inside an ambient module re-exports from that module, not from this file.
+        if (context.namespaceBody === true) return;
         symbols.push(this.createSymbol("export", "*", node, ast, { ...initialContext, exported: true, defaultExport: false }, {
           moduleSpecifier: findModuleSpecifier(node),
         }));
@@ -95,6 +174,31 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       case "ImportDeclaration":
         this.addImportSymbols(node, ast, symbols);
         return;
+      case "TSImportEqualsDeclaration":
+        this.addImportEqualsSymbols(node, ast, context, symbols);
+        return;
+      case "TSExportAssignment":
+        this.addExportAssignment(node, ast, context, symbols, pendingExports);
+        return;
+      case "TSEnumDeclaration":
+      case "TSInterfaceDeclaration":
+      case "TSTypeAliasDeclaration": {
+        const kind = node.type === "TSEnumDeclaration" ? "enum" : node.type === "TSInterfaceDeclaration" ? "interface" : "type-alias";
+        const name = getName(node);
+        if (name !== undefined) symbols.push(this.createSymbol(kind, name, node, ast, context));
+        // Members are not symbols, but initializers and computed keys are still code to visit.
+        this.visitChildren(node, ast, { ...context, exported: false, defaultExport: false }, symbols, pendingExports);
+        return;
+      }
+      case "TSModuleDeclaration":
+        this.addModuleDeclaration(node, ast, context, symbols, pendingExports);
+        return;
+      case "TSDeclareFunction": {
+        // A signature without a body: it has no scope, parameter bindings or code to visit.
+        const signature = this.addFunctionSymbol(node, ast, context, symbols);
+        this.signatureIds.add(signature.id);
+        return;
+      }
       case "VariableDeclaration":
         this.addVariableSymbols(node, ast, context, symbols);
         break;
@@ -529,9 +633,9 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
           pendingExports.push({ name: localName, scopeChain: context.scopeChain });
         }
       } else {
-        const names = findDeclaredNames(node);
-        for (const name of names) {
-          this.addExport(node, ast, name, false, moduleSpecifier, undefined, symbols);
+        for (const { name, rank } of findDeclaredNames(node)) {
+          const exported = this.addExport(node, ast, name, false, moduleSpecifier, undefined, symbols);
+          this.declaredExports.set(exported.id, rank);
         }
       }
       return;
@@ -561,17 +665,139 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     moduleSpecifier: string | undefined,
     sourceSymbolName: string | undefined,
     symbols: CodeSymbol[],
+  ): CodeSymbol {
+    const symbol = this.createSymbol("export", name, node, ast, {
+      ...initialContext,
+      exported: true,
+      defaultExport,
+    }, {
+      ...(moduleSpecifier === undefined ? {} : { moduleSpecifier }),
+      ...(sourceSymbolName === undefined ? {} : { sourceSymbolName }),
+    });
+    symbols.push(symbol);
+    return symbol;
+  }
+
+  /**
+   * An `export` inside a namespace or ambient module body exports a member of that namespace, never
+   * of the file: it creates no `export` symbol. The declaration it wraps is visited as an exported
+   * member, and `export { a }` / `export default a` mark the namespace's own `a` as exported.
+   */
+  private addNamespaceExport(
+    node: ASTNode,
+    ast: ASTResult,
+    defaultExport: boolean,
+    symbols: CodeSymbol[],
+    context: ExtractionContext,
+    pendingExports: PendingExportBinding[],
   ): void {
-    symbols.push(
-      this.createSymbol("export", name, node, ast, {
-        ...initialContext,
-        exported: true,
-        defaultExport,
-      }, {
-        ...(moduleSpecifier === undefined ? {} : { moduleSpecifier }),
-        ...(sourceSymbolName === undefined ? {} : { sourceSymbolName }),
-      }),
-    );
+    if (findModuleSpecifier(node) === undefined) {
+      for (const specifier of node.children.filter((child) => child.role === "specifiers" && child.type === "ExportSpecifier")) {
+        const local = readStringAttribute(specifier, "sourceSymbolName")
+          ?? readIdentifierName(specifier.children.find((child) => child.role === "local"));
+        if (local !== undefined) pendingExports.push({ name: local, scopeChain: context.scopeChain });
+      }
+      const declaration = node.children.find((child) => child.role === "declaration");
+      if (defaultExport && declaration?.type === "Identifier") {
+        const local = readIdentifierName(declaration);
+        if (local !== undefined) pendingExports.push({ name: local, scopeChain: context.scopeChain });
+      }
+    }
+    this.visitChildren(node, ast, { ...context, exported: true, defaultExport }, symbols, pendingExports);
+  }
+
+  /**
+   * `namespace NS {}`, `module M {}`, `declare module "x" {}` and `declare global {}`: each opens a
+   * lexical scope for its members. Only an identifier-named namespace declares a binding (a `namespace`
+   * symbol, named by the outermost identifier of `A.B.C`); a string-named module declares no identifier
+   * and `global` augments the global scope, so neither adds a symbol to the enclosing scope.
+   */
+  private addModuleDeclaration(
+    node: ASTNode,
+    ast: ASTResult,
+    context: ExtractionContext,
+    symbols: CodeSymbol[],
+    pendingExports: PendingExportBinding[],
+  ): void {
+    const id = node.children.find((child) => child.role === "id");
+    const body = node.children.find((child) => child.role === "body");
+    const isGlobal = node.attributes.kind === "global";
+    const path = isGlobal ? "global" : modulePath(id);
+    const binding = isGlobal || id?.type === "StringLiteral" ? undefined : path?.split(".")[0];
+    if (binding !== undefined) symbols.push(this.createSymbol("namespace", binding, node, ast, context));
+    if (body === undefined) return;
+
+    const scopeId = createLexicalScopeId(node.type, node.location);
+    const enclosing = context.namespaceBody === true && binding !== undefined && context.containerName !== undefined
+      ? `${context.containerName}.`
+      : "";
+    const ambient = context.ambient === true || node.attributes.declare === true || DECLARATION_FILE.test(ast.metadata.sourcePath);
+    this.visit(body, ast, {
+      ...context,
+      // TypeScript exports every member of an ambient namespace or module that has no export declaration.
+      exported: ambient && !isGlobal && !hasExportDeclarations(body),
+      defaultExport: false,
+      ambient,
+      containerName: path === undefined ? undefined : `${enclosing}${path}`,
+      // containerId names a class; a namespace is not one.
+      containerId: undefined,
+      enclosingAssignedName: undefined,
+      enclosingAssignedId: undefined,
+      scopeId,
+      functionScopeId: scopeId,
+      scopeChain: [scopeId, ...context.scopeChain],
+      namespaceBody: true,
+    }, symbols, pendingExports);
+  }
+
+  /**
+   * `import x = require("m")` binds the module like `const x = require("m")`: an import symbol, its
+   * module reference and the same source anchor. `import A = NS.B` aliases an entity and imports no module.
+   */
+  private addImportEqualsSymbols(
+    node: ASTNode,
+    ast: ASTResult,
+    context: ExtractionContext,
+    symbols: CodeSymbol[],
+  ): void {
+    const name = readIdentifierName(node.children.find((child) => child.role === "id"));
+    const reference = node.children.find((child) => child.role === "moduleReference");
+    if (name === undefined || reference === undefined) return;
+
+    if (reference.type === "TSExternalModuleReference") {
+      const moduleSpecifier = nonEmptyString(reference.children.find((child) => child.role === "expression")?.attributes.value);
+      if (moduleSpecifier === undefined) return;
+      const symbolStart = symbols.length;
+      symbols.push(this.createSymbol("import", name, node, ast, initialContext, { moduleSpecifier, defaultExport: true }));
+      this.addModuleReference(node, moduleSpecifier, "commonjs-import", symbols.slice(symbolStart), node.attributes.importKind === "type" ? "type" : undefined);
+      return;
+    }
+
+    const target = modulePath(reference);
+    symbols.push(this.createSymbol("variable", name, node, ast, context, {
+      declarationKind: "const",
+      ...(target === undefined ? {} : { sourceSymbolName: target }),
+    }));
+  }
+
+  /**
+   * `export = x` is the TypeScript spelling of `module.exports = x`: a default export sourced from the
+   * identifier, which becomes exported. Inside an ambient module it exports from that module only.
+   */
+  private addExportAssignment(
+    node: ASTNode,
+    ast: ASTResult,
+    context: ExtractionContext,
+    symbols: CodeSymbol[],
+    pendingExports: PendingExportBinding[],
+  ): void {
+    const expression = node.children.find((child) => child.role === "expression");
+    const local = expression?.type === "Identifier" ? readIdentifierName(expression) : undefined;
+    if (context.namespaceBody !== true) this.addExport(node, ast, "default", true, undefined, local, symbols);
+    if (local !== undefined) pendingExports.push({ name: local, scopeChain: context.scopeChain });
+    if (expression !== undefined) {
+      this.visit(expression, ast, { ...context, exported: false, defaultExport: false }, symbols, pendingExports);
+    }
   }
 
   private processAssignment(
@@ -740,7 +966,8 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
   ): void {
     const isExportable = (sym: CodeSymbol): boolean =>
       sym.name === name &&
-      (sym.kind === "function" || sym.kind === "variable" || sym.kind === "class");
+      (sym.kind === "function" || sym.kind === "variable" || sym.kind === "class"
+        || sym.kind === "enum" || sym.kind === "namespace" || sym.kind === "interface" || sym.kind === "type-alias");
 
     const chain: readonly string[] =
       scopeChain === undefined
@@ -835,14 +1062,26 @@ function getParameters(node: ASTNode): readonly string[] {
     .flatMap((child) => extractBoundNames(child));
 }
 
-function findDeclaredNames(node: ASTNode): readonly string[] {
-  const declaration = node.children.find((child) =>
-    child.role === "declaration" &&
-    ["ClassDeclaration", "FunctionDeclaration", "VariableDeclaration"].includes(child.type),
-  );
+/** The declarations an `export <declaration>` can name, and how strongly each owns its export symbol. */
+const declarationRanks: ReadonlyMap<string, ExportRank> = new Map<string, ExportRank>([
+  ["ClassDeclaration", VALUE_DECLARATION],
+  ["FunctionDeclaration", VALUE_DECLARATION],
+  ["VariableDeclaration", VALUE_DECLARATION],
+  ["TSDeclareFunction", MERGEABLE_DECLARATION],
+  ["TSEnumDeclaration", MERGEABLE_DECLARATION],
+  ["TSModuleDeclaration", MERGEABLE_DECLARATION],
+  ["TSImportEqualsDeclaration", MERGEABLE_DECLARATION],
+  ["TSInterfaceDeclaration", TYPE_DECLARATION],
+  ["TSTypeAliasDeclaration", TYPE_DECLARATION],
+]);
+
+function findDeclaredNames(node: ASTNode): readonly { readonly name: string; readonly rank: ExportRank }[] {
+  const declaration = node.children.find((child) => child.role === "declaration" && declarationRanks.has(child.type));
   if (declaration === undefined) return [];
+  const rank = declarationRanks.get(declaration.type)!;
+  const named = (names: readonly string[]) => names.map((name) => ({ name, rank }));
   if (declaration.type === "VariableDeclaration") {
-    return declaration.children
+    return named(declaration.children
       .filter((child) => child.role === "declarations" && child.type === "VariableDeclarator")
       .flatMap((child) => {
         const binding = child.children.find((c) => c.role === "id");
@@ -851,11 +1090,39 @@ function findDeclaredNames(node: ASTNode): readonly string[] {
         }
         const name = getName(child);
         return name === undefined ? [] : [name];
-      });
+      }));
+  }
+  if (declaration.type === "TSModuleDeclaration") {
+    // `export namespace A.B.C` exports `A`; a string-named module or `global` is not an exportable name.
+    const id = declaration.children.find((child) => child.role === "id");
+    const outermost = id?.type === "StringLiteral" || declaration.attributes.kind === "global" ? undefined : modulePath(id)?.split(".")[0];
+    return named(outermost === undefined ? [] : [outermost]);
   }
 
   const name = getName(declaration);
-  return name === undefined ? [] : [name];
+  return named(name === undefined ? [] : [name]);
+}
+
+/** An export declaration or assignment in a namespace body turns off the implicit export of its ambient members. */
+function hasExportDeclarations(body: ASTNode): boolean {
+  return body.children.some((statement) =>
+    statement.type === "ExportAllDeclaration"
+    || statement.type === "TSExportAssignment"
+    || (statement.type === "ExportNamedDeclaration" && !statement.children.some((child) => child.role === "declaration"))
+    || (statement.type === "ExportDefaultDeclaration"
+      && !statement.children.some((child) => child.role === "declaration" && declarationRanks.has(child.type))));
+}
+
+/** `A.B.C` for a qualified name, the text of a string-named module, otherwise the identifier. */
+function modulePath(node: ASTNode | undefined): string | undefined {
+  if (node === undefined) return undefined;
+  if (node.type === "StringLiteral") return nonEmptyString(node.attributes.value);
+  if (node.type === "TSQualifiedName") {
+    const left = modulePath(node.children.find((child) => child.role === "left"));
+    const right = readIdentifierName(node.children.find((child) => child.role === "right"));
+    return left === undefined || right === undefined ? undefined : `${left}.${right}`;
+  }
+  return readIdentifierName(node);
 }
 
 function extractBoundIdentifierNodes(node: ASTNode | undefined): readonly ASTNode[] {

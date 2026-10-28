@@ -3,7 +3,21 @@ import { z } from "zod";
 import { LegacyExodusError } from "@shared/errors";
 import { moduleReferenceSchema, freezeModuleReference, type ModuleReference } from "./module-reference-contracts";
 
-export type SymbolKind = "class" | "export" | "function" | "import" | "method" | "variable";
+/**
+ * `enum` and `namespace` declare runtime bindings; `interface` and `type-alias` are type-only and declare
+ * none. Members of enums, interfaces and type aliases are not symbols.
+ */
+export type SymbolKind =
+  | "class"
+  | "enum"
+  | "export"
+  | "function"
+  | "import"
+  | "interface"
+  | "method"
+  | "namespace"
+  | "type-alias"
+  | "variable";
 
 export interface CodeSymbol {
   readonly id: string;
@@ -51,7 +65,9 @@ export interface SymbolTable {
   readonly moduleReferences?: readonly ModuleReference[];
 }
 
-const symbolKindSchema = z.enum(["class", "export", "function", "import", "method", "variable"]);
+const symbolKindSchema = z.enum([
+  "class", "enum", "export", "function", "import", "interface", "method", "namespace", "type-alias", "variable",
+]);
 const positionSchema = z.object({ line: z.number().int().positive(), column: z.number().int().nonnegative() });
 
 export const codeSymbolSchema = z.object({

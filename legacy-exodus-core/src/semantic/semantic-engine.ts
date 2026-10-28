@@ -202,6 +202,7 @@ function createsLexicalScope(node: ASTNode): boolean {
     "FunctionDeclaration",
     "FunctionExpression",
     "ObjectMethod",
+    "TSModuleDeclaration",
   ].includes(node.type);
 }
 

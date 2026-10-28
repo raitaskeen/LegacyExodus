@@ -262,7 +262,7 @@ function createScope(id: string, parent?: ScopeFrame, selfName?: string): ScopeF
 }
 
 function createsScope(node: ASTNode): boolean {
-  return node.type === "BlockStatement" || isCallable(node) || node.type === "CatchClause" || isLoop(node);
+  return node.type === "BlockStatement" || isCallable(node) || node.type === "CatchClause" || isLoop(node) || node.type === "TSModuleDeclaration";
 }
 
 /**
@@ -408,8 +408,9 @@ function returnsValue(node: ASTNode, isRoot = false): boolean {
 }
 
 /**
- * byScopeAndName restricted to symbols that declare a binding: imports, classes, functions
- * and declared variables (declarators, parameters, catch parameters). The extractor records
+ * byScopeAndName restricted to symbols that declare a binding: imports, classes, enums, namespaces,
+ * functions and declared variables (declarators, parameters, catch parameters). Interfaces and type
+ * aliases are type-only and declare none; they may share a name with a value. The extractor records
  * more under the same scope and name: members (methods, class properties, `o.p = …`, object
  * literal keys), export records, and `f = () => …` as a function named f, which writes f's
  * real declaration. Binding lookups that decide what a write or call refers to must skip
@@ -439,6 +440,8 @@ function bindingDeclarations(byScopeAndName: ReadonlyMap<string, readonly CodeSy
     switch (symbol.kind) {
       case "import":
       case "class":
+      case "enum":
+      case "namespace":
         return true;
       case "function":
         return !assignedFunctions.has(anchor);
@@ -1006,11 +1009,12 @@ function createLexicalBindingIndex(
     return [];
   };
   const visit = (node: ASTNode, scopeId: string, functionScopeId: string, parent?: ASTNode): void => {
-    const createsScope = node.type === "BlockStatement" || isCallable(node) || node.type === "CatchClause" || isLoop(node);
+    const createsScope = node.type === "BlockStatement" || isCallable(node) || node.type === "CatchClause" || isLoop(node) || node.type === "TSModuleDeclaration";
     const nestedScope = createsScope ? createLexicalScopeId(node.type, node.location) : scopeId;
-    const nestedFunctionScope = isCallable(node) ? nestedScope : functionScopeId;
-    if (node.type === "FunctionDeclaration" || node.type === "ClassDeclaration") {
-      const kind = node.type === "FunctionDeclaration" ? "function" : "class";
+    // A namespace body runs as a function, so `var` declared in it belongs to the namespace.
+    const nestedFunctionScope = isCallable(node) || node.type === "TSModuleDeclaration" ? nestedScope : functionScopeId;
+    if (node.type === "FunctionDeclaration" || node.type === "TSDeclareFunction" || node.type === "ClassDeclaration") {
+      const kind = node.type === "ClassDeclaration" ? "class" : "function";
       for (const symbol of anchored(node)) {
         if (symbol.kind === kind && symbol.name === nodeName(node) && symbol.scopeId === scopeId) declare(symbol);
       }
@@ -1039,6 +1043,13 @@ function createLexicalBindingIndex(
       const local = node.children.find(child => child.role === "local");
       for (const symbol of anchored(node)) {
         if (symbol.kind === "import" && symbol.name === identifier(local) && symbol.scopeId === "scope:module") declare(symbol);
+      }
+    }
+    if (node.type === "TSImportEqualsDeclaration") {
+      // `import x = require("m")` binds an import and `import A = NS.B` a variable alias.
+      const name = identifier(node.children.find(child => child.role === "id"));
+      for (const symbol of anchored(node)) {
+        if (symbol.name === name && ((symbol.kind === "import" && symbol.scopeId === "scope:module") || (symbol.kind === "variable" && symbol.scopeId === scopeId))) declare(symbol);
       }
     }
     if (node.type === "VariableDeclarator" && parent?.type === "VariableDeclaration") {
@@ -1133,10 +1144,10 @@ function isLexicalReference(node: ASTNode, parent: ASTNode | undefined): boolean
 
 function isBindingPosition(parent: ASTNode, child: ASTNode, parentIsBinding: boolean): boolean {
   if (["ImportSpecifier", "ImportDefaultSpecifier", "ImportNamespaceSpecifier"].includes(parent.type)) return true;
-  if (["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ClassPrivateMethod", "ObjectMethod"].includes(parent.type)) {
+  if (["FunctionDeclaration", "TSDeclareFunction", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ClassPrivateMethod", "ObjectMethod"].includes(parent.type)) {
     return child.role === "id" || child.role === "param" || child.role === "params";
   }
-  if ((parent.type === "ClassDeclaration" || parent.type === "ClassExpression" || parent.type === "VariableDeclarator") && child.role === "id") return true;
+  if ((parent.type === "ClassDeclaration" || parent.type === "ClassExpression" || parent.type === "VariableDeclarator" || parent.type === "TSImportEqualsDeclaration") && child.role === "id") return true;
   if (parent.type === "CatchClause" && child.role === "param") return true;
   if (!parentIsBinding) return false;
   if (parent.type === "AssignmentPattern") return child.role === "left";
