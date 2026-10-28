@@ -30,12 +30,13 @@ hand-off point: a new session resumes from here.
 | 0 | Code-point ordering | BA-16 | sort comparators in `src/**`, `src/shared/ordering.ts` | ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â | merged #205 `9b31888` |
 | 0 | Truth-label reset | BA-21, BA-22, BA-08 label | `README.md`, `docs/CURRENT_IMPLEMENTATION.md`, route state + test | #205 | merged #207 `5a95e9f` |
 | 0 | Conformance corpus + ledger | BA-20 (1) | `tests/conformance/**` | #204 | merged #206 `5ba1e21` |
-| 1 | Parser dialect per extension | BA-01 | `src/parser/adapters/javascript/**`, parser tests, BA-01 ledger group | #206 | PR #210 (head 8e23d7c), in red team. Behind main since #209: merge `origin/main`, re-run `bun test tests/conformance`, push, then arm auto-merge |
+| 1 | Parser dialect per extension | BA-01 | `src/parser/adapters/javascript/**`, parser tests, BA-01 ledger group | #206 | merged #210 `24c3d3b` |
 | 1 | CFG adjacents (A2, A3, `finally` ids) | BA-14 | `src/flow/control-flow-builder.ts`, CFG tests, BA-14 ledger group | #206 | PR #211 (head e41810c), in red team. Lead decisions: keep the dead-tail `loop-back` edge (two tests rely on it; the block is marked unreachable); loops wholly in dead code are no longer natural loops |
 | 1 | CI fact-diff job (PR summary of facts lost/gained) | BA-20 | `.github/workflows/ci.yml`, workflow tests | #204 | merged #208 `5ef17de` |
 | 1 | Pin corpora by commit and tree hash | BA-20 (2) | `benchmarks/corpus/**`, `tests/unit/governance/test-fidelity-helpers.ts` | ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â | queued |
 | 1 | Harden conformance (#206 review): an `analyzed` companion for every `lacks` case; callee/state in `cjs:indirect-call-recorded`; taint state where it matters | BA-20 (3) | `tests/conformance/cases.ts` | #206 | merged #209 `0ffd0c2` |
 | 5 | Manifest location without plaintext path | BA-26 | `src/storage/projections/**`, `src/discovery/discovery-validator.ts`, `snapshot-trust.ts`, tests | Wave 4 | queued. Design (lead, 2026-10-28): the validator binds reuse to the canonical absolute path (`discovery-validator.ts:280, :405`, the F-001 location binding), so a relative path alone would weaken trust. Replace `repository.path` with `repository.locationDigest = HMAC(localKey, canonicalPath)`, recomputed on validate, and bump the manifest contract so old snapshots refresh |
+| 1 | Parser fallback honours `language: typescript` for unlisted extensions (#210 review; unreachable in production today) | BA-01 | `src/parser/adapters/javascript/**` | #210 | queued (small) |
 | 1 | Fact-diff residual gaps (dominators, lifetimes, unused definitions, first taint hop) | ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â | `benchmarks/fact-diff.ts` | #204 | queued (low) |
 | 2 | Split hotspot files (behaviour-preserving, fact-diff 0/0) | ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â | symbol extractor, `src/semantic/*` | Wave 1 | queued |
 | 2 | TypeScript declarations, then class expressions, then dynamic import, then compiled CJS | BA-02, BA-13, BA-10, BA-12 | symbol extractor (serial chain) | split | queued |
@@ -47,6 +48,7 @@ hand-off point: a new session resumes from here.
 | Docs | Docs/governance session (incl. remaining `core-foundation` mentions in GOVERNANCE, CONTRIBUTING, PR template, `.agents`) | BA-23, BA-22 rest | `docs/**`, root docs, `.agents/**` | anytime | queued |
 
 Notes:
+- BA-01 known limitation: with the Flow plugin, a statement that is only the identifier `type`, `declare` or `opaque` at the end of a line, followed by an assignment on the next line (valid JS via ASI), now misparses as Flow. No corpus hits it. Revisit if a real repository does.
 - BA-03: since #205 the generic `paths` alias `@/*` beats `@/_internal/*`. ICU order matched tsc's longest-prefix rule only by accident. Implement longest-prefix selection.
 
 ## Paused 2026-10-28 (usage limit)
