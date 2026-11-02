@@ -49,7 +49,7 @@ session resumes from here.
 | 2 | Compiled CommonJS | BA-12 | symbol extractor (`void 0`), `call-graph-builder.ts` | #217 (stacked) | merged #218 `16c51ec`. Follow-up: getter re-exports, `__exportStar`, `__importDefault`/`__importStar` interop |
 | 2 | Dynamic `import()` and computed loads | BA-10 | module-reference and graph contracts, extractor, graph builder, semantic engine, `fact-diff.ts` | #218 (stacked) | merged #219 `7210e8d`. Follow-up: literal `require('./x')` in expression position |
 | 2 | Follow-ups: `.d.ts` implicit exports; surface tsconfig diagnostics; namespace calls through aliases; `profile.ts` alias reader | BA-02, BA-03 | per item | #213, #214 | queued |
-| 3 | Data flow rebuilt on the CFG; design in WAVE3-DFG-DESIGN.md (steps 3a–3d) | BA-05, BA-04, BA-06, BA-27, BA-28 | 3a: `control-flow-builder.ts` (`buildAllWithNodes`), new `cfg-dataflow.ts` | design done | 3a next (the earlier Sonnet writer was stopped before any change) |
+| 3 | Data flow rebuilt on the CFG; design in WAVE3-DFG-DESIGN.md (steps 3a–3d) | BA-05, BA-04, BA-06, BA-27, BA-28 | 3a: `control-flow-builder.ts` (`buildAllWithNodes`), new `cfg-dataflow.ts` | design done | 3a merged #220 `041ccee` (core not wired in; fact-diff 0/0). Next 3b: wire into `buildContext` with `bindingOf` from lexical scopes, closures may-only, catch parameter definition; expect taint gains and lost `join` definitions |
 | 3 | Taint policy packs | BA-07 | flow policy module | DFG rebuild | queued |
 | S | Scale and storage track (from the Ghost run, below) | BA-17, BA-28, new | per item | see track | queued; S1 rides with 3d |
 | 4 | Express model; dead-code precision; React; discovery policy | BA-08, BA-11, BA-24, BA-15 | semantic modules; `src/discovery/**` | Wave 3 | queued |
@@ -102,7 +102,7 @@ Notes:
 ## How to resume (new session or after a usage limit)
 
 1. `git -C C:\Projects\LegacyExodus fetch origin`, then read this file on `origin/audit/2026-10-28-blind-audit`.
-2. `gh pr list --repo raitaskeen/LegacyExodus --state open` shows in-flight PRs. No PRs are open after #219 (2026-11-02). Next item: Wave 3a.
+2. `gh pr list --repo raitaskeen/LegacyExodus --state open` shows in-flight PRs. No PRs are open after #220 (2026-11-03). Next item: Wave 3b.
 3. When an item merges, mark it here (commit to the audit branch) and start the next queued item whose dependencies are merged.
 4. Ledger check: `bun test tests/conformance` on `main` must pass, and `known-gaps.ts` lists exactly the open findings.
 
