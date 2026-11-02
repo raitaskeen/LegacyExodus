@@ -5,16 +5,6 @@
  * ledger always describes the engine exactly. A fix removes its entries in the same PR.
  */
 const gaps: Readonly<Record<string, readonly string[]>> = {
-  "BA-04 direct source arguments": ["taint-direct-send:flow", "taint-direct-json-object:flow"],
-  "BA-05 F-004 structured joins": [
-    "taint-f004-L1:flow", "taint-f004-L2:flow", "taint-f004-L3:flow", "taint-f004-L4:flow",
-    "taint-f004-L5:flow", "taint-f004-L6:flow", "taint-f004-L7:flow", "taint-f004-L8:flow",
-    "taint-f004-L9:flow", "taint-f004-L10:flow", "taint-f004-L11:flow",
-    "taint-f004-S1:flow", "taint-f004-S2:flow", "taint-f004-S3:flow", "taint-f004-S4:flow",
-    "taint-f004-T1:flow", "taint-f004-T2:flow", "taint-f004-T3:flow", "taint-f004-T4:flow",
-    "taint-f004-E1:flow", "taint-f004-E2:flow", "taint-f004-E3:flow", "taint-f004-E4:flow",
-  ],
-  "BA-06 condition is not data": ["taint-condition-not-data:no-flow"],
   "BA-07 taint policy aliasing": ["taint-destructured-body:flow"],
   "BA-08 Express route model": [
     "express:middleware-is-per-router",

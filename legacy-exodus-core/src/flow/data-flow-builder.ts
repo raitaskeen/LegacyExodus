@@ -3,23 +3,27 @@ import type { ASTNode, ASTResult } from "@parser/index";
 import type { CodeSymbol } from "@symbols/index";
 import { createDataFlowGraph, createProvenCallTargets, type CallFlowBinding, type DataFlowGraph, type FunctionFlowSummary, type InterproceduralFlow, type ProvenCallTarget, type TaintFlow, type VariableDefinition, type VariableUse } from "./flow-contracts";
 import { compareCodePoints } from "@shared/ordering";
+import { combineTaint } from "./cfg-dataflow";
+import { cfgSinkVerdicts, type SinkVerdict } from "./cfg-taint";
+import { DeterministicControlFlowGraphBuilder, type ControlFlowGraphsWithNodes } from "./control-flow-builder";
 
 export interface Scope { readonly parent?: Scope; readonly definitions: Map<string, VariableDefinition>; }
 export interface FunctionRecord { readonly name: string; readonly parameters: VariableDefinition[][]; readonly returns: VariableDefinition[]; readonly symbolId?: string; }
 export interface PendingCall { readonly id: string; readonly targetSymbolId?: string; readonly callee?: FunctionRecord; readonly argumentDefinitionIds: readonly (string | undefined)[]; readonly argumentSourceIds: readonly (string | undefined)[]; readonly receiverDefinitionId?: string; }
 export interface TaintTransfer { readonly sourceDefinitionId: string; readonly targetDefinitionId: string; }
-export interface PendingSink { readonly id: string; readonly name: string; readonly argumentDefinitionIds: readonly string[]; }
-export interface FlowState { readonly definitions: VariableDefinition[]; readonly uses: VariableUse[]; readonly taintPaths: Map<string, Map<string, readonly string[]>>; readonly transfers: TaintTransfer[]; readonly sinks: PendingSink[]; readonly functions: Map<ASTNode, FunctionRecord>; readonly resolvableFunctions: Map<string, FunctionRecord>; readonly functionsBySymbolId: Map<string, FunctionRecord>; readonly provenTargets: ReadonlyMap<string, ProvenCallTarget>; readonly hasSemanticResolution: boolean; readonly pendingCalls: CapturedPendingCall[]; readonly interproceduralFlows: InterproceduralFlow[]; }
+/** `verdict`: the CFG data-flow taint at this sink (Wave 3b), authoritative for sources of the sink's own function. */
+export interface PendingSink { readonly id: string; readonly name: string; readonly argumentDefinitionIds: readonly string[]; readonly verdict?: SinkVerdict; }
+export interface JoinInputs { readonly id: string; readonly incoming: readonly (string | undefined)[]; }
+export interface FlowState { readonly definitions: VariableDefinition[]; readonly uses: VariableUse[]; readonly taintPaths: Map<string, Map<string, readonly string[]>>; readonly transfers: TaintTransfer[]; readonly sinks: PendingSink[]; readonly functions: Map<ASTNode, FunctionRecord>; readonly resolvableFunctions: Map<string, FunctionRecord>; readonly functionsBySymbolId: Map<string, FunctionRecord>; readonly provenTargets: ReadonlyMap<string, ProvenCallTarget>; readonly hasSemanticResolution: boolean; readonly pendingCalls: CapturedPendingCall[]; readonly interproceduralFlows: InterproceduralFlow[]; readonly joins: Map<string, JoinInputs>; }
 
-interface JoinInputs { readonly id: string; readonly incoming: readonly (string | undefined)[]; }
-// Connection states retain their joins; the lookup does not retain completed builds.
-const joinInputsById = new Map<string, WeakRef<JoinInputs>>();
-const joinsByTransfers = new WeakMap<readonly TaintTransfer[], JoinInputs[]>();
-
+/** Per-build evidence for taint flows; joins live here, not in module state (BA-27). */
 interface FlowConnectionState {
   readonly transfers: readonly TaintTransfer[];
   readonly taintPaths: ReadonlyMap<string, ReadonlyMap<string, readonly string[]>>;
   readonly sinks: readonly PendingSink[];
+  readonly joins: ReadonlyMap<string, JoinInputs>;
+  /** This file's own declaration and assignment definitions: a path only through these stays in one file and no call. */
+  readonly localDefinitionIds: ReadonlySet<string>;
 }
 
 export interface BuildContextResult {
@@ -47,17 +51,17 @@ export class DeterministicDataFlowGraphBuilder {
   private readonly functionScopes = new WeakSet<Scope>();
   private readonly capturedEntries = new WeakMap<Scope, Map<string, VariableDefinition>>();
 
-  public buildContext(ast: ASTResult, provenCallTargets?: readonly ProvenCallTarget[], symbols: readonly CodeSymbol[] = []): BuildContextResult {
-    for (const [id, reference] of joinInputsById) if (reference.deref() === undefined) joinInputsById.delete(id);
+  /** @param controlFlow - the file's CFGs from `buildAllWithNodes`, when the caller already built them. */
+  public buildContext(ast: ASTResult, provenCallTargets?: readonly ProvenCallTarget[], symbols: readonly CodeSymbol[] = [], controlFlow?: ControlFlowGraphsWithNodes): BuildContextResult {
     const functions = collectFunctions(ast.root, symbols);
     const targets = provenCallTargets === undefined ? undefined : createProvenCallTargets(provenCallTargets);
-    const state: FlowState = { definitions: [], uses: [], taintPaths: new Map(), transfers: [], sinks: [], functions, resolvableFunctions: new Map(), functionsBySymbolId: new Map(), provenTargets: new Map((targets ?? []).map((target) => [callLocationKey(target.sourceFilePath, target.location), target])), hasSemanticResolution: targets !== undefined, pendingCalls: [], interproceduralFlows: [] };
-    joinsByTransfers.set(state.transfers, []);
+    const state: FlowState = { definitions: [], uses: [], taintPaths: new Map(), transfers: [], sinks: [], functions, resolvableFunctions: new Map(), functionsBySymbolId: new Map(), provenTargets: new Map((targets ?? []).map((target) => [callLocationKey(target.sourceFilePath, target.location), target])), hasSemanticResolution: targets !== undefined, pendingCalls: [], interproceduralFlows: [], joins: new Map() };
     for (const record of state.functions.values()) if (record.name.length > 0 && [...state.functions.values()].filter((candidate) => candidate.name === record.name).length === 1) state.resolvableFunctions.set(record.name, record);
     for (const record of state.functions.values()) if (record.symbolId !== undefined) state.functionsBySymbolId.set(record.symbolId, record);
     this.visit(ast.root, createScope(), ast.metadata.sourcePath, state);
     this.connectCalls(state);
     this.propagateTaint(state);
+    this.attachSinkVerdicts(ast, state, controlFlow ?? new DeterministicControlFlowGraphBuilder().buildAllWithNodes(ast));
     const definitions = state.definitions.sort(byId);
     const uses = state.uses.sort(byId);
     const usesByDefinitionId = new Map<string, string[]>();
@@ -91,19 +95,74 @@ export class DeterministicDataFlowGraphBuilder {
       functionSummaries: functionSummaries(state, ast.metadata.sourcePath),
       callBindings: callBindings(state),
     });
-    const connectionState: FlowConnectionState = Object.freeze({
+    return { graph, state: this.connectionState(state) };
+  }
+
+  private connectionState(state: FlowState): FlowConnectionState {
+    const receivers = new Set(state.interproceduralFlows.map((flow) => flow.targetDefinitionId));
+    return Object.freeze({
       transfers: state.transfers,
       taintPaths: state.taintPaths,
       sinks: state.sinks,
+      joins: state.joins,
+      localDefinitionIds: new Set(state.definitions.filter((definition) => (definition.kind === "declaration" || definition.kind === "assignment") && !receivers.has(definition.id)).map((definition) => definition.id)),
     });
-    return { graph, state: connectionState };
+  }
+
+  /** Runs CFG data flow over the file and attaches each sink's verdict, adding sinks only it found (Wave 3b). */
+  private attachSinkVerdicts(ast: ASTResult, state: FlowState, controlFlow: ControlFlowGraphsWithNodes): void {
+    const filePath = ast.metadata.sourcePath;
+    const sinkNames = new Map<string, string>();
+    const verdicts = cfgSinkVerdicts(ast.root, controlFlow, {
+      sourceOf: (node) => this.source(node, filePath),
+      sinkIdOf: (call) => {
+        if (call.type !== "CallExpression") return undefined;
+        const callee = call.children.find((child) => child.role === "callee");
+        const name = memberPath(callee) ?? identifierName(callee);
+        if (name === undefined || !sinks.has(name)) return undefined;
+        const position = call.location === undefined ? undefined : `${call.location.start.line}:${call.location.start.column}`;
+        if (position === undefined) return undefined;
+        const sinkId = hash(`sink:${filePath}:${name}:${position}`);
+        sinkNames.set(sinkId, name);
+        return sinkId;
+      },
+      // An unresolved call may return anything derived from its receiver and arguments; a resolved one
+      // is followed by the interprocedural transfers instead, and a sanitizer cuts taint.
+      callValue: (call, callee, args) => {
+        if (sanitized(call) || this.isResolvedCall(call, filePath, state)) return new Map();
+        return args.reduce((value, argument) => combineTaint(value, argument), callee);
+      },
+    });
+    const byId = new Map(state.sinks.map((sink, index) => [sink.id, index]));
+    for (const [sinkId, verdict] of verdicts) {
+      const index = byId.get(sinkId);
+      const existing = index === undefined ? undefined : state.sinks[index];
+      if (existing !== undefined && index !== undefined) state.sinks[index] = { ...existing, verdict };
+      else state.sinks.push({ id: sinkId, name: sinkNames.get(sinkId) ?? "", argumentDefinitionIds: [], verdict });
+    }
+  }
+
+  private isResolvedCall(call: ASTNode, filePath: string, state: FlowState): boolean {
+    const callee = call.children.find((child) => child.role === "callee");
+    const name = memberPath(callee) ?? identifierName(callee);
+    const proven = call.location === undefined ? undefined : state.provenTargets.get(callLocationKey(filePath, call.location.start));
+    const resolved = state.hasSemanticResolution ? (proven === undefined ? undefined : state.functionsBySymbolId.get(proven.targetSymbolId)) : resolveFunction(name, state.resolvableFunctions);
+    return resolved !== undefined || proven !== undefined;
   }
 
   public build(ast: ASTResult, provenCallTargets?: readonly ProvenCallTarget[], symbols: readonly CodeSymbol[] = []): DataFlowGraph {
     return this.buildContext(ast, provenCallTargets, symbols).graph;
   }
 
-  public computeTaintFlows(state: Pick<FlowConnectionState, "sinks"> & Partial<Pick<FlowConnectionState, "transfers">>, taintPaths: ReadonlyMap<string, ReadonlyMap<string, readonly string[]>>): readonly TaintFlow[] {
+  /**
+   * Taint flows at this state's sinks. The path-based flows come from definition transfers; for a
+   * source evaluated in the sink's own function the CFG verdict then decides (Wave 3b): it sets the
+   * state, adds the flows the transfers miss, and removes a flow the CFG rules out unless its path
+   * crosses a call or another file.
+   * @param state.joins - every join any path can reach; across files, the merged joins of all builds.
+   */
+  public computeTaintFlows(state: Pick<FlowConnectionState, "sinks"> & Partial<Pick<FlowConnectionState, "transfers" | "joins" | "localDefinitionIds">>, taintPaths: ReadonlyMap<string, ReadonlyMap<string, readonly string[]>>): readonly TaintFlow[] {
+    const joins = state.joins ?? new Map<string, JoinInputs>();
     const confirmed = new Map<string, Set<string>>();
     const predecessors = new Map<string, string[]>();
     for (const edge of state.transfers ?? []) {
@@ -116,10 +175,10 @@ export class DeterministicDataFlowGraphBuilder {
       if (path === undefined || active.has(definitionId)) return false;
       if (confirmed.get(sourceId)?.has(definitionId)) return true;
       active.add(definitionId);
-      const join = joinInputsById.get(definitionId)?.deref();
+      const join = joins.get(definitionId);
       const certain = join !== undefined
         ? join.incoming.every((id) => id !== undefined && isConfirmed(id, sourceId, active))
-        : path.every((id) => joinInputsById.get(id)?.deref() === undefined || isConfirmed(id, sourceId, active))
+        : path.every((id) => !joins.has(id) || isConfirmed(id, sourceId, active))
           || (predecessors.get(definitionId) ?? []).some((id) => isConfirmed(id, sourceId, active));
       active.delete(definitionId);
       if (certain) {
@@ -144,6 +203,22 @@ export class DeterministicDataFlowGraphBuilder {
     for (const flow of flows) {
       const key = flow.sourceId + ":" + flow.sinkId;
       if (unique.get(key)?.state !== "CONFIRMED") unique.set(key, flow);
+    }
+    const local = state.localDefinitionIds;
+    for (const sink of state.sinks) {
+      const verdict = sink.verdict;
+      if (verdict === undefined) continue;
+      for (const [key, flow] of unique) {
+        if (flow.sinkId !== sink.id || !verdict.scopeSourceIds.has(flow.sourceId)) continue;
+        const must = verdict.taint.get(flow.sourceId);
+        const crossesCallOrFile = local === undefined || flow.path.slice(1, -1).some((id) => !local.has(id));
+        if (must !== undefined) unique.set(key, { ...flow, state: must ? "CONFIRMED" : "INFERRED" });
+        else if (!crossesCallOrFile) unique.delete(key);
+      }
+      for (const [sourceId, must] of verdict.taint) {
+        const key = sourceId + ":" + sink.id;
+        if (!unique.has(key)) unique.set(key, { sourceId, sinkId: sink.id, path: Object.freeze([sourceId, sink.name]), state: must ? "CONFIRMED" : "INFERRED" });
+      }
     }
     return Object.freeze(
       [...unique.values()].sort((left, right) =>
@@ -241,9 +316,7 @@ export class DeterministicDataFlowGraphBuilder {
         if (incoming[0] === incoming[1]) continue;
         const id = hash("join:" + filePath + ":" + name + ":" + position + ":" + index + ":" + incoming.map((value) => value ?? "unbound").join(":"));
         const definition: VariableDefinition = { id, filePath, name, kind: "assignment" };
-        const join: JoinInputs = joinInputsById.get(id)?.deref() ?? { id, incoming: Object.freeze(incoming) };
-        joinsByTransfers.get(state.transfers)?.push(join);
-        joinInputsById.set(id, new WeakRef(join));
+        state.joins.set(id, state.joins.get(id) ?? { id, incoming: Object.freeze(incoming) });
         state.definitions.push(definition);
         for (const input of incoming) if (input !== undefined) this.addTransfer(state, input, id);
         // These are the original owner frames, never the transient branch scopes.
@@ -1016,7 +1089,7 @@ export class DeterministicDataFlowGraphBuilder {
   }
 
   private taintFlows(state: FlowState): readonly TaintFlow[] {
-    return this.computeTaintFlows(state, state.taintPaths);
+    return this.computeTaintFlows(this.connectionState(state), state.taintPaths);
   }
 
   private memberUse(node: ASTNode, scope: Scope, filePath: string, state: FlowState): void { const path = memberPath(node); if (path !== undefined) this.use(path, node, scope, filePath, state); const base = memberBase(node); if (base !== undefined && base !== path) this.use(base, node, scope, filePath, state); }
