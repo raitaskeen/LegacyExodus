@@ -65,6 +65,12 @@ and natural loops, with exception edges per clause and `finally` copied per jump
 - 3b also closed BA-04 within a file (a direct source at a sink). 3c keeps the cross-file part.
 - Because the old builder still runs alongside, BA-28 waits for 3d.
 
+3c merged as #222 (cross-file direct sources). 3d merged as #223:
+- Profiling found five superlinear causes, all fixed with byte-identical output: per-`if` frame copies, linear transfer dedupe, the sweep fixed point, quadratic function indexing, and cubic idom extraction.
+- The gate holds at ≤ 2.5× per doubling of function count.
+- Long single functions remain quadratic.
+- Ghost is pinned with ceiling budgets; its first run is pending.
+
 ## Verification model
 
 - **Ledger:** the BA-04, BA-05 and BA-06 groups in `tests/conformance/known-gaps.ts` must flip and be removed. That is 23 + 2 + 1 expectations plus the analyzed companions.
