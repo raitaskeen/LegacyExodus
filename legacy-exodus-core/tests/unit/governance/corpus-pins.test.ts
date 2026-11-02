@@ -19,7 +19,7 @@ const GIT_SHA = /^[0-9a-f]{40}$/;
 
 // The external corpora that existed when the pins were introduced. Listing them keeps the
 // well-formedness checks below from passing vacuously if manifest discovery ever breaks.
-const EXTERNAL_CORPORA = ["cookie-parser", "debug", "express", "express-session", "fastify", "ms"];
+const EXTERNAL_CORPORA = ["cookie-parser", "debug", "express", "express-session", "fastify", "ghost", "ms"];
 
 interface LoadedManifest {
   readonly file: string;

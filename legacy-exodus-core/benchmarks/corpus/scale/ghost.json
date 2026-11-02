@@ -1,0 +1,28 @@
+{
+  "name": "ghost",
+  "repository": "https://github.com/TryGhost/Ghost.git",
+  "revision": "v6.73.0",
+  "commit": "5794cfd8daca61fd60cd8659acd6591ece3b7956",
+  "tree": "291f039a01db3f75b08196d75bb31a4d37e8cff1",
+  "tier": "scale",
+  "languageProfile": [
+    "javascript",
+    "typescript"
+  ],
+  "frameworkProfile": [
+    "express",
+    "react"
+  ],
+  "sizeClass": "large",
+  "license": "MIT",
+  "reason": "Large mixed JavaScript and TypeScript monorepo (about 9k files). Scale benchmark for BA-28/BA-17: wall time and peak memory of a full analysis. The audit-era run (2026-10-29, before Wave 3) took about 26 min and 10.2 GB; the budgets start there as a no-regression ceiling and are tightened from measured runs.",
+  "budgets": {
+    "maxWallMs": 1560000,
+    "maxPeakRssMb": 10445
+  },
+  "knownHotspots": [
+    "ghost/core — Express server, services, data model",
+    "apps/* — React admin and portal apps (TSX)",
+    "@tryghost/* — workspace packages imported by name"
+  ]
+}

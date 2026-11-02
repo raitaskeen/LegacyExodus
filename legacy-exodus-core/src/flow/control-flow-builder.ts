@@ -65,6 +65,7 @@ export class DeterministicControlFlowGraphBuilder {
 
 class FlowState {
   private readonly blocks: MutableBlock[] = [];
+  private readonly blocksById = new Map<string, MutableBlock>();
   private readonly edges: ControlFlowEdge[] = [];
   private sequence = 0;
   private unlocatedStatementSequence = 0;
@@ -78,7 +79,7 @@ class FlowState {
     private readonly scopeName: string,
     private readonly hasUnsupportedExpressionControl: boolean,
   ) {}
-  public createBlock(): string { const id = hash(`${this.filePath}:${this.scopeName}:block:${this.sequence++}`); this.blocks.push({ id, statements: [] }); return id; }
+  public createBlock(): string { const id = hash(`${this.filePath}:${this.scopeName}:block:${this.sequence++}`); const block = { id, statements: [] }; this.blocks.push(block); this.blocksById.set(id, block); return id; }
   public addEdge(fromBlockId: string, toBlockId: string, kind: ControlFlowEdgeKind): void {
     const id = hash(`${fromBlockId}:${toBlockId}:${kind}`);
     if (this.edges.some((candidate) => candidate.id === id)) return;
@@ -343,6 +344,7 @@ class FlowState {
     const index = this.blocks.findIndex((candidate) => candidate.id === id);
     if (index >= 0) {
       this.blocks.splice(index, 1);
+      this.blocksById.delete(id);
     }
   }
   private hasIncomingEdges(toBlockId: string | undefined): boolean {
@@ -372,7 +374,7 @@ class FlowState {
     this.copyContext = outer === "" ? copy : `${outer}/${copy}`;
     try { return build(); } finally { this.copyContext = outer; }
   }
-  private block(id: string): MutableBlock { const block = this.blocks.find((candidate) => candidate.id === id); if (block === undefined) throw new ControlFlowInvariantError(id); return block; }
+  private block(id: string): MutableBlock { const block = this.blocksById.get(id); if (block === undefined) throw new ControlFlowInvariantError(id); return block; }
   private retagCompletionEdge(fromBlockId: string, toBlockId: string, sourceKind: ControlFlowEdgeKind, targetKind: ControlFlowEdgeKind): void { const edge = this.edges.find((candidate) => candidate.fromBlockId === fromBlockId && candidate.toBlockId === toBlockId && candidate.kind === sourceKind); if (edge === undefined) return; const index = this.edges.indexOf(edge); this.edges[index] = { ...edge, id: hash(`${fromBlockId}:${toBlockId}:${targetKind}`), kind: targetKind }; }
   private retagIncomingEdges(toBlockId: string | undefined, sourceKind: ControlFlowEdgeKind, targetKind: ControlFlowEdgeKind): void { if (toBlockId === undefined) return; for (const [index, edge] of this.edges.entries()) { if (edge.toBlockId === toBlockId && edge.kind === sourceKind) this.edges[index] = { ...edge, id: hash(`${edge.fromBlockId}:${toBlockId}:${targetKind}`), kind: targetKind }; } }
   public finish(entry: string, exit: string): ControlFlowGraph {
@@ -436,12 +438,13 @@ class FlowState {
       idomMap.set(d.blockId, d.immediateDominatorId);
     }
     const loopHeaders = new Map<string, Set<string>>();
+    const dominates = dominatorTreeIndex(idomMap);
     for (const edge of activeEdges) {
       // A back edge out of unreachable code (the dead tail after break/return/continue) closes no natural loop.
       if (!reachable.has(edge.fromBlockId)) continue;
       if (
         edge.kind === "loop-back" ||
-        (isDominator(idomMap, edge.toBlockId, edge.fromBlockId) && (edge.kind === "continue" || edge.kind === "true"))
+        ((edge.kind === "continue" || edge.kind === "true") && dominates(edge.toBlockId, edge.fromBlockId))
       ) {
         const headerId = edge.toBlockId;
         const loopBlocks = computeNaturalLoopBlocks(headerId, edge.fromBlockId, predecessorsByBlock);
@@ -645,6 +648,12 @@ function calculateDominators(entry: string, blocks: readonly BasicBlock[], _edge
     }
   }
 
+  // The immediate dominator of i is the first strict dominator (in index order) whose own dominator
+  // set holds every other strict dominator of i. Such a set is at least as large as i's strict set,
+  // so sizes prefilter the candidates before a word-wise subset test (BA-28: the pairwise test was
+  // cubic on long functions).
+  const sizes = dom.map((bitset) => bitset.reduce((total, word) => total + popcount(word), 0));
+  const strict = new Uint32Array(wordsPerBlock);
   const result: { blockId: string; immediateDominatorId?: string }[] = [];
   for (let i = 0; i < count; i++) {
     const blockId = blockIds[i];
@@ -660,20 +669,24 @@ function calculateDominators(entry: string, blocks: readonly BasicBlock[], _edge
       continue;
     }
 
-    const candidates: number[] = [];
-    for (let c = 0; c < count; c++) {
-      if (c !== i && ((current[c >>> 5] ?? 0) & (1 << (c & 31))) !== 0) {
-        candidates.push(c);
+    strict.set(current);
+    strict[i >>> 5] = (strict[i >>> 5] ?? 0) & ~(1 << (i & 31));
+    const strictSize = (sizes[i] ?? 0) - (((current[i >>> 5] ?? 0) & (1 << (i & 31))) !== 0 ? 1 : 0);
+    let immediate: number | undefined;
+    for (let w = 0; w < wordsPerBlock && immediate === undefined; w++) {
+      for (let bits = strict[w] ?? 0; bits !== 0 && immediate === undefined; bits &= bits - 1) {
+        const candidate = (w << 5) + (31 - Math.clz32(bits & -bits));
+        const candidateDom = dom[candidate];
+        if (candidateDom === undefined || (sizes[candidate] ?? 0) < strictSize) continue;
+        let holdsAll = true;
+        for (let v = 0; v < wordsPerBlock && holdsAll; v++) {
+          // Every other strict dominator must be in the candidate's set (the candidate is in its own).
+          const others = (strict[v] ?? 0) & ~(v === w ? (bits & -bits) : 0);
+          if ((others & ~(candidateDom[v] ?? 0)) !== 0) holdsAll = false;
+        }
+        if (holdsAll) immediate = candidate;
       }
     }
-
-    const immediate = candidates.find((candidate) => {
-      const candidateDom = dom[candidate];
-      if (candidateDom === undefined) return false;
-      return candidates.every(
-        (other) => other === candidate || ((candidateDom[other >>> 5] ?? 0) & (1 << (other & 31))) !== 0,
-      );
-    });
 
     const immediateId = immediate !== undefined ? blockIds[immediate] : undefined;
     result.push({
@@ -713,6 +726,41 @@ function computeNaturalLoopBlocks(
   return Array.from(loopBlocks).sort();
 }
 
+/**
+ * `dominates(a, b)` in O(1): a dominates b when b's interval in a pre/post numbering of the dominator
+ * tree lies within a's. A block outside the numbered forest (an idom cycle in unreachable code) falls
+ * back to walking the idom chain, as before (BA-28: the walk per edge was quadratic).
+ */
+function dominatorTreeIndex(idomMap: ReadonlyMap<string, string | undefined>): (ancestorId: string, blockId: string) => boolean {
+  const children = new Map<string, string[]>();
+  const roots: string[] = [];
+  for (const [blockId, idom] of idomMap) {
+    if (idom === undefined) roots.push(blockId);
+    else children.set(idom, [...(children.get(idom) ?? []), blockId]);
+  }
+  const pre = new Map<string, number>();
+  const post = new Map<string, number>();
+  let clock = 0;
+  for (const root of roots) {
+    const stack: { readonly id: string; next: number }[] = [{ id: root, next: 0 }];
+    pre.set(root, clock++);
+    while (stack.length > 0) {
+      const frame = stack[stack.length - 1]!;
+      const next = children.get(frame.id)?.[frame.next++];
+      if (next === undefined) { post.set(frame.id, clock++); stack.pop(); continue; }
+      if (pre.has(next)) continue;
+      pre.set(next, clock++);
+      stack.push({ id: next, next: 0 });
+    }
+  }
+  return (ancestorId, blockId) => {
+    if (ancestorId === blockId) return true;
+    const ancestorPre = pre.get(ancestorId), ancestorPost = post.get(ancestorId), blockPre = pre.get(blockId), blockPost = post.get(blockId);
+    if (blockPre === undefined || blockPost === undefined) return isDominator(idomMap, ancestorId, blockId);
+    return ancestorPre !== undefined && ancestorPost !== undefined && ancestorPre <= blockPre && blockPost <= ancestorPost;
+  };
+}
+
 function isDominator(
   idomMap: ReadonlyMap<string, string | undefined>,
   ancestorId: string,
@@ -727,6 +775,12 @@ function isDominator(
     curr = idomMap.get(curr);
   }
   return false;
+}
+
+function popcount(word: number): number {
+  let value = word - ((word >>> 1) & 0x55555555);
+  value = (value & 0x33333333) + ((value >>> 2) & 0x33333333);
+  return (((value + (value >>> 4)) & 0x0f0f0f0f) * 0x01010101) >>> 24;
 }
 
 function hash(value: string): string { return createHash("sha256").update(value).digest("hex"); }

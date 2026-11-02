@@ -12,7 +12,16 @@
 // ─── Size Class & Tier ─────────────────────────────────────────────────────────
 
 export type SizeClass = "small" | "medium" | "large";
-export type CorpusTier = "tier-1" | "tier-2" | "tier-3" | "self-analysis";
+/** `scale`: large repositories run on request only (`cli.ts scale`), with time and memory budgets (BA-28). */
+export type CorpusTier = "tier-1" | "tier-2" | "tier-3" | "self-analysis" | "scale";
+
+/** Upper bounds a scale benchmark run must stay within. */
+export interface ScaleBudgets {
+  /** Wall time of one full analysis, in milliseconds. */
+  readonly maxWallMs: number;
+  /** Peak resident memory of the process, in MiB. */
+  readonly maxPeakRssMb: number;
+}
 
 // ─── Benchmark Manifest ───────────────────────────────────────────────────────
 
@@ -53,6 +62,8 @@ export interface BenchmarkManifest {
   readonly localPath?: string;
   /** Flag indicating whether this is an internal self-analysis benchmark. */
   readonly isSelfAnalysis?: boolean;
+  /** Budgets for a `scale` tier benchmark. */
+  readonly budgets?: ScaleBudgets;
 }
 
 // ─── Analysis Disposition ─────────────────────────────────────────────────────
