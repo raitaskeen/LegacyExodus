@@ -96,6 +96,7 @@ export const controlFlowPayloadSchema = z.object({
 
 const persistedCallFlowBindingSchema = callFlowBindingSchema.extend({
   argumentDefinitionIds: z.array(z.string().min(1).nullable()),
+  argumentSourceIds: z.array(z.string().min(1).nullable()).optional(),
 });
 const persistedDataFlowGraphSchema = dataFlowGraphSchema.extend({
   callBindings: z.array(persistedCallFlowBindingSchema),

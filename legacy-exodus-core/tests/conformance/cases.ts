@@ -266,6 +266,19 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "projection:manifest-path-not-absolute", check: (directory) => !isAbsolutePath(readJson(directory, "manifest.json").repository.path) },
     ],
   },
+  {
+    // BA-04 across files: a source passed straight into another file's function (Wave 3c).
+    id: "taint-cross-file-direct",
+    files: {
+      "helpers.js": "export function reply(res, value) { res.send(value); }\nexport function pass(value) { return value; }\n",
+      "app.js": "import { reply, pass } from './helpers.js';\nexport function a(req, res) { reply(res, req.body); }\nexport function b(req, res) { const v = pass(req.query); res.json(v); }\n",
+    },
+    expectations: [
+      { id: "taint-cross-file-direct:argument-reaches-callee-sink", category: "taint", has: /^helpers\.js\|.*\|sink=#[0-9a-f]+:res\.send\|/ },
+      { id: "taint-cross-file-direct:returned-reaches-caller-sink", category: "taint", has: /^app\.js\|.*\|sink=#[0-9a-f]+:res\.json\|/ },
+      { id: "taint-cross-file-direct:helpers-analyzed", category: "dispositions", has: analyzed("helpers.js") },
+    ],
+  },
   ...taintCases,
 ];
 

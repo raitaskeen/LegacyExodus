@@ -56,6 +56,8 @@ export class DeterministicFlowAnalysisEngine {
     }
 
     const crossFileTransfersByGraph = new Map<string, InterproceduralFlow[]>();
+    // A source passed straight into another file's function taints that parameter (BA-04).
+    const crossFileSourceSeeds: { readonly sourceId: string; readonly parameterDefinitionId: string }[] = [];
     const allCrossFileTransfers: { sourceDefinitionId: string; targetDefinitionId: string }[] = [];
 
     for (const { graph } of contexts) {
@@ -63,6 +65,11 @@ export class DeterministicFlowAnalysisEngine {
       for (const binding of graph.callBindings) {
         const target = summaries.get(binding.targetSymbolId);
         if (target === undefined || target.filePath === graph.filePath) continue;
+        for (const [index, sourceId] of (binding.argumentSourceIds ?? []).entries()) {
+          const slot = target.parameterDefinitionIds[index];
+          if (sourceId === undefined || slot === undefined) continue;
+          for (const parameterDefinitionId of Array.isArray(slot) ? slot : [slot]) crossFileSourceSeeds.push({ sourceId, parameterDefinitionId });
+        }
         for (const [index, sourceDefinitionId] of binding.argumentDefinitionIds.entries()) {
           const slot = target.parameterDefinitionIds[index];
           if (sourceDefinitionId !== undefined && slot !== undefined) {
@@ -93,6 +100,8 @@ export class DeterministicFlowAnalysisEngine {
         globalTaintPaths.set(defId, globalSourceMap);
       }
     }
+
+    for (const seed of crossFileSourceSeeds) setGlobalTaintPath(globalTaintPaths, seed.parameterDefinitionId, seed.sourceId, [seed.sourceId, seed.parameterDefinitionId]);
 
     const allTransfers = [
       ...contexts.flatMap(({ state }) => state.transfers),

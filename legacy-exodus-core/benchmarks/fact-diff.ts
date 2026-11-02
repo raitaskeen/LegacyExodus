@@ -143,7 +143,7 @@ export function extractFacts(discoveryDirectory: string): FactSet {
     addCounted("dfg-uses", (dfg.uses ?? []).map((use: any) => `${dfg.filePath}|${use.name} -> ${use.definitionId === undefined ? "unbound" : definition(use.definitionId)}`));
     addCounted("dfg-interprocedural", (dfg.interproceduralFlows ?? []).map((flow: any) => `${dfg.filePath}|${flow.kind}|${definition(flow.sourceDefinitionId)} -> ${definition(flow.targetDefinitionId)}`));
     addCounted("dfg-bindings", (dfg.callBindings ?? []).map((binding: any) =>
-      `${dfg.filePath}|-> ${describe(binding.targetSymbolId)}|args=[${(binding.argumentDefinitionIds ?? []).map(definition).join(",")}]|receiver=${definition(binding.receiverDefinitionId)}`));
+      `${dfg.filePath}|-> ${describe(binding.targetSymbolId)}|args=[${(binding.argumentDefinitionIds ?? []).map(definition).join(",")}]|receiver=${definition(binding.receiverDefinitionId)}${binding.argumentSourceIds === undefined ? "" : `|sources=[${binding.argumentSourceIds.map((id: string | null) => (id === null || id === undefined ? "-" : `#${id.slice(0, 8)}`)).join(",")}]`}`));
     addCounted("dfg-summaries", (dfg.functionSummaries ?? []).map((summary: any) =>
       `${summary.filePath}|${describe(summary.symbolId)}|params=[${(summary.parameterDefinitionIds ?? []).map((slot: any) => (Array.isArray(slot) ? slot : [slot]).map(definition).join("&")).join(",")}]|returns=${(summary.returnDefinitionIds ?? []).length}`));
     addCounted("taint", (dfg.taintFlows ?? []).map((flow: any) =>
