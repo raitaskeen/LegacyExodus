@@ -57,6 +57,14 @@ and natural loops, with exception edges per clause and `finally` copied per jump
 | 3c | `argumentSourceIds` on sinks and bindings; `connect()` carries them | taint gains; no losses | BA-04 |
 | 3d | Scale gate: stage timer doubling ≤ 2.5×; Ghost pinned as a benchmark with time and memory budgets (with BA-17 streaming if needed) | none | BA-28 |
 
+**As built (2026-11-03).** 3a merged as #220. 3b merged as #221 with a narrower seam than planned:
+- The contract gives each use one `definitionId`, so the CFG engine decides **taint verdicts** only, for sources evaluated in the sink's own function.
+- The legacy builder still emits definitions, uses, summaries, bindings and cross-call paths, so no `join` definitions were lost.
+- A flow the CFG rules out is dropped only when its path stays inside one function.
+- Closures follow decision 6. A function nothing references or exports counts as never running.
+- 3b also closed BA-04 within a file (a direct source at a sink). 3c keeps the cross-file part.
+- Because the old builder still runs alongside, BA-28 waits for 3d.
+
 ## Verification model
 
 - **Ledger:** the BA-04, BA-05 and BA-06 groups in `tests/conformance/known-gaps.ts` must flip and be removed. That is 23 + 2 + 1 expectations plus the analyzed companions.
