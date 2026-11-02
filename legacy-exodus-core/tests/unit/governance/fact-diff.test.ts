@@ -77,6 +77,16 @@ describe("fact diff", () => {
     expect(lost).toEqual(["use.ts -> lib.ts|./lib|esm-binding|phase=type|@0-20"]);
   });
 
+  it("sees a dropped direct source argument on a call binding", () => {
+    const binding = { callId: "c", targetSymbolId: "t", argumentDefinitionIds: [null] };
+    const lost = lostIn(
+      { "data-flow.json": { graphs: [{ filePath: "a.js", callBindings: [{ ...binding, argumentSourceIds: ["0123456789abcdef"] }] }] } },
+      { "data-flow.json": { graphs: [{ filePath: "a.js", callBindings: [binding] }] } },
+      "dfg-bindings",
+    );
+    expect(lost).toEqual([expect.stringContaining("|sources=[#01234567]")]);
+  });
+
   it("sees a dropped unresolved module reference", () => {
     const unresolved = { sourceFilePath: "main.js", form: "dynamic-import", sourceAnchor: { kind: "offset", start: 0, end: 12 } };
     expect(lostIn(

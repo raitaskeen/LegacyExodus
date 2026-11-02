@@ -634,6 +634,7 @@ export class AnalyzeProjectHandler {
               targetSymbolId: binding.targetSymbolId,
               argumentDefinitionIds: binding.argumentDefinitionIds.map((definitionId) => definitionId ?? null),
               ...(binding.receiverDefinitionId === undefined ? {} : { receiverDefinitionId: binding.receiverDefinitionId }),
+              ...(binding.argumentSourceIds === undefined ? {} : { argumentSourceIds: binding.argumentSourceIds.map((sourceId) => sourceId ?? null) }),
             })),
           })),
         }),
