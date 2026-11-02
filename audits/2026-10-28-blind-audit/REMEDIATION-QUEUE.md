@@ -39,13 +39,13 @@ hand-off point: a new session resumes from here.
 | 1 | Parser fallback honours `language: typescript` for unlisted extensions (#210 review; unreachable in production today) | BA-01 | `src/parser/adapters/javascript/**` | #210 | queued (small) |
 | 1 | Fact-diff residual gaps (dominators, lifetimes, unused definitions, first taint hop) | ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â | `benchmarks/fact-diff.ts` | #204 | queued (low) |
 | 2 | TypeScript declarations | BA-02 | symbol extractor, `symbol-contracts.ts`, kind lists in `src/` | Wave 1 | merged #214 `56acd69` (after one FAIL: specifier exports, regex, reopened-namespace soundness) |
-| 2 | Class expressions (then dynamic import, then compiled CJS, serial) | BA-13, BA-10, BA-12 | symbol extractor, call graph | BA-02 | BA-13 in progress |
+| 2 | Class expressions (then dynamic import, then compiled CJS, serial) | BA-13, BA-10, BA-12 | symbol extractor, call graph | BA-02 | BA-13: PR #216 (head d6083bf), re-review after a FAIL (Annex B wrong target, class-expression dead code). Order after BA-13: BA-12 (extractor + call graph) in parallel with BA-09 (dependency graph + semantic engine), then BA-10 |
 | 2 | TS module resolution, then namespace imports | BA-03, BA-09 | `src/graph/**`, tsconfig loader, `command-handler.ts` aliases | Wave 1 | queued |
-| 3 | Data flow rebuilt on the CFG | BA-05, BA-04, BA-06, BA-27, BA-28 | DFG modules | Wave 2 | queued |
+| 3 | Data flow rebuilt on the CFG; design in WAVE3-DFG-DESIGN.md (steps 3a–3d) | BA-05, BA-04, BA-06, BA-27, BA-28 | 3a: `control-flow-builder.ts` (`buildAllWithNodes`), new `cfg-dataflow.ts` | design done | 3a in progress (Sonnet writer, branch `feat/w3a-cfg-dataflow-core`) |
 | 3 | Taint policy packs | BA-07 | flow policy module | DFG rebuild | queued |
 | 4 | Express model; dead-code precision; React; discovery policy | BA-08, BA-11, BA-24, BA-15 | semantic modules; `src/discovery/**` | Wave 3 | queued |
 | 5 | Stable identity (ADR first); sharded output | BA-18, BA-17 | ids; projections | Wave 4 | queued |
-| 2 | Docs truth update after BA-02 and BA-03 merge (README rows, CURRENT_IMPLEMENTATION, CLI configuration doc) | BA-21 follow-up | `README.md`, `docs/CURRENT_IMPLEMENTATION.md`, `docs/development/cli/configuration.md` | #213, #214 | in progress |
+| 2 | Docs truth update after BA-02 and BA-03 merge | BA-21 follow-up | `README.md`, `docs/CURRENT_IMPLEMENTATION.md` | #213, #214 | merged #215 `de960f7` |
 | 2 | Follow-ups: `.d.ts` module implicit exports; surface tsconfig diagnostics in analysis output; namespace calls through aliases in the call graph; `profile.ts` alias reader | BA-02, BA-03 | per item | #213, #214 | queued |
 | Docs | Docs/governance session (incl. remaining `core-foundation` mentions in GOVERNANCE, CONTRIBUTING, PR template, `.agents`) | BA-23, BA-22 rest | `docs/**`, root docs, `.agents/**` | anytime | queued |
 
