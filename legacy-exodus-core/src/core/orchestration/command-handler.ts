@@ -27,7 +27,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { ParserManager, type ASTResult } from "@parser/index";
 import { collectUnstableExportIds, DeterministicCallGraphBuilder, DeterministicSemanticAnalysisEngine, findHttpCalls, type ExpressRoute, type MiddlewareChain, type SemanticCall, type SymbolReference } from "@semantic/index";
-import { createStorageRecord, type StorageRecord } from "@storage/index";
+import { createOwnedStorageRecord, createStorageRecord, type StorageRecord } from "@storage/index";
 import { JavaScriptSymbolExtractor, validateCodeSymbols, type CodeSymbol, type SymbolTable } from "@symbols/index";
 import { RunScopedAstStore, type AnalysisAstStoreFactory } from "./run-scoped-ast-store";
 import { compareCodePoints } from "@shared/ordering";
@@ -468,7 +468,7 @@ export class AnalyzeProjectHandler {
         symbolTables.push(table);
         dispositions.set(file.id, { fileId: file.id, path: file.path, kind: "analyzed", symbolCount: table.symbols.length });
         records.push(
-          createStorageRecord("symbol-table", {
+          createOwnedStorageRecord("symbol-table", {
             fileId: file.id,
             path: file.path,
             projectId: discovery.projectId,
@@ -496,7 +496,7 @@ export class AnalyzeProjectHandler {
         new ModuleResolver(tsConfig.options),
       ).build(symbolTables, discovery.files);
       records.push(
-        createStorageRecord("dependency-graph", {
+        createOwnedStorageRecord("dependency-graph", {
           projectId: discovery.projectId,
           analysisRunId: command.id,
           nodes: dependencyGraph.nodes,
@@ -597,7 +597,7 @@ export class AnalyzeProjectHandler {
       allHttpCalls = undefined;
 
       records.push(
-        createStorageRecord("semantic-analysis", {
+        createOwnedStorageRecord("semantic-analysis", {
           projectId: discovery.projectId,
           analysisRunId: command.id,
           calls: semantic.calls,
@@ -617,14 +617,14 @@ export class AnalyzeProjectHandler {
       allContexts = undefined;
 
       records.push(
-        createStorageRecord("control-flow-analysis", {
+        createOwnedStorageRecord("control-flow-analysis", {
           projectId: discovery.projectId,
           analysisRunId: command.id,
           graphs: flow.controlFlowGraphs,
         }),
       );
       records.push(
-        createStorageRecord("data-flow-analysis", {
+        createOwnedStorageRecord("data-flow-analysis", {
           projectId: discovery.projectId,
           analysisRunId: command.id,
           graphs: flow.dataFlowGraphs.map((graph) => ({
@@ -641,7 +641,7 @@ export class AnalyzeProjectHandler {
       );
       const knowledgeGraph = new DeterministicKnowledgeGraphBuilder().build(symbolTables, dependencyGraph);
       records.push(
-        createStorageRecord("knowledge-graph", {
+        createOwnedStorageRecord("knowledge-graph", {
           projectId: discovery.projectId,
           analysisRunId: command.id,
           nodes: knowledgeGraph.nodes,

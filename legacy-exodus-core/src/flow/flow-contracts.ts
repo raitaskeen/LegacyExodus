@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { compareCodePoints } from "@shared/ordering";
+import { sortByKey } from "@shared/ordering";
 
 /** Certainty of an analysis result. Missing facts must never be treated as resolved facts. */
 export type AnalysisState = "RESOLVED" | "INFERRED" | "UNRESOLVED" | "UNSUPPORTED" | "CONFLICTING" | "REQUIRES_REVIEW";
@@ -45,7 +45,7 @@ export const controlFlowGraphSchema = cfgSchema;
 export function createControlFlowGraph(graph: ControlFlowGraph): ControlFlowGraph { return freeze(controlFlowGraphSchema.parse(graph)); }
 export function createDataFlowGraph(graph: DataFlowGraph): DataFlowGraph { return freeze(dataFlowGraphSchema.parse(graph)); }
 export function createProvenCallTargets(targets: readonly ProvenCallTarget[]): readonly ProvenCallTarget[] {
-  return Object.freeze(provenCallTargetSchema.array().parse(targets).map((target) => Object.freeze({ ...target, location: Object.freeze({ ...target.location }) })).sort((left, right) => compareCodePoints(`${left.sourceFilePath}:${left.location.line}:${left.location.column}:${left.callId}`, `${right.sourceFilePath}:${right.location.line}:${right.location.column}:${right.callId}`)));
+  return Object.freeze(sortByKey(provenCallTargetSchema.array().parse(targets).map((target) => Object.freeze({ ...target, location: Object.freeze({ ...target.location }) })), (target) => `${target.sourceFilePath}:${target.location.line}:${target.location.column}:${target.callId}`));
 }
 
 function freeze<T>(value: T): T { return deepFreeze(value); }

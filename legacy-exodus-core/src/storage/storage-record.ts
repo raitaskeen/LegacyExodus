@@ -56,6 +56,40 @@ export function createStorageRecord<Payload extends SerializedPayload>(
   });
 }
 
+/**
+ * `createStorageRecord` for a payload its caller hands over: the payload is frozen in place, every
+ * nested object included, instead of being copied first. Same identity and same content; the
+ * whole-run analysis payloads are hundreds of megabytes, and the copy doubled them (BA-17).
+ * The caller must not keep a mutable reference to any part of `payload`.
+ */
+export function createOwnedStorageRecord<Payload extends SerializedPayload>(
+  type: string,
+  payload: Payload,
+): StorageRecord<Payload> {
+  const createdAt = new Date();
+  const updatedAt = new Date(createdAt.getTime());
+  const id = contentIdentity(type, payload);
+  freezeEverything(payload);
+
+  return validateStorageRecord({
+    id,
+    type,
+    payload,
+    createdAt,
+    updatedAt,
+  });
+}
+
+/**
+ * Freezes `value` and everything under it, also beneath objects that are already frozen. A
+ * serializable payload has no cycles, so no visited set is kept (it would hold every object).
+ */
+function freezeEverything(value: SerializedPayload): void {
+  if (value === null || typeof value !== "object") return;
+  for (const nested of Object.values(value) as SerializedPayload[]) freezeEverything(nested);
+  Object.freeze(value);
+}
+
 /** Stable content identity; timestamps remain observability metadata only. */
 function contentIdentity(type: string, payload: SerializedPayload): string {
   const hash = createHash("sha256");

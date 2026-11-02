@@ -8,3 +8,13 @@
 export function compareCodePoints(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
+
+/**
+ * `items` sorted by `key` in code-point order, a stable sort that computes each key once. A
+ * comparator that builds keys builds two per comparison, n log n strings in all (BA-17).
+ */
+export function sortByKey<T>(items: readonly T[], key: (item: T) => string): T[] {
+  const keyed = items.map((item, index) => ({ item, key: key(item), index }));
+  keyed.sort((left, right) => compareCodePoints(left.key, right.key) || left.index - right.index);
+  return keyed.map((entry) => entry.item);
+}

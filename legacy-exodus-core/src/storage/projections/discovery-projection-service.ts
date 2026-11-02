@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { createDiscoveryProjection, validateAnalysisDisposition, type DiscoveryProjection } from "@contracts/discovery-projection";
+import { createDiscoveryProjection, deferredArtifact, validateAnalysisDisposition, type DiscoveryProjection } from "@contracts/discovery-projection";
 import {
   analysisRunPayloadSchema,
   discoveryPayloadSchema as discoveryStoragePayloadSchema,
@@ -64,11 +64,12 @@ export class DiscoveryProjectionService implements RuntimeService {
       this.storage.findScoped({ type: "data-flow-analysis", ...runCriteria }),
       this.storage.findScoped({ type: "analysis-run", ...runCriteria }),
     ]);
-    const graph = latestPayload(graphRecords, dependencyGraphStoragePayloadSchema, payload.projectId, payload.analysisRunId);
-    const knowledge = latestPayload(knowledgeRecords, knowledgeGraphStoragePayloadSchema, payload.projectId, payload.analysisRunId);
-    const semantic = latestPayload(semanticRecords, semanticAnalysisStoragePayloadSchema, payload.projectId, payload.analysisRunId);
-    const controlFlow = latestPayload(controlFlowRecords, controlFlowStoragePayloadSchema, payload.projectId, payload.analysisRunId);
-    const dataFlow = latestPayload(dataFlowRecords, dataFlowStoragePayloadSchema, payload.projectId, payload.analysisRunId);
+    // Large payloads are validated here one at a time, then produced again as each is written (BA-17).
+    const graph = latestPayloadLoader(graphRecords, dependencyGraphStoragePayloadSchema, payload.projectId, payload.analysisRunId);
+    const knowledge = latestPayloadLoader(knowledgeRecords, knowledgeGraphStoragePayloadSchema, payload.projectId, payload.analysisRunId);
+    const semantic = latestPayloadLoader(semanticRecords, semanticAnalysisStoragePayloadSchema, payload.projectId, payload.analysisRunId);
+    const controlFlow = latestPayloadLoader(controlFlowRecords, controlFlowStoragePayloadSchema, payload.projectId, payload.analysisRunId);
+    const dataFlow = latestPayloadLoader(dataFlowRecords, dataFlowStoragePayloadSchema, payload.projectId, payload.analysisRunId);
     const tables = symbolRecords
       .map((candidate) => {
         const parsed = symbolTableStoragePayloadSchema.safeParse(candidate.payload);
@@ -148,13 +149,13 @@ export class DiscoveryProjectionService implements RuntimeService {
         ...(graph === undefined
           ? []
           : [
-              { name: "dependency-graph.json" as const, payload: graph },
+              deferredArtifact("dependency-graph.json", graph),
               { name: "modules.json" as const, payload: payload.files.map((file) => ({ path: file.path, language: file.language, ...(file.fileKind === undefined ? {} : { fileKind: file.fileKind }) })) },
               { name: "symbols.json" as const, payload: symbols },
-              ...(knowledge === undefined ? [] : [{ name: "knowledge.json" as const, payload: knowledge }]),
-              ...(semantic === undefined ? [] : [{ name: "semantic.json" as const, payload: semantic }]),
-              ...(controlFlow === undefined ? [] : [{ name: "control-flow.json" as const, payload: controlFlow }]),
-              ...(dataFlow === undefined ? [] : [{ name: "data-flow.json" as const, payload: dataFlow }]),
+              ...(knowledge === undefined ? [] : [deferredArtifact("knowledge.json", knowledge)]),
+              ...(semantic === undefined ? [] : [deferredArtifact("semantic.json", semantic)]),
+              ...(controlFlow === undefined ? [] : [deferredArtifact("control-flow.json", controlFlow)]),
+              ...(dataFlow === undefined ? [] : [deferredArtifact("data-flow.json", dataFlow)]),
             ]),
       ],
       metadata: {
@@ -189,17 +190,17 @@ function matchesRun(payload: RunScopedPayload, projectId: string, analysisRunId:
   return payload.projectId === projectId && (analysisRunId === undefined || payload.analysisRunId === analysisRunId);
 }
 
-function latestPayload<Payload extends RunScopedPayload>(
+/**
+ * Validates every record and returns a loader of the latest matching payload. Each parse is dropped
+ * before the next, so at most one large payload is alive while records are checked.
+ */
+function latestPayloadLoader<Payload extends RunScopedPayload>(
   records: readonly StorageRecord[],
   schema: z.ZodType<Payload>,
   projectId: string,
   analysisRunId: string | undefined,
-): Payload | undefined {
-  if (records.length === 0) {
-    return undefined;
-  }
-
-  const candidates: { payload: Payload; updatedAt: number; index: number }[] = [];
+): (() => Payload) | undefined {
+  let latest: { readonly record: StorageRecord; readonly updatedAt: number; readonly index: number } | undefined;
   for (let index = 0; index < records.length; index++) {
     const record = records[index]!;
     const parsed = schema.safeParse(record.payload);
@@ -210,11 +211,10 @@ function latestPayload<Payload extends RunScopedPayload>(
         metadata: { issues: parsed.error.issues, recordId: record.id },
       });
     }
-    if (matchesRun(parsed.data, projectId, analysisRunId)) {
-      candidates.push({ payload: parsed.data, updatedAt: record.updatedAt.getTime(), index });
-    }
+    if (!matchesRun(parsed.data, projectId, analysisRunId)) continue;
+    const updatedAt = record.updatedAt.getTime();
+    if (latest === undefined || updatedAt >= latest.updatedAt) latest = { record, updatedAt, index };
   }
-
-  candidates.sort((left, right) => left.updatedAt - right.updatedAt || left.index - right.index);
-  return candidates.at(-1)?.payload;
+  const chosen = latest?.record;
+  return chosen === undefined ? undefined : () => schema.parse(chosen.payload);
 }
