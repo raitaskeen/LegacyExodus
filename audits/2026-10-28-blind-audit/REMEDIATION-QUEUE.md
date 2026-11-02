@@ -15,7 +15,7 @@ session resumes from here.
   - required checks green (Verify Core, Windows Path Smoke);
   - fact-diff with no unexplained lost facts;
   - each fix removes its own ledger entries;
-  - the standing auto-merge authorization also required an independent red team `VERDICT: RED_TEAM_PASS`. Without subagents there is no independent reviewer, so merges wait for the owner's decision on a replacement gate.
+  - owner decision (2026-11-02): with no subagents, merge on green CI. The lead self-reviews, and the fact-diff evidence goes in the PR. This replaces the independent red-team PASS. After each merge, confirm `origin/main^{tree}` equals the reviewed head's tree.
 
   Merge with `gh pr merge <n> --auto --squash --match-head-commit <sha>`. `main` requires up-to-date branches, so after another PR merges, merge `origin/main` into the waiting branch, push, and re-arm.
 - **Red-team FAIL → Path A:** fix on the same branch, then send the fixed head back to the same reviewer. After two FAILs, go back to design.
@@ -45,9 +45,9 @@ session resumes from here.
 | 2 | TypeScript declarations | BA-02 | symbol extractor, `symbol-contracts.ts`, kind lists in `src/` | Wave 1 | merged #214 `56acd69` (after one FAIL: specifier exports, regex, reopened-namespace soundness) |
 | 2 | Docs truth update after BA-02 and BA-03 | BA-21 follow-up | `README.md`, `docs/CURRENT_IMPLEMENTATION.md` | #213, #214 | merged #215 `de960f7` |
 | 2 | Class expressions; switch and static-block scopes | BA-13 | symbol extractor, call graph | BA-02 | merged #216 `1a55f86` (after one FAIL: Annex B target, class-expression dead code) |
-| 2 | Namespace imports | BA-09 | `dependency-graph-builder.ts`, `semantic-engine.ts`, `module-resolver.test.ts` | #216 | PR #217 head `1036788`: CI green, self-reviewed, waiting on the merge gate |
-| 2 | Compiled CommonJS | BA-12 | symbol extractor (`void 0`), `call-graph-builder.ts` | #217 (stacked) | PR #218 head `f056b26`, waiting on the merge gate. Follow-up: getter re-exports, `__exportStar`, `__importDefault`/`__importStar` interop |
-| 2 | Dynamic `import()` and computed loads | BA-10 | module-reference and graph contracts, extractor, graph builder, semantic engine, `fact-diff.ts` | #218 (stacked) | PR #219, waiting on the merge gate. Follow-up: literal `require('./x')` in expression position |
+| 2 | Namespace imports | BA-09 | `dependency-graph-builder.ts`, `semantic-engine.ts`, `module-resolver.test.ts` | #216 | merged #217 `6a15716` |
+| 2 | Compiled CommonJS | BA-12 | symbol extractor (`void 0`), `call-graph-builder.ts` | #217 (stacked) | merged #218 `16c51ec`. Follow-up: getter re-exports, `__exportStar`, `__importDefault`/`__importStar` interop |
+| 2 | Dynamic `import()` and computed loads | BA-10 | module-reference and graph contracts, extractor, graph builder, semantic engine, `fact-diff.ts` | #218 (stacked) | merged #219 `7210e8d`. Follow-up: literal `require('./x')` in expression position |
 | 2 | Follow-ups: `.d.ts` implicit exports; surface tsconfig diagnostics; namespace calls through aliases; `profile.ts` alias reader | BA-02, BA-03 | per item | #213, #214 | queued |
 | 3 | Data flow rebuilt on the CFG; design in WAVE3-DFG-DESIGN.md (steps 3a–3d) | BA-05, BA-04, BA-06, BA-27, BA-28 | 3a: `control-flow-builder.ts` (`buildAllWithNodes`), new `cfg-dataflow.ts` | design done | 3a next (the earlier Sonnet writer was stopped before any change) |
 | 3 | Taint policy packs | BA-07 | flow policy module | DFG rebuild | queued |
@@ -102,7 +102,7 @@ Notes:
 ## How to resume (new session or after a usage limit)
 
 1. `git -C C:\Projects\LegacyExodus fetch origin`, then read this file on `origin/audit/2026-10-28-blind-audit`.
-2. `gh pr list --repo raitaskeen/LegacyExodus --state open` shows in-flight PRs. Open now: #217, then #218 stacked on it, then #219 stacked on #218. Merge them in that order and merge `origin/main` into the next one after each merge. Worktrees are `C:\Projects\.w2\ba09`, `ba12` and `ba10`.
+2. `gh pr list --repo raitaskeen/LegacyExodus --state open` shows in-flight PRs. No PRs are open after #219 (2026-11-02). Next item: Wave 3a.
 3. When an item merges, mark it here (commit to the audit branch) and start the next queued item whose dependencies are merged.
 4. Ledger check: `bun test tests/conformance` on `main` must pass, and `known-gaps.ts` lists exactly the open findings.
 
