@@ -195,7 +195,8 @@ describe("P0-2: Data-Flow Destructuring & Taint Propagation", () => {
 
     const taintFlow = dfg.taintFlows.find((f) => f.path.includes("child_process.exec"));
     expect(taintFlow).toBeDefined();
-    expect(taintFlow?.state).toBe("CONFIRMED");
+    // The default runs only when the destructured value is undefined: data decides, so the flow is INFERRED (Wave 3b).
+    expect(taintFlow?.state).toBe("INFERRED");
     expect(taintFlow?.path).toContain(cmdDef!.id);
   });
 
@@ -212,7 +213,8 @@ describe("P0-2: Data-Flow Destructuring & Taint Propagation", () => {
 
     const taintFlow = dfg.taintFlows.find((f) => f.path.includes("child_process.exec"));
     expect(taintFlow).toBeDefined();
-    expect(taintFlow?.state).toBe("CONFIRMED");
+    // The default runs only when the destructured value is undefined: data decides, so the flow is INFERRED (Wave 3b).
+    expect(taintFlow?.state).toBe("INFERRED");
   });
 
   it("Test 13: Nested destructuring default expression propagates taint to sink", async () => {
@@ -227,7 +229,8 @@ describe("P0-2: Data-Flow Destructuring & Taint Propagation", () => {
 
     const taintFlow = dfg.taintFlows.find((f) => f.path.includes("child_process.exec"));
     expect(taintFlow).toBeDefined();
-    expect(taintFlow?.state).toBe("CONFIRMED");
+    // The default runs only when the destructured value is undefined: data decides, so the flow is INFERRED (Wave 3b).
+    expect(taintFlow?.state).toBe("INFERRED");
   });
 
   it("Test 14: Destructuring default with alias binds alias and propagates default taint", async () => {
@@ -243,7 +246,8 @@ describe("P0-2: Data-Flow Destructuring & Taint Propagation", () => {
 
     const taintFlow = dfg.taintFlows.find((f) => f.path.includes("child_process.exec"));
     expect(taintFlow).toBeDefined();
-    expect(taintFlow?.state).toBe("CONFIRMED");
+    // The default runs only when the destructured value is undefined: data decides, so the flow is INFERRED (Wave 3b).
+    expect(taintFlow?.state).toBe("INFERRED");
   });
 
   it("Test 15: Array destructuring default expression propagates taint", async () => {
@@ -258,7 +262,8 @@ describe("P0-2: Data-Flow Destructuring & Taint Propagation", () => {
 
     const taintFlow = dfg.taintFlows.find((f) => f.path.includes("child_process.exec"));
     expect(taintFlow).toBeDefined();
-    expect(taintFlow?.state).toBe("CONFIRMED");
+    // The default runs only when the destructured value is undefined: data decides, so the flow is INFERRED (Wave 3b).
+    expect(taintFlow?.state).toBe("INFERRED");
   });
 
   // ─── CodeRabbit Remediation: Finding 2 (Formal Parameter Slot Semantics) ────

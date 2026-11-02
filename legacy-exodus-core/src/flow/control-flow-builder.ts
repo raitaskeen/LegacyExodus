@@ -8,6 +8,8 @@ export interface ControlFlowGraphsWithNodes {
   readonly graphs: readonly ControlFlowGraph[];
   readonly statementNodes: ReadonlyMap<string, ASTNode>;
   readonly blockClauses: ReadonlyMap<string, readonly ASTNode[]>;
+  /** The Program or function node each graph id analyses. */
+  readonly graphRoots: ReadonlyMap<string, ASTNode>;
 }
 interface MutableBlock { readonly id: string; readonly statements: ControlFlowNode[]; terminator?: string; }
 interface LabelTarget { readonly breakTarget: string; readonly continueTarget?: string; readonly breakFinalizerTarget?: string; readonly continueFinalizerTarget?: string; }
@@ -39,12 +41,14 @@ export class DeterministicControlFlowGraphBuilder {
   public buildAllWithNodes(ast: ASTResult): ControlFlowGraphsWithNodes {
     const statementNodes = new Map<string, ASTNode>();
     const blockClauses = new Map<string, readonly ASTNode[]>();
+    const graphRoots = new Map<string, ASTNode>();
     const functions = collectFunctions(ast.root);
+    const rooted = (graph: ControlFlowGraph, root: ASTNode): ControlFlowGraph => { graphRoots.set(graph.id, root); return graph; };
     const graphs = [
-      this.buildScope(ast.metadata.sourcePath, "module", ast.root.children, statementNodes, blockClauses),
-      ...functions.map((candidate) => this.buildScope(ast.metadata.sourcePath, candidate.name, statementChildren(candidate.node.children.find((child) => child.role === "body") ?? candidate.node), statementNodes, blockClauses)),
+      rooted(this.buildScope(ast.metadata.sourcePath, "module", ast.root.children, statementNodes, blockClauses), ast.root),
+      ...functions.map((candidate) => rooted(this.buildScope(ast.metadata.sourcePath, candidate.name, statementChildren(candidate.node.children.find((child) => child.role === "body") ?? candidate.node), statementNodes, blockClauses), candidate.node)),
     ].sort((left, right) => compareCodePoints(left.id, right.id));
-    return { graphs: Object.freeze(graphs), statementNodes, blockClauses };
+    return { graphs: Object.freeze(graphs), statementNodes, blockClauses, graphRoots };
   }
 
   private buildScope(filePath: string, scopeName: string, nodes: readonly ASTNode[], statementNodes?: Map<string, ASTNode>, blockClauses?: Map<string, readonly ASTNode[]>): ControlFlowGraph {

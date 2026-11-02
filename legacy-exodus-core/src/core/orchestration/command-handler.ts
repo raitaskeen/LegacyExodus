@@ -562,8 +562,8 @@ export class AnalyzeProjectHandler {
         );
         allHttpCalls.push(httpCalls);
 
-        const cfgs = controlFlowBuilder.buildAll(ast);
-        allControlFlowGraphs.push(...cfgs);
+        const controlFlow = controlFlowBuilder.buildAllWithNodes(ast);
+        allControlFlowGraphs.push(...controlFlow.graphs);
 
         const provenTargets = createProvenCallTargets(
           fileCalls.flatMap((call) =>
@@ -576,6 +576,7 @@ export class AnalyzeProjectHandler {
           ast,
           provenTargets,
           symbolsByPath.get(canonicalizePath(file.path)) ?? [],
+          controlFlow,
         );
         allContexts.push(contextResult);
 

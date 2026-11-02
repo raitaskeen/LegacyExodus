@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { DeterministicDataFlowGraphBuilder } from "@flow/data-flow-builder";
 import { JavaScriptParser } from "@parser/index";
 
-const approvedStateKeys = Object.freeze(["sinks", "taintPaths", "transfers"]);
+// `joins` moved here from module state (BA-27); `localDefinitionIds` (ids only) lets the CFG taint
+// verdict tell a path within one function from one through a call or another file (Wave 3b).
+const approvedStateKeys = Object.freeze(["joins", "localDefinitionIds", "sinks", "taintPaths", "transfers"]);
 const forbiddenStateKeys = Object.freeze([
   "definitions",
   "uses",

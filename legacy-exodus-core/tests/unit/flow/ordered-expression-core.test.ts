@@ -26,6 +26,39 @@ function sourceFor(statement: string, sink = "x"): string {
   return `let x = req.query.x;\nlet y = 2;\n${statement}\nchild_process.exec(${sink});`;
 }
 
+/**
+ * Wave 3b: the CFG taint verdict adds flows the legacy transfers miss, with path `[source, sink]`
+ * (a legacy path always passes a definition). The golden hashes cover the legacy graph; these
+ * additions are asserted on their own. Each is a real runtime flow: `x` holds `req.query.x`
+ * (or a value derived from it) at the sink, on every path (CONFIRMED) or on some (INFERRED).
+ */
+const cfgAddedFlows: Readonly<Record<string, string>> = {
+  "x = (x = x + 1, unknownFunction(x));": "CONFIRMED",
+  "x = (x = x + 1, { value: x });": "CONFIRMED",
+  "x = (x = x + 1, [x, ...items]);": "CONFIRMED",
+  "x = (x = x + 1, x && y);": "INFERRED",
+  "x = (x = x + 1, x ? y : x);": "INFERRED",
+  "x = (x = x + 1, x++);": "CONFIRMED",
+  "x = (x = x + 1, -x);": "CONFIRMED",
+  "x = (x = x + 1, obj.value = x);": "CONFIRMED",
+  "x &&= x + 1;": "CONFIRMED",
+  "x ||= x + 1;": "CONFIRMED",
+  "x ??= x + 1;": "CONFIRMED",
+  "const result = (x = x + 1);": "CONFIRMED",
+  "consume(x = x + 1);": "CONFIRMED",
+  "x + (x = x + 1);": "CONFIRMED",
+};
+
+function legacyHash(result: BuildContextResult): string {
+  const graph = { ...result.graph, taintFlows: result.graph.taintFlows.filter((flow) => flow.path.length > 2) };
+  return hash(JSON.stringify({ graph, transfers: result.state.transfers }));
+}
+
+function expectCfgAddedFlows(result: BuildContextResult, statement: string): void {
+  const added = result.graph.taintFlows.filter((flow) => flow.path.length === 2).map((flow) => flow.state).join(",");
+  expect(added).toBe(cfgAddedFlows[statement.replace(/\s*\/\* note \*\//g, "")] ?? "");
+}
+
 function edges(result: BuildContextResult): string[] {
   return result.state.transfers.map((edge) => `${edge.sourceDefinitionId}>${edge.targetDefinitionId}`).sort();
 }
@@ -453,7 +486,8 @@ describe("F01-CORE whole-statement fallback and consumer boundary", () => {
         expect(result.graph.taintFlows).toHaveLength(expected === "F01-FULL:transfer" ? 1 : 0);
         expectIntegrity(result);
       } else {
-        expect(hash(JSON.stringify({ graph: result.graph, transfers: result.state.transfers }))).toBe(expected);
+        expect(legacyHash(result)).toBe(expected);
+        expectCfgAddedFlows(result, statement);
       }
     });
   }
@@ -603,8 +637,9 @@ describe("RT-01 comment metadata", () => {
 
   for (const [statement, expected] of rt01Fallbacks) {
     test(`atomic fallback: ${statement}`, async () => {
-      const { graph, state } = await analyze(sourceFor(statement));
-      expect(hash(JSON.stringify({ graph, transfers: state.transfers }))).toBe(expected);
+      const result = await analyze(sourceFor(statement));
+      expect(legacyHash(result)).toBe(expected);
+      expectCfgAddedFlows(result, statement);
     });
   }
 
