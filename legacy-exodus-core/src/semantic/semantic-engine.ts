@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { ASTNode } from "@parser/index";
 
-import type { DependencyGraph } from "@graph/index";
+import { canonicalizePath, ModuleResolver, type DependencyGraph } from "@graph/index";
 import { createLexicalScopeId, type SymbolTable } from "@symbols/index";
 
 import { DeterministicCallGraphBuilder } from "./call-graph-builder";
@@ -38,7 +38,11 @@ export class DeterministicSemanticAnalysisEngine {
     readonly httpCalls: readonly { readonly routes: readonly ExpressRoute[]; readonly middlewareChains: readonly MiddlewareChain[] }[];
   }): SemanticAnalysis {
     const referencedSymbolIds = new Set(params.references.flatMap((reference) => reference.resolvedSymbolId === undefined ? [] : [reference.resolvedSymbolId]));
-    const exportedIds = new Set(params.dependencyGraph.edges.map((edge) => edge.targetExportSymbolId));
+    const exportedIds = new Set([
+      ...params.dependencyGraph.edges.map((edge) => edge.targetExportSymbolId),
+      ...referencedSymbolIds,
+      ...namespaceExposedExportIds(params.symbolTables, params.dependencyGraph),
+    ]);
     const scopes = params.symbolTables.map((table) => createScope(table.filePath, table.symbols.map((symbol) => symbol.name), params.references.filter((reference) => reference.filePath === table.filePath).map((reference) => reference.name)));
     const unusedImports = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => isLexicalImportBinding(symbol) && !referencedSymbolIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unused-import")));
     const unusedExports = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => symbol.kind === "export" && !exportedIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unused-export")));
@@ -56,6 +60,51 @@ export class DeterministicSemanticAnalysisEngine {
       middlewareChains: params.httpCalls.flatMap((analysis) => analysis.middlewareChains),
     });
   }
+}
+
+/**
+ * Exports reachable through a module namespace object (`import * as ns`, `export * as ns from`),
+ * following `export *` chains. References carry no member-access context, and a namespace object can
+ * escape (`use(ns)`, `ns[key]`), so every export it exposes may be read (BA-09).
+ */
+function namespaceExposedExportIds(symbolTables: readonly SymbolTable[], dependencyGraph: DependencyGraph): readonly string[] {
+  const tablesByPath = new Map(symbolTables.map((table) => [canonicalizePath(table.filePath), table]));
+  const knownPaths = new Set(tablesByPath.keys());
+  const edgeTargetsByReference = new Map<string, string[]>();
+  for (const edge of dependencyGraph.moduleGraph?.edges ?? []) {
+    const key = JSON.stringify([edge.sourceFilePath, edge.moduleSpecifier]);
+    edgeTargetsByReference.set(key, [...(edgeTargetsByReference.get(key) ?? []), edge.targetFilePath]);
+  }
+  const resolver = new ModuleResolver();
+  const targetsOf = (filePath: string, moduleSpecifier: string): readonly string[] => {
+    const source = canonicalizePath(filePath);
+    // Imports carry module edges resolved with the project's tsconfig; re-exports do not, so they
+    // fall back to the default resolver.
+    const edgeTargets = edgeTargetsByReference.get(JSON.stringify([source, moduleSpecifier]));
+    if (edgeTargets !== undefined) return edgeTargets;
+    const resolved = resolver.resolve(source, moduleSpecifier, knownPaths).resolvedPath;
+    return resolved === null ? [] : [resolved];
+  };
+  const pending = symbolTables.flatMap((table) => table.symbols.flatMap((symbol) =>
+    symbol.moduleSpecifier !== undefined && symbol.sourceSymbolName === "*" && !symbol.defaultExport
+      && (symbol.kind === "import" || symbol.kind === "export")
+      ? targetsOf(table.filePath, symbol.moduleSpecifier)
+      : []));
+  const visited = new Set<string>();
+  const exposed: string[] = [];
+  while (pending.length > 0) {
+    const filePath = pending.pop() as string;
+    if (visited.has(filePath)) continue;
+    visited.add(filePath);
+    const table = tablesByPath.get(filePath);
+    if (table === undefined) continue;
+    for (const symbol of table.symbols) {
+      if (symbol.kind !== "export") continue;
+      exposed.push(symbol.id);
+      if (symbol.name === "*" && symbol.moduleSpecifier !== undefined) pending.push(...targetsOf(table.filePath, symbol.moduleSpecifier));
+    }
+  }
+  return exposed;
 }
 
 function isLexicalImportBinding(symbol: SymbolTable["symbols"][number]): boolean {

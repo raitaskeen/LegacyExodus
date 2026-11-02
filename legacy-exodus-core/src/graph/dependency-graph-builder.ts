@@ -67,7 +67,9 @@ export class DeterministicDependencyGraphBuilder {
           if (symbol === undefined || symbol.kind !== "import" || symbol.moduleSpecifier !== reference.moduleSpecifier) {
             throw new Error(`Invalid module reference binding: ${importSymbolId}`);
           }
-          const exported = target === undefined ? undefined
+          // A namespace import binds the module namespace object, not any one export (BA-09).
+          const namespaceImport = !symbol.defaultExport && symbol.sourceSymbolName === "*";
+          const exported = target === undefined || namespaceImport ? undefined
             : this.resolveExport(target, symbol.defaultExport ? "default" : (symbol.sourceSymbolName ?? symbol.name), files, tablesByPath, new Set());
           if (exported === undefined) continue;
           edges.push({
@@ -112,6 +114,8 @@ export class DeterministicDependencyGraphBuilder {
       const resolved = this.resolver.resolve(tableCanonicalPath, direct.moduleSpecifier, files).resolvedPath;
       const target = resolved === null ? undefined : tables.get(resolved);
       const forwardedName = direct.sourceSymbolName ?? name;
+      // `export * as ns from` re-exports a namespace object: the re-export itself is the binding.
+      if (forwardedName === "*") return target === undefined ? undefined : direct;
       return target === undefined ? undefined : this.resolveExport(target, forwardedName, files, tables, nextVisited);
     }
 
@@ -147,15 +151,7 @@ export class DeterministicDependencyGraphBuilder {
   private findDirectExport(table: SymbolTable, name: string): CodeSymbol | undefined {
     const exports = table.symbols.filter((symbol) => symbol.kind === "export");
     const exact = exports.find((symbol) => (name === "default" ? symbol.defaultExport : symbol.name === name));
-    if (exact !== undefined) {
-      return exact;
-    }
-
-    if (name === "*") {
-      return exports.find((symbol) => symbol.moduleSpecifier === undefined);
-    }
-
-    return undefined;
+    return exact;
   }
 }
 
