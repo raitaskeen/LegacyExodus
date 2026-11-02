@@ -4,6 +4,11 @@ import { createControlFlowGraph, type BasicBlock, type ControlFlowEdge, type Con
 import { ControlFlowInvariantError } from "./flow-errors";
 import { compareCodePoints } from "@shared/ordering";
 
+export interface ControlFlowGraphsWithNodes {
+  readonly graphs: readonly ControlFlowGraph[];
+  readonly statementNodes: ReadonlyMap<string, ASTNode>;
+  readonly blockClauses: ReadonlyMap<string, readonly ASTNode[]>;
+}
 interface MutableBlock { readonly id: string; readonly statements: ControlFlowNode[]; terminator?: string; }
 interface LabelTarget { readonly breakTarget: string; readonly continueTarget?: string; readonly breakFinalizerTarget?: string; readonly continueFinalizerTarget?: string; }
 interface PendingLabelFinalizer { readonly label: string; readonly target: LabelTarget; readonly breakFinalizer?: string; readonly continueFinalizer?: string; }
@@ -24,19 +29,33 @@ export class DeterministicControlFlowGraphBuilder {
   }
 
   public buildAll(ast: ASTResult): readonly ControlFlowGraph[] {
-    const functions = collectFunctions(ast.root);
-    return Object.freeze([
-      this.build(ast),
-      ...functions.map((candidate) => this.buildScope(ast.metadata.sourcePath, candidate.name, statementChildren(candidate.node.children.find((child) => child.role === "body") ?? candidate.node))),
-    ].sort((left, right) => compareCodePoints(left.id, right.id)));
+    return this.buildAllWithNodes(ast).graphs;
   }
 
-  private buildScope(filePath: string, scopeName: string, nodes: readonly ASTNode[]): ControlFlowGraph {
+  /**
+   * `buildAll` plus, for data flow (Wave 3), the AST node behind each statement id and the clauses a
+   * block evaluates without a statement of its own (a do-while test). Neither map is persisted.
+   */
+  public buildAllWithNodes(ast: ASTResult): ControlFlowGraphsWithNodes {
+    const statementNodes = new Map<string, ASTNode>();
+    const blockClauses = new Map<string, readonly ASTNode[]>();
+    const functions = collectFunctions(ast.root);
+    const graphs = [
+      this.buildScope(ast.metadata.sourcePath, "module", ast.root.children, statementNodes, blockClauses),
+      ...functions.map((candidate) => this.buildScope(ast.metadata.sourcePath, candidate.name, statementChildren(candidate.node.children.find((child) => child.role === "body") ?? candidate.node), statementNodes, blockClauses)),
+    ].sort((left, right) => compareCodePoints(left.id, right.id));
+    return { graphs: Object.freeze(graphs), statementNodes, blockClauses };
+  }
+
+  private buildScope(filePath: string, scopeName: string, nodes: readonly ASTNode[], statementNodes?: Map<string, ASTNode>, blockClauses?: Map<string, readonly ASTNode[]>): ControlFlowGraph {
     const state = new FlowState(filePath, scopeName, hasUnsupportedExpressionControl(nodes));
     const entry = state.createBlock();
     const exit = state.createBlock();
     state.buildStatements(nodes, entry, exit, { exceptionTarget: exit, returnTarget: exit });
-    return state.finish(entry, exit);
+    const graph = state.finish(entry, exit);
+    for (const [id, node] of state.statementNodes) statementNodes?.set(id, node);
+    for (const [id, clauses] of state.blockClauses) blockClauses?.set(id, clauses);
+    return graph;
   }
 }
 
@@ -46,6 +65,8 @@ class FlowState {
   private sequence = 0;
   private unlocatedStatementSequence = 0;
   private readonly statementIds = new Set<string>();
+  public readonly statementNodes = new Map<string, ASTNode>();
+  public readonly blockClauses = new Map<string, ASTNode[]>();
   // Identifies the finally copy being built ("" for the original text), so each copied statement gets a unique id.
   private copyContext = "";
   public constructor(
@@ -107,7 +128,7 @@ class FlowState {
   }
   private buildIf(node: ASTNode, block: string, control: ControlContext | undefined): string { this.addNode(block, node); const consequent = this.createBlock(); const alternate = this.createBlock(); const join = this.createBlock(); const condition = staticBoolean(node.children.find((child) => child.role === "test")); if (condition !== false) this.addEdge(block, consequent, "true"); if (condition !== true) this.addEdge(block, alternate, "false"); const children = node.children.filter((child) => child.role === "consequent" || child.role === "alternate"); const yes = children.filter((child) => child.role === "consequent").flatMap(statementChildren); const no = children.filter((child) => child.role === "alternate").flatMap(statementChildren); this.buildStatements(yes, consequent, join, control); this.buildStatements(no, alternate, join, control); return join; }
   private buildLabeled(node: ASTNode, block: string, control: ControlContext | undefined): string { this.addNode(block, node); const label = labelName(node); const body = node.children.find((child) => child.role === "body"); if (body === undefined || label === undefined) return block; const potentialExceptionTarget = control?.potentialExceptionTarget; if (body.type === "DoWhileStatement") { if (potentialExceptionTarget !== undefined && hasPotentiallyThrowingEvaluation(body)) this.addEdge(block, potentialExceptionTarget, "exception"); return this.buildDoWhile(body, block, control, label); } if (isLoop(body)) return this.buildLoop(body, block, control, label, potentialExceptionTarget); const after = this.createBlock(); const labels = withLabel(control?.labels, label, { breakTarget: after }); this.buildStatements(statementChildren(body), block, after, { ...control, labels }); return after; }
-  private buildDoWhile(node: ASTNode, block: string, control: ControlContext | undefined, label?: string): string { const body = this.createBlock(); const conditionBlock = this.createBlock(); const after = this.createBlock(); const condition = staticBoolean(node.children.find((child) => child.role === "test")); this.addNode(block, node); this.addEdge(block, body, "next"); const labels = label === undefined ? control?.labels : withLabel(control?.labels, label, { breakTarget: after, continueTarget: conditionBlock }); const content = node.children.filter((child) => child.role === "body").flatMap(statementChildren); const last = this.buildStatements(content, body, undefined, { ...control, breakTarget: after, continueTarget: conditionBlock, labels }); if (this.block(last).terminator === undefined) this.addEdge(last, conditionBlock, "next"); if (condition !== false) this.addEdge(conditionBlock, body, "true"); if (condition !== true) this.addEdge(conditionBlock, after, "false"); return after; }
+  private buildDoWhile(node: ASTNode, block: string, control: ControlContext | undefined, label?: string): string { const body = this.createBlock(); const conditionBlock = this.createBlock(); const after = this.createBlock(); const condition = staticBoolean(node.children.find((child) => child.role === "test")); this.addNode(block, node); this.addEdge(block, body, "next"); const labels = label === undefined ? control?.labels : withLabel(control?.labels, label, { breakTarget: after, continueTarget: conditionBlock }); const content = node.children.filter((child) => child.role === "body").flatMap(statementChildren); const last = this.buildStatements(content, body, undefined, { ...control, breakTarget: after, continueTarget: conditionBlock, labels }); if (this.block(last).terminator === undefined) this.addEdge(last, conditionBlock, "next"); const test = node.children.find((child) => child.role === "test"); if (test !== undefined) this.blockClauses.set(conditionBlock, [test]); if (condition !== false) this.addEdge(conditionBlock, body, "true"); if (condition !== true) this.addEdge(conditionBlock, after, "false"); return after; }
   private buildLoop(node: ASTNode, block: string, control: ControlContext | undefined, label?: string, potentialExceptionTarget?: string): string {
     // The header holds only the loop test. Clauses evaluated once (for init, for-in/of object) stay
     // in the pre-loop block; a for update gets its own block, which is also the continue target.
@@ -334,6 +355,7 @@ class FlowState {
     let id = hash(origin);
     for (let attempt = 0; this.statementIds.has(id); attempt++) id = hash(`${origin}@${this.copyContext}#${attempt}`);
     this.statementIds.add(id);
+    this.statementNodes.set(id, node);
     this.block(blockId).statements.push({
       id,
       type: node.type,
