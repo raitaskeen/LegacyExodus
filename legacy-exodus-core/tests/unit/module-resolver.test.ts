@@ -155,8 +155,11 @@ describe("ModuleResolver", () => {
     const auth = extractor.extract((await parser.parse({ file: fixtureFiles[2], source: "export function login() {}" })).result);
     const graph = new DeterministicDependencyGraphBuilder().build([app, barrel, auth], fixtureFiles);
 
-    expect(barrel.symbols.find((symbol) => symbol.kind === "export")?.sourceSymbolName).toBe("*");
-    expect(graph.edges[0]?.targetFilePath).toBe("src/services/auth.js");
+    const namespaceExport = barrel.symbols.find((symbol) => symbol.kind === "export");
+    expect(namespaceExport?.sourceSymbolName).toBe("*");
+    // The import binds the namespace object the barrel re-exports, not one of auth.js's exports (BA-09).
+    expect(graph.edges.map((edge) => [edge.targetFilePath, edge.targetExportSymbolId])).toEqual([["src/services/index.js", namespaceExport?.id ?? "missing"]]);
+    expect(graph.moduleGraph.edges.map((edge) => edge.targetFilePath)).toEqual(["src/services/index.js"]);
   });
 
   test("records cyclic barrels while preserving their valid import edges", async (): Promise<void> => {
