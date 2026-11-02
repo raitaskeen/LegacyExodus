@@ -33,6 +33,8 @@ export interface CodeSymbol {
   readonly visibility: "public";
   readonly parameters: readonly string[];
   readonly declarationKind?: "const" | "let" | "var" | "param";
+  /** True for a class created by a class expression: it exists because it is used as a value, so it is never dead code. */
+  readonly expression?: true;
   readonly value?: string | number | boolean | null;
   readonly moduleSpecifier?: string;
   /** Original exported name when this symbol is a named re-export. */
@@ -83,6 +85,7 @@ export const codeSymbolSchema = z.object({
   visibility: z.literal("public"),
   parameters: z.array(z.string().min(1)),
   declarationKind: z.enum(["const", "let", "var", "param"]).optional(),
+  expression: z.literal(true).optional(),
   value: z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
   moduleSpecifier: z.string().min(1).optional(),
   sourceSymbolName: z.string().min(1).optional(),
@@ -163,6 +166,17 @@ export function createLexicalScopeId(
 ): string {
   if (location === undefined) return `scope:${type}:unknown`;
   return `scope:${type}:${location.start.line}:${location.start.column}`;
+}
+
+/**
+ * Scope in which a named function or class expression binds its own name, visible only inside it.
+ * It sits between the enclosing scope and the expression's own scope.
+ */
+export function createSelfScopeId(
+  type: string,
+  location: CodeSymbol["location"] | undefined,
+): string {
+  return `self:${type}:${location?.start.line ?? 0}:${location?.start.column ?? 0}`;
 }
 
 function freezeCodeSymbol(symbol: CodeSymbol): CodeSymbol {

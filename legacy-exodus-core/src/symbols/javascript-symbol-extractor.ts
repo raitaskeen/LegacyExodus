@@ -11,6 +11,7 @@ import {
   type SymbolSummary,
   type SymbolTable,
   createLexicalScopeId,
+  createSelfScopeId,
 } from "./symbol-contracts";
 import { UnsupportedSymbolLanguageError } from "./symbol-errors";
 
@@ -72,6 +73,8 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
    * `export { X }` specifier has no rank of its own: it takes the strongest rank of the local `X`.
    */
   private declaredExports = new Map<string, ExportRank | { readonly local: string }>();
+  /** The binding an anonymous class expression is assigned to: `const X = class {}`, `X = class {}`, `{ X: class {} }`. */
+  private classBindingNames = new WeakMap<ASTNode, string>();
 
   public extract(ast: ASTResult): SymbolTable {
     const validatedAst = validateASTResult(ast);
@@ -163,6 +166,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     symbols: CodeSymbol[],
     pendingExports: PendingExportBinding[],
   ): void {
+    this.noteClassBinding(node);
     switch (node.type) {
       case "ExportNamedDeclaration":
         if (context.namespaceBody === true) {
@@ -218,6 +222,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       case "VariableDeclaration":
         this.addVariableSymbols(node, ast, context, symbols);
         break;
+      case "SwitchStatement":
       case "BlockStatement": {
         const blockScopeId = createLexicalScopeId(node.type, node.location);
         this.visitChildren(node, ast, {
@@ -306,6 +311,29 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         this.visitChildren(node, ast, { ...context, containerName: className, containerId: classSymbol.id }, symbols, pendingExports);
         return;
       }
+      case "ClassExpression": {
+        const ownName = getName(node);
+        const className = ownName ?? this.classBindingNames.get(node) ?? "anonymous-class";
+        // A class expression's own name is bound only inside the class, not in the enclosing scope.
+        const classContext = ownName === undefined ? context : { ...context, scopeId: createSelfScopeId(node.type, node.location) };
+        const classSymbol = this.createSymbol("class", className, node, ast, classContext, { expression: true });
+        symbols.push(classSymbol);
+        this.visitChildren(node, ast, { ...context, containerName: className, containerId: classSymbol.id }, symbols, pendingExports);
+        return;
+      }
+      case "StaticBlock": {
+        // A static block runs as a function: its `var` declarations belong to it, not to the class's scope.
+        const blockScopeId = createLexicalScopeId(node.type, node.location);
+        this.visitChildren(node, ast, {
+          ...context,
+          enclosingAssignedName: undefined,
+          enclosingAssignedId: undefined,
+          scopeId: blockScopeId,
+          functionScopeId: blockScopeId,
+          scopeChain: [blockScopeId, ...context.scopeChain],
+        }, symbols, pendingExports);
+        return;
+      }
       case "ClassMethod":
       case "ClassPrivateMethod": {
         const methodScopeId = createLexicalScopeId(node.type, node.location);
@@ -343,6 +371,22 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     }
 
     this.visitChildren(node, ast, context, symbols, pendingExports);
+  }
+
+  /** Records the binding that names an anonymous class expression, before the expression is visited. */
+  private noteClassBinding(node: ASTNode): void {
+    let name: string | undefined;
+    let value: ASTNode | undefined;
+    if (node.type === "VariableDeclarator") {
+      const binding = node.children.find((child) => child.role === "id");
+      if (binding?.type === "Identifier") name = readIdentifierName(binding);
+      value = node.children.find((child) => child.role === "init");
+    } else if (node.type === "ObjectProperty" && node.attributes.computed !== true) {
+      const key = node.children.find((child) => child.role === "key");
+      if (key?.type === "Identifier" || key?.type === "StringLiteral") name = getName(node);
+      value = node.children.find((child) => child.role === "value");
+    }
+    if (name !== undefined && value?.type === "ClassExpression") this.classBindingNames.set(value, name);
   }
 
   private visitChildren(
@@ -833,8 +877,10 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     const targets: ASTNode[] = [];
     let current: ASTNode | undefined = node;
     let innermostRight: ASTNode | undefined;
+    let innermostOperator: unknown;
 
     while (current && current.type === "AssignmentExpression") {
+      innermostOperator = current.attributes.operator;
       const left = current.children.find((child) => child.role === "left");
       const rightChild: ASTNode | undefined = current.children.find((child) => child.role === "right");
       if (left) targets.push(left);
@@ -958,7 +1004,12 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     }
 
     if (innermostRight) {
-      if (innermostRight.type === "FunctionExpression" || innermostRight.type === "ArrowFunctionExpression") {
+      if (innermostRight.type === "ClassExpression") {
+        const target = targets.at(-1);
+        const targetName = target?.type === "Identifier" && innermostOperator === "=" ? readIdentifierName(target) : undefined;
+        if (targetName !== undefined) this.classBindingNames.set(innermostRight, targetName);
+        this.visit(innermostRight, ast, context, symbols, pendingExports);
+      } else if (innermostRight.type === "FunctionExpression" || innermostRight.type === "ArrowFunctionExpression") {
         const fnScopeId = createLexicalScopeId(innermostRight.type, innermostRight.location);
         const matchingSymbol = symbols.find(
           (s) => (s.kind === "function" || s.kind === "method") &&

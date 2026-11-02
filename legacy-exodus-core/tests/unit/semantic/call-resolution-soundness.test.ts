@@ -1111,17 +1111,20 @@ describe("F-002 call resolution soundness: independent review counterexamples", 
   });
 
   describe("scopes the symbol table does not model", () => {
+    // BA-13: a switch is a block scope, so the case's `x` is not the `x` after the switch (this was unproven while it was not modelled).
     it("a lexical declaration in a switch case shadowing an outer receiver", async () => {
-      await unproven(js(`
+      const files = js(`
         class A { m() { return "A"; } }
         class B { m() { return "B"; } }
         const x = new A();
         function test(k) {
-          switch (k) { case 0: const x = new B(); x.m(); }
+          switch (k) { case 0: const x = new B(); x.m(); } // INSIDE
           x.m(); // CALL
         }
         test(1);
-      `), "src/main.js", "// CALL");
+      `);
+      expect((await resolvedOn(files, "src/main.js", "// CALL", "x.m")).containerName).toBe("A");
+      expect((await resolvedOn(files, "src/main.js", "// INSIDE", "x.m")).containerName).toBe("B");
     });
 
     it("a write past a switch-case declaration to the outer function", async () => {
@@ -1180,15 +1183,18 @@ describe("F-002 call resolution soundness: independent review counterexamples", 
       `), "src/main.js", "// CALL");
     });
 
+    // BA-13: the class expression is a class of its own, so `this.#m()` is its `#m`, never the declaration's.
     it("a private method of a class expression named like a class declaration", async () => {
-      await unproven(js(`
+      const files = js(`
         class Inner { #m() { return "declaration"; } }
         const K = class Inner {
           #m() { return "expression"; }
           go() { return this.#m(); } // CALL
         };
         new K().go();
-      `), "src/main.js", "// CALL");
+      `);
+      const target = await resolvedOn(files, "src/main.js", "// CALL", "this.#m");
+      expect(target.location?.start.line).toBe(markedLine(files, "src/main.js", "#m() { return \"expression\"; }"));
     });
 
     it("control: a receiver declared outside a switch", async () => {

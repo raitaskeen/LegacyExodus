@@ -474,7 +474,7 @@ describe("P1 Task 9: Semantic Receiver Resolution Integrity & Anti-Hallucination
       expect(wrapperCall?.targetSymbolId).toBeUndefined();
     });
 
-    it("Case P: nested block function declaration shadows receiver inside block while preserving outer resolution", async () => {
+    it("Case P: nested block function declaration shadows receiver inside block while and, in sloppy code, the outer name may hold the block function (Annex B)", async () => {
       const source = `
         class Service {
           start() {}
@@ -492,6 +492,37 @@ describe("P1 Task 9: Semantic Receiver Resolution Integrity & Anti-Hallucination
       const startSymbol = symbolTable.symbols.find((s) => s.kind === "method" && s.name === "start" && s.containerName === "Service");
       const innerCall = analysis.calls.find((c) => c.callerName === "wrapper" && c.calleeName === "service.start" && c.location?.line === 8);
       const outerCall = analysis.calls.find((c) => c.callerName === "wrapper" && c.calleeName === "service.start" && c.location?.line === 11);
+
+      expect(innerCall).toBeDefined();
+      expect(innerCall?.resolutionState).toBe("UNRESOLVED");
+      expect(innerCall?.targetSymbolId).toBeUndefined();
+
+      expect(outerCall).toBeDefined();
+      // Annex B.3.3: in non-strict code the block function also binds `service` in wrapper, so this receiver is not proven.
+      expect(startSymbol).toBeDefined();
+      expect(outerCall?.resolutionState).toBe("UNRESOLVED");
+      expect(outerCall?.targetSymbolId).toBeUndefined();
+    });
+
+    it("Case P (strict): nested block function declaration shadows receiver inside block while preserving outer resolution", async () => {
+      const source = `
+        class Service {
+          start() {}
+        }
+        const service = new Service();
+        function wrapper() {
+          "use strict";
+          {
+            service.start();
+            function service() {}
+          }
+          service.start();
+        }
+      `;
+      const { analysis, symbolTable } = await analyze(source);
+      const startSymbol = symbolTable.symbols.find((s) => s.kind === "method" && s.name === "start" && s.containerName === "Service");
+      const innerCall = analysis.calls.find((c) => c.callerName === "wrapper" && c.calleeName === "service.start" && c.location?.line === 9);
+      const outerCall = analysis.calls.find((c) => c.callerName === "wrapper" && c.calleeName === "service.start" && c.location?.line === 12);
 
       expect(innerCall).toBeDefined();
       expect(innerCall?.resolutionState).toBe("UNRESOLVED");
