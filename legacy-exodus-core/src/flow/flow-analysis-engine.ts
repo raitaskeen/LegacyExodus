@@ -7,6 +7,7 @@ import { DeterministicControlFlowGraphBuilder } from "./control-flow-builder";
 import { DeterministicDataFlowGraphBuilder } from "./data-flow-builder";
 import { createDataFlowGraph, createProvenCallTargets, type ControlFlowGraph, type DataFlowGraph, type InterproceduralFlow } from "./flow-contracts";
 import { compareCodePoints } from "@shared/ordering";
+import { propagateTaintPaths, setTaintPath } from "./taint-propagation";
 
 export interface FlowAnalysisResult { readonly controlFlowGraphs: readonly ControlFlowGraph[]; readonly dataFlowGraphs: readonly DataFlowGraph[]; }
 export class DeterministicFlowAnalysisEngine {
@@ -101,58 +102,12 @@ export class DeterministicFlowAnalysisEngine {
       }
     }
 
-    for (const seed of crossFileSourceSeeds) setGlobalTaintPath(globalTaintPaths, seed.parameterDefinitionId, seed.sourceId, [seed.sourceId, seed.parameterDefinitionId]);
+    for (const seed of crossFileSourceSeeds) setTaintPath(globalTaintPaths, seed.parameterDefinitionId, seed.sourceId, [seed.sourceId, seed.parameterDefinitionId]);
 
-    const allTransfers = [
+    propagateTaintPaths([
       ...contexts.flatMap(({ state }) => state.transfers),
       ...allCrossFileTransfers,
-    ].sort((left, right) => compareCodePoints(`${left.sourceDefinitionId}:${left.targetDefinitionId}`, `${right.sourceDefinitionId}:${right.targetDefinitionId}`));
-
-    const transferIndexesBySource = new Map<string, number[]>();
-    let currentQueue: number[] = [];
-    let currentQueued = new Set<number>();
-    let nextQueue: number[] = [];
-    let nextQueued = new Set<number>();
-
-    for (const [index, transfer] of allTransfers.entries()) {
-      const dependents = transferIndexesBySource.get(transfer.sourceDefinitionId) ?? [];
-      dependents.push(index);
-      transferIndexesBySource.set(transfer.sourceDefinitionId, dependents);
-      if (globalTaintPaths.has(transfer.sourceDefinitionId)) {
-        enqueueTransferIndex(currentQueue, currentQueued, index);
-      }
-    }
-
-    while (currentQueue.length > 0 || nextQueue.length > 0) {
-      if (currentQueue.length === 0) {
-        currentQueue = nextQueue;
-        currentQueued = nextQueued;
-        nextQueue = [];
-        nextQueued = new Set<number>();
-      }
-
-      const transferIndex = dequeueTransferIndex(currentQueue, currentQueued);
-      const transfer = allTransfers[transferIndex];
-      if (transfer === undefined) continue;
-      const sourcePaths = globalTaintPaths.get(transfer.sourceDefinitionId);
-      if (sourcePaths === undefined) continue;
-
-      let targetChanged = false;
-      for (const [sourceId, path] of sourcePaths) {
-        if (setGlobalTaintPath(globalTaintPaths, transfer.targetDefinitionId, sourceId, [...path, transfer.targetDefinitionId])) {
-          targetChanged = true;
-        }
-      }
-      if (!targetChanged) continue;
-
-      for (const dependentIndex of transferIndexesBySource.get(transfer.targetDefinitionId) ?? []) {
-        if (dependentIndex > transferIndex) {
-          enqueueTransferIndex(currentQueue, currentQueued, dependentIndex);
-        } else {
-          enqueueTransferIndex(nextQueue, nextQueued, dependentIndex);
-        }
-      }
-    }
+    ], globalTaintPaths);
 
     // A path can pass through joins of any file; each build keeps its own (BA-27).
     const allJoins = new Map(contexts.flatMap(({ state }) => [...state.joins]));
@@ -173,62 +128,6 @@ export class DeterministicFlowAnalysisEngine {
       dataFlowGraphs: Object.freeze(connected),
     });
   }
-}
-
-function enqueueTransferIndex(queue: number[], queued: Set<number>, index: number): void {
-  if (queued.has(index)) return;
-  queued.add(index);
-  queue.push(index);
-  for (let child = queue.length - 1; child > 0;) {
-    const parent = Math.floor((child - 1) / 2);
-    const childValue = queue[child];
-    const parentValue = queue[parent];
-    if (childValue === undefined || parentValue === undefined || parentValue <= childValue) break;
-    queue[parent] = childValue;
-    queue[child] = parentValue;
-    child = parent;
-  }
-}
-
-function dequeueTransferIndex(queue: number[], queued: Set<number>): number {
-  const first = queue[0];
-  if (first === undefined) throw new Error("Transfer worklist is unexpectedly empty.");
-  const last = queue.pop();
-  queued.delete(first);
-  if (queue.length === 0 || last === undefined) return first;
-  queue[0] = last;
-
-  for (let parent = 0;;) {
-    const left = parent * 2 + 1;
-    const right = left + 1;
-    let smallest = parent;
-    if (queue[left] !== undefined && queue[smallest] !== undefined && queue[left]! < queue[smallest]!) smallest = left;
-    if (queue[right] !== undefined && queue[smallest] !== undefined && queue[right]! < queue[smallest]!) smallest = right;
-    if (smallest === parent) break;
-    const parentValue = queue[parent];
-    const childValue = queue[smallest];
-    if (parentValue === undefined || childValue === undefined) break;
-    queue[parent] = childValue;
-    queue[smallest] = parentValue;
-    parent = smallest;
-  }
-
-  return first;
-}
-
-function setGlobalTaintPath(
-  taintPaths: Map<string, Map<string, readonly string[]>>,
-  definitionId: string,
-  sourceId: string,
-  path: readonly string[],
-): boolean {
-  if (path.slice(0, -1).includes(definitionId)) return false;
-  const paths = taintPaths.get(definitionId) ?? new Map<string, readonly string[]>();
-  const existing = paths.get(sourceId);
-  if (existing !== undefined && (existing.length <= path.length || existing.join(":") <= path.join(":"))) return false;
-  paths.set(sourceId, Object.freeze([...path]));
-  taintPaths.set(definitionId, paths);
-  return true;
 }
 
 function createTransfer(callId: string, kind: InterproceduralFlow["kind"], sourceDefinitionId: string, targetDefinitionId: string): InterproceduralFlow {

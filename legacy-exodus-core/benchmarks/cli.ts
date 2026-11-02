@@ -37,6 +37,7 @@ import { detectTerminalCapabilities } from "../src/cli/presentation/capabilities
 import { ErrorPresenter } from "../src/cli/presentation/errors";
 import { LayoutRenderer } from "../src/cli/presentation/layout";
 import { VerificationPresenter } from "../src/cli/presentation/verification";
+import { runScaleBenchmark } from "./scale";
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -159,6 +160,20 @@ async function main(): Promise<void> {
       break;
     }
 
+    case "scale": {
+      const name = args[1];
+      if (!name) {
+        console.error("Usage: bun run benchmarks/cli.ts scale <name>");
+        process.exit(1);
+      }
+      const result = await runScaleBenchmark(name);
+      console.log(`${result.name} @ ${result.commit ?? "?"}: ${result.filesAnalyzed}/${result.filesDiscovered} files, ${(result.wallMs / 1000).toFixed(1)} s (budget ${(result.budgets.maxWallMs / 1000).toFixed(0)} s), peak ${result.peakRssMb} MiB (budget ${result.budgets.maxPeakRssMb} MiB)`);
+      if (!result.withinBudget) {
+        console.error("Scale budget exceeded.");
+        process.exit(1);
+      }
+      break;
+    }
     case "fact-diff": {
       const baseDiscovery = getArgValue(args, "--base-discovery");
       const headDiscovery = getArgValue(args, "--head-discovery");
@@ -230,6 +245,7 @@ function printUsage(): void {
     "    validate <target-path>             Validate mathematical file accounting on target",
     "    fidelity [target-path]             Validate migration discovery fidelity against ground truth",
     "    fact-diff --base D --head D C...   Diff projected facts of two engines on corpus dirs",
+    "    scale <name>                       Time and peak memory of a scale corpus against its budgets",
     "    help                               Show this help message",
     "",
     layout.renderDivider(),

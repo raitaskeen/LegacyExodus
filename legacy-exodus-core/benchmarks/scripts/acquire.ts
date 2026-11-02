@@ -325,9 +325,10 @@ async function main(): Promise<void> {
 
   console.log("LegacyExodus — Repository Acquisition\n");
 
+  // The scale tier is hundreds of megabytes: it is fetched only when asked for by tier or name.
   const tiers = tierFilter
     ? [tierFilter]
-    : await readdir(CORPUS_DIR).catch(() => [] as string[]);
+    : (await readdir(CORPUS_DIR).catch(() => [] as string[])).filter((tier) => nameFilter !== undefined || tier !== "scale");
 
   await mkdir(CACHE_DIR, { recursive: true });
 

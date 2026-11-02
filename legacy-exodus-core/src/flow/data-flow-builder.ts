@@ -5,6 +5,7 @@ import { createDataFlowGraph, createProvenCallTargets, type CallFlowBinding, typ
 import { compareCodePoints } from "@shared/ordering";
 import { combineTaint } from "./cfg-dataflow";
 import { cfgSinkVerdicts, type SinkVerdict } from "./cfg-taint";
+import { propagateTaintPaths, setTaintPath } from "./taint-propagation";
 import { DeterministicControlFlowGraphBuilder, type ControlFlowGraphsWithNodes } from "./control-flow-builder";
 
 export interface Scope { readonly parent?: Scope; readonly definitions: Map<string, VariableDefinition>; }
@@ -50,13 +51,16 @@ export class DeterministicDataFlowGraphBuilder {
   // Private frame metadata keeps ownership out of the public graph/Scope contracts.
   private readonly functionScopes = new WeakSet<Scope>();
   private readonly capturedEntries = new WeakMap<Scope, Map<string, VariableDefinition>>();
+  private readonly transferKeys = new WeakMap<readonly TaintTransfer[], Set<string>>();
 
   /** @param controlFlow - the file's CFGs from `buildAllWithNodes`, when the caller already built them. */
   public buildContext(ast: ASTResult, provenCallTargets?: readonly ProvenCallTarget[], symbols: readonly CodeSymbol[] = [], controlFlow?: ControlFlowGraphsWithNodes): BuildContextResult {
     const functions = collectFunctions(ast.root, symbols);
     const targets = provenCallTargets === undefined ? undefined : createProvenCallTargets(provenCallTargets);
     const state: FlowState = { definitions: [], uses: [], taintPaths: new Map(), transfers: [], sinks: [], functions, resolvableFunctions: new Map(), functionsBySymbolId: new Map(), provenTargets: new Map((targets ?? []).map((target) => [callLocationKey(target.sourceFilePath, target.location), target])), hasSemanticResolution: targets !== undefined, pendingCalls: [], interproceduralFlows: [], joins: new Map() };
-    for (const record of state.functions.values()) if (record.name.length > 0 && [...state.functions.values()].filter((candidate) => candidate.name === record.name).length === 1) state.resolvableFunctions.set(record.name, record);
+    const namesakes = new Map<string, number>();
+    for (const record of state.functions.values()) namesakes.set(record.name, (namesakes.get(record.name) ?? 0) + 1);
+    for (const record of state.functions.values()) if (record.name.length > 0 && namesakes.get(record.name) === 1) state.resolvableFunctions.set(record.name, record);
     for (const record of state.functions.values()) if (record.symbolId !== undefined) state.functionsBySymbolId.set(record.symbolId, record);
     this.visit(ast.root, createScope(), ast.metadata.sourcePath, state);
     this.connectCalls(state);
@@ -289,7 +293,7 @@ export class DeterministicDataFlowGraphBuilder {
       const copies: Scope[] = [];
       for (let index = frames.length - 1; index >= 0; index--) {
         const original = frames[index]!;
-        const copy: Scope = { parent: copies[index + 1], definitions: new Map(original.definitions) };
+        const copy: Scope = { parent: copies[index + 1], definitions: new BranchDefinitions(original.definitions) };
         if (this.functionScopes.has(original)) this.functionScopes.add(copy);
         const captured = this.capturedEntries.get(original);
         if (captured !== undefined) this.capturedEntries.set(copy, new Map(captured));
@@ -939,7 +943,15 @@ export class DeterministicDataFlowGraphBuilder {
   private addInterproceduralFlow(state: FlowState, callId: string, kind: InterproceduralFlow["kind"], sourceDefinitionId: string, targetDefinitionId: string): void { state.interproceduralFlows.push({ id: hash(`interprocedural:${callId}:${kind}:${sourceDefinitionId}:${targetDefinitionId}`), callId, kind, sourceDefinitionId, targetDefinitionId }); }
   private addTransfer(state: FlowState, sourceDefinitionId: string, targetDefinitionId: string): void {
     if (sourceDefinitionId === targetDefinitionId) return;
-    if (state.transfers.some((transfer) => transfer.sourceDefinitionId === sourceDefinitionId && transfer.targetDefinitionId === targetDefinitionId)) return;
+    // Constant-time dedupe per build; a linear scan made the stage quadratic (BA-28).
+    let keys = this.transferKeys.get(state.transfers);
+    if (keys === undefined) {
+      keys = new Set(state.transfers.map((transfer) => `${transfer.sourceDefinitionId}\u0000${transfer.targetDefinitionId}`));
+      this.transferKeys.set(state.transfers, keys);
+    }
+    const key = `${sourceDefinitionId}\u0000${targetDefinitionId}`;
+    if (keys.has(key)) return;
+    keys.add(key);
     state.transfers.push({ sourceDefinitionId, targetDefinitionId });
   }
 
@@ -1069,23 +1081,13 @@ export class DeterministicDataFlowGraphBuilder {
   }
 
   private propagateTaint(state: FlowState): void {
-    const transfers = state.transfers.sort((left, right) => compareCodePoints(`${left.sourceDefinitionId}:${left.targetDefinitionId}`, `${right.sourceDefinitionId}:${right.targetDefinitionId}`));
-    for (let changed = true; changed;) {
-      changed = false;
-      for (const transfer of transfers) for (const [sourceId, path] of state.taintPaths.get(transfer.sourceDefinitionId) ?? []) {
-        if (this.setTaintPath(state, transfer.targetDefinitionId, sourceId, [...path, transfer.targetDefinitionId])) changed = true;
-      }
-    }
+    // The connection state exposes transfers in this order.
+    state.transfers.sort((left, right) => compareCodePoints(`${left.sourceDefinitionId}:${left.targetDefinitionId}`, `${right.sourceDefinitionId}:${right.targetDefinitionId}`));
+    propagateTaintPaths(state.transfers, state.taintPaths);
   }
 
   private setTaintPath(state: FlowState, definitionId: string, sourceId: string, path: readonly string[]): boolean {
-    if (path.slice(0, -1).includes(definitionId)) return false;
-    const paths = state.taintPaths.get(definitionId) ?? new Map<string, readonly string[]>();
-    const existing = paths.get(sourceId);
-    if (existing !== undefined && (existing.length <= path.length || existing.join(":") <= path.join(":"))) return false;
-    paths.set(sourceId, Object.freeze([...path]));
-    state.taintPaths.set(definitionId, paths);
-    return true;
+    return setTaintPath(state.taintPaths, definitionId, sourceId, path);
   }
 
   private taintFlows(state: FlowState): readonly TaintFlow[] {
@@ -1126,8 +1128,19 @@ export class DeterministicDataFlowGraphBuilder {
   private source(node: ASTNode, filePath: string): string | undefined { const path = memberPath(node); if (path === undefined || ![...sources].some((source) => path === source || path.startsWith(`${source}.`))) return undefined; const position = node.location === undefined ? "anon" : `${node.location.start.line}:${node.location.start.column}`; return hash(`source:${filePath}:${path}:${position}`); }
 }
 
+/**
+ * A branch's view of a scope frame: reads fall through to the frame, writes stay in the branch, and
+ * its own keys are exactly the names the branch defined. Replaces a full copy of every frame (the
+ * whole module scope included) at each `if`, which made the stage quadratic (BA-28).
+ */
+class BranchDefinitions extends Map<string, VariableDefinition> {
+  public constructor(private readonly base: ReadonlyMap<string, VariableDefinition>) { super(); }
+  public override get(name: string): VariableDefinition | undefined { return super.has(name) ? super.get(name) : this.base.get(name); }
+  public override has(name: string): boolean { return super.has(name) || this.base.has(name); }
+}
+
 function createScope(parent?: Scope): Scope { return { parent, definitions: new Map() }; }
-function collectFunctions(root: ASTNode, symbols: readonly CodeSymbol[]): Map<ASTNode, FunctionRecord> { const records = new Map<ASTNode, FunctionRecord>(); const visit = (node: ASTNode): void => { if (isFunction(node)) { const name = functionName(node); if (name !== undefined) { const symbol = symbols.filter((candidate) => (candidate.kind === "function" || candidate.kind === "method") && candidate.name === name && sameLocation(candidate.location, node.location)); records.set(node, { name, parameters: [], returns: [], ...(symbol.length === 1 && symbol[0] !== undefined ? { symbolId: symbol[0].id } : {}) }); } } for (const child of node.children) visit(child); }; visit(root); return records; }
+function collectFunctions(root: ASTNode, symbols: readonly CodeSymbol[]): Map<ASTNode, FunctionRecord> { const records = new Map<ASTNode, FunctionRecord>(); const callables = new Map<string, CodeSymbol[]>(); for (const candidate of symbols) if (candidate.kind === "function" || candidate.kind === "method") callables.set(candidate.name, [...(callables.get(candidate.name) ?? []), candidate]); const visit = (node: ASTNode): void => { if (isFunction(node)) { const name = functionName(node); if (name !== undefined) { const symbol = (callables.get(name) ?? []).filter((candidate) => sameLocation(candidate.location, node.location)); records.set(node, { name, parameters: [], returns: [], ...(symbol.length === 1 && symbol[0] !== undefined ? { symbolId: symbol[0].id } : {}) }); } } for (const child of node.children) visit(child); }; visit(root); return records; }
 function resolveFunction(name: string | undefined, functions: ReadonlyMap<string, FunctionRecord>): FunctionRecord | undefined { if (name === undefined) return undefined; const direct = functions.get(name); if (direct !== undefined) return direct; const property = name.split(".").at(-1); return property === undefined ? undefined : functions.get(property); }
 function bindingOwner(scope: Scope | undefined, name: string): Scope | undefined {
   for (let current = scope; current !== undefined; current = current.parent) {
