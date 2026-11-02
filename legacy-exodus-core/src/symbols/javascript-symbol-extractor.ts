@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { validateASTResult, type ASTNode, type ASTResult } from "@parser/index";
 
 import type { SymbolExtractor } from "./symbol-extractor";
-import { sourceAnchorSchema, type ModuleReference, type SourceAnchor } from "./module-reference-contracts";
+import { sourceAnchorSchema, type ModuleReference, type SourceAnchor, type UnresolvedModuleReference } from "./module-reference-contracts";
 import {
   validateSymbolTable,
   type CodeSymbol,
@@ -90,6 +90,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     const extracted: CodeSymbol[] = [];
     const pendingExports: PendingExportBinding[] = [];
     this.visit(validatedAst.root, validatedAst, initialContext, extracted, pendingExports);
+    const unresolvedModuleReferences = this.collectDynamicModuleReferences(validatedAst.root);
     const symbols = this.mergeDeclarations(extracted);
 
     for (const pending of pendingExports) {
@@ -102,7 +103,35 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       symbols,
       summary: createSummary(symbols),
       moduleReferences: this.moduleReferences,
+      ...(unresolvedModuleReferences.length === 0 ? {} : { unresolvedModuleReferences }),
     });
+  }
+
+  /**
+   * Records `import(...)` anywhere in the file, and `require(...)` with a computed argument (BA-10):
+   * a literal `import("x")` is a module reference; a computed specifier is returned as unresolved, so
+   * an unknown load stays visible instead of absent.
+   */
+  private collectDynamicModuleReferences(root: ASTNode): UnresolvedModuleReference[] {
+    const unresolved: UnresolvedModuleReference[] = [];
+    const record = (node: ASTNode, form: UnresolvedModuleReference["form"]): void => {
+      const sourceAnchor = anchorOf(node);
+      unresolved.push(sourceAnchor === undefined ? { form } : { form, sourceAnchor });
+    };
+    const visit = (node: ASTNode): void => {
+      if (node.type === "ImportExpression") {
+        const moduleSpecifier = literalSpecifier(node.children.find((child) => child.role === "source"));
+        const sourceAnchor = anchorOf(node);
+        if (moduleSpecifier === undefined) record(node, "dynamic-import");
+        else this.moduleReferences.push({ moduleSpecifier, form: "dynamic-import", importSymbolIds: [], ...(sourceAnchor === undefined ? {} : { sourceAnchor }) });
+      } else if (node.type === "CallExpression" && identifierName(node.children.find((child) => child.role === "callee")) === "require") {
+        const argument = node.children.find((child) => child.role === "arguments");
+        if (argument !== undefined && literalSpecifier(argument) === undefined) record(node, "commonjs-import");
+      }
+      for (const child of node.children) visit(child);
+    };
+    visit(root);
+    return unresolved;
   }
 
   /**
@@ -451,9 +480,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
   ): void {
     const importSymbolIds = symbols.filter((symbol) => symbol.kind === "import").map((symbol) => symbol.id);
     if (importSymbolIds.length === 0) return;
-    const offset = sourceAnchorSchema.safeParse({ kind: "offset", start: node.attributes.start, end: node.attributes.end });
-    const location = sourceAnchorSchema.safeParse({ kind: "location", ...node.location });
-    const sourceAnchor: SourceAnchor | undefined = offset.success ? offset.data : location.success ? location.data : undefined;
+    const sourceAnchor = anchorOf(node);
     this.moduleReferences.push({ moduleSpecifier, form, importSymbolIds,
       ...(sourceAnchor === undefined ? {} : { sourceAnchor }),
       ...(sourcePhase === undefined ? {} : { sourcePhase }),
@@ -1329,6 +1356,20 @@ function requireSpecifier(node: ASTNode | undefined): string | undefined {
   if (node?.type === "CallExpression") return requireArgument(node);
   if (node?.type === "MemberExpression") return requireSpecifier(node.children.find((child) => child.role === "object"));
   return undefined;
+}
+
+function anchorOf(node: ASTNode): SourceAnchor | undefined {
+  const offset = sourceAnchorSchema.safeParse({ kind: "offset", start: node.attributes.start, end: node.attributes.end });
+  const location = sourceAnchorSchema.safeParse({ kind: "location", ...node.location });
+  return offset.success ? offset.data : location.success ? location.data : undefined;
+}
+
+/** A string literal or a template literal without substitutions. */
+function literalSpecifier(node: ASTNode | undefined): string | undefined {
+  if (node?.type === "StringLiteral") return nonEmptyString(node.attributes.value);
+  if (node?.type !== "TemplateLiteral" || node.children.some((child) => child.role === "expressions")) return undefined;
+  const quasis = node.children.filter((child) => child.role === "quasis");
+  return quasis.length === 1 ? nonEmptyString(quasis[0]?.attributes.cooked) : undefined;
 }
 
 function requireArgument(node: ASTNode): string | undefined {

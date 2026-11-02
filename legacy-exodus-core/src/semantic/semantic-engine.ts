@@ -45,7 +45,9 @@ export class DeterministicSemanticAnalysisEngine {
     ]);
     const scopes = params.symbolTables.map((table) => createScope(table.filePath, table.symbols.map((symbol) => symbol.name), params.references.filter((reference) => reference.filePath === table.filePath).map((reference) => reference.name)));
     const unusedImports = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => isLexicalImportBinding(symbol) && !referencedSymbolIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unused-import")));
-    const unusedExports = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => symbol.kind === "export" && !exportedIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unused-export")));
+    // A computed `import(name)` or `require(name)` can load any module, so no export is provably unused (BA-10).
+    const exportState = params.symbolTables.some((table) => (table.unresolvedModuleReferences?.length ?? 0) > 0) ? "REQUIRES_REVIEW" : "INFERRED";
+    const unusedExports = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => symbol.kind === "export" && !exportedIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unused-export", exportState)));
     const deadCode = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => ["function", "method", "class", "variable"].includes(symbol.kind) && symbol.expression !== true && !symbol.exported && !referencedSymbolIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unreferenced-local-symbol")));
 
     return createSemanticAnalysis({
@@ -85,11 +87,15 @@ function namespaceExposedExportIds(symbolTables: readonly SymbolTable[], depende
     const resolved = resolver.resolve(source, moduleSpecifier, knownPaths).resolvedPath;
     return resolved === null ? [] : [resolved];
   };
-  const pending = symbolTables.flatMap((table) => table.symbols.flatMap((symbol) =>
-    symbol.moduleSpecifier !== undefined && symbol.sourceSymbolName === "*" && !symbol.defaultExport
-      && (symbol.kind === "import" || symbol.kind === "export")
-      ? targetsOf(table.filePath, symbol.moduleSpecifier)
-      : []));
+  const pending = symbolTables.flatMap((table) => [
+    ...table.symbols.flatMap((symbol) =>
+      symbol.moduleSpecifier !== undefined && symbol.sourceSymbolName === "*" && !symbol.defaultExport
+        && (symbol.kind === "import" || symbol.kind === "export")
+        ? targetsOf(table.filePath, symbol.moduleSpecifier)
+        : []),
+    // `import("x")` evaluates to x's namespace object (BA-10).
+    ...(table.moduleReferences ?? []).flatMap((reference) => reference.form === "dynamic-import" ? targetsOf(table.filePath, reference.moduleSpecifier) : []),
+  ]);
   const visited = new Set<string>();
   const exposed: string[] = [];
   while (pending.length > 0) {
@@ -116,8 +122,8 @@ function createScope(filePath: string, declaredSymbols: readonly string[], refer
   return { id: hash(`scope:${filePath}:module`), filePath, name: "module", declaredSymbols: uniqueSorted(declaredSymbols), referencedNames: uniqueSorted(referencedNames) };
 }
 
-function finding(symbolId: string, filePath: string, name: string, reason: DeadCodeFinding["reason"]): DeadCodeFinding {
-  return { symbolId, filePath, name, reason, state: "INFERRED" };
+function finding(symbolId: string, filePath: string, name: string, reason: DeadCodeFinding["reason"], state: DeadCodeFinding["state"] = "INFERRED"): DeadCodeFinding {
+  return { symbolId, filePath, name, reason, state };
 }
 
 function entryPoints(paths: readonly string[], calls: readonly { readonly sourceFilePath: string; readonly calleeName: string }[]): readonly SemanticEntryPoint[] {

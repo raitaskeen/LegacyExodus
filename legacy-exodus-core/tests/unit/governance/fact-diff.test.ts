@@ -77,6 +77,15 @@ describe("fact diff", () => {
     expect(lost).toEqual(["use.ts -> lib.ts|./lib|esm-binding|phase=type|@0-20"]);
   });
 
+  it("sees a dropped unresolved module reference", () => {
+    const unresolved = { sourceFilePath: "main.js", form: "dynamic-import", sourceAnchor: { kind: "offset", start: 0, end: 12 } };
+    expect(lostIn(
+      { "dependency-graph.json": { edges: [], cycles: [], moduleGraph: { edges: [], unresolvedReferences: [unresolved] } } },
+      { "dependency-graph.json": { edges: [], cycles: [], moduleGraph: { edges: [] } } },
+      "module-unresolved",
+    )).toEqual(["main.js|dynamic-import|@0-12"]);
+  });
+
   it("sees one of two identical routes disappear", () => {
     const route = { filePath: "app.js", method: "GET", path: "/t", handlerName: "h", middleware: [], state: "INFERRED" };
 
