@@ -948,6 +948,8 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
           }
         }
       } else if (targetPath.startsWith("module.exports.") || targetPath.startsWith("exports.")) {
+        // `exports.x = void 0` is how tsc pre-declares an export before assigning it (BA-12).
+        if (isVoidPlaceholder(innermostRight)) continue;
         const propName = targetPath.split(".").at(-1);
         if (propName && propName.length > 0) {
           const sourceSymbolName = identifierName(innermostRight);
@@ -1334,6 +1336,11 @@ function requireArgument(node: ASTNode): string | undefined {
   if (identifierName(callee) !== "require") return undefined;
   const argument = node.children.find((child) => child.role === "arguments");
   return argument?.type === "StringLiteral" ? nonEmptyString(argument.attributes.value) : undefined;
+}
+
+function isVoidPlaceholder(node: ASTNode): boolean {
+  return node.type === "UnaryExpression" && node.attributes.operator === "void"
+    && node.children.every((child) => child.type === "NumericLiteral");
 }
 
 function requireProperty(node: ASTNode | undefined): string | undefined {

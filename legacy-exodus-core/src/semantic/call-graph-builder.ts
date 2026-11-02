@@ -1392,7 +1392,10 @@ function invokerProperties(call: ASTNode): string[] {
 function callName(node: ASTNode, context: ResolutionContext, boundCallees?: Set<ASTNode>): string | undefined {
   const callee = node.children.find((child) => child.role === "callee");
   if (callee === undefined) return undefined;
-  const effectiveCallee = collectBoundCalleeChain(callee, context, boundCallees);
+  // `(0, lib_1.f)()`, tsc's call form for imports, calls the sequence's last value (BA-12).
+  const sequenceValue = callee.type === "SequenceExpression" ? callee.children.filter((child) => child.role === "expressions").at(-1) : callee;
+  if (sequenceValue === undefined) return undefined;
+  const effectiveCallee = collectBoundCalleeChain(sequenceValue, context, boundCallees);
   return memberName(effectiveCallee, context, boundCallees);
 }
 
@@ -1693,10 +1696,19 @@ function resolveNamespaceCall(
   methodName: string,
   tablesByPath: ReadonlyMap<string, SymbolTable>,
   resolver: ModuleResolver,
+  context: ResolutionContext,
 ): string | undefined {
   if (importSymbol.moduleSpecifier === undefined) return undefined;
-  if (importSymbol.sourceSymbolName !== "*") {
+  // `const m = require("./x")` binds x's exports object: a namespace while x never replaces
+  // `module.exports`, m is never rebound and no code here writes the member (BA-12).
+  const wholeModuleRequire = importSymbol.defaultExport && importSymbol.sourceSymbolName === undefined
+    && (table.moduleReferences ?? []).some((reference) => reference.form === "commonjs-import" && reference.importSymbolIds.includes(importSymbol.id));
+  if (importSymbol.sourceSymbolName !== "*" && !wholeModuleRequire) {
     return undefined;
+  }
+  if (wholeModuleRequire) {
+    const frame = declaredBindingFrame(index, importSymbol.name, context.scope);
+    if (frame === undefined || isRebound(index, frame.id, importSymbol.name) || propertyWriteCount(index, methodName) > 0) return undefined;
   }
 
   const knownPaths = new Set(Array.from(tablesByPath.keys()).map((p) => canonicalizePath(p)));
@@ -1714,6 +1726,12 @@ function resolveNamespaceCall(
     }
   }
   if (targetTable === undefined) return undefined;
+
+  if (wholeModuleRequire) {
+    if (targetTable.symbols.some((s) => s.kind === "export" && s.defaultExport)) return undefined;
+    const property = targetTable.symbols.filter((s) => s.kind === "export" && s.moduleSpecifier === undefined && s.name === methodName);
+    return property.length === 1 && property[0] !== undefined && !isUnstableTarget(index, property[0].id) ? property[0].id : undefined;
+  }
 
   const exportSymbol = targetTable.symbols.find((s) => s.kind === "export" && s.name === methodName);
   if (exportSymbol !== undefined) {
@@ -1788,7 +1806,7 @@ function resolveLocalCall(
   // 3. Imported namespace receiver (e.g. import * as api from "./api"; api.ping() or api["ping"]())
   const namespaceImport = receiver === "this" || isLexicallyShadowed(receiver, context, index) ? undefined : visibleImport(index, receiver, context.scope);
   if (namespaceImport !== undefined && tablesByPath !== undefined && resolver !== undefined) {
-    const namespaceTarget = resolveNamespaceCall(table, index, namespaceImport, methodName, tablesByPath, resolver);
+    const namespaceTarget = resolveNamespaceCall(table, index, namespaceImport, methodName, tablesByPath, resolver, context);
     if (namespaceTarget !== undefined) return namespaceTarget;
   }
 
