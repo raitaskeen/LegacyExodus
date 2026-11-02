@@ -82,11 +82,20 @@ export class DeterministicDependencyGraphBuilder {
       }
     }
 
+    // Computed `import(name)` / `require(name)`: the target is unknown, so it is kept, not dropped (BA-10).
+    const unresolvedReferences = orderedTables.flatMap((table) => (table.unresolvedModuleReferences ?? []).map((reference) => ({
+      sourceFilePath: canonicalizePath(table.filePath), ...reference,
+    })));
     return validateCurrentDependencyGraph({
       nodes: [...nodes].sort((left, right) => compareCodePoints(left.id, right.id)),
       edges: [...edges].sort((left, right) => compareCodePoints(left.id, right.id)),
-      cycles: findCycles(moduleEdges),
-      moduleGraph: { contract: "f07-import-relations-v1", edges: moduleEdges.sort((left, right) => compareCodePoints(left.id, right.id)) },
+      // A dynamic import loads lazily, so it cannot form an evaluation-order cycle.
+      cycles: findCycles(moduleEdges.filter((edge) => edge.form !== "dynamic-import")),
+      moduleGraph: {
+        contract: "f07-import-relations-v1",
+        edges: moduleEdges.sort((left, right) => compareCodePoints(left.id, right.id)),
+        ...(unresolvedReferences.length === 0 ? {} : { unresolvedReferences }),
+      },
     });
   }
   private resolveExport(

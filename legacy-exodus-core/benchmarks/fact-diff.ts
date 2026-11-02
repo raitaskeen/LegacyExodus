@@ -98,6 +98,8 @@ export function extractFacts(discoveryDirectory: string): FactSet {
   const graph = readArtifact(discoveryDirectory, "dependency-graph.json");
   addCounted("module-edges", (graph?.moduleGraph?.edges ?? []).map((edge: any) =>
     `${edge.sourceFilePath} -> ${edge.targetFilePath}|${edge.moduleSpecifier}|${edge.form}|phase=${edge.sourcePhase ?? "-"}|${anchor(edge.sourceAnchor)}`));
+  addCounted("module-unresolved", (graph?.moduleGraph?.unresolvedReferences ?? []).map((reference: any) =>
+    `${reference.sourceFilePath}|${reference.form}|${anchor(reference.sourceAnchor)}`));
   addCounted("import-edges", (graph?.edges ?? []).map((edge: any) => `${describe(edge.importSymbolId)} -> ${describe(edge.targetExportSymbolId)}`));
   for (const cycle of graph?.cycles ?? []) add("cycles", cycle.join(" > "));
 

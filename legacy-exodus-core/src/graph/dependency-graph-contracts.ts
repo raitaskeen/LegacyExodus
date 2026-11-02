@@ -1,7 +1,10 @@
 import { z } from "zod";
 
 import type { SymbolTable } from "@symbols/index";
-import { sourceAnchorSchema, moduleReferenceFormSchema, sourcePhaseSchema, freezeSourceAnchor, type SourceAnchor } from "@symbols/module-reference-contracts";
+import {
+  sourceAnchorSchema, moduleReferenceFormSchema, sourcePhaseSchema, freezeSourceAnchor, unresolvedModuleReferenceSchema, freezeUnresolvedModuleReference,
+  type SourceAnchor, type UnresolvedModuleReference,
+} from "@symbols/module-reference-contracts";
 
 export interface DependencyGraphNode {
   readonly id: string;
@@ -24,12 +27,17 @@ export interface ModuleDependencyEdge {
   readonly targetFilePath: string;
   readonly moduleSpecifier: string;
   readonly sourceAnchor: SourceAnchor;
-  readonly form: "esm-side-effect" | "esm-binding" | "commonjs-import";
+  readonly form: "esm-side-effect" | "esm-binding" | "commonjs-import" | "dynamic-import";
   readonly sourcePhase?: "value" | "type" | "mixed";
+}
+export interface UnresolvedModuleDependency extends UnresolvedModuleReference {
+  readonly sourceFilePath: string;
 }
 export interface ModuleDependencyLayer {
   readonly contract: "f07-import-relations-v1";
   readonly edges: readonly ModuleDependencyEdge[];
+  /** Module loads with a computed specifier (`import(name)`, `require(name)`); present only when non-empty. */
+  readonly unresolvedReferences?: readonly UnresolvedModuleDependency[];
 }
 export interface CurrentDependencyGraph extends DependencyGraph {
   readonly moduleGraph: ModuleDependencyLayer;
@@ -72,6 +80,7 @@ export const moduleDependencyLayerSchema = z.object({
     form: moduleReferenceFormSchema,
     sourcePhase: sourcePhaseSchema.optional(),
   }).strict()),
+  unresolvedReferences: z.array(unresolvedModuleReferenceSchema.extend({ sourceFilePath: z.string().min(1) })).min(1).optional(),
 }).strict();
 
 const graphSchema = z.object({ nodes: z.array(nodeSchema), edges: z.array(edgeSchema), cycles: z.array(z.array(z.string().min(1)).min(2)), moduleGraph: moduleDependencyLayerSchema.optional() })
@@ -87,6 +96,11 @@ export function validateDependencyGraph(graph: unknown): DependencyGraph {
     ...(parsedGraph.moduleGraph === undefined ? {} : { moduleGraph: Object.freeze({
       contract: parsedGraph.moduleGraph.contract,
       edges: Object.freeze(parsedGraph.moduleGraph.edges.map((edge) => Object.freeze({ ...edge, sourceAnchor: freezeSourceAnchor(edge.sourceAnchor) }))),
+      ...(parsedGraph.moduleGraph.unresolvedReferences === undefined ? {} : {
+        unresolvedReferences: Object.freeze(parsedGraph.moduleGraph.unresolvedReferences.map((reference) => Object.freeze({
+          ...freezeUnresolvedModuleReference(reference), sourceFilePath: reference.sourceFilePath,
+        }))),
+      }),
     }) }),
   });
 }

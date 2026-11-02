@@ -22,7 +22,6 @@ const gaps: Readonly<Record<string, readonly string[]>> = {
     "express:handler-is-last-argument",
     "express:mount-path-applied",
   ],
-  "BA-10 dynamic import": ["dynamic:literal-import-edge", "dynamic:target-not-unused"],
   "BA-15 discovery policy": [
     "discovery:no-express-from-directory-name",
     "discovery:no-react-from-directory-name",

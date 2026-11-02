@@ -1,7 +1,10 @@
 import { z } from "zod";
 
 import { LegacyExodusError } from "@shared/errors";
-import { moduleReferenceSchema, freezeModuleReference, type ModuleReference } from "./module-reference-contracts";
+import {
+  moduleReferenceSchema, freezeModuleReference, unresolvedModuleReferenceSchema, freezeUnresolvedModuleReference,
+  type ModuleReference, type UnresolvedModuleReference,
+} from "./module-reference-contracts";
 
 /**
  * `enum` and `namespace` declare runtime bindings; `interface` and `type-alias` are type-only and declare
@@ -65,6 +68,7 @@ export interface SymbolTable {
   readonly symbols: readonly CodeSymbol[];
   readonly summary: SymbolSummary;
   readonly moduleReferences?: readonly ModuleReference[];
+  readonly unresolvedModuleReferences?: readonly UnresolvedModuleReference[];
 }
 
 const symbolKindSchema = z.enum([
@@ -100,6 +104,7 @@ const symbolTableSchema = z.object({
   language: z.string().min(1),
   symbols: z.array(codeSymbolSchema),
   moduleReferences: z.array(moduleReferenceSchema).optional(),
+  unresolvedModuleReferences: z.array(unresolvedModuleReferenceSchema).optional(),
   summary: z.object({
     classes: z.number().int().nonnegative(),
     exports: z.number().int().nonnegative(),
@@ -143,6 +148,7 @@ export function validateSymbolTable(table: unknown): SymbolTable {
     symbols: Object.freeze(parsedTable.data.symbols.map(freezeCodeSymbol)),
     summary: Object.freeze({ ...parsedTable.data.summary }),
     ...(parsedTable.data.moduleReferences === undefined ? {} : { moduleReferences: Object.freeze(parsedTable.data.moduleReferences.map(freezeModuleReference)) }),
+    ...(parsedTable.data.unresolvedModuleReferences === undefined ? {} : { unresolvedModuleReferences: Object.freeze(parsedTable.data.unresolvedModuleReferences.map(freezeUnresolvedModuleReference)) }),
   });
 }
 
