@@ -1,4 +1,4 @@
-import { compareCodePoints } from "@shared/ordering";
+import { sortByKey } from "@shared/ordering";
 
 /** A taint transfer: whatever reaches the source definition reaches the target. */
 export interface TaintEdge { readonly sourceDefinitionId: string; readonly targetDefinitionId: string }
@@ -27,7 +27,7 @@ export function setTaintPath(taintPaths: TaintPaths, definitionId: string, sourc
  * transfer once per round, which is quadratic or worse on long chains).
  */
 export function propagateTaintPaths(transfers: readonly TaintEdge[], taintPaths: TaintPaths): void {
-  const ordered = [...transfers].sort((left, right) => compareCodePoints(`${left.sourceDefinitionId}:${left.targetDefinitionId}`, `${right.sourceDefinitionId}:${right.targetDefinitionId}`));
+  const ordered = sortByKey(transfers, (transfer) => `${transfer.sourceDefinitionId}:${transfer.targetDefinitionId}`);
   const indexesBySource = new Map<string, number[]>();
   let current: number[] = [];
   let currentQueued = new Set<number>();

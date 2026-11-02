@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { ASTNode, ASTResult } from "@parser/index";
 import type { CodeSymbol } from "@symbols/index";
 import { createDataFlowGraph, createProvenCallTargets, type CallFlowBinding, type DataFlowGraph, type FunctionFlowSummary, type InterproceduralFlow, type ProvenCallTarget, type TaintFlow, type VariableDefinition, type VariableUse } from "./flow-contracts";
-import { compareCodePoints } from "@shared/ordering";
+import { compareCodePoints, sortByKey } from "@shared/ordering";
 import { combineTaint } from "./cfg-dataflow";
 import { cfgSinkVerdicts, type SinkVerdict } from "./cfg-taint";
 import { propagateTaintPaths, setTaintPath } from "./taint-propagation";
@@ -1082,7 +1082,8 @@ export class DeterministicDataFlowGraphBuilder {
 
   private propagateTaint(state: FlowState): void {
     // The connection state exposes transfers in this order.
-    state.transfers.sort((left, right) => compareCodePoints(`${left.sourceDefinitionId}:${left.targetDefinitionId}`, `${right.sourceDefinitionId}:${right.targetDefinitionId}`));
+    const sorted = sortByKey(state.transfers, (transfer) => `${transfer.sourceDefinitionId}:${transfer.targetDefinitionId}`);
+    for (const [index, transfer] of sorted.entries()) state.transfers[index] = transfer;
     propagateTaintPaths(state.transfers, state.taintPaths);
   }
 

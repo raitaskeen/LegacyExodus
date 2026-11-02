@@ -71,8 +71,27 @@ const discoveryProjectionSchema = z.object({
     .optional(),
 });
 
+const deferred = Symbol("deferred discovery artifact");
+
+/**
+ * An artifact whose payload is produced each time it is read. The writer reads artifacts one at a
+ * time, so only one large payload is alive at once instead of all of them (BA-17). `load` must
+ * return the same content on every call.
+ */
+export function deferredArtifact(name: DiscoveryArtifactName, load: () => unknown): DiscoveryArtifact {
+  return Object.freeze({ name, get payload(): unknown { return deepFreeze(load()); }, [deferred]: true });
+}
+
+function isDeferred(artifact: DiscoveryArtifact): boolean {
+  return (artifact as { readonly [deferred]?: boolean })[deferred] === true;
+}
+
 export function createDiscoveryProjection(projection: DiscoveryProjection): DiscoveryProjection {
-  const parsedProjection = discoveryProjectionSchema.safeParse(projection);
+  // Validated without reading payloads, so a deferred artifact is not produced here.
+  const parsedProjection = discoveryProjectionSchema.safeParse({
+    ...projection,
+    artifacts: Array.isArray(projection?.artifacts) ? projection.artifacts.map((artifact) => ({ name: artifact?.name, payload: null })) : projection?.artifacts,
+  });
 
   if (!parsedProjection.success) {
     throw new LegacyExodusError({
@@ -85,8 +104,8 @@ export function createDiscoveryProjection(projection: DiscoveryProjection): Disc
   return Object.freeze({
     projectPath: parsedProjection.data.projectPath,
     artifacts: Object.freeze(
-      parsedProjection.data.artifacts.map((artifact) =>
-        Object.freeze({ name: artifact.name, payload: deepFreeze(artifact.payload) }),
+      projection.artifacts.map((artifact) =>
+        isDeferred(artifact) ? artifact : Object.freeze({ name: artifact.name, payload: deepFreeze(artifact.payload) }),
       ),
     ),
     ...(parsedProjection.data.metadata ? { metadata: Object.freeze({ ...parsedProjection.data.metadata }) } : {}),

@@ -43,7 +43,14 @@ export class DeterministicSemanticAnalysisEngine {
       ...referencedSymbolIds,
       ...namespaceExposedExportIds(params.symbolTables, params.dependencyGraph),
     ]);
-    const scopes = params.symbolTables.map((table) => createScope(table.filePath, table.symbols.map((symbol) => symbol.name), params.references.filter((reference) => reference.filePath === table.filePath).map((reference) => reference.name)));
+    // One pass groups references by file; filtering all references per file was files × references (BA-17).
+    const referencedNamesByFile = new Map<string, string[]>();
+    for (const reference of params.references) {
+      const names = referencedNamesByFile.get(reference.filePath);
+      if (names === undefined) referencedNamesByFile.set(reference.filePath, [reference.name]);
+      else names.push(reference.name);
+    }
+    const scopes = params.symbolTables.map((table) => createScope(table.filePath, table.symbols.map((symbol) => symbol.name), referencedNamesByFile.get(table.filePath) ?? []));
     const unusedImports = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => isLexicalImportBinding(symbol) && !referencedSymbolIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unused-import")));
     // A computed `import(name)` or `require(name)` can load any module, so no export is provably unused (BA-10).
     const exportState = params.symbolTables.some((table) => (table.unresolvedModuleReferences?.length ?? 0) > 0) ? "REQUIRES_REVIEW" : "INFERRED";

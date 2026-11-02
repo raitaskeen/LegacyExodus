@@ -15,10 +15,10 @@
   ],
   "sizeClass": "large",
   "license": "MIT",
-  "reason": "Large mixed JavaScript and TypeScript monorepo (about 9k files). Scale benchmark for BA-28/BA-17: wall time and peak memory of a full analysis. Budgets are the measured run plus 10% (S1 no-regression rule). Measured 2026-11-03 after Wave 3 (main 09aa02f, 16-core Windows 11, Bun 1.4.4): 7,174 of 9,171 files analyzed, 768 s wall time, 11,431 MiB peak RSS, 1.6 GB output. The audit-era run (2026-10-29) took about 26 min. Memory and output size are the open BA-17 work (streamed per-file shards, compact storage).",
+  "reason": "Large mixed JavaScript and TypeScript monorepo (about 9k files). Scale benchmark for BA-28/BA-17: wall time and peak memory of a full analysis. Budgets are the measured run plus 10% (S1 no-regression rule). Measured 2026-11-03 after the BA-17 memory pass (16-core Windows 11, Bun 1.4.4): 7,174 of 9,171 files analyzed, 328 s wall time, 6,166 MiB peak RSS, 1.6 GB output. Earlier: 768 s and 11,431 MiB after Wave 3; about 26 min in the audit-era run (2026-10-29). Streamed per-file shards (S4) and compact storage (S5) are the next memory and output steps.",
   "budgets": {
-    "maxWallMs": 845000,
-    "maxPeakRssMb": 12575
+    "maxWallMs": 360000,
+    "maxPeakRssMb": 6785
   },
   "knownHotspots": [
     "ghost/core — Express server, services, data model",

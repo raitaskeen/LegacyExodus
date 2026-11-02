@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { compareCodePoints } from "@shared/ordering";
+import { sortByKey } from "@shared/ordering";
 
 export interface SemanticCall {
   readonly id: string;
@@ -89,8 +89,9 @@ export function createSemanticAnalysis(analysis: SemanticAnalysis): SemanticAnal
   });
 }
 
+/** `items` are fresh from the schema parse, so they are frozen in place rather than copied again (BA-17). */
 function freezeSorted<T extends { readonly id?: string; readonly filePath?: string; readonly name?: string }>(items: readonly T[]): readonly T[] {
-  return Object.freeze([...items].sort((left, right) => compareCodePoints(stableKey(left), stableKey(right))).map((item) => Object.freeze({ ...item })));
+  return Object.freeze(sortByKey(items, stableKey).map((item) => Object.freeze(item)));
 }
 
 function stableKey(item: { readonly id?: string; readonly filePath?: string; readonly name?: string }): string {
