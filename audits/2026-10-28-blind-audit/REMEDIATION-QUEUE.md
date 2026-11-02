@@ -102,7 +102,15 @@ Notes:
 ## How to resume (new session or after a usage limit)
 
 1. `git -C C:\Projects\LegacyExodus fetch origin`, then read this file on `origin/audit/2026-10-28-blind-audit`.
-2. `gh pr list --repo raitaskeen/LegacyExodus --state open` shows in-flight PRs. No PRs are open after #224 (2026-11-03). Wave 3 is merged and Ghost is measured. Time halved; memory (11.4 GiB) and output (1.6 GB, mostly semantic/CFG/DFG JSON) did not change. Next by impact: S4+S5 (BA-17 streamed shards and compact storage; Ghost target under 3 GB), S3 workspace resolution (`@tryghost/*`), then BA-07.
+2. `gh pr list --repo raitaskeen/LegacyExodus --state open` shows in-flight PRs. No PRs are open after #225 (2026-11-03). BA-17 first pass merged as #225 `c54905e`:
+- Ghost went from 768 s / 11,431 MiB to **328 s / 6,166 MiB**; zod from 3,044 to 1,305 MiB. Output is byte-identical.
+- Causes fixed: sort keys built per comparison; scopes cost files × references; whole-payload record copies; all projection payloads held at once.
+- Ghost budgets are now 360 s / 6,785 MiB.
+
+Next by impact:
+- S4+S5 (per-file shards, compact storage): Ghost is still about 6 GB at the start of projection and writes 1.6 GB; target under 3 GB.
+- S3 workspace resolution (`@tryghost/*`).
+- Then BA-07.
 3. When an item merges, mark it here (commit to the audit branch) and start the next queued item whose dependencies are merged.
 4. Ledger check: `bun test tests/conformance` on `main` must pass, and `known-gaps.ts` lists exactly the open findings.
 
