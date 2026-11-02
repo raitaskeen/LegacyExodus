@@ -69,7 +69,7 @@ Each item is the smallest change that moves a measured number. Every one keeps o
 
 | Step | Change | Budget / gate | Findings |
 |---|---|---|---|
-| S1 | Ghost pinned as a benchmark (commit and tree hash, like the other corpora). The stage timer and peak RSS are recorded in the benchmark report | Baseline recorded; from then on a run may not regress time or RSS by more than 10% | BA-28. Pinned in #223 (`cli.ts scale ghost`); first measured run pending |
+| S1 | Ghost pinned as a benchmark (commit and tree hash, like the other corpora). The stage timer and peak RSS are recorded in the benchmark report | Baseline recorded; from then on a run may not regress time or RSS by more than 10% | BA-28. Pinned in #223 (`cli.ts scale ghost`). First run 2026-11-03: 768 s (was about 26 min), 11,431 MiB peak, 1.6 GB output, 17 taint flows; budgets set to measured +10% in #224 `e18a19c` |
 | S2 | Linear-cost data flow (Wave 3a–3b persistent state, no per-`if` scope copies) | Stage doubling ratio ≤ 2.5× at 1k→2k→4k functions | BA-28, BA-05. Done in #223 (×1.5/×1.7/×2.1). Long single functions are still quadratic: shared-prefix taint paths and persistent CFG state, only if Ghost needs them |
 | S3 | Workspace package resolution: read `workspaces` (npm/yarn) and `pnpm-workspace.yaml`, then map package names to their source roots via each package's `exports`/`main`/`types`. No network, no `node_modules` crawling | Ghost import bindings rise from 37.5% relative-only; the fact-diff gains are explained | new (coverage) |
 | S4 | Streamed, per-file sharded output. Write each file's facts when the file is done and drop its AST. The project-level indexes are built from shards, and the HMAC manifest covers shard digests | Peak RSS bounded by the largest file plus the indexes, not the repository. Target for Ghost: under 3 GB | BA-17 |
@@ -102,7 +102,7 @@ Notes:
 ## How to resume (new session or after a usage limit)
 
 1. `git -C C:\Projects\LegacyExodus fetch origin`, then read this file on `origin/audit/2026-10-28-blind-audit`.
-2. `gh pr list --repo raitaskeen/LegacyExodus --state open` shows in-flight PRs. No PRs are open after #223 (2026-11-03). Wave 3 (3a–3d) is merged. Next: the Ghost scale run (owner OK needed: about 600 MB fetch), then BA-07 taint policy packs, or the S3 workspace resolution.
+2. `gh pr list --repo raitaskeen/LegacyExodus --state open` shows in-flight PRs. No PRs are open after #224 (2026-11-03). Wave 3 is merged and Ghost is measured. Time halved; memory (11.4 GiB) and output (1.6 GB, mostly semantic/CFG/DFG JSON) did not change. Next by impact: S4+S5 (BA-17 streamed shards and compact storage; Ghost target under 3 GB), S3 workspace resolution (`@tryghost/*`), then BA-07.
 3. When an item merges, mark it here (commit to the audit branch) and start the next queued item whose dependencies are merged.
 4. Ledger check: `bun test tests/conformance` on `main` must pass, and `known-gaps.ts` lists exactly the open findings.
 
