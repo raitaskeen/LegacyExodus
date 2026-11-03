@@ -292,6 +292,46 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // BA-07: the taint policy follows what names resolve to (s06-taint's handlers, plus controls).
+    id: "taint-policy",
+    files: {
+      "app.js": [
+        "const express = require('express');",
+        "const { exec } = require('child_process');",
+        "const vm = require('node:vm');",
+        "const escapeHtml = require('escape-html');",
+        "const app = express();",
+        "app.post('/renamed', (request, response) => { response.send(request.body); });",
+        "app.post('/exec', (req, res) => { exec(req.query.cmd); });",
+        "app.post('/headers', (req, res) => { const v = req.headers['x-user']; res.send(v); });",
+        "app.post('/eval', (req, res) => { eval(req.body.code); });",
+        "app.post('/write', (req, res) => { res.write(req.body); });",
+        "app.post('/redirect', (req, res) => { res.redirect(req.query.next); });",
+        "app.post('/get', (req, res) => { res.send(req.get('x-forwarded-for')); });",
+        "app.post('/vm', (req, res) => { vm.runInNewContext(req.body.script); });",
+        "app.post('/nested', (req, res) => { const { body: { name } } = req; res.send(name); });",
+        "app.post('/escaped', (req, res) => { res.send(escapeHtml(req.body.name)); });",
+        "function local(cmd) { return cmd; }",
+        "app.post('/local', (req, res) => { local(req.body); });",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "policy:renamed-handler-params", category: "taint", has: /^app\.js\|.*\|sink=#[0-9a-f]+:res\.send\|/ },
+      { id: "policy:destructured-require-sink", category: "taint", has: /^app\.js\|.*\|sink=#[0-9a-f]+:child_process\.exec\|/ },
+      { id: "policy:global-eval-sink", category: "taint", has: /^app\.js\|.*\|sink=#[0-9a-f]+:eval\|/ },
+      { id: "policy:response-write-sink", category: "taint", has: /^app\.js\|.*\|sink=#[0-9a-f]+:res\.write\|/ },
+      { id: "policy:response-redirect-sink", category: "taint", has: /^app\.js\|.*\|sink=#[0-9a-f]+:res\.redirect\|/ },
+      { id: "policy:node-prefixed-module-sink", category: "taint", has: /^app\.js\|.*\|sink=#[0-9a-f]+:vm\.runInNewContext\|/ },
+      { id: "policy:local-function-is-not-a-sink", category: "taint", lacks: /\|sink=#[0-9a-f]+:local\|/ },
+      {
+        id: "policy:sanitizer-cuts-and-every-handler-flows",
+        // One flow per tainted handler: renamed, exec, headers, eval, write, redirect, get, vm, nested; not escaped, not local.
+        check: (directory) => readJson(directory, "data-flow.json").graphs.flatMap((graph: { taintFlows: unknown[] }) => graph.taintFlows).length === 9,
+      },
+    ],
+  },
+  {
     // S3: a workspace package imported by name resolves to its source, like a relative import.
     id: "workspace-package",
     files: {

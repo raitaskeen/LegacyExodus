@@ -5,7 +5,6 @@
  * ledger always describes the engine exactly. A fix removes its entries in the same PR.
  */
 const gaps: Readonly<Record<string, readonly string[]>> = {
-  "BA-07 taint policy aliasing": ["taint-destructured-body:flow"],
   "BA-08 Express route model": [
     "express:middleware-is-per-router",
     "express:settings-read-is-not-route",

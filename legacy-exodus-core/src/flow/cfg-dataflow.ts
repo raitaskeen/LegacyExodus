@@ -26,6 +26,8 @@ export interface DataFlowContext {
   definitionId(node: ASTNode, binding: string): string;
   /** Source id when this call or member read produces tainted data. */
   sourceOf(node: ASTNode): string | undefined;
+  /** Source id when `keys` destructured from the expression `object` name a source; `at` is the property. */
+  sourceOfDestructured?(object: ASTNode, keys: readonly string[], at: ASTNode): string | undefined;
   /** Binding key for an identifier; the name by default. */
   bindingOf?(identifier: ASTNode, name: string): string;
   /** Value of a call that is not a source, from its callee and argument values; untainted by default. */
@@ -133,6 +135,8 @@ const TYPE_ROLES = new Set(["typeAnnotation", "typeParameters", "typeArguments",
  */
 interface Structured {
   readonly taint: Taint;
+  /** The expression (and keys below it) this value was read from, when it is a name or member path. */
+  readonly origin?: { readonly object: ASTNode; readonly keys: readonly string[]; readonly sourced: boolean };
   readonly fields?: ReadonlyMap<string, Structured>;
   readonly elements?: readonly Structured[];
   readonly definite?: boolean;
@@ -400,14 +404,37 @@ class Evaluator {
       const elements = node.children.filter((child) => child.role === "elements").map((child) => child.type === "ArrayHole" ? MISSING : this.structured(child, state));
       return { taint: elements.reduce((taint, part) => combineTaint(taint, part.taint), EMPTY_TAINT), elements, definite: true };
     }
-    return { taint: this.expression(node, state) };
+    const taint = this.expression(node, state);
+    // `sourced`: the expression itself is a source, so a key destructured from it adds no second one.
+    return node.type === "Identifier" || node.type === "MemberExpression" ? { taint, origin: { object: node, keys: [], sourced: this.context.sourceOf(node) !== undefined } } : { taint };
+  }
+
+  /** The part of `value` under `key`: from a literal's fields, or a source the policy names for its origin. */
+  private part(value: Structured, key: string, at: ASTNode): Structured {
+    if (value.origin === undefined) return { taint: value.taint };
+    const keys = [...value.origin.keys, key];
+    const sourceId = value.origin.sourced ? undefined : this.context.sourceOfDestructured?.(value.origin.object, keys, at);
+    if (sourceId !== undefined) this.sources?.add(sourceId);
+    const taint = sourceId === undefined ? value.taint : combineTaint(value.taint, new Map([[sourceId, true]]));
+    return { taint, origin: { object: value.origin.object, keys, sourced: value.origin.sourced || sourceId !== undefined } };
   }
 
   /** Binds a pattern from a structured value: each target from its own part where the shape is known. */
   private bind(target: ASTNode, value: Structured, state: State): void {
     switch (target.type) {
       case "ObjectPattern": {
-        if (value.fields === undefined) { this.assign(target, value.taint, state); return; }
+        if (value.fields === undefined && value.origin === undefined) { this.assign(target, value.taint, state); return; }
+        if (value.fields === undefined) {
+          for (const property of target.children) {
+            if (property.type === "RestElement") { const argument = role(property, "argument"); if (argument !== undefined) this.assign(argument, value.taint, state); continue; }
+            if (property.type !== "ObjectProperty") continue;
+            const key = staticKey(property);
+            const binding = role(property, "value");
+            if (key === undefined) { const computed = role(property, "key"); if (computed !== undefined) this.expression(computed, state); }
+            if (binding !== undefined) this.bind(binding, key === undefined ? { taint: value.taint } : this.part(value, key, property), state);
+          }
+          return;
+        }
         const named = new Set<string>();
         for (const property of target.children) {
           if (property.type === "RestElement") continue;
