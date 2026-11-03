@@ -64,8 +64,9 @@ export async function runScaleBenchmark(name: string): Promise<ScaleResult> {
  * repository grows: the gate fails a change that brings back whole-run state.
  */
 export const SYNTHETIC_BUDGETS: Readonly<Record<number, { readonly maxWallMs: number; readonly maxPeakRssMb: number }>> = {
-  // Measured 2026-11-04: 1,509-1,666 MiB, 131-382 s on a 16 GB Windows dev machine.
-  10_000: { maxWallMs: 600_000, maxPeakRssMb: 2_048 },
+  // Measured 2026-11-04: 2,212 MiB, 115 s on the CI runner (ubuntu-latest); 1,509-1,666 MiB on a 16 GB Windows
+  // dev machine. The ceiling is the CI peak plus about 25%.
+  10_000: { maxWallMs: 600_000, maxPeakRssMb: 2_800 },
 };
 
 /** One fresh analysis of the synthetic corpus of `files` modules, checked against its budgets. */
