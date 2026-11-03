@@ -46,7 +46,7 @@ Executable reality always supersedes written prose. When discrepancies arise bet
 ### Precedence Rules
 1. **No Prose Supremacy:** A document or roadmap MUST NOT override executable reality. If documentation states a feature exists but no working, integrated implementation exists in `legacy-exodus-core`, the feature MUST be treated as **NOT IMPLEMENTED**.
 2. **Test as Specification:** The test suite defines the operational contract of the code. If code passes tests but violates an explicit architectural boundary defined in Rank 1–4, the test suite is incomplete.
-3. **Docs-Foundation Stale Snapshot:** The `legacy-exodus-core` snapshot residing inside the `docs-foundation` branch is historical and unverified. It MUST NOT be used as an implementation or test authority. This prohibition applies equally to source code (`src/`), automated test suites and regression fixtures (`tests/`), and benchmarks. Agents MUST query `core-foundation` via branch-qualified Git commands (`git show core-foundation:<path>`) for source and test truth.
+3. **Single Source of Truth:** `main` is the implementation and test authority. The retired `docs-foundation` branch holds a historical, unverified `legacy-exodus-core` snapshot that MUST NOT be used as evidence. When a checkout may be behind, agents query `main` with branch-qualified Git commands (`git show origin/main:<path>`).
 
 ---
 
@@ -234,16 +234,11 @@ The engine MUST stream and process files in bounded batches. Whole-repository AS
 
 To maintain a clean, auditable release history, the repository enforces strict branch separation:
 
-### Permanent Branches (Exactly Three)
-1. **`main`**: The authoritative canonical integration and release baseline. NEVER commit directly to `main`; all changes land on `main` via verified Pull Requests.
-2. **`core-foundation`**: The authoritative core implementation development trunk for `legacy-exodus-core` source, unit/integration tests, benchmarks, and runtime code.
-3. **`docs-foundation`**: The authoritative documentation development trunk for architectural guides, specifications, ADRs, and website content.
+### Permanent Branch (Exactly One)
+1. **`main`**: The single implementation, documentation and release truth. NEVER commit directly to `main`; all changes land on `main` via verified Pull Requests. `core-foundation` and `docs-foundation` are retired as integration branches (2026-10-28).
 
 ### Temporary Task Branches & Authoritative Bases
-* All active engineering and documentation work MUST occur on temporary task branches created from the appropriate authoritative base:
-  * Core implementation work (`legacy-exodus-core/`) MUST branch from `core-foundation`.
-  * Documentation and architectural work (`docs/`, architecture, ADRs) MUST branch from `docs-foundation`.
-  * Repository-wide / main integration tasks MUST branch from `main` ONLY when genuinely appropriate.
+* All active engineering and documentation work MUST occur on temporary task branches created from `main`.
 * Branch naming conventions:
   * `chore/<topic>`: Dependency, toolchain, or maintenance tasks.
   * `fix/<finding-id>`: Forensic defect remediation.
@@ -259,7 +254,7 @@ To maintain a clean, auditable release history, the repository enforces strict b
 * **Post-Push Clean Worktree Postcondition:** AFTER committing and pushing to origin, `git status` MUST confirm a clean working tree (`nothing to commit, working tree clean`).
 
 ### Force-Push Policy (Deterministic Boundary)
-1. **Autonomous Agents & Contributors Prohibition:** Autonomous agents and general contributors MUST NOT force-push (`git push --force` or `--force-with-lease`) to shared branches (`main`, `core-foundation`, `docs-foundation`).
+1. **Autonomous Agents & Contributors Prohibition:** Autonomous agents and general contributors MUST NOT force-push (`git push --force` or `--force-with-lease`) to shared branches (`main` and any retired integration branch).
 2. **Normal Development Prohibition:** Normal day-to-day engineering and PR workflows MUST NEVER employ force-pushes on shared branches.
 3. **Human Maintainer Emergency Exception:** Human Maintainers MAY execute a force-push ONLY as a narrowly defined emergency recovery operation (e.g., rectifying accidental credential leakage or catastrophic repository history corruption). Any emergency force-push MUST be deliberate, documented, and communicated to all maintainers.
 
@@ -271,12 +266,12 @@ To prevent semantic cross-contamination and noisy PRs:
 
 1. **Strict Directory Boundary:** Core code lives in `legacy-exodus-core/`. Documentation lives in `docs/`.
 2. **No Mixed PRs:** Core remediation PRs MUST NOT edit `README.md`, `CHANGELOG.md`, `docs/`, or architectural marketing materials unless explicitly required for technical build correctness.
-3. **Docs-Foundation Authority Boundary:** The stale copy of `legacy-exodus-core` present on `docs-foundation` MUST NEVER be treated as current source truth. Documentation tasks must inspect the current core using Git queries:
+3. **Retired-Branch Boundary:** The stale copy of `legacy-exodus-core` on the retired `docs-foundation` branch MUST NEVER be treated as current source truth. Documentation tasks inspect the current core on `main`:
    ```bash
-   git show core-foundation:legacy-exodus-core/src/some-file.ts
-   git log core-foundation --oneline -n 10
+   git show origin/main:legacy-exodus-core/src/some-file.ts
+   git log origin/main --oneline -n 10
    ```
-4. **No Arbitrary Synchronization:** Contributors MUST NOT merge `main` or `core-foundation` into `docs-foundation` merely to synchronize the stale core directory.
+4. **No Revival:** Contributors MUST NOT merge into or develop on the retired `core-foundation` and `docs-foundation` branches.
 
 ---
 

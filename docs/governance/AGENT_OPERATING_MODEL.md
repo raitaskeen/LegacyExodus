@@ -30,9 +30,7 @@ flowchart TD
     end
 
     subgraph Authoritative Bases & Merges
-        H -->|Core PR Approved| CF[Merged into core-foundation]
-        H -->|Docs PR Approved| DF[Merged into docs-foundation]
-        H -->|Integration Release PR| M[Merged into main]
+        H -->|PR Approved| M[Merged into main]
     end
 ```
 
@@ -88,7 +86,7 @@ flowchart TD
   3. Destructive migrations or database schema version increments.
   4. Major toolchain or runtime upgrades (Bun runtime, compiler replacements).
   5. Branch strategy changes or permanent governance modifications.
-  6. PR merges into `main`, `core-foundation`, or `docs-foundation`.
+  6. PR merges into `main`.
   7. Resolving contradictory evidence between Builder and Red Team.
 
 ---
@@ -163,7 +161,7 @@ Every code remediation executed by an engineering agent MUST follow this 20-step
    * Gather primary evidence from live AST mappings, execution traces, or logs. Do not accept external review text without primary evidence.
 
 3. **Step 3: Finding Confirmation**
-   * Confirm the defect against current implementation code on `core-foundation:legacy-exodus-core/src/`.
+   * Confirm the defect against current implementation code on `main:legacy-exodus-core/src/`.
    * Formulate a minimal reproduction scenario or CLI invocation proving the defect exists in executable reality.
 
 4. **Step 4: Smallest Safe Change Definition**
@@ -287,7 +285,7 @@ When a remediation is submitted for red-team review in Step 13:
 When performing documentation maintenance:
 
 ```text
-CURRENT SOURCE (core-foundation)
+CURRENT SOURCE (main)
        │
        ▼
 EVIDENCE CHECK (inspect live symbols, CLI help, exports)
@@ -302,7 +300,7 @@ LINK & REFERENCE AUDIT (verify markdown anchors & cross-references)
 HYGIENE CHECK (git diff --check)
        │
        ▼
-COMMIT & PUSH (to docs-foundation or task branch)
+COMMIT & PUSH (to a task branch, PR into main)
        │
        ▼
 HARD STOP
