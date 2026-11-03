@@ -134,6 +134,26 @@ export class DeterministicCallGraphBuilder {
       }
     }
 
+    // Under the classic JSX runtime, JSX compiles to `React.createElement`, so an element or fragment
+    // uses the visible `React` binding. Which runtime a project uses is not known here; the binding is
+    // never claimed unused in a file that needs it under either (BA-24).
+    if (node.type === "JSXElement" || node.type === "JSXFragment") {
+      const binding = resolveLexicalBinding(fileSymbols, "React", nextContext.scope);
+      if (binding.state === "ONE_BINDING") {
+        const location = node.location?.start;
+        for (const target of binding.referenceTargets) {
+          references.push({
+            id: hash(`jsx-reference:${ast.metadata.sourcePath}:${target.id}:${location?.line ?? 0}:${location?.column ?? 0}`),
+            filePath: ast.metadata.sourcePath,
+            name: "React",
+            kind: "identifier",
+            resolutionState: "RESOLVED",
+            resolvedSymbolId: target.id,
+          });
+        }
+      }
+    }
+
     for (const child of node.children) {
       this.visit(
         child,

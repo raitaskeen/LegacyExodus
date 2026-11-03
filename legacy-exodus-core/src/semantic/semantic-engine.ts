@@ -36,13 +36,18 @@ export class DeterministicSemanticAnalysisEngine {
     readonly dependencyGraph: DependencyGraph;
     readonly filePaths: readonly string[];
     readonly httpCalls: readonly { readonly routes: readonly ExpressRoute[]; readonly middlewareChains: readonly MiddlewareChain[] }[];
+    /** Package entry modules (main, exports, bin): their exports are public API, used outside the project (BA-11). */
+    readonly publicModules?: ReadonlySet<string>;
   }): SemanticAnalysis {
     const referencedSymbolIds = new Set(params.references.flatMap((reference) => reference.resolvedSymbolId === undefined ? [] : [reference.resolvedSymbolId]));
+    const modules = moduleTargets(params.symbolTables, params.dependencyGraph, this.callGraphBuilder.resolver);
     const exportedIds = new Set([
       ...params.dependencyGraph.edges.map((edge) => edge.targetExportSymbolId),
       ...referencedSymbolIds,
-      ...namespaceExposedExportIds(params.symbolTables, params.dependencyGraph, this.callGraphBuilder.resolver),
+      ...namespaceExposedExportIds(params.symbolTables, modules),
+      ...reexportChainIds(params.symbolTables, modules),
     ]);
+    const publicModules = params.publicModules ?? new Set<string>();
     // One pass groups references by file; filtering all references per file was files × references (BA-17).
     const referencedNamesByFile = new Map<string, string[]>();
     for (const reference of params.references) {
@@ -54,8 +59,15 @@ export class DeterministicSemanticAnalysisEngine {
     const unusedImports = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => isLexicalImportBinding(symbol) && !referencedSymbolIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unused-import")));
     // A computed `import(name)` or `require(name)` can load any module, so no export is provably unused (BA-10).
     const exportState = params.symbolTables.some((table) => (table.unresolvedModuleReferences?.length ?? 0) > 0) ? "REQUIRES_REVIEW" : "INFERRED";
-    const unusedExports = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => symbol.kind === "export" && !exportedIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unused-export", exportState)));
-    const deadCode = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => ["function", "method", "class", "variable"].includes(symbol.kind) && symbol.expression !== true && !symbol.exported && !referencedSymbolIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unreferenced-local-symbol")));
+    const unusedExports = params.symbolTables.filter((table) => !publicModules.has(canonicalizePath(table.filePath))).flatMap((table) => table.symbols.filter((symbol) => symbol.kind === "export" && !exportedIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unused-export", exportState)));
+    // A local is a lexical binding: object-literal keys, class members and `x.y =` members are
+    // properties, read through objects the references cannot follow, so they are never "unreferenced locals". A leading `_`
+    // marks a binding unused on purpose, as `tsc --noUnusedLocals` treats it (BA-11). A parameter before a used one
+    // holds a position callers fill, so only parameters after the last used one are dead (ESLint `after-used`).
+    const deadCode = params.symbolTables.flatMap((table) => {
+      const positional = requiredParameterIds(table.symbols, referencedSymbolIds);
+      return table.symbols.filter((symbol) => ["function", "method", "class", "variable"].includes(symbol.kind) && symbol.expression !== true && !symbol.exported && symbol.member !== true && !symbol.name.startsWith("_") && !referencedSymbolIds.has(symbol.id) && !positional.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unreferenced-local-symbol"));
+    });
 
     return createSemanticAnalysis({
       calls: params.calls,
@@ -76,23 +88,8 @@ export class DeterministicSemanticAnalysisEngine {
  * following `export *` chains. References carry no member-access context, and a namespace object can
  * escape (`use(ns)`, `ns[key]`), so every export it exposes may be read (BA-09).
  */
-function namespaceExposedExportIds(symbolTables: readonly SymbolTable[], dependencyGraph: DependencyGraph, resolver: ModuleResolver): readonly string[] {
-  const tablesByPath = new Map(symbolTables.map((table) => [canonicalizePath(table.filePath), table]));
-  const knownPaths = new Set(tablesByPath.keys());
-  const edgeTargetsByReference = new Map<string, string[]>();
-  for (const edge of dependencyGraph.moduleGraph?.edges ?? []) {
-    const key = JSON.stringify([edge.sourceFilePath, edge.moduleSpecifier]);
-    edgeTargetsByReference.set(key, [...(edgeTargetsByReference.get(key) ?? []), edge.targetFilePath]);
-  }
-  const targetsOf = (filePath: string, moduleSpecifier: string): readonly string[] => {
-    const source = canonicalizePath(filePath);
-    // Imports carry module edges resolved with the project's tsconfig; re-exports do not, so they
-    // fall back to the default resolver.
-    const edgeTargets = edgeTargetsByReference.get(JSON.stringify([source, moduleSpecifier]));
-    if (edgeTargets !== undefined) return edgeTargets;
-    const resolved = resolver.resolve(source, moduleSpecifier, knownPaths).resolvedPath;
-    return resolved === null ? [] : [resolved];
-  };
+function namespaceExposedExportIds(symbolTables: readonly SymbolTable[], modules: ModuleTargets): readonly string[] {
+  const { tablesByPath, targetsOf } = modules;
   const pending = symbolTables.flatMap((table) => [
     ...table.symbols.flatMap((symbol) =>
       symbol.moduleSpecifier !== undefined && symbol.sourceSymbolName === "*" && !symbol.defaultExport
@@ -117,6 +114,91 @@ function namespaceExposedExportIds(symbolTables: readonly SymbolTable[], depende
     }
   }
   return exposed;
+}
+
+/**
+ * Re-exports an import passes through (BA-11): `import { a } from "./index"` with
+ * `export { a } from "./a"` in the barrel uses that re-export too, and an `export *` the name is
+ * found through. The dependency edge targets only the terminal export, so barrels looked unused.
+ */
+function reexportChainIds(symbolTables: readonly SymbolTable[], modules: ModuleTargets): readonly string[] {
+  const { tablesByPath, targetsOf } = modules;
+  const used: string[] = [];
+  const follow = (filePath: string, name: string, seen: Set<string>): boolean => {
+    const key = `${filePath}\u0000${name}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    const table = tablesByPath.get(filePath);
+    if (table === undefined) return false;
+    const direct = table.symbols.find((symbol) => symbol.kind === "export" && (name === "default" ? symbol.defaultExport : symbol.name === name && name !== "*"));
+    if (direct !== undefined) {
+      used.push(direct.id);
+      const forwarded = direct.sourceSymbolName ?? name;
+      if (direct.moduleSpecifier !== undefined && forwarded !== "*") {
+        for (const target of targetsOf(table.filePath, direct.moduleSpecifier)) follow(target, forwarded, seen);
+      }
+      return true;
+    }
+    if (name === "default") return false;
+    let found = false;
+    for (const star of table.symbols) {
+      if (star.kind !== "export" || star.name !== "*" || star.moduleSpecifier === undefined) continue;
+      for (const target of targetsOf(table.filePath, star.moduleSpecifier)) {
+        if (follow(target, name, seen)) { used.push(star.id); found = true; }
+      }
+    }
+    return found;
+  };
+  for (const table of symbolTables) {
+    for (const symbol of table.symbols) {
+      if (symbol.kind !== "import" || symbol.moduleSpecifier === undefined || (symbol.sourceSymbolName === "*" && !symbol.defaultExport)) continue;
+      const name = symbol.defaultExport ? "default" : symbol.sourceSymbolName ?? symbol.name;
+      for (const target of targetsOf(table.filePath, symbol.moduleSpecifier)) follow(target, name, new Set());
+    }
+  }
+  return used;
+}
+
+interface ModuleTargets {
+  readonly tablesByPath: ReadonlyMap<string, SymbolTable>;
+  /** Files `moduleSpecifier` names from `filePath`: its module edges, else the run's resolver. */
+  readonly targetsOf: (filePath: string, moduleSpecifier: string) => readonly string[];
+}
+
+function moduleTargets(symbolTables: readonly SymbolTable[], dependencyGraph: DependencyGraph, resolver: ModuleResolver): ModuleTargets {
+  const tablesByPath = new Map(symbolTables.map((table) => [canonicalizePath(table.filePath), table]));
+  const knownPaths = new Set(tablesByPath.keys());
+  const edgeTargetsByReference = new Map<string, string[]>();
+  for (const edge of dependencyGraph.moduleGraph?.edges ?? []) {
+    const key = JSON.stringify([edge.sourceFilePath, edge.moduleSpecifier]);
+    edgeTargetsByReference.set(key, [...(edgeTargetsByReference.get(key) ?? []), edge.targetFilePath]);
+  }
+  const targetsOf = (filePath: string, moduleSpecifier: string): readonly string[] => {
+    const origin = canonicalizePath(filePath);
+    // Imports carry module edges resolved with the project's tsconfig; re-exports do not, so they
+    // fall back to the run's resolver.
+    const edgeTargets = edgeTargetsByReference.get(JSON.stringify([origin, moduleSpecifier]));
+    if (edgeTargets !== undefined) return edgeTargets;
+    const resolved = resolver.resolve(origin, moduleSpecifier, knownPaths).resolvedPath;
+    return resolved === null ? [] : [resolved];
+  };
+  return { tablesByPath, targetsOf };
+}
+
+/** Unused parameters that precede a used parameter of the same function: they keep later ones in place. */
+function requiredParameterIds(symbols: SymbolTable["symbols"], referenced: ReadonlySet<string>): ReadonlySet<string> {
+  const byFunction = new Map<string, SymbolTable["symbols"][number][]>();
+  for (const symbol of symbols) {
+    if (symbol.declarationKind !== "param" || symbol.scopeId === undefined) continue;
+    byFunction.set(symbol.scopeId, [...(byFunction.get(symbol.scopeId) ?? []), symbol]);
+  }
+  const required = new Set<string>();
+  for (const parameters of byFunction.values()) {
+    const ordered = [...parameters].sort((left, right) => (left.location?.start.line ?? 0) - (right.location?.start.line ?? 0) || (left.location?.start.column ?? 0) - (right.location?.start.column ?? 0));
+    const lastUsed = ordered.map((parameter) => referenced.has(parameter.id)).lastIndexOf(true);
+    for (const parameter of ordered.slice(0, Math.max(lastUsed, 0))) required.add(parameter.id);
+  }
+  return required;
 }
 
 function isLexicalImportBinding(symbol: SymbolTable["symbols"][number]): boolean {

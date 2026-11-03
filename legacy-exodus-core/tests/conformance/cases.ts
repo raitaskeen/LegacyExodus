@@ -334,6 +334,66 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // BA-11: findings report only what is provably unused, and still report what is.
+    id: "findings-precision",
+    files: {
+      "package.json": JSON.stringify({ name: "lib", main: "src/main.js" }),
+      "src/main.js": "export function start() { return 1; }\n",
+      "src/lib/index.js": "export { helper } from './util.js';\n",
+      "src/lib/util.js": [
+        "export function helper() { return 1; }",
+        "export function unusedThing() { return 2; }",
+        "const config = { key: 1, other: 2 };",
+        "export class Box { method() { return config.key; } }",
+        "function deadLocal() { return 0; }",
+        "const _ignored = 1;",
+        "",
+      ].join("\n"),
+      "src/app.js": "import { helper } from './lib/index.js';\nimport { Box } from './lib/util.js';\nhelper();\nnew Box();\n",
+      "src/locals.ts": [
+        "export function copy(source: { a?: number }): object {",
+        "  const leftover = 1;",
+        "  const merged = { ...source };",
+        "  return source?.a === 1 ? merged : {};",
+        "}",
+        "export class Store {",
+        "  constructor(private readonly backend: string) {}",
+        "  read(): string { return this.backend; }",
+        "}",
+        "export const pick = (first: number, second: number) => second;",
+        "export const head = (front: number, tail: number) => front;",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "findings:barrel-reexport-used", category: "unusedExports", lacks: /\|export:helper@\S*@src\/lib\/index\.js\|/ },
+      { id: "findings:entry-module-exports-are-public", category: "unusedExports", lacks: /\|export:start@\S*@src\/main\.js\|/ },
+      { id: "findings:unused-export-still-reported", category: "unusedExports", has: /\|export:unusedThing@\S*@src\/lib\/util\.js\|/ },
+      { id: "findings:object-keys-are-not-dead-locals", category: "deadCode", lacks: /\|variable:(key|other)@/ },
+      { id: "findings:class-members-are-not-dead-locals", category: "deadCode", lacks: /\|method:method@/ },
+      { id: "findings:underscore-binding-intentional", category: "deadCode", lacks: /\|variable:_ignored@/ },
+      { id: "findings:dead-local-still-reported", category: "deadCode", has: /^unreferenced-local-symbol\|function:deadLocal@\S*@src\/lib\/util\.js\|/ },
+      { id: "findings:local-of-exported-function-reported", category: "deadCode", has: /^unreferenced-local-symbol\|variable:leftover@\S*@src\/locals\.ts\|/ },
+      { id: "findings:spread-does-not-hide-references", category: "deadCode", lacks: /\|variable:source@/ },
+      { id: "findings:parameter-property-is-a-member", category: "deadCode", lacks: /\|variable:backend@/ },
+      { id: "findings:parameter-before-used-one-kept", category: "deadCode", lacks: /\|variable:first@/ },
+      { id: "findings:trailing-unused-parameter-reported", category: "deadCode", has: /^unreferenced-local-symbol\|variable:tail@\S*@src\/locals\.ts\|/ },
+    ],
+  },
+  {
+    // BA-24: under the classic JSX runtime, JSX uses React; it is never claimed unused there.
+    id: "jsx-react-import",
+    files: {
+      "src/Card.jsx": "import React from 'react';\nimport { unused } from './helpers.js';\nexport function Card() { return <div>hi</div>; }\n",
+      "src/helpers.js": "export const unused = 1;\n",
+      "src/main.js": "import { Card } from './Card.jsx';\nCard();\n",
+    },
+    expectations: [
+      { id: "jsx:react-import-used-by-jsx", category: "unusedImports", lacks: /\|import:React@/ },
+      { id: "jsx:other-unused-import-still-reported", category: "unusedImports", has: /\|import:unused@\S*@src\/Card\.jsx\|/ },
+    ],
+  },
+  {
     // BA-07: the taint policy follows what names resolve to (s06-taint's handlers, plus controls).
     id: "taint-policy",
     files: {

@@ -256,6 +256,9 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         const blockScopeId = createLexicalScopeId(node.type, node.location);
         this.visitChildren(node, ast, {
           ...context,
+          // A declaration's export does not reach the bindings in its body.
+          exported: false,
+          defaultExport: false,
           scopeId: blockScopeId,
           scopeChain: [blockScopeId, ...context.scopeChain],
         }, symbols, pendingExports);
@@ -302,6 +305,9 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         this.extractParameterSymbols(node, ast, fnScopeId, fnSymbol.name, fnSymbol.id, symbols);
         this.visitChildren(node, ast, {
           ...context,
+          // A declaration's export does not reach the bindings in its body.
+          exported: false,
+          defaultExport: false,
           enclosingAssignedName: undefined,
           enclosingAssignedId: undefined,
           scopeId: fnScopeId,
@@ -325,6 +331,9 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         this.extractParameterSymbols(node, ast, fnScopeId, fnName, fnId, symbols);
         this.visitChildren(node, ast, {
           ...context,
+          // A declaration's export does not reach the bindings in its body.
+          exported: false,
+          defaultExport: false,
           enclosingAssignedName: undefined,
           enclosingAssignedId: undefined,
           scopeId: fnScopeId,
@@ -370,6 +379,9 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         this.extractParameterSymbols(node, ast, methodScopeId, methodSymbol.name, methodSymbol.id, symbols);
         this.visitChildren(node, ast, {
           ...context,
+          // A declaration's export does not reach the bindings in its body.
+          exported: false,
+          defaultExport: false,
           scopeId: methodScopeId,
           functionScopeId: methodScopeId,
           scopeChain: [methodScopeId, ...context.scopeChain],
@@ -382,6 +394,9 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         this.extractParameterSymbols(node, ast, methodScopeId, methodSymbol.name, methodSymbol.id, symbols);
         this.visitChildren(node, ast, {
           ...context,
+          // A declaration's export does not reach the bindings in its body.
+          exported: false,
+          defaultExport: false,
           scopeId: methodScopeId,
           functionScopeId: methodScopeId,
           scopeChain: [methodScopeId, ...context.scopeChain],
@@ -580,6 +595,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
                 containerName: name,
               }, {
                 declarationKind,
+                member: true,
               }),
             );
           }
@@ -619,7 +635,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     symbols: CodeSymbol[],
   ): CodeSymbol {
     const name = getName(node) ?? "anonymous-method";
-    const symbol = this.createSymbol("method", name, node, ast, context, { parameters: getParameters(node) });
+    const symbol = this.createSymbol("method", name, node, ast, context, { parameters: getParameters(node), member: true });
     symbols.push(symbol);
     return symbol;
   }
@@ -634,6 +650,8 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
   ): void {
     const paramNodes = fnNode.children.filter((child) => child.role === "params" || child.role === "param");
     for (const paramNode of paramNodes) {
+      // `constructor(private x: T)` also declares the class field `x`, read as `this.x`.
+      const property = paramNode.type === "TSParameterProperty";
       const boundNodes = extractBoundIdentifierNodes(paramNode);
       for (const idNode of boundNodes) {
         const name = readIdentifierName(idNode);
@@ -648,6 +666,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
             defaultExport: false,
           }, {
             declarationKind: "param",
+            ...(property ? { member: true as const } : {}),
           }),
         );
       }
@@ -678,6 +697,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       const methodSymbol = this.createSymbol("method", name, node, ast, context, {
         parameters: getParameters(initializer),
         async: initializer.attributes.async === true,
+        member: true,
       });
       symbols.push(methodSymbol);
       this.visitChildren(node, ast, {
@@ -691,6 +711,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       symbols.push(
         this.createSymbol("variable", name, node, ast, context, {
           ...(value === undefined ? {} : { value }),
+          member: true,
         }),
       );
     }
@@ -990,6 +1011,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
               exported: true,
             }, {
               sourceSymbolName: sourceSymbolName ?? propName,
+              member: true,
             }),
           );
         }
@@ -1008,6 +1030,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
             }, {
               parameters: funcParams,
               sourceSymbolName: funcName !== propName ? funcName : undefined,
+              member: true,
             }),
           );
         } else {
@@ -1018,6 +1041,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
               containerName: receiverName,
             }, {
               ...(sourceSymbolName === undefined ? {} : { sourceSymbolName }),
+              member: true,
             }),
           );
         }
@@ -1027,6 +1051,8 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
           this.createSymbol("function", targetPath, innermostRight, ast, context, {
             parameters: funcParams,
             anonymous: false,
+            // A value written into an existing binding: that binding's uses are its uses.
+            expression: true,
           }),
         );
       }
@@ -1416,7 +1442,8 @@ function findObjectProperties(node: ASTNode): readonly ExtractedProperty[] {
   const seen = new Set<string>();
 
   for (const child of node.children) {
-    if (child.type !== "ObjectProperty" && child.role !== "properties") continue;
+    // A spread (`{ ...rest }`) names no property; its argument is a reference, not a key.
+    if (child.type !== "ObjectProperty" && child.type !== "ObjectMethod") continue;
     const keyChild = child.children.find((c) => c.role === "key")
       ?? child.children.find((c) => c.type === "Identifier" || c.type === "StringLiteral");
     const valChild = child.children.find((c) => c.role === "value");
