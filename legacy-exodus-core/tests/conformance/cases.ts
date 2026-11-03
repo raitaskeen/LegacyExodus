@@ -326,6 +326,25 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // Branches inside expressions are blocks: `a && b`, `a ?? b`, `c ? x : y`, `x?.y`, `x ||= y`, also in loop tests.
+    id: "cfg-expression-control",
+    files: {
+      "expr.js": [
+        "export function pick(a, b) { const v = a ?? b; return a && b ? v : null; }",
+        "export function call(svc, x) { svc?.run(x); x ||= 1; return x; }",
+        "export function spin(a, b) { while (a && b()) { a = a.next; } return a; }",
+        "export function later(a) { switch (a) { case a ?? 1: return 1; } return 0; }",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "cfg-expr:logical-and-conditional-resolved", category: "cfg", has: /^expr\.js\|pick@[^|]*\|[^|]*\|blocks=9\|edges=11\|loops=0\|unreachable=0\|dead=0\|state=RESOLVED$/ },
+      { id: "cfg-expr:optional-and-logical-assignment-resolved", category: "cfg", has: /^expr\.js\|call@[^|]*\|.*\|state=RESOLVED$/ },
+      { id: "cfg-expr:loop-test-lowered", category: "cfg", has: /^expr\.js\|spin@[^|]*\|.*\|loops=1\|.*\|state=RESOLVED$/ },
+      { id: "cfg-expr:unlowered-case-test-stays-unsupported", category: "cfg", has: /^expr\.js\|later@[^|]*\|.*\|state=UNSUPPORTED$/ },
+    ],
+  },
+  {
     id: "projection",
     files: { "index.js": "export const a = 1;\n" },
     expectations: [
