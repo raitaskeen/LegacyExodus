@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { appendFileSync, existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
@@ -59,8 +59,8 @@ describe("ADR-009 fact lists on disk", () => {
       const writer = store.writer<number>();
       writer.append(1);
       const list = writer.seal();
-      appendFileSync(pathOf(store), "2\n");
-      expect(() => [...list]).toThrow("holds 2 items, expected 1");
+      writeFileSync(pathOf(store), "");
+      expect(() => [...list]).toThrow("holds 0 items, expected 1");
       expect(() => writer.append(3)).toThrow("sealed");
     } finally {
       store.dispose();
@@ -100,6 +100,56 @@ describe("ADR-009 fact lists on disk", () => {
       expect(first.id).toBe(same.id);
       expect(first.id).not.toBe(other.id);
       expect(first.payload.graphs).toBeInstanceOf(FactArray);
+    } finally {
+      store.dispose();
+    }
+  });
+});
+
+describe("ADR-009 step 2: many small lists in one file", () => {
+  test("a spool keeps each list to its own range, readable while later lists are written", () => {
+    const store = FactStore.create();
+    try {
+      const spool = store.spool();
+      const first = toFactArray(spool, [{ id: "a" }, { id: "b" }]);
+      expect([...first]).toEqual([{ id: "a" }, { id: "b" }]);
+      const empty = toFactArray(spool, []);
+      const third = toFactArray(spool, [{ id: "é漢" }]);
+      spool.close();
+      expect([...first]).toEqual([{ id: "a" }, { id: "b" }]);
+      expect([...empty]).toEqual([]);
+      expect([...third]).toEqual([{ id: "é漢" }]);
+      expect(readdirSync((store as unknown as { directory: string }).directory)).toHaveLength(1);
+    } finally {
+      store.dispose();
+    }
+  });
+
+  test("a spool writes one list at a time", () => {
+    const store = FactStore.create();
+    try {
+      const spool = store.spool();
+      const writer = spool.writer<number>();
+      expect(() => spool.writer<number>()).toThrow("one list at a time");
+      writer.seal();
+      expect(() => spool.writer<number>().seal()).not.toThrow();
+    } finally {
+      store.dispose();
+    }
+  });
+
+  test("concat reads lists one after another, mapped views included, and projects as one array", async () => {
+    const store = FactStore.create();
+    try {
+      const spool = store.spool();
+      const a = toFactArray(spool, [1, 2]);
+      const b = toFactArray(store, [3]).map((value) => value * 10);
+      const both = FactArray.concat([a, b, toFactArray(spool, [])]);
+      expect(both.length).toBe(3);
+      expect([...both]).toEqual([1, 2, 30]);
+      expect(await written(both)).toBe(`${JSON.stringify([1, 2, 30], null, 2)}\n`);
+      expect(FactArray.concat([a, b]).sha256).toBe(FactArray.concat([a, b]).sha256);
+      expect(FactArray.concat([a, b]).sha256).not.toBe(FactArray.concat([b, a]).sha256);
     } finally {
       store.dispose();
     }

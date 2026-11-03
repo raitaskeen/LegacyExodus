@@ -201,7 +201,7 @@ export class DiscoveryQueryService {
     projectId: string,
     filePath: string,
     analysisRunId?: string,
-  ): Promise<SymbolTablePayload["symbols"]> {
+  ): Promise<SymbolTablePayload["symbols"] extends Iterable<infer Symbol> ? Symbol[] : never> {
     const targetRunId = analysisRunId ?? (await this.getLatestCompletedRunId(projectId));
     if (targetRunId === null) {
       return [];
@@ -229,7 +229,7 @@ export class DiscoveryQueryService {
         parsed.data.analysisRunId === targetRunId &&
         parsed.data.path === filePath
       ) {
-        return parsed.data.symbols;
+        return [...parsed.data.symbols];
       }
       return [];
     });

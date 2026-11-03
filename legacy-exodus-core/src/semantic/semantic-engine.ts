@@ -59,19 +59,22 @@ export class DeterministicSemanticAnalysisEngine {
     ]);
     const publicModules = params.publicModules ?? new Set<string>();
     const referencedNamesByFile = usage.referencedNamesByFile;
-    const scopes = params.symbolTables.map((table) => createScope(table.filePath, table.symbols.map((symbol) => symbol.name), referencedNamesByFile.get(table.filePath) ?? []));
+    // Scopes and dead code read every symbol of a table: from `fullTables`, one at a time, when tables wait on disk.
+    const scopes: ScopeAnalysis[] = [];
+    const deadCode: DeadCodeFinding[] = [];
+    for (const table of params.fullTables?.() ?? params.symbolTables) {
+      scopes.push(createScope(table.filePath, table.symbols.map((symbol) => symbol.name), referencedNamesByFile.get(table.filePath) ?? []));
+      // A local is a lexical binding: object-literal keys, class members and `x.y =` members are
+      // properties, read through objects the references cannot follow, so they are never "unreferenced locals". A leading `_`
+      // marks a binding unused on purpose, as `tsc --noUnusedLocals` treats it (BA-11). A parameter before a used one
+      // holds a position callers fill, so only parameters after the last used one are dead (ESLint `after-used`).
+      const positional = requiredParameterIds(table.symbols, referencedSymbolIds);
+      deadCode.push(...table.symbols.filter((symbol) => ["function", "method", "class", "variable"].includes(symbol.kind) && symbol.expression !== true && !symbol.exported && symbol.member !== true && !symbol.name.startsWith("_") && !referencedSymbolIds.has(symbol.id) && !positional.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unreferenced-local-symbol")));
+    }
     const unusedImports = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => isLexicalImportBinding(symbol) && !referencedSymbolIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unused-import")));
     // A computed `import(name)` or `require(name)` can load any module, so no export is provably unused (BA-10).
     const exportState = params.symbolTables.some((table) => (table.unresolvedModuleReferences?.length ?? 0) > 0) ? "REQUIRES_REVIEW" : "INFERRED";
     const unusedExports = params.symbolTables.filter((table) => !publicModules.has(canonicalizePath(table.filePath))).flatMap((table) => table.symbols.filter((symbol) => symbol.kind === "export" && !exportedIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unused-export", exportState)));
-    // A local is a lexical binding: object-literal keys, class members and `x.y =` members are
-    // properties, read through objects the references cannot follow, so they are never "unreferenced locals". A leading `_`
-    // marks a binding unused on purpose, as `tsc --noUnusedLocals` treats it (BA-11). A parameter before a used one
-    // holds a position callers fill, so only parameters after the last used one are dead (ESLint `after-used`).
-    const deadCode = params.symbolTables.flatMap((table) => {
-      const positional = requiredParameterIds(table.symbols, referencedSymbolIds);
-      return table.symbols.filter((symbol) => ["function", "method", "class", "variable"].includes(symbol.kind) && symbol.expression !== true && !symbol.exported && symbol.member !== true && !symbol.name.startsWith("_") && !referencedSymbolIds.has(symbol.id) && !positional.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unreferenced-local-symbol"));
-    });
 
     return {
       scopes,
@@ -86,7 +89,10 @@ export class DeterministicSemanticAnalysisEngine {
 }
 
 interface SynthesisInput {
+  /** Tables with at least each file's imports and exports (all that module and export findings read). */
   readonly symbolTables: readonly SymbolTable[];
+  /** Every table in full, in `symbolTables` order, read once (ADR-009 step 2); by default `symbolTables`. */
+  readonly fullTables?: () => Iterable<SymbolTable>;
   readonly dependencyGraph: DependencyGraph;
   readonly filePaths: readonly string[];
   readonly httpCalls: readonly { readonly routes: readonly ExpressRoute[]; readonly middlewareChains: readonly MiddlewareChain[] }[];

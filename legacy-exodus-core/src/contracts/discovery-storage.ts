@@ -60,7 +60,7 @@ export const symbolTablePayloadSchema = z.object({
   projectId: z.string().uuid(),
   analysisRunId: z.string().uuid().optional(),
   path: z.string(),
-  symbols: z.array(codeSymbolSchema),
+  symbols: factList(codeSymbolSchema),
 });
 
 export const dependencyGraphPayloadSchema = z.object({
@@ -95,7 +95,7 @@ export const knowledgeGraphPayloadSchema = z.object({
 function factList<Item extends z.ZodTypeAny>(item: Item) {
   return z.union([
     z.array(item),
-    z.instanceof(FactArray).transform((list) => (list as FactArray<unknown>).map((value): z.output<Item> => {
+    z.custom<FactArray<unknown>>((value) => value instanceof FactArray).transform((list) => list.map((value): z.output<Item> => {
       const parsed = item.safeParse(value);
       if (!parsed.success) {
         throw new LegacyExodusError({ code: "DISCOVERY_RECORD_INVALID", message: "Stored fact is invalid.", metadata: { issues: parsed.error.issues } });

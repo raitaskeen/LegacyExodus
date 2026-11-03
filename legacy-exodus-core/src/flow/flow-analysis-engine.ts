@@ -66,7 +66,8 @@ export class DeterministicFlowAnalysisEngine {
   public connectDataFlow(
     contexts: readonly ConnectionContext[],
     graphs: Iterable<DataFlowGraphBody>,
-    symbolTables: readonly SymbolTable[],
+    /** Every table in full, read once (they can come from disk one at a time). */
+    symbolTables: Iterable<SymbolTable>,
     emit: (graph: DataFlowGraph) => void,
   ): void {
 

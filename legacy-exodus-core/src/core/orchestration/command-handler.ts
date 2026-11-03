@@ -31,7 +31,7 @@ import { createOwnedStorageRecord, createStorageRecord, type StorageRecord } fro
 import { JavaScriptSymbolExtractor, validateCodeSymbols, type CodeSymbol, type SymbolTable } from "@symbols/index";
 import { RunScopedAstStore, type AnalysisAstStoreFactory } from "./run-scoped-ast-store";
 import { compareCodePoints } from "@shared/ordering";
-import { FactStore, toFactArray } from "@shared/fact-array";
+import { FactStore, toFactArray, type FactArray, type FactSpool } from "@shared/fact-array";
 
 export interface CommandExecution {
   readonly events: readonly DomainEvent[];
@@ -406,12 +406,19 @@ export class AnalyzeProjectHandler {
 
     const events: DomainEvent[] = [...this.discoveryEngine.createEvents(discovery)];
     const records: StorageRecord[] = [record];
+    /** Each table's cross-file summary (ADR-009 step 2); the full tables wait on disk, in `fullSymbols`. */
     const symbolTables: SymbolTable[] = [];
+    const fullSymbols = new Map<SymbolTable, FactArray<CodeSymbol>>();
+    const fullTable = (summary: SymbolTable): SymbolTable => ({ ...summary, symbols: [...fullSymbols.get(summary)!] });
+    // Every full table, one at a time, in pass-1 order.
+    const fullTables = function* (): Generator<SymbolTable> { for (const summary of symbolTables) yield fullTable(summary); };
     // Exports reassigned by their own module; the call graph must know them before any importer is built.
     const unstableExportIds = new Set<string>();
     const dispositions = new Map<string, AnalysisFileDisposition>();
     const successfullyParsedFiles: FileArtifact[] = [];
     const astStore = await this.astStoreFactory();
+    // Full symbol tables, one list per file, in one file (ADR-009 step 2).
+    let symbolSpool: FactSpool | undefined;
 
     try {
       for (const file of discovery.files) {
@@ -483,7 +490,11 @@ export class AnalyzeProjectHandler {
         for (const id of collectUnstableExportIds(ast, table)) unstableExportIds.add(id);
         await astStore.write(ast);
         successfullyParsedFiles.push(file);
-        symbolTables.push(table);
+        symbolSpool ??= this.factStore().spool();
+        const symbols = toFactArray(symbolSpool, table.symbols);
+        const summary = summarizeTable(table);
+        symbolTables.push(summary);
+        fullSymbols.set(summary, symbols);
         dispositions.set(file.id, { fileId: file.id, path: file.path, kind: "analyzed", symbolCount: table.symbols.length });
         records.push(
           createOwnedStorageRecord("symbol-table", {
@@ -496,7 +507,7 @@ export class AnalyzeProjectHandler {
             functions: table.summary.functions,
             imports: table.summary.imports,
             exports: table.summary.exports,
-            symbols: table.symbols,
+            symbols,
           }),
         );
         events.push(
@@ -508,11 +519,12 @@ export class AnalyzeProjectHandler {
         );
       }
 
+      symbolSpool?.close();
       const tsConfig = await loadTsConfigResolution(discovery.projectPath);
       this.tsConfigDiagnostics = tsConfig.diagnostics;
       // One resolver for the run: tsconfig aliases and workspace packages (S3) mean the same everywhere.
       const resolver = new ModuleResolver({ ...tsConfig.options, packages: await loadWorkspacePackages(discovery.projectPath, discovery.files) });
-      const dependencyGraph = new DeterministicDependencyGraphBuilder(resolver).build(symbolTables, discovery.files);
+      const dependencyGraph = new DeterministicDependencyGraphBuilder(resolver).build(symbolTables, discovery.files, fullTables());
       records.push(
         createOwnedStorageRecord("dependency-graph", {
           projectId: discovery.projectId,
@@ -572,6 +584,14 @@ export class AnalyzeProjectHandler {
         }
 
         completedFiles.push(file);
+        // This file's own table in full, for this file only; other files keep their summaries.
+        const ownPath = canonicalizePath(file.path);
+        const ownSummary = tablesByPath.get(ownPath);
+        if (ownSummary !== undefined) {
+          const own = fullTable(ownSummary);
+          tablesByPath.set(ownPath, own);
+          symbolsByPath.set(ownPath, own.symbols);
+        }
 
         const fileCalls: SemanticCall[] = [];
         const fileReferences: SymbolReference[] = [];
@@ -609,6 +629,10 @@ export class AnalyzeProjectHandler {
         const { filePath } = body;
         allContexts.push({ graph: { filePath, functionSummaries, callBindings, interproceduralFlows }, state: contextResult.state });
 
+        if (ownSummary !== undefined) {
+          tablesByPath.set(ownPath, ownSummary);
+          symbolsByPath.set(ownPath, ownSummary.symbols);
+        }
         ast = undefined;
       }
 
@@ -616,6 +640,7 @@ export class AnalyzeProjectHandler {
       let semantic: Omit<SemanticAnalysis, "calls" | "references"> | undefined = semanticEngine.synthesizeFromUsage({
         usage,
         symbolTables,
+        fullTables,
         dependencyGraph,
         filePaths: completedFiles.map((file) => file.path),
         httpCalls: allHttpCalls,
@@ -642,7 +667,7 @@ export class AnalyzeProjectHandler {
 
       const flowEngine = new DeterministicFlowAnalysisEngine(controlFlowBuilder, dataFlowBuilder);
       const dataFlowGraphs = facts.writer<unknown>();
-      flowEngine.connectDataFlow(allContexts, builtDataFlowGraphs.seal(), symbolTables, (graph) => dataFlowGraphs.append({
+      flowEngine.connectDataFlow(allContexts, builtDataFlowGraphs.seal(), fullTables(), (graph) => dataFlowGraphs.append({
         ...graph,
         callBindings: graph.callBindings.map((binding) => ({
           callId: binding.callId,
@@ -668,7 +693,7 @@ export class AnalyzeProjectHandler {
           graphs: dataFlowGraphs.seal(),
         }),
       );
-      const knowledgeGraph = new DeterministicKnowledgeGraphBuilder().build(symbolTables, dependencyGraph);
+      const knowledgeGraph = new DeterministicKnowledgeGraphBuilder().build(fullTables(), dependencyGraph);
       records.push(
         createOwnedStorageRecord("knowledge-graph", {
           projectId: discovery.projectId,
@@ -771,6 +796,14 @@ export class AnalyzeProjectHandler {
       }
     }
   }
+}
+
+/**
+ * What other files read of a table (ADR-009 step 2): its imports, exports and exported declarations, with all of
+ * its module references. Import resolution, namespace calls, re-export chains and export findings read no more.
+ */
+function summarizeTable(table: SymbolTable): SymbolTable {
+  return { ...table, symbols: table.symbols.filter((symbol) => symbol.kind === "import" || symbol.kind === "export" || symbol.exported) };
 }
 
 function getErrorCode(error: unknown, fallback = "UNKNOWN_ERROR"): string {
