@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { ASTNode, ASTResult } from "@parser/index";
+import { stableId } from "@shared/identity";
 import { FactKeyer, type CodeSymbol } from "@symbols/index";
 import { createDataFlowGraph, createProvenCallTargets, type CallFlowBinding, type DataFlowGraph, type FunctionFlowSummary, type InterproceduralFlow, type ProvenCallTarget, type TaintFlow, type VariableDefinition, type VariableUse } from "./flow-contracts";
 import { compareCodePoints, sortByKey } from "@shared/ordering";
@@ -65,24 +66,32 @@ export class DeterministicDataFlowGraphBuilder {
   /** The taint policy of the file being built (BA-07); builds are synchronous, one file at a time. */
   private policy: FilePolicy = filePolicy({ type: "Program", children: [], attributes: {} } as unknown as ASTNode, { keyOf: new Map(), ownerOf: new Map() });
 
-  /** This file's fact keys (ADR-008), by fact id: the first creation of an id assigns its ordinal, repeats reuse it. */
+  /**
+   * This file's fact identities (ADR-008), by working id: a fact is recognized by its working (position) id, so
+   * the CFG engine's repeated evaluation reuses the first key, and its public id is the digest of that key.
+   */
   private keyer: FactKeyer | undefined;
-  private factKeys = new Map<string, string>();
-  /** The source and sink subset of `factKeys`: all that cross-file flow keying reads, so all the connection state keeps. */
+  private identities = new Map<string, { readonly id: string; readonly key: string }>();
+  /** Keys of this file's sources and sinks by public id: all that cross-file flow keying reads, so all the connection state keeps. */
   private boundaryKeys = new Map<string, string>();
-  private keyFor(id: string, kind: string, subject: string, node: ASTNode | undefined): { readonly key?: string } {
-    if (this.keyer === undefined) return {};
-    const known = this.factKeys.get(id);
-    if (known !== undefined) return { key: known };
+  private identify(workingId: string, kind: string, subject: string, node: ASTNode | undefined, domain: string): { readonly id: string; readonly key?: string } {
+    if (this.keyer === undefined) return { id: workingId };
+    const known = this.identities.get(workingId);
+    if (known !== undefined) return known;
     const key = this.keyer.key(kind, subject, node?.location?.start);
-    this.factKeys.set(id, key);
-    if (kind === "source" || kind === "sink") this.boundaryKeys.set(id, key);
-    return { key };
+    const identity = { id: stableId(domain, key), key };
+    this.identities.set(workingId, identity);
+    if (kind === "source" || kind === "sink") this.boundaryKeys.set(identity.id, key);
+    return identity;
   }
 
   /** @param controlFlow - the file's CFGs from `buildAllWithNodes`, when the caller already built them. */
-  public buildContext(ast: ASTResult, provenCallTargets?: readonly ProvenCallTarget[], symbols: readonly CodeSymbol[] = [], controlFlow?: ControlFlowGraphsWithNodes): BuildContextResult {
-    const functions = collectFunctions(ast.root, symbols);
+  /**
+   * @param symbols - the file's symbols. Given (production always passes them), facts carry keys and ids are digests
+   *   of those keys (ADR-008); omitted, ids keep their source-position formula, as the CFG builder does without owners.
+   */
+  public buildContext(ast: ASTResult, provenCallTargets?: readonly ProvenCallTarget[], symbols?: readonly CodeSymbol[], controlFlow?: ControlFlowGraphsWithNodes): BuildContextResult {
+    const functions = collectFunctions(ast.root, symbols ?? []);
     const targets = provenCallTargets === undefined ? undefined : createProvenCallTargets(provenCallTargets);
     const state: FlowState = { definitions: [], uses: [], taintPaths: new Map(), transfers: [], sinks: [], functions, resolvableFunctions: new Map(), functionsBySymbolId: new Map(), provenTargets: new Map((targets ?? []).map((target) => [callLocationKey(target.sourceFilePath, target.location), target])), hasSemanticResolution: targets !== undefined, pendingCalls: [], interproceduralFlows: [], joins: new Map() };
     const namesakes = new Map<string, number>();
@@ -91,8 +100,8 @@ export class DeterministicDataFlowGraphBuilder {
     for (const record of state.functions.values()) if (record.symbolId !== undefined) state.functionsBySymbolId.set(record.symbolId, record);
     const bindings = resolveLexicalBindings(ast.root);
     this.policy = filePolicy(ast.root, bindings);
-    this.keyer = new FactKeyer(ast.metadata.sourcePath, ast.root, symbols.filter((symbol) => symbol.kind === "function" || symbol.kind === "method" || symbol.kind === "class"));
-    this.factKeys = new Map();
+    this.keyer = symbols === undefined ? undefined : new FactKeyer(ast.metadata.sourcePath, ast.root, symbols.filter((symbol) => symbol.kind === "function" || symbol.kind === "method" || symbol.kind === "class"));
+    this.identities = new Map();
     this.boundaryKeys = new Map();
     this.visit(ast.root, createScope(), ast.metadata.sourcePath, state);
     this.connectCalls(state);
@@ -155,17 +164,14 @@ export class DeterministicDataFlowGraphBuilder {
       sourceOfDestructured: (object, keys, at) => {
         const path = this.policy.destructuredSourcePath(object, keys);
         if (path === undefined) return undefined;
-        const id = hash(`source:${filePath}:${path}:${at.location === undefined ? "anon" : `${at.location.start.line}:${at.location.start.column}`}`);
-        this.keyFor(id, "source", path, at);
-        return id;
+        return this.identify(hash(`source:${filePath}:${path}:${at.location === undefined ? "anon" : `${at.location.start.line}:${at.location.start.column}`}`), "source", path, at, "source").id;
       },
       sinkIdOf: (call) => {
         const name = this.policy.sinkName(call);
         if (name === undefined) return undefined;
         const position = call.location === undefined ? undefined : `${call.location.start.line}:${call.location.start.column}`;
         if (position === undefined) return undefined;
-        const sinkId = hash(`sink:${filePath}:${name}:${position}`);
-        this.keyFor(sinkId, "sink", name, call);
+        const sinkId = this.identify(hash(`sink:${filePath}:${name}:${position}`), "sink", name, call, "sink").id;
         sinkNames.set(sinkId, name);
         return sinkId;
       },
@@ -193,7 +199,7 @@ export class DeterministicDataFlowGraphBuilder {
     return resolved !== undefined || proven !== undefined;
   }
 
-  public build(ast: ASTResult, provenCallTargets?: readonly ProvenCallTarget[], symbols: readonly CodeSymbol[] = []): DataFlowGraph {
+  public build(ast: ASTResult, provenCallTargets?: readonly ProvenCallTarget[], symbols?: readonly CodeSymbol[]): DataFlowGraph {
     return this.buildContext(ast, provenCallTargets, symbols).graph;
   }
 
@@ -356,8 +362,9 @@ export class DeterministicDataFlowGraphBuilder {
         const entry = owner.definitions.get(name) ?? captured;
         const incoming = [thenDefinitions.get(name)?.id ?? entry?.id, elseDefinitions.get(name)?.id ?? entry?.id];
         if (incoming[0] === incoming[1]) continue;
-        const id = hash("join:" + filePath + ":" + name + ":" + position + ":" + index + ":" + incoming.map((value) => value ?? "unbound").join(":"));
-        const definition: VariableDefinition = { id, ...this.keyFor(id, "join", `${name}/${index}`, node), filePath, name, kind: "assignment" };
+        const identity = this.identify(hash("join:" + filePath + ":" + name + ":" + position + ":" + index + ":" + incoming.map((value) => value ?? "unbound").join(":")), "join", `${name}/${index}`, node, "definition");
+        const id = identity.id;
+        const definition: VariableDefinition = { ...identity, filePath, name, kind: "assignment" };
         state.joins.set(id, state.joins.get(id) ?? { id, incoming: Object.freeze(incoming) });
         state.definitions.push(definition);
         for (const input of incoming) if (input !== undefined) this.addTransfer(state, input, id);
@@ -925,7 +932,7 @@ export class DeterministicDataFlowGraphBuilder {
     const resolved = state.hasSemanticResolution ? (proven === undefined ? undefined : state.functionsBySymbolId.get(proven.targetSymbolId)) : resolveFunction(name, state.resolvableFunctions);
     const callPosition = node.location === undefined ? `anon-${state.pendingCalls.length}` : `${node.location.start.line}:${node.location.start.column}`;
     const cut = staged && this.policy.isSanitizer(node);
-    if (resolved !== undefined || proven !== undefined) state.pendingCalls.push({ id: proven?.callId ?? hash(`call:${filePath}:${name}:${callPosition}`), ...(proven === undefined ? {} : { targetSymbolId: proven.targetSymbolId }), ...(resolved === undefined ? {} : { callee: resolved }), argumentDefinitionIds: staged ? values.map((value) => this.orderedValueIds(value, "definition")[0]) : argumentsNodes.map((argument) => this.definitionFor(argument, scope)?.id), argumentSourceIds: staged ? values.map((value) => this.orderedValueIds(value, "source")[0]) : argumentsNodes.map((argument) => this.source(argument, filePath)), ...(receiverDefinitionId === undefined || cut ? {} : { receiverDefinitionId }), ...(staged ? { argumentValues: values } : {}) });
+    if (resolved !== undefined || proven !== undefined) state.pendingCalls.push({ id: proven?.callId ?? this.identify(hash(`call:${filePath}:${name}:${callPosition}`), "call", name ?? "<computed>", node, "flow-call").id, ...(proven === undefined ? {} : { targetSymbolId: proven.targetSymbolId }), ...(resolved === undefined ? {} : { callee: resolved }), argumentDefinitionIds: staged ? values.map((value) => this.orderedValueIds(value, "definition")[0]) : argumentsNodes.map((argument) => this.definitionFor(argument, scope)?.id), argumentSourceIds: staged ? values.map((value) => this.orderedValueIds(value, "source")[0]) : argumentsNodes.map((argument) => this.source(argument, filePath)), ...(receiverDefinitionId === undefined || cut ? {} : { receiverDefinitionId }), ...(staged ? { argumentValues: values } : {}) });
     if (staged && receiverDefinitionId !== undefined && !cut) {
       const calleeSource = callee === undefined ? undefined : this.source(callee, filePath);
       if (calleeSource !== undefined) this.materializeOrderedValue({ kind: "source", id: calleeSource }, receiverDefinitionId, state);
@@ -935,8 +942,7 @@ export class DeterministicDataFlowGraphBuilder {
     const sinkName = this.policy.sinkName(node);
     if (sinkName === undefined) return;
     const sinkPosition = node.location === undefined ? `anon-${state.sinks.length}` : `${node.location.start.line}:${node.location.start.column}`;
-    const sinkId = hash(`sink:${filePath}:${sinkName}:${sinkPosition}`);
-    this.keyFor(sinkId, "sink", sinkName, node);
+    const sinkId = this.identify(hash(`sink:${filePath}:${sinkName}:${sinkPosition}`), "sink", sinkName, node, "sink").id;
     state.sinks.push({ id: sinkId, name: sinkName, argumentDefinitionIds: staged ? values.flatMap((value) => this.orderedValueIds(value, "definition")) : argumentsNodes.flatMap((argument) => this.collectDefinitions(argument, scope, filePath, state).map((definition) => definition.id)) });
   }
 
@@ -1139,7 +1145,7 @@ export class DeterministicDataFlowGraphBuilder {
   }
 
   private memberUse(node: ASTNode, scope: Scope, filePath: string, state: FlowState): void { const path = memberPath(node); if (path !== undefined) this.use(path, node, scope, filePath, state); const base = memberBase(node); if (base !== undefined && base !== path) this.use(base, node, scope, filePath, state); }
-  private use(name: string | undefined, node: ASTNode, scope: Scope, filePath: string, state: FlowState): void { if (name === undefined) return; const definition = resolve(scope, name); const position = node.location === undefined ? `anon-${state.uses.length}` : `${node.location.start.line}:${node.location.start.column}`; const id = hash(`use:${filePath}:${name}:${position}`); state.uses.push({ id, ...this.keyFor(id, "use", name, node), filePath, name, ...(definition === undefined ? {} : { definitionId: definition.id }) }); }
+  private use(name: string | undefined, node: ASTNode, scope: Scope, filePath: string, state: FlowState): void { if (name === undefined) return; const definition = resolve(scope, name); const position = node.location === undefined ? `anon-${state.uses.length}` : `${node.location.start.line}:${node.location.start.column}`; state.uses.push({ ...this.identify(hash(`use:${filePath}:${name}:${position}`), "use", name, node, "use"), filePath, name, ...(definition === undefined ? {} : { definitionId: definition.id }) }); }
   private declarationOwner(scope: Scope, kind: unknown): Scope {
     if (kind !== "var") return scope;
     let owner = scope;
@@ -1168,16 +1174,14 @@ export class DeterministicDataFlowGraphBuilder {
     owner.definitions.set(definition.name, definition);
   }
 
-  private define(name: string, kind: VariableDefinition["kind"], node: ASTNode, scope: Scope, filePath: string, state: FlowState, constantValue: string | number | boolean | null | undefined, publish = true, declarationOwner: Scope = scope): VariableDefinition { const position = node.location === undefined ? `anon-${state.definitions.length}` : `${node.location.start.line}:${node.location.start.column}`; const id = hash(`definition:${filePath}:${name}:${kind}:${position}`); const definition: VariableDefinition = { id, ...this.keyFor(id, "def", `${name}:${kind}`, node), filePath, name, kind, ...(constantValue === undefined ? {} : { constantValue }) }; if (publish) this.publishDefinition(scope, definition, declarationOwner); state.definitions.push(definition); return definition; }
+  private define(name: string, kind: VariableDefinition["kind"], node: ASTNode, scope: Scope, filePath: string, state: FlowState, constantValue: string | number | boolean | null | undefined, publish = true, declarationOwner: Scope = scope): VariableDefinition { const position = node.location === undefined ? `anon-${state.definitions.length}` : `${node.location.start.line}:${node.location.start.column}`; const definition: VariableDefinition = { ...this.identify(hash(`definition:${filePath}:${name}:${kind}:${position}`), "def", `${name}:${kind}`, node, "definition"), filePath, name, kind, ...(constantValue === undefined ? {} : { constantValue }) }; if (publish) this.publishDefinition(scope, definition, declarationOwner); state.definitions.push(definition); return definition; }
   /** Source id of a source the file policy recognizes; the written path stays in the id, so existing ids are stable. */
   private source(node: ASTNode, filePath: string): string | undefined {
     const canonical = this.policy.sourcePath(node);
     if (canonical === undefined) return undefined;
     const written = node.type === "CallExpression" ? `${memberPath(node.children.find((child) => child.role === "callee")) ?? canonical}()` : memberPath(node) ?? canonical;
     const position = node.location === undefined ? "anon" : `${node.location.start.line}:${node.location.start.column}`;
-    const id = hash(`source:${filePath}:${written}:${position}`);
-    this.keyFor(id, "source", written, node);
-    return id;
+    return this.identify(hash(`source:${filePath}:${written}:${position}`), "source", written, node, "source").id;
   }
 }
 
