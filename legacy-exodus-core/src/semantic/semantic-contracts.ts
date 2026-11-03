@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { sortByKey } from "@shared/ordering";
+import { toFactArray, type FactArray, type FactArrayWriter, type FactStore } from "@shared/fact-array";
+import { compareCodePoints, sortByKey } from "@shared/ordering";
 
 export interface SemanticCall {
   readonly id: string;
@@ -106,4 +107,34 @@ function freezeSorted<T extends { readonly id?: string; readonly key?: string; r
 // and survives edits elsewhere; ids are digests and order nothing.
 function stableKey(item: { readonly id?: string; readonly key?: string; readonly filePath?: string; readonly name?: string }): string {
   return `${item.key ?? item.id ?? ""}:${item.filePath ?? ""}:${item.name ?? ""}`;
+}
+
+/**
+ * Calls or references written to disk one file at a time, in the order `createSemanticAnalysis` gives them
+ * (ADR-009 step 3). Keys begin with the file path, so files taken in path order, each sorted, are already in
+ * order end to end; should a file's facts start before the previous file's ended (no key, or a path that sorts
+ * differently with its `#`), the list is sorted once, in full, when sealed.
+ */
+export class SortedFactList<T extends { readonly id?: string; readonly key?: string; readonly filePath?: string; readonly name?: string }> {
+  readonly #writer: FactArrayWriter<T>;
+  #last: string | undefined;
+  #ordered = true;
+
+  public constructor(private readonly store: FactStore, private readonly schema: z.ZodType<T>) {
+    this.#writer = store.writer<T>();
+  }
+
+  public appendFile(items: readonly unknown[]): void {
+    for (const item of sortByKey(items.map((candidate) => this.schema.parse(candidate)), stableKey)) {
+      const key = stableKey(item);
+      if (this.#last !== undefined && compareCodePoints(key, this.#last) < 0) this.#ordered = false;
+      this.#last = key;
+      this.#writer.append(item);
+    }
+  }
+
+  public seal(): FactArray<T> {
+    const list = this.#writer.seal();
+    return this.#ordered ? list : toFactArray(this.store, sortByKey([...list], stableKey));
+  }
 }
