@@ -51,16 +51,20 @@ export class DeterministicControlFlowGraphBuilder {
     const rooted = (graph: ControlFlowGraph, root: ASTNode): ControlFlowGraph => { graphRoots.set(graph.id, root); return graph; };
     const graphs = [
       rooted(this.buildScope(ast.metadata.sourcePath, "module", ast.root.children, statementNodes, blockClauses, keys, undefined), ast.root),
-      ...functions.map((candidate) => rooted(this.buildScope(ast.metadata.sourcePath, candidate.name, statementChildren(candidate.node.children.find((child) => child.role === "body") ?? candidate.node), statementNodes, blockClauses, keys, candidate.node), candidate.node)),
+      ...functions.map((candidate) => rooted(this.buildScope(ast.metadata.sourcePath, candidate.name, graphStatements(candidate.node), statementNodes, blockClauses, keys, candidate.node), candidate.node)),
     ].sort((left, right) => compareCodePoints(left.id, right.id));
     return { graphs: Object.freeze(graphs), statementNodes, blockClauses, graphRoots };
   }
 
   private buildScope(filePath: string, scopeName: string, nodes: readonly ASTNode[], statementNodes?: Map<string, ASTNode>, blockClauses?: Map<string, readonly ASTNode[]>, keys?: FileKeys, root?: ASTNode): ControlFlowGraph {
-    const state = new FlowState(filePath, scopeName, collectExpressionControl(nodes), keys, keys === undefined ? undefined : root === undefined ? `${filePath}#` : keys.keyer.ownerKey(root.location?.start));
+    // Parameters are evaluated on entry: their defaults run only for an undefined argument.
+    const parameters = root?.children.filter((child) => child.role === "params" || child.role === "param") ?? [];
+    // An unlocated root has no owner range to key it by; its scope name (with its anon ordinal) tells it apart.
+    const graphKey = keys === undefined ? undefined : root === undefined ? `${filePath}#` : root.location === undefined ? `${filePath}#${scopeName}/` : keys.keyer.ownerKey(root.location.start);
+    const state = new FlowState(filePath, scopeName, collectExpressionControl([...parameters, ...nodes]), keys, graphKey);
     const entry = state.createBlock();
     const exit = state.createBlock();
-    state.buildStatements(nodes, entry, exit, { exceptionTarget: exit, returnTarget: exit });
+    state.buildStatements(nodes, state.lowerAll(entry, parameters), exit, { exceptionTarget: exit, returnTarget: exit });
     const graph = state.finish(entry, exit);
     for (const [id, node] of state.statementNodes) statementNodes?.set(id, node);
     for (const [id, clauses] of state.blockClauses) blockClauses?.set(id, clauses);
@@ -102,12 +106,12 @@ class FlowState {
     return { key: this.copyContext === "" || known === undefined ? base : `${base}/copy:${this.copyContext}` };
   }
   // Constant-time duplicate and incoming checks: a scan per edge made long functions quadratic.
-  private readonly edgeIds = new Set<string>();
+  private readonly edgeIds = new Map<string, number>();
   private readonly blocksWithIncoming = new Set<string>();
   public addEdge(fromBlockId: string, toBlockId: string, kind: ControlFlowEdgeKind): void {
     const id = hash(`${fromBlockId}:${toBlockId}:${kind}`);
     if (this.edgeIds.has(id)) return;
-    this.edgeIds.add(id);
+    this.edgeIds.set(id, 1);
     this.blocksWithIncoming.add(toBlockId);
     this.edges.push({ id, fromBlockId, toBlockId, kind });
   }
@@ -125,7 +129,7 @@ class FlowState {
       }
       if (isFunction(node)) continue;
       const own = loweredExpressions(node);
-      if (own !== undefined) block = this.lowerAll(block, own);
+      if (own !== undefined) block = this.lowerAll(block, own, control?.potentialExceptionTarget);
       // Header loops attribute each clause's potential exception to the block that evaluates it.
       if (control?.potentialExceptionTarget !== undefined && !hasLoopHeader(node) && hasPotentiallyThrowingEvaluation(node)) {
         this.addEdge(block, control.potentialExceptionTarget, "exception");
@@ -172,7 +176,7 @@ class FlowState {
     this.addEdge(preLoop, header, "next");
     // The test is lowered from the header (the loop-back target); the loop node completes it.
     const evaluated = node.children.filter((child) => child.role === "test" || child.role === "left");
-    const test = this.lowerAll(header, evaluated);
+    const test = this.lowerAll(header, evaluated, potentialExceptionTarget);
     this.addNode(test, node);
     if (potentialExceptionTarget !== undefined && evaluated.some(hasPotentiallyThrowingEvaluation)) {
       this.addEdge(test, potentialExceptionTarget, "exception");
@@ -199,16 +203,30 @@ class FlowState {
   }
   /** Lowers a clause evaluated in `blockId`, records it in the block it completes in, and returns that block. */
   private addClause(blockId: string, clause: ASTNode, potentialExceptionTarget: string | undefined): string {
-    const completed = this.lowerAll(blockId, [clause]);
+    const completed = this.lowerAll(blockId, [clause], potentialExceptionTarget);
     this.addNode(completed, clause);
     if (potentialExceptionTarget !== undefined && hasPotentiallyThrowingEvaluation(clause)) this.addEdge(completed, potentialExceptionTarget, "exception");
     return completed;
   }
-  /** Lowers each expression in evaluation order and returns the block in which they have all completed. */
-  private lowerAll(blockId: string, expressions: readonly ASTNode[]): string {
-    let block = blockId;
-    for (const expression of expressions) block = this.lower(block, expression);
-    return block;
+  /**
+   * Lowers each expression in evaluation order and returns the block in which they have all completed. With an
+   * exception target, a decision or arm whose own expression may throw also gets an exception edge, so a throw is
+   * shown where it can happen; the completing block keeps its edge for the statement as a whole.
+   */
+  public lowerAll(blockId: string, expressions: readonly ASTNode[], exceptionTarget?: string): string {
+    const outer = this.loweringExceptionTarget;
+    this.loweringExceptionTarget = exceptionTarget;
+    try {
+      let block = blockId;
+      for (const expression of expressions) block = this.lower(block, expression);
+      return block;
+    } finally {
+      this.loweringExceptionTarget = outer;
+    }
+  }
+  private loweringExceptionTarget: string | undefined;
+  private mayThrowFrom(blockId: string, node: ASTNode | undefined): void {
+    if (this.loweringExceptionTarget !== undefined && node !== undefined && hasPotentiallyThrowingEvaluation(node)) this.addEdge(blockId, this.loweringExceptionTarget, "exception");
   }
   /**
    * Splits the branches inside one expression into blocks: `a && b`, `a || b`, `a ?? b`, `c ? x : y`,
@@ -224,11 +242,26 @@ class FlowState {
       const left = node.children.find((child) => child.role === "left");
       const right = node.children.find((child) => child.role === "right");
       const decision = left === undefined ? blockId : this.lower(blockId, left);
+      this.mayThrowFrom(decision, left);
       return this.branch(decision, node, String(node.attributes.operator).startsWith("&&") ? "true" : "false", right === undefined ? [] : [right]);
+    }
+    // `x = d` in a pattern or a parameter: the default is evaluated only when the value is undefined (`true`).
+    if (node.type === "AssignmentPattern") {
+      const target = node.children.find((child) => child.role === "left");
+      const fallback = node.children.find((child) => child.role === "right");
+      const joined = this.branch(blockId, node, "true", fallback === undefined ? [] : [fallback]);
+      return target === undefined ? joined : this.lower(joined, target);
+    }
+    // The value is evaluated before the pattern it is destructured into (and its defaults).
+    if (node.type === "VariableDeclarator" || (node.type === "AssignmentExpression" && isPattern(node.children.find((child) => child.role === "left")))) {
+      const value = node.children.find((child) => child.role === "init" || child.role === "right");
+      const target = node.children.find((child) => child.role === "id" || child.role === "left");
+      return this.lowerAll(this.lowerAll(blockId, value === undefined ? [] : [value], this.loweringExceptionTarget), target === undefined ? [] : [target], this.loweringExceptionTarget);
     }
     if (node.type === "ConditionalExpression") {
       const test = node.children.find((child) => child.role === "test");
       const decision = test === undefined ? blockId : this.lower(blockId, test);
+      this.mayThrowFrom(decision, test);
       this.addDecision(decision, node, "test");
       this.loweredControl.add(node);
       const join = this.createBlock();
@@ -237,6 +270,7 @@ class FlowState {
         this.addEdge(decision, arm, kind);
         const operand = node.children.find((child) => child.role === role);
         const end = operand === undefined ? arm : this.lower(arm, operand);
+        this.mayThrowFrom(end, operand);
         if (operand !== undefined) this.addDecision(end, operand, "value");
         this.addEdge(end, join, "next");
       }
@@ -255,7 +289,8 @@ class FlowState {
     const join = this.createBlock();
     this.addEdge(decision, arm, continueOn);
     this.addEdge(decision, join, continueOn === "true" ? "false" : "true");
-    const end = this.lowerAll(arm, operands);
+    const end = this.lowerAll(arm, operands, this.loweringExceptionTarget);
+    for (const operand of operands) this.mayThrowFrom(end, operand);
     for (const operand of operands) this.addDecision(end, operand, "value");
     this.addEdge(end, join, "next");
     return join;
@@ -264,11 +299,19 @@ class FlowState {
   private lowerChain(blockId: string, root: ASTNode): string {
     const spine: ASTNode[] = [];
     let current: ASTNode | undefined = root;
-    while (current !== undefined && isOptionalChain(current)) {
-      spine.push(current);
-      current = current.children.find((child) => child.role === "object" || child.role === "callee");
+    while (current !== undefined) {
+      if (isOptionalChain(current)) {
+        spine.push(current);
+        current = current.children.find((child) => child.role === "object" || child.role === "callee");
+        continue;
+      }
+      // `a?.b!.c`: the assertion keeps the chain going, so a nullish `a` still skips `.c`.
+      const asserted = current.type === "TSNonNullExpression" ? current.children.find((child) => child.role === "expression") : undefined;
+      if (asserted === undefined || !isOptionalChain(asserted)) break;
+      current = asserted;
     }
     let block = current === undefined ? blockId : this.lower(blockId, current);
+    this.mayThrowFrom(block, current);
     const end = this.createBlock();
     for (const link of spine.reverse()) {
       if (link.attributes.optional === true) {
@@ -514,7 +557,13 @@ class FlowState {
   private block(id: string): MutableBlock { const block = this.blocksById.get(id); if (block === undefined) throw new ControlFlowInvariantError(id); return block; }
   private retagCompletionEdge(fromBlockId: string, toBlockId: string, sourceKind: ControlFlowEdgeKind, targetKind: ControlFlowEdgeKind): void { const edge = this.edges.find((candidate) => candidate.fromBlockId === fromBlockId && candidate.toBlockId === toBlockId && candidate.kind === sourceKind); if (edge === undefined) return; const index = this.edges.indexOf(edge); this.retag(index, { ...edge, id: hash(`${fromBlockId}:${toBlockId}:${targetKind}`), kind: targetKind }); }
   private retagIncomingEdges(toBlockId: string | undefined, sourceKind: ControlFlowEdgeKind, targetKind: ControlFlowEdgeKind): void { if (toBlockId === undefined) return; for (const [index, edge] of this.edges.entries()) { if (edge.toBlockId === toBlockId && edge.kind === sourceKind) this.retag(index, { ...edge, id: hash(`${edge.fromBlockId}:${toBlockId}:${targetKind}`), kind: targetKind }); } }
-  private retag(index: number, edge: ControlFlowEdge): void { this.edgeIds.delete(this.edges[index]!.id); this.edgeIds.add(edge.id); this.edges[index] = edge; }
+  private retag(index: number, edge: ControlFlowEdge): void {
+    const old = this.edges[index]!.id;
+    const remaining = (this.edgeIds.get(old) ?? 1) - 1;
+    if (remaining > 0) this.edgeIds.set(old, remaining); else this.edgeIds.delete(old);
+    this.edgeIds.set(edge.id, (this.edgeIds.get(edge.id) ?? 0) + 1);
+    this.edges[index] = edge;
+  }
   public finish(entry: string, exit: string): ControlFlowGraph {
     const predecessorsByBlock = new Map<string, string[]>();
     const successorsByBlock = new Map<string, string[]>();
@@ -639,7 +688,13 @@ function collectFunctions(root: ASTNode): readonly { readonly name: string; read
   for (const child of root.children) visit(child);
   return functions.sort((left, right) => compareCodePoints(left.name, right.name));
 }
-function functionName(node: ASTNode): string { const name = node.children.find((child) => child.role === "id" || child.role === "key")?.attributes.name; return typeof name === "string" ? name : node.type === "ClassMethod" ? "method" : "anonymous"; }
+function functionName(node: ASTNode): string {
+  if (node.type === "StaticBlock") return "static";
+  const key = node.children.find((child) => child.role === "id" || child.role === "key");
+  // `#name()`: the key is a PrivateName holding the identifier.
+  const name = key?.type === "PrivateName" ? key.children.find((child) => child.role === "id")?.attributes.name : key?.attributes.name;
+  return typeof name === "string" ? (key?.type === "PrivateName" ? `#${name}` : name) : node.type === "ClassMethod" ? "method" : "anonymous";
+}
 function statementChildren(node: ASTNode): readonly ASTNode[] { return node.type === "BlockStatement" || node.type === "Program" ? node.children : [node]; }
 function switchCaseStatements(node: ASTNode): readonly ASTNode[] { return node.children.filter((child) => child.role === "consequent"); }
 function catchStatements(node: ASTNode): readonly ASTNode[] { const body = node.children.find((child) => child.role === "body"); return body === undefined ? [] : statementChildren(body); }
@@ -649,8 +704,15 @@ function resolveBreakTarget(node: ASTNode, control: ControlContext | undefined):
 function resolveContinueTarget(node: ASTNode, control: ControlContext | undefined): string | undefined { const label = labelName(node); return label === undefined ? control?.continueTarget : control?.labels?.get(label)?.continueTarget; }
 function resolveBreakFinalizerTarget(node: ASTNode, control: ControlContext | undefined): string | undefined { const label = labelName(node); return label === undefined ? control?.breakFinalizerTarget : control?.labels?.get(label)?.breakFinalizerTarget; }
 function resolveContinueFinalizerTarget(node: ASTNode, control: ControlContext | undefined): string | undefined { const label = labelName(node); return label === undefined ? control?.continueFinalizerTarget : control?.labels?.get(label)?.continueFinalizerTarget; }
-function isFunction(node: ASTNode): boolean { return ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ObjectMethod"].includes(node.type); }
-const EXPRESSION_CONTROL = new Set(["ConditionalExpression", "LogicalExpression", "OptionalCallExpression", "OptionalMemberExpression"]);
+/** Code that runs as a unit of its own and gets its own graph: functions, methods (private too) and class static blocks. */
+function isFunction(node: ASTNode): boolean { return ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ClassPrivateMethod", "ObjectMethod", "StaticBlock"].includes(node.type); }
+function isPattern(node: ASTNode | undefined): boolean { return node !== undefined && (node.type === "ObjectPattern" || node.type === "ArrayPattern"); }
+/** The statements a graph analyses: a function's body (or its expression body), or a static block's statements. */
+function graphStatements(node: ASTNode): readonly ASTNode[] {
+  if (node.type === "StaticBlock") return node.children;
+  return statementChildren(node.children.find((child) => child.role === "body") ?? node);
+}
+const EXPRESSION_CONTROL = new Set(["ConditionalExpression", "LogicalExpression", "OptionalCallExpression", "OptionalMemberExpression", "AssignmentPattern"]);
 function isLogicalAssignment(node: ASTNode): boolean { return node.type === "AssignmentExpression" && ["&&=", "||=", "??="].includes(String(node.attributes.operator)); }
 function isOptionalChain(node: ASTNode): boolean { return node.type === "OptionalCallExpression" || node.type === "OptionalMemberExpression"; }
 /** Every expression-control node evaluated by this graph's own code (not inside nested functions). */
