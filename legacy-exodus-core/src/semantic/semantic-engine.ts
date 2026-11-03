@@ -41,7 +41,7 @@ export class DeterministicSemanticAnalysisEngine {
     const exportedIds = new Set([
       ...params.dependencyGraph.edges.map((edge) => edge.targetExportSymbolId),
       ...referencedSymbolIds,
-      ...namespaceExposedExportIds(params.symbolTables, params.dependencyGraph),
+      ...namespaceExposedExportIds(params.symbolTables, params.dependencyGraph, this.callGraphBuilder.resolver),
     ]);
     // One pass groups references by file; filtering all references per file was files × references (BA-17).
     const referencedNamesByFile = new Map<string, string[]>();
@@ -76,7 +76,7 @@ export class DeterministicSemanticAnalysisEngine {
  * following `export *` chains. References carry no member-access context, and a namespace object can
  * escape (`use(ns)`, `ns[key]`), so every export it exposes may be read (BA-09).
  */
-function namespaceExposedExportIds(symbolTables: readonly SymbolTable[], dependencyGraph: DependencyGraph): readonly string[] {
+function namespaceExposedExportIds(symbolTables: readonly SymbolTable[], dependencyGraph: DependencyGraph, resolver: ModuleResolver): readonly string[] {
   const tablesByPath = new Map(symbolTables.map((table) => [canonicalizePath(table.filePath), table]));
   const knownPaths = new Set(tablesByPath.keys());
   const edgeTargetsByReference = new Map<string, string[]>();
@@ -84,7 +84,6 @@ function namespaceExposedExportIds(symbolTables: readonly SymbolTable[], depende
     const key = JSON.stringify([edge.sourceFilePath, edge.moduleSpecifier]);
     edgeTargetsByReference.set(key, [...(edgeTargetsByReference.get(key) ?? []), edge.targetFilePath]);
   }
-  const resolver = new ModuleResolver();
   const targetsOf = (filePath: string, moduleSpecifier: string): readonly string[] => {
     const source = canonicalizePath(filePath);
     // Imports carry module edges resolved with the project's tsconfig; re-exports do not, so they

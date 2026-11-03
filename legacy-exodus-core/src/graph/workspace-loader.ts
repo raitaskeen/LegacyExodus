@@ -1,0 +1,107 @@
+import { readFile } from "node:fs/promises";
+import { join, posix } from "node:path";
+
+import type { FileArtifact } from "@contracts/discovery";
+
+import { canonicalizePath, type WorkspacePackage } from "./module-resolver";
+
+/**
+ * Workspace packages of a monorepo by name (S3): the patterns of the root `package.json`
+ * `workspaces` (an array, or `{ packages }`) and of `pnpm-workspace.yaml` select package
+ * directories among the manifests discovery already found, so nothing outside the project is read.
+ * `*` matches one path segment, `**` any number, and `!pattern` excludes. A name two packages claim is
+ * left out: which one an import means is unknown. Unreadable manifests are skipped.
+ */
+export async function loadWorkspacePackages(projectPath: string, files: readonly FileArtifact[]): Promise<Readonly<Record<string, WorkspacePackage>>> {
+  const patterns = [
+    ...workspacePatterns(await readJson(join(projectPath, "package.json"))),
+    ...pnpmPatterns(await readText(join(projectPath, "pnpm-workspace.yaml"))),
+  ];
+  const include = patterns.filter((pattern) => !pattern.startsWith("!")).map(globToRegExp);
+  const exclude = patterns.filter((pattern) => pattern.startsWith("!")).map((pattern) => globToRegExp(pattern.slice(1)));
+  if (include.length === 0) return {};
+
+  const roots = files
+    .map((file) => canonicalizePath(file.path))
+    .filter((path) => path.endsWith("/package.json"))
+    .map((path) => path.slice(0, -"/package.json".length))
+    .filter((root) => include.some((pattern) => pattern.test(`${root}/`)) && !exclude.some((pattern) => pattern.test(`${root}/`)))
+    .sort();
+
+  const byName = new Map<string, WorkspacePackage | null>();
+  for (const root of roots) {
+    const manifest = await readJson(join(projectPath, root, "package.json"));
+    if (manifest === undefined || typeof manifest.name !== "string" || manifest.name.length === 0) continue;
+    const entry: WorkspacePackage = {
+      root,
+      ...(manifest.exports === undefined ? {} : { exports: manifest.exports }),
+      ...(typeof manifest.source === "string" ? { source: manifest.source } : {}),
+      ...(typeof manifest.module === "string" ? { module: manifest.module } : {}),
+      ...(typeof manifest.main === "string" ? { main: manifest.main } : {}),
+    };
+    byName.set(manifest.name, byName.has(manifest.name) ? null : entry);
+  }
+  const packages: Record<string, WorkspacePackage> = {};
+  for (const [name, entry] of [...byName].sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))) {
+    if (entry !== null) packages[name] = entry;
+  }
+  return Object.freeze(packages);
+}
+
+function workspacePatterns(manifest: Record<string, unknown> | undefined): readonly string[] {
+  const workspaces = manifest?.workspaces;
+  const list = Array.isArray(workspaces) ? workspaces
+    : typeof workspaces === "object" && workspaces !== null && Array.isArray((workspaces as { packages?: unknown }).packages) ? (workspaces as { packages: unknown[] }).packages
+      : [];
+  return list.filter((pattern): pattern is string => typeof pattern === "string" && pattern.length > 0);
+}
+
+/** The `packages:` list of a pnpm-workspace.yaml: block-style `- item` lines, quoted or not. */
+function pnpmPatterns(text: string | undefined): readonly string[] {
+  if (text === undefined) return [];
+  const patterns: string[] = [];
+  let inPackages = false;
+  for (const line of text.split(/\r?\n/)) {
+    if (/^packages:\s*(#.*)?$/.test(line)) { inPackages = true; continue; }
+    if (!inPackages) continue;
+    const item = /^\s+-\s+(.*?)\s*(#.*)?$/.exec(line);
+    if (item !== null) {
+      const value = item[1]!.replace(/^(['"])(.*)\1$/, "$2");
+      if (value.length > 0) patterns.push(value);
+      continue;
+    }
+    if (line.trim().length === 0) continue;
+    inPackages = false;
+  }
+  return patterns;
+}
+
+/** Matches a directory path followed by "/": each segment ends in "/", and `**` is any number of segments. */
+function globToRegExp(pattern: string): RegExp {
+  const segments = posix.normalize(pattern.replaceAll("\\", "/")).replace(/^\.\//, "").replace(/\/+$/, "").split("/");
+  const source = segments.map((segment) => segment === "**" ? "(?:[^/]+/)*" : `${segment.split("*").map(escapeRegExp).join("[^/]*")}/`).join("");
+  return new RegExp(`^${source}$`);
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function readText(path: string): Promise<string | undefined> {
+  try {
+    return await readFile(path, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+async function readJson(path: string): Promise<Record<string, unknown> | undefined> {
+  const text = await readText(path);
+  if (text === undefined) return undefined;
+  try {
+    const value: unknown = JSON.parse(text);
+    return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+  } catch {
+    return undefined;
+  }
+}

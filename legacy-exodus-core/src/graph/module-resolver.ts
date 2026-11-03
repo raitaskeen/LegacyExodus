@@ -17,6 +17,17 @@ export interface ResolvedImport {
 export interface ModuleResolutionOptions {
   readonly baseUrl?: string;
   readonly paths?: Readonly<Record<string, readonly string[]>>;
+  /** Workspace packages by name (S3, see workspace-loader.ts). */
+  readonly packages?: Readonly<Record<string, WorkspacePackage>>;
+}
+
+/** A workspace package: its project-relative POSIX root and the manifest fields naming its entry points. */
+export interface WorkspacePackage {
+  readonly root: string;
+  readonly exports?: unknown;
+  readonly source?: string;
+  readonly module?: string;
+  readonly main?: string;
 }
 
 export type KnownPathLookup = readonly FileArtifact[] | ReadonlySet<string>;
@@ -85,7 +96,8 @@ export class ModuleResolver {
 
   /**
    * Non-relative specifiers follow TypeScript: `paths` first, through the single best-matching
-   * pattern, then `baseUrl`. Anything else (packages, built-ins, URLs) stays unresolved.
+   * pattern, then `baseUrl`, then packages, which here means workspace packages only. Anything else
+   * (installed packages, built-ins, URLs) stays unresolved.
    */
   private resolveNonRelative(
     specifier: string,
@@ -111,10 +123,96 @@ export class ModuleResolver {
     }
 
     if (this.options.baseUrl !== undefined && !NOT_BASE_URL_RELATIVE.test(specifier)) {
-      return firstKnown(candidatesFor(canonicalizePath(posix.join(baseUrl, specifier)), importerIsTypeScript), knownPaths);
+      const viaBaseUrl = firstKnown(candidatesFor(canonicalizePath(posix.join(baseUrl, specifier)), importerIsTypeScript), knownPaths);
+      if (viaBaseUrl !== null) return viaBaseUrl;
+    }
+    return this.resolveWorkspacePackage(specifier, knownPaths, importerIsTypeScript);
+  }
+
+  /**
+   * `name` or `name/subpath` of a workspace package. With an `exports` map the subpath must be
+   * exported, and a conditional target is tried in SOURCE_FIRST_CONDITIONS order; without one, the
+   * root is `source`, `module`, then `main`, then the package's index. Only files that exist in the
+   * project and lie inside the package root are accepted: an export to build output that is not in
+   * the repository stays unresolved.
+   */
+  private resolveWorkspacePackage(specifier: string, knownPaths: ReadonlySet<string>, importerIsTypeScript: boolean): string | null {
+    const packages = this.options.packages;
+    if (packages === undefined) return null;
+    const segments = specifier.split("/");
+    const scoped = specifier.startsWith("@");
+    if (scoped && segments.length < 2) return null;
+    const name = scoped ? `${segments[0]}/${segments[1]}` : segments[0]!;
+    const workspacePackage = Object.hasOwn(packages, name) ? packages[name] : undefined;
+    if (workspacePackage === undefined) return null;
+    const root = canonicalizePath(workspacePackage.root);
+    const subpath = specifier === name ? "." : `./${specifier.slice(name.length + 1)}`;
+    const file = (target: string): string | null => {
+      const relative = target.startsWith("./") || target.startsWith("../") ? target : `./${target}`;
+      const path = canonicalizePath(posix.join(root, relative));
+      if (path !== root && !path.startsWith(`${root}/`)) return null;
+      return firstKnown(candidatesFor(path, importerIsTypeScript), knownPaths);
+    };
+
+    if (workspacePackage.exports !== undefined && workspacePackage.exports !== null) {
+      const match = matchExports(workspacePackage.exports, subpath);
+      return match === undefined ? null : resolveExportTarget(match.target, match.captured, file);
+    }
+    if (subpath !== ".") return file(subpath);
+    for (const field of [workspacePackage.source, workspacePackage.module, workspacePackage.main]) {
+      if (typeof field !== "string" || field.length === 0) continue;
+      const resolved = file(field);
+      if (resolved !== null) return resolved;
+    }
+    return file("./index");
+  }
+}
+
+/** Conditions tried for a conditional export: the source first, since analysis wants code, not build output. */
+const SOURCE_FIRST_CONDITIONS = ["source", "import", "require", "node", "default", "types"] as const;
+
+/** The target an `exports` field maps `subpath` to: an exact key, else the wildcard key with the longest prefix. */
+function matchExports(exports: unknown, subpath: string): { readonly target: unknown; readonly captured: string | undefined } | undefined {
+  const isSubpathMap = typeof exports === "object" && exports !== null && !Array.isArray(exports)
+    && Object.keys(exports).some((key) => key.startsWith("."));
+  const map = isSubpathMap ? exports as Record<string, unknown> : { ".": exports };
+  if (Object.hasOwn(map, subpath)) return { target: map[subpath], captured: undefined };
+  let best: { target: unknown; captured: string } | undefined;
+  let bestPrefix = -1;
+  for (const [key, target] of Object.entries(map)) {
+    const star = key.indexOf("*");
+    if (star < 0 || key.indexOf("*", star + 1) >= 0) continue;
+    const prefix = key.slice(0, star);
+    const suffix = key.slice(star + 1);
+    if (subpath.length < prefix.length + suffix.length || !subpath.startsWith(prefix) || !subpath.endsWith(suffix)) continue;
+    if (prefix.length > bestPrefix) {
+      best = { target, captured: subpath.slice(prefix.length, subpath.length - suffix.length) };
+      bestPrefix = prefix.length;
+    }
+  }
+  return best;
+}
+
+function resolveExportTarget(target: unknown, captured: string | undefined, file: (target: string) => string | null): string | null {
+  if (typeof target === "string") {
+    if (!target.startsWith("./")) return null;
+    return file(captured === undefined ? target : target.replaceAll("*", captured));
+  }
+  if (Array.isArray(target)) {
+    for (const candidate of target) {
+      const resolved = resolveExportTarget(candidate, captured, file);
+      if (resolved !== null) return resolved;
     }
     return null;
   }
+  if (typeof target !== "object" || target === null) return null;
+  const conditions = target as Record<string, unknown>;
+  for (const condition of SOURCE_FIRST_CONDITIONS) {
+    if (!Object.hasOwn(conditions, condition)) continue;
+    const resolved = resolveExportTarget(conditions[condition], captured, file);
+    if (resolved !== null) return resolved;
+  }
+  return null;
 }
 
 /** Importers whose own language is TypeScript; they prefer TypeScript sources for `.js` specifiers. */
