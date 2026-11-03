@@ -9,7 +9,8 @@ import type { SemanticCall, SymbolReference } from "./semantic-contracts";
 import { compareCodePoints } from "@shared/ordering";
 
 export class DeterministicCallGraphBuilder {
-  private readonly resolver = new ModuleResolver();
+  /** @param resolver - the run's resolver (tsconfig aliases, workspace packages), shared with the dependency graph. */
+  public constructor(public readonly resolver: ModuleResolver = new ModuleResolver()) {}
 
   public build(astResults: readonly ASTResult[], symbolTables: readonly SymbolTable[], dependencyGraph: DependencyGraph): { readonly calls: readonly SemanticCall[]; readonly references: readonly SymbolReference[] } {
     const tablesByPath = new Map(symbolTables.map((table) => [canonicalizePath(table.filePath), table]));

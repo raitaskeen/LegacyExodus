@@ -267,6 +267,21 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // S3: a workspace package imported by name resolves to its source, like a relative import.
+    id: "workspace-package",
+    files: {
+      "package.json": JSON.stringify({ name: "acme", private: true, workspaces: ["packages/*"] }),
+      "packages/util/package.json": JSON.stringify({ name: "@acme/util", main: "build/index.js", exports: { ".": { source: "./src/index.js", default: "./build/index.js" } } }),
+      "packages/util/src/index.js": "export function greet(name) { return `hi ${name}`; }\n",
+      "app/main.js": "import { greet } from '@acme/util';\ngreet('x');\n",
+    },
+    expectations: [
+      { id: "workspace:module-edge-to-package-source", category: "module-edges", has: /^app\/main\.js -> packages\/util\/src\/index\.js\|@acme\/util\|/ },
+      { id: "workspace:call-resolves-across-packages", category: "calls", has: /^app\/main\.js@[^|]*\|module\|greet\|RESOLVED\|export:greet@\S*@packages\/util\/src\/index\.js/ },
+      { id: "workspace:package-analyzed", category: "dispositions", has: analyzed("packages/util/src/index.js") },
+    ],
+  },
+  {
     // BA-04 across files: a source passed straight into another file's function (Wave 3c).
     id: "taint-cross-file-direct",
     files: {

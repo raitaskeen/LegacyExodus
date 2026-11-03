@@ -20,7 +20,7 @@ import type {
 import { createDomainEvent, type DomainEvent } from "@core/events/domain-event";
 import { validateProjectDiscovery, type FileArtifact } from "@contracts/discovery";
 import { DiscoveryEngine, DiscoveryValidator, type DiscoveryResult } from "@discovery/index";
-import { DeterministicDependencyGraphBuilder, ModuleResolver, canonicalizePath, loadTsConfigResolution, validateCurrentDependencyGraph, type TsConfigDiagnostic } from "@graph/index";
+import { DeterministicDependencyGraphBuilder, ModuleResolver, canonicalizePath, loadTsConfigResolution, loadWorkspacePackages, validateCurrentDependencyGraph, type TsConfigDiagnostic } from "@graph/index";
 import { DeterministicControlFlowGraphBuilder, DeterministicDataFlowGraphBuilder, DeterministicFlowAnalysisEngine, createProvenCallTargets, type ControlFlowGraph, type BuildContextResult } from "@flow/index";
 import { DeterministicKnowledgeGraphBuilder } from "@knowledge/index";
 import { readFile } from "node:fs/promises";
@@ -492,9 +492,9 @@ export class AnalyzeProjectHandler {
 
       const tsConfig = await loadTsConfigResolution(discovery.projectPath);
       this.tsConfigDiagnostics = tsConfig.diagnostics;
-      const dependencyGraph = new DeterministicDependencyGraphBuilder(
-        new ModuleResolver(tsConfig.options),
-      ).build(symbolTables, discovery.files);
+      // One resolver for the run: tsconfig aliases and workspace packages (S3) mean the same everywhere.
+      const resolver = new ModuleResolver({ ...tsConfig.options, packages: await loadWorkspacePackages(discovery.projectPath, discovery.files) });
+      const dependencyGraph = new DeterministicDependencyGraphBuilder(resolver).build(symbolTables, discovery.files);
       records.push(
         createOwnedStorageRecord("dependency-graph", {
           projectId: discovery.projectId,
@@ -510,7 +510,7 @@ export class AnalyzeProjectHandler {
       const importsByFile = new Map(symbolTables.map((table) => [canonicalizePath(table.filePath), table.symbols.filter((symbol) => symbol.kind === "import")]));
       const targetByImportId = new Map(dependencyGraph.edges.map((edge) => [edge.importSymbolId, edge.targetExportSymbolId]));
 
-      const callGraphBuilder = new DeterministicCallGraphBuilder();
+      const callGraphBuilder = new DeterministicCallGraphBuilder(resolver);
       const controlFlowBuilder = new DeterministicControlFlowGraphBuilder();
       const dataFlowBuilder = new DeterministicDataFlowGraphBuilder();
 
