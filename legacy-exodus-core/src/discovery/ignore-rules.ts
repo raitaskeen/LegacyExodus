@@ -27,8 +27,20 @@ export class IgnoreRules {
     return added.length === 0 ? this : new IgnoreRules([...this.rules, ...added]);
   }
 
-  /** The source of the rule that ignores `path`, or undefined when it is not ignored. */
+  /**
+   * The source of the rule that ignores `path`, or undefined when it is not ignored. A path under an
+   * ignored directory is ignored, and no rule can re-include it (git's semantics).
+   */
   public ignoredBy(path: string, isDirectory: boolean): IgnoreSource | undefined {
+    const segments = path.split("/");
+    for (let depth = 1; depth < segments.length; depth++) {
+      const ancestor = this.ownMatch(segments.slice(0, depth).join("/"), true);
+      if (ancestor !== undefined) return ancestor;
+    }
+    return this.ownMatch(path, isDirectory);
+  }
+
+  private ownMatch(path: string, isDirectory: boolean): IgnoreSource | undefined {
     for (let index = this.rules.length - 1; index >= 0; index--) {
       const rule = this.rules[index]!;
       if (rule.directoryOnly && !isDirectory) continue;

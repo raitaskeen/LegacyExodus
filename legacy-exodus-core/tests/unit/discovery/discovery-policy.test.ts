@@ -44,6 +44,26 @@ describe("BA-15 scanner policy", () => {
     ]);
   });
 
+  it("keeps files git tracks, as git does: .gitignore applies to untracked files only", async () => {
+    const path = await project({
+      ".gitignore": "config.*.json\nbuild/\n",
+      ".legacyexodusignore": "secret.json\n",
+      "config.development.json": "{}",
+      "config.local.json": "{}",
+      "build/kept.js": "export {};\n",
+      "build/output.js": "export {};\n",
+      "secret.json": "{}",
+    });
+    const tracked = new Set([".gitignore", ".legacyexodusignore", "config.development.json", "build/kept.js", "secret.json"]);
+    const scan = await new FileScanner({ trackedFiles: async () => tracked }).scan(path);
+    expect(scan.files.map((file) => file.path)).toEqual([".gitignore", ".legacyexodusignore", "build/kept.js", "config.development.json"]);
+    expect(scan.excludedPaths).toEqual([
+      { path: "build/output.js", kind: "file", reason: "gitignore" },
+      { path: "config.local.json", kind: "file", reason: "gitignore" },
+      { path: "secret.json", kind: "file", reason: "legacyexodusignore" },
+    ]);
+  });
+
   it("lists minified bundles as generated and does not dispatch them; similar names stay source", async () => {
     const path = await project({ "public/app.min.js": "!function(){}();\n", "src/admin.js": "export {};\n", "src/x.min.mjs": "export{};\n" });
     const files = (await new FileScanner().scan(path)).files;
