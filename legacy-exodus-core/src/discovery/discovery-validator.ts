@@ -4,7 +4,7 @@ import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 
 import type { FileArtifact } from "@contracts/discovery";
-import { discoveryManifestSchema, verifyManifestMac, type DiscoveryManifest } from "./discovery-manifest";
+import { discoveryManifestSchema, MANIFEST_SCHEMA_VERSION, manifestKeyId, manifestLocationDigest, verifyManifestMac, type DiscoveryManifest } from "./discovery-manifest";
 import { FileScanner } from "./file-scanner";
 import { createSnapshotTrust, type SnapshotTrust } from "./snapshot-trust";
 import { compareCodePoints } from "@shared/ordering";
@@ -86,7 +86,7 @@ export interface ValidateDiscoveryOptions {
   readonly verifyFreshness?: boolean;
   /**
    * Additionally require that the snapshot may be reused as current analysis:
-   * its manifest records this canonical absolute project path, is authenticated
+   * its manifest is bound to this canonical project location, is authenticated
    * by the local snapshot key, and names the running analyzer build.
    */
   readonly authorizeReuse?: boolean;
@@ -267,7 +267,7 @@ export class DiscoveryValidator {
 
     const manifest = parseResult.data;
 
-    const expectedSchema = options.expectedSchemaVersion ?? 1;
+    const expectedSchema = options.expectedSchemaVersion ?? MANIFEST_SCHEMA_VERSION;
     if (manifest.schemaVersion !== expectedSchema) {
       return {
         valid: false,
@@ -278,11 +278,13 @@ export class DiscoveryValidator {
     }
 
     const canonicalProjectPath = await canonicalPath(projectPath);
-    if (await canonicalPath(manifest.repository.path) !== canonicalProjectPath) {
+    // Only the local key can confirm the location; without it (or without a digest) the snapshot
+    // still validates as a snapshot, but it can never be authorized for reuse.
+    if (await this.locationDiffers(manifest, canonicalProjectPath)) {
       return {
         valid: false,
         status: "PATH_MISMATCH",
-        reason: `Manifest repository path '${manifest.repository.path}' does not match target path '${projectPath}'.`,
+        reason: `The manifest was written for a different project location than '${projectPath}'.`,
         manifest,
       };
     }
@@ -396,20 +398,13 @@ export class DiscoveryValidator {
 
   /**
    * Decides whether an integrity-valid manifest may stand in for fresh analysis.
-   * Order: exact canonical location, local-key authenticity, then analyzer identity,
-   * so no unauthenticated field is trusted to explain a rejection.
+   * Order: the local key, the exact canonical location, local-key authenticity, then analyzer
+   * identity, so no unauthenticated field is trusted to explain a rejection.
    */
   private async authorizeReuse(
     manifest: DiscoveryManifest,
     canonicalProjectPath: string,
   ): Promise<{ readonly status: DiscoveryValidationStatus; readonly reason: string } | undefined> {
-    if (manifest.repository.path !== canonicalProjectPath) {
-      return {
-        status: "PATH_MISMATCH",
-        reason: `Reusable snapshots must record the canonical absolute project path '${canonicalProjectPath}'.`,
-      };
-    }
-
     const keyStore = this.trust.keyStore;
     if (isWithin(canonicalProjectPath, await canonicalPath(keyStore.directory))) {
       return { status: "UNAUTHENTICATED", reason: "The snapshot key must not be stored inside the analyzed project." };
@@ -424,6 +419,9 @@ export class DiscoveryValidator {
     if (key === undefined) {
       return { status: "UNAUTHENTICATED", reason: "No local snapshot key exists to authenticate this snapshot." };
     }
+    if (manifest.repository.locationDigest !== manifestLocationDigest(canonicalProjectPath, key)) {
+      return { status: "PATH_MISMATCH", reason: `Reusable snapshots must be bound to the canonical project location '${canonicalProjectPath}'.` };
+    }
     if (!verifyManifestMac(manifest, key)) {
       return { status: "UNAUTHENTICATED", reason: "The snapshot manifest is not authenticated by the local snapshot key." };
     }
@@ -437,6 +435,21 @@ export class DiscoveryValidator {
     }
 
     return undefined;
+  }
+
+  /** True only when the local key proves the manifest's location digest names another location. */
+  private async locationDiffers(manifest: DiscoveryManifest, canonicalProjectPath: string): Promise<boolean> {
+    const digest = manifest.repository.locationDigest;
+    const keyStore = this.trust.keyStore;
+    // A key inside the project proves nothing; reuse authorization refuses it on its own terms.
+    if (digest === undefined || isWithin(canonicalProjectPath, await canonicalPath(keyStore.directory))) return false;
+    let key: Buffer | undefined;
+    try {
+      key = await keyStore.readKey();
+    } catch {
+      return false;
+    }
+    return key !== undefined && manifest.integrity?.keyId === manifestKeyId(key) && digest !== manifestLocationDigest(canonicalProjectPath, key);
   }
 
   /**

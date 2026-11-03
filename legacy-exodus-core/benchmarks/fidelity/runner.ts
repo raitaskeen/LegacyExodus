@@ -93,14 +93,8 @@ export async function runFidelityValidation(options: RunFidelityOptions): Promis
     // Verify Repository Identity
     const expectedRepo = options.expectedRepositoryName ?? (isExpress ? "express" : "fastify");
     const actualRepoName = provenance.repository.name;
-    const actualRepoPath = provenance.repository.path;
-    if (
-      actualRepoName.toLowerCase() !== expectedRepo.toLowerCase() &&
-      !actualRepoPath.toLowerCase().includes(expectedRepo.toLowerCase())
-    ) {
-      throw new Error(
-        `Repository identity mismatch: expected '${expectedRepo}', found '${actualRepoName}' (${actualRepoPath}).`,
-      );
+    if (actualRepoName.toLowerCase() !== expectedRepo.toLowerCase()) {
+      throw new Error(`Repository identity mismatch: expected '${expectedRepo}', found '${actualRepoName}'.`);
     }
 
     // Verify Repository Revision (if requested)

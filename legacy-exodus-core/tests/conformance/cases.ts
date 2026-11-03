@@ -11,8 +11,8 @@
  * record the id in `known-gaps.ts` with the finding that owns the fix.
  */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readdirSync, readFileSync, realpathSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 export interface Expectation {
   readonly id: string;
@@ -329,7 +329,8 @@ export const conformanceCases: readonly ConformanceCase[] = [
     id: "projection",
     files: { "index.js": "export const a = 1;\n" },
     expectations: [
-      { id: "projection:manifest-path-not-absolute", check: (directory) => !isAbsolutePath(readJson(directory, "manifest.json").repository.path) },
+      { id: "projection:manifest-path-not-absolute", check: (directory) => !stringValues(readJson(directory, "manifest.json")).some(isAbsolutePath) },
+      { id: "projection:no-artifact-records-project-location", check: (directory) => !recordsLocation(directory, dirname(directory)) },
     ],
   },
   {
@@ -405,6 +406,21 @@ export const conformanceCases: readonly ConformanceCase[] = [
 
 function readJson(directory: string, name: string): any {
   return JSON.parse(readFileSync(join(directory, name), "utf8"));
+}
+
+/** BA-26: a shared `.discovery` must not reveal where the project lives, in any spelling of the path. */
+function recordsLocation(directory: string, location: string): boolean {
+  const spellings = [location, realpathSync.native(location)].flatMap((path) => [path, path.replaceAll("\\", "/"), JSON.stringify(path).slice(1, -1)]);
+  return readdirSync(directory).filter((name) => name.endsWith(".json")).some((name) => {
+    const text = readFileSync(join(directory, name), "utf8");
+    return spellings.some((spelling) => text.includes(spelling));
+  });
+}
+
+function stringValues(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (value === null || typeof value !== "object") return [];
+  return Object.values(value).flatMap(stringValues);
 }
 
 function isAbsolutePath(path: string): boolean {

@@ -3,12 +3,16 @@ import { z } from "zod";
 
 export const MANIFEST_MAC_ALGORITHM = "hmac-sha256";
 const MANIFEST_MAC_DOMAIN = "legacy-exodus/discovery-manifest/v1\n";
+const LOCATION_DIGEST_DOMAIN = "legacy-exodus/discovery-location/v1\n";
+/** 2: the project location is a keyed digest, never a plaintext path (BA-26). */
+export const MANIFEST_SCHEMA_VERSION = 2;
 
 export const discoveryManifestSchema = z.object({
   schemaVersion: z.number().int().positive(),
   repository: z.object({
     name: z.string().min(1),
-    path: z.string().min(1),
+    /** Keyed digest of the canonical project path; absent when no local snapshot key was usable. */
+    locationDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     packageVersion: z.string().optional(),
     commitSha: z.string().optional(),
     sourceDigest: z.string().optional(),
@@ -42,6 +46,14 @@ export const discoveryManifestSchema = z.object({
 });
 
 export type DiscoveryManifest = z.infer<typeof discoveryManifestSchema>;
+
+/**
+ * Binds a snapshot to its canonical project location without recording the path: a shared
+ * `.discovery` reveals no user name or directory layout, and only the local key can confirm it.
+ */
+export function manifestLocationDigest(canonicalProjectPath: string, key: Buffer): string {
+  return createHmac("sha256", key).update(LOCATION_DIGEST_DOMAIN).update(canonicalProjectPath).digest("hex");
+}
 
 /** Short public identifier of a snapshot key; never reveals the key itself. */
 export function manifestKeyId(key: Buffer): string {

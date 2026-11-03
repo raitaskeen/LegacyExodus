@@ -62,10 +62,9 @@ describe("Migration Fidelity — Verification Hardening & Evidence Freshness Loc
     }
 
     const provenance: DiscoveryArtifactProvenance = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: {
         name: "test-repo",
-        path: tempDir,
         packageVersion: "1.2.3",
         commitSha: "a1b2c3d4e5f6071829304152637485960718293a",
       },
@@ -569,7 +568,7 @@ describe("ensureDiscoveryProjections Helper Provenance Hardening", () => {
     await plantReuseCanary(tempDir);
 
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "test-helper-repo", path: tempDir },
       engine: { packageVersion: "0.1.0", commitSha: manifestSha },
       analysis: {

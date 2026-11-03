@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { createLegacyExodusEngine } from "@runtime/composition/services";
 import { DiscoveryValidator } from "@discovery/discovery-validator";
 import { DiscoveryQueryService } from "@discovery/discovery-query-service";
-import { computeManifestMac, manifestKeyId, MANIFEST_MAC_ALGORITHM, SnapshotKeyStore } from "@discovery/index";
+import { computeManifestMac, manifestKeyId, MANIFEST_MAC_ALGORITHM, MANIFEST_SCHEMA_VERSION, SnapshotKeyStore } from "@discovery/index";
 import { StorageManager } from "@storage/index";
 import { SqliteStorageProvider } from "@storage/adapters/sqlite-storage";
 import { validateCurrentDependencyGraph } from "@graph/index";
@@ -71,7 +71,7 @@ describe("F07 checksum-valid snapshot graph capability", () => {
         const queried = await new DiscoveryQueryService(storage).getDependencyGraph(projectId, second.analysisRunId);
         expect(validateCurrentDependencyGraph(queried).moduleGraph).toEqual(original.moduleGraph);
         const manifest = JSON.parse(await readFile(join(projectPath, ".discovery", "manifest.json"), "utf8"));
-        expect(manifest.schemaVersion).toBe(1);
+        expect(manifest.schemaVersion).toBe(MANIFEST_SCHEMA_VERSION);
       } finally {
         await storage?.close();
         await rm(scratchPath, { recursive: true, force: true });

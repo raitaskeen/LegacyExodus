@@ -154,7 +154,7 @@ export interface DiscoveryArtifactProvenance {
   readonly schemaVersion: number;
   readonly repository: {
     readonly name: string;
-    readonly path: string;
+    readonly locationDigest?: string;
     readonly packageVersion?: string;
     readonly commitSha?: string;
     readonly tag?: string;

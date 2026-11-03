@@ -5,7 +5,6 @@
  * ledger always describes the engine exactly. A fix removes its entries in the same PR.
  */
 const gaps: Readonly<Record<string, readonly string[]>> = {
-  "BA-26 relative manifest path": ["projection:manifest-path-not-absolute"],
 };
 
 /** Expectation id -> owning finding. */

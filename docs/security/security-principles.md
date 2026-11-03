@@ -16,7 +16,7 @@ flowchart TD
 
 1. **Zero Code Execution:** LegacyExodus never evaluates, runs, or imports target source code during static analysis. Analysis is performed strictly via AST parsing and symbolic traversal.
 2. **Symlink-Skipping Traversal:** `FileScanner` skips symbolic-link directory entries encountered during repository traversal. This prevents traversal through those entries, including symlink cycles, duplicate source analysis, and escapes through encountered links; it is not an operating-system sandbox.
-3. **Repository-Relative Source Identity:** Discovered source-file paths are normalized relative to the repository for file artifacts, and deterministic file and symbol IDs are derived from path and symbol context. Project-level projection metadata is different: it intentionally retains the supplied `projectPath`, including `project.json`'s `path` and the discovery manifest's `repository.path`. Projections therefore do not provide universal host-path anonymization.
+3. **Repository-Relative Source Identity:** Discovered source-file paths are normalized relative to the repository for file artifacts, and deterministic file and symbol IDs are derived from path and symbol context. No projection records where the project lives: `project.json` holds no path, and the discovery manifest binds a snapshot to its location only through `repository.locationDigest`, an HMAC of the canonical project path under the local snapshot key (manifest schema 2). Only that key can confirm the location, so a shared `.discovery` reveals no user name or directory layout.
 4. **Fail-Closed Conservative Resolution:** When static analysis cannot prove a relationship with certainty, it resolves to `UNRESOLVED` or `null` rather than guessing or fabricating.
 
 ---
