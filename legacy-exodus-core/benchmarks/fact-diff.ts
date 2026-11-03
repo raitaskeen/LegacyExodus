@@ -108,6 +108,8 @@ export function extractFacts(discoveryDirectory: string): FactSet {
   const semantic = readArtifact(discoveryDirectory, "semantic.json");
   addCounted("calls", (semantic?.calls ?? []).map((call: any) =>
     `${call.sourceFilePath}${at(call.location)}|${call.callerName}|${call.calleeName}|${call.resolutionState}|${describe(call.targetSymbolId)}`));
+  for (const call of semantic?.calls ?? []) if (typeof call.key === "string") add("call-keys", call.key);
+  for (const reference of semantic?.references ?? []) if (typeof reference.key === "string") add("reference-keys", `${reference.kind}|${reference.key}`);
   addCounted("references", (semantic?.references ?? []).map((reference: any) =>
     `${reference.filePath}|${reference.kind}|${reference.name}|${reference.resolutionState}|${describe(reference.resolvedSymbolId)}`));
   for (const kind of ["deadCode", "unusedImports", "unusedExports"] as const) {

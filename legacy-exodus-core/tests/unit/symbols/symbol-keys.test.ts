@@ -42,6 +42,11 @@ describe("symbol keys (ADR-008)", () => {
     ]));
   });
 
+  test("anonymous functions at module level are numbered across the whole module", async () => {
+    const keys = await keysOf("src/t.js", "test('a', (v) => v);\ntest('b', (w) => w);\n");
+    expect(keys).toEqual(expect.arrayContaining(["src/t.js#ArrowFunctionExpression@0/v:variable", "src/t.js#ArrowFunctionExpression@1/w:variable"]));
+  });
+
   test("true duplicates are told apart in source order", async () => {
     const keys = await keysOf("src/d.js", "var a = 1;\nvar a = 2;\nfunction f() { { let b = 1; } { let b = 2; } }\n");
     expect(keys.filter((key) => key.startsWith("src/d.js#a:variable"))).toEqual(["src/d.js#a:variable~0", "src/d.js#a:variable~1"]);
