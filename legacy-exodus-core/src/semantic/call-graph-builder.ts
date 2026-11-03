@@ -1710,6 +1710,26 @@ function visibleImport(index: FileSymbolIndex, name: string, scope: ScopeFrame):
   return binding.state === "ONE_BINDING" && binding.referenceTargets.some((target) => target.id === imported.id) ? imported : undefined;
 }
 
+interface CanonicalTables { readonly knownPaths: ReadonlySet<string>; readonly byCanonicalPath: ReadonlyMap<string, SymbolTable> }
+const canonicalTablesCache = new WeakMap<ReadonlyMap<string, SymbolTable>, CanonicalTables>();
+
+/**
+ * The canonical path index of one run's symbol tables, built once. Rebuilding it per namespace call cost
+ * files × calls path normalizations (and defeated the resolver's own cache, keyed by set identity).
+ */
+function canonicalTables(tablesByPath: ReadonlyMap<string, SymbolTable>): CanonicalTables {
+  const cached = canonicalTablesCache.get(tablesByPath);
+  if (cached !== undefined) return cached;
+  const byCanonicalPath = new Map<string, SymbolTable>();
+  for (const [path, table] of tablesByPath) {
+    const canonical = canonicalizePath(path);
+    if (!byCanonicalPath.has(canonical)) byCanonicalPath.set(canonical, table);
+  }
+  const built: CanonicalTables = { knownPaths: new Set(byCanonicalPath.keys()), byCanonicalPath };
+  canonicalTablesCache.set(tablesByPath, built);
+  return built;
+}
+
 function resolveNamespaceCall(
   table: SymbolTable,
   index: FileSymbolIndex,
@@ -1732,20 +1752,12 @@ function resolveNamespaceCall(
     if (frame === undefined || isRebound(index, frame.id, importSymbol.name) || propertyWriteCount(index, methodName) > 0) return undefined;
   }
 
-  const knownPaths = new Set(Array.from(tablesByPath.keys()).map((p) => canonicalizePath(p)));
+  const tables = canonicalTables(tablesByPath);
   const canonicalImporter = canonicalizePath(table.filePath);
-  const resolved = resolver.resolve(canonicalImporter, importSymbol.moduleSpecifier, knownPaths);
+  const resolved = resolver.resolve(canonicalImporter, importSymbol.moduleSpecifier, tables.knownPaths);
   if (resolved.resolvedPath === null) return undefined;
 
-  let targetTable = tablesByPath.get(resolved.resolvedPath);
-  if (targetTable === undefined) {
-    for (const [path, t] of tablesByPath.entries()) {
-      if (canonicalizePath(path) === resolved.resolvedPath) {
-        targetTable = t;
-        break;
-      }
-    }
-  }
+  const targetTable = tablesByPath.get(resolved.resolvedPath) ?? tables.byCanonicalPath.get(resolved.resolvedPath);
   if (targetTable === undefined) return undefined;
 
   if (wholeModuleRequire) {
