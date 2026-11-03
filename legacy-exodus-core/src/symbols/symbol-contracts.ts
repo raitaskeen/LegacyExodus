@@ -24,6 +24,8 @@ export type SymbolKind =
 
 export interface CodeSymbol {
   readonly id: string;
+  /** Edit-stable structural key: owners, name and kind, never a position (ADR-008). */
+  readonly key?: string;
   readonly kind: SymbolKind;
   readonly name: string;
   readonly filePath: string;
@@ -83,6 +85,7 @@ const positionSchema = z.object({ line: z.number().int().positive(), column: z.n
 
 export const codeSymbolSchema = z.object({
   id: z.string().min(1),
+  key: z.string().min(1).optional(),
   kind: symbolKindSchema,
   name: z.string().min(1),
   filePath: z.string().min(1),

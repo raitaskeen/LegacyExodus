@@ -1,7 +1,7 @@
 # ADR-008 — Edit-Stable Fact Identity
 
 ## Status
-**PROPOSED** (design, BA-18; not implemented). Must be implemented before the IR schema is frozen and before incremental runs (S6).
+**ACCEPTED, rollout in progress** (BA-18). Step 1 is implemented: every symbol carries a structural `key` (`src/symbols/symbol-keys.ts`), checked edit-stable over the engine's own source and tracked by fact-diff as `symbol-keys`. Steps 2–4 must land before the IR schema is frozen and before incremental runs (S6).
 
 ## Context
 Every fact id hashes its source position:
