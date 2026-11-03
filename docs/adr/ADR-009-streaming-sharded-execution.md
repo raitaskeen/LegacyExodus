@@ -33,7 +33,7 @@ Follow-ups enabled by this design, decided separately:
 - **Unknowns stay explicit.** A shard that fails to write or verify fails the run for that file, visibly, as dispositions do today.
 
 ## Rollout
-1. Shard writer, with the existing projections derived from shards (output identical). Shards start run-scoped (beside the run-scoped AST store); persisting them under `.discovery/shards` with the manifest comes with S6, which is the first consumer that needs them after the run.
+1. Shard writer, with the existing projections derived from shards (output identical). Shards start in an engine-owned temporary directory that lives as long as the records referencing them (removed on session reset and shutdown); persisting them under `.discovery/shards` with the manifest comes with S6, the first consumer that needs them after the engine stops.
 2. Pass 1 plus summaries plus link, with the dependency graph from summaries (fact-diff 0/0).
 3. Pass 2 per file, with semantic and CFG facts streamed (fact-diff 0/0).
 4. Cross-file taint over interprocedural summaries (fact-diff 0/0).
