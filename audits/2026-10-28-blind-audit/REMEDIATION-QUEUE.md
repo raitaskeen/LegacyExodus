@@ -139,6 +139,9 @@ ADR-009 (streaming, sharded execution), 2026-11-03 night. The owner approved it;
 - Every step so far: fact-diff 0/0 on five corpora and byte-identical artifacts.
 - #255: step 4a, DFG bodies on disk plus #253 review fixes. Same-session A/B: main 288 s / 3,468 MB vs **241 s / 2,732 MB**.
 - #256: step 2, full symbol tables on disk (one spool file), cross-file stages read summaries (imports, exports, exported declarations, module references). Ghost fact-diff 0/0 (7,172 files). Back to back: peak 2,668 -> 2,057 MB, live heap after pass 1 677 -> 243 MB.
+- 4b measured and deferred (owner OK): cross-file taint state is ~30 MB JSON on Ghost (137k transfers); summary-based taint would change path choice.
+- #257: step 5, dependency and knowledge graph lists sorted on disk (sortedFactArray), Scale Gate CI job (synthetic 10k files, 2,800 MiB ceiling; CI measured 2,212 MiB / 115 s), Ghost budget 6,785 -> 2,560 MiB. Ghost back to back 2,613 -> 1,847 MiB. Ghost fact-diff 0/0.
+- OPEN (next memory item): memory still grows with files. Synthetic 10k 1.67 GB, 20k 2.97 GB. Live heap is only ~22 KB/file (225 MB at 10k after forced GC); the rest is late GC garbage that scales with the live heap. Per-file live state: events/records committed at the end, summary symbols, sparse call bindings. Periodic GC gave only ~10%.
 - Remaining: step 4b (taint over summaries), step 5 (100k-file scale gate, re-baseline Ghost budgets).
 - Known limit: the SQLite driver serializes fact lists in full at commit (S6).
 - Target machine: the owner accepts 32 GB for enterprise scale; the dev machine has 16 GB.
