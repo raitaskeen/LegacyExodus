@@ -75,6 +75,25 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
   private declaredExports = new Map<string, ExportRank | { readonly local: string }>();
   /** The binding an anonymous class expression is assigned to: `const X = class {}`, `X = class {}`, `{ X: class {} }`. */
   private classBindingNames = new WeakMap<ASTNode, string>();
+  /**
+   * First function or method symbol at each start position, indexed as the file's symbol list grows (it is
+   * append-only during a visit). A scan of the whole list per function expression was quadratic per file.
+   */
+  private functionIndex: { readonly symbols: readonly CodeSymbol[]; scanned: number; readonly byStart: Map<string, CodeSymbol> } | undefined;
+
+  private functionSymbolAt(symbols: readonly CodeSymbol[], node: ASTNode): CodeSymbol | undefined {
+    const start = node.location?.start;
+    if (start === undefined) return undefined;
+    if (this.functionIndex?.symbols !== symbols) this.functionIndex = { symbols, scanned: 0, byStart: new Map() };
+    const index = this.functionIndex;
+    for (; index.scanned < symbols.length; index.scanned++) {
+      const symbol = symbols[index.scanned]!;
+      if ((symbol.kind !== "function" && symbol.kind !== "method") || symbol.location === undefined) continue;
+      const key = `${symbol.location.start.line}:${symbol.location.start.column}`;
+      if (!index.byStart.has(key)) index.byStart.set(key, symbol);
+    }
+    return index.byStart.get(`${start.line}:${start.column}`);
+  }
 
   public extract(ast: ASTResult): SymbolTable {
     const validatedAst = validateASTResult(ast);
@@ -87,6 +106,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     this.moduleReferences = [];
     this.signatureIds = new Set();
     this.declaredExports = new Map();
+    this.functionIndex = undefined;
     const extracted: CodeSymbol[] = [];
     const pendingExports: PendingExportBinding[] = [];
     this.visit(validatedAst.root, validatedAst, initialContext, extracted, pendingExports);
@@ -319,13 +339,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       case "FunctionExpression":
       case "ArrowFunctionExpression": {
         const fnScopeId = createLexicalScopeId(node.type, node.location);
-        const matchingSymbol = symbols.find(
-          (s) => (s.kind === "function" || s.kind === "method") &&
-            s.location !== undefined &&
-            node.location !== undefined &&
-            s.location.start.line === node.location.start.line &&
-            s.location.start.column === node.location.start.column,
-        );
+        const matchingSymbol = this.functionSymbolAt(symbols, node);
         const fnName = matchingSymbol?.name ?? getName(node) ?? context.enclosingAssignedName;
         const fnId = matchingSymbol?.id ?? context.enclosingAssignedId;
         this.extractParameterSymbols(node, ast, fnScopeId, fnName, fnId, symbols);
@@ -1066,13 +1080,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         this.visit(innermostRight, ast, context, symbols, pendingExports);
       } else if (innermostRight.type === "FunctionExpression" || innermostRight.type === "ArrowFunctionExpression") {
         const fnScopeId = createLexicalScopeId(innermostRight.type, innermostRight.location);
-        const matchingSymbol = symbols.find(
-          (s) => (s.kind === "function" || s.kind === "method") &&
-            s.location !== undefined &&
-            innermostRight.location !== undefined &&
-            s.location.start.line === innermostRight.location.start.line &&
-            s.location.start.column === innermostRight.location.start.column,
-        );
+        const matchingSymbol = this.functionSymbolAt(symbols, innermostRight);
         const fnName = matchingSymbol?.name ?? getName(innermostRight);
         const fnId = matchingSymbol?.id;
         this.extractParameterSymbols(innermostRight, ast, fnScopeId, fnName, fnId, symbols);
