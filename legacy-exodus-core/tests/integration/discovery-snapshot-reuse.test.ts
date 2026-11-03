@@ -1088,15 +1088,16 @@ describe("R01 complete accounting and capability oracles", () => {
           expect(d.files.find((file) => file.path === "a.js")).toMatchObject({ kind: "analyzed", secondPassFailure: { code: mode === "restore" ? "AST_RESTORE_INJECTED" : "R01_RESTORED_AST_ERROR" } });
           const cfg = controlFlowPayloadSchema.parse(f.cold.records.find((r) => r.type === "control-flow-analysis")!.payload);
           const dfg = dataFlowPayloadSchema.parse(f.cold.records.find((r) => r.type === "data-flow-analysis")!.payload);
-          expect(cfg.graphs.filter((graph) => graph.filePath === "a.js")).toHaveLength(0);
-          expect(dfg.graphs.filter((graph) => graph.filePath === "a.js")).toHaveLength(0);
-          expect(cfg.graphs.filter((graph) => graph.filePath === "b.js")).toHaveLength(2);
-          expect(dfg.graphs.filter((graph) => graph.filePath === "b.js")).toHaveLength(1);
+          expect([...cfg.graphs].filter((graph) => graph.filePath === "a.js")).toHaveLength(0);
+          expect([...dfg.graphs].filter((graph) => graph.filePath === "a.js")).toHaveLength(0);
+          expect([...cfg.graphs].filter((graph) => graph.filePath === "b.js")).toHaveLength(2);
+          expect([...dfg.graphs].filter((graph) => graph.filePath === "b.js")).toHaveLength(1);
           const semantic = semanticAnalysisPayloadSchema.parse(f.cold.records.find((r) => r.type === "semantic-analysis")!.payload);
-          expect(semantic.calls).toHaveLength(1);
-          expect(semantic.calls[0]).toMatchObject({ sourceFilePath: "b.js", resolutionState: "RESOLVED" });
+          const calls = [...semantic.calls];
+          expect(calls).toHaveLength(1);
+          expect(calls[0]).toMatchObject({ sourceFilePath: "b.js", resolutionState: "RESOLVED" });
           const target = validateCodeSymbols(f.cold.records.filter((r) => r.type === "symbol-table")
-            .flatMap((r) => (r.payload as { symbols: unknown[] }).symbols)).find((symbol) => symbol.id === semantic.calls[0]!.targetSymbolId);
+            .flatMap((r) => (r.payload as { symbols: unknown[] }).symbols)).find((symbol) => symbol.id === calls[0]!.targetSymbolId);
           expect(target).toMatchObject({ filePath: "a.js", name: "alpha" });
           f.recovery();
           const recovered = await f.run(true);

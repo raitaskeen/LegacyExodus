@@ -18,6 +18,7 @@ import {
   type AnalysisRunPayload,
 } from "@contracts/discovery-storage";
 import { LegacyExodusError } from "@shared/errors";
+import { FactArray } from "@shared/fact-array";
 import type { StorageManager } from "@storage/storage-manager";
 import type { StorageRecord } from "@storage/storage-record";
 
@@ -346,6 +347,12 @@ export class DiscoveryQueryService {
     }
 
     candidates.sort((left, right) => left.updatedAt - right.updatedAt || left.index - right.index);
-    return candidates.at(-1)?.payload ?? null;
+    const latest = candidates.at(-1)?.payload;
+    return latest === undefined ? null : materialized(latest);
   }
+}
+
+/** A query answers with plain data: fact lists kept on disk (ADR-009) are read in full here. */
+function materialized<T extends object>(payload: T): T {
+  return Object.fromEntries(Object.entries(payload).map(([key, value]) => [key, value instanceof FactArray ? [...value] : value])) as T;
 }

@@ -2,6 +2,8 @@ import { createHash, type Hash } from "node:crypto";
 
 import { z } from "zod";
 
+import { FactArray } from "@shared/fact-array";
+
 import { StorageValidationError } from "./storage-errors";
 
 export interface SerializedObject {
@@ -100,6 +102,12 @@ function contentIdentity(type: string, payload: SerializedPayload): string {
 function updateCanonicalHash(hash: Hash, value: SerializedPayload | SerializedObject): void {
   if (value === null || typeof value !== "object") {
     hash.update(JSON.stringify(value) ?? "null");
+    return;
+  }
+
+  // A list on disk is identified by its own digest, computed as it was written (ADR-009).
+  if (value instanceof FactArray) {
+    hash.update(`{"$facts":${JSON.stringify(value.sha256)},"length":${value.length}}`);
     return;
   }
 

@@ -83,7 +83,7 @@ describe("Lookup-Map Key Canonicalization (CodeRabbit #3941957284)", () => {
 
     const semanticRecord = execution.records.find((r) => r.type === "semantic-analysis");
     expect(semanticRecord).toBeDefined();
-    const calls = (semanticRecord?.payload as any)?.calls ?? [];
+    const calls = [...((semanticRecord?.payload as any)?.calls ?? [])];
     const helperCall = calls.find((c: any) => c.calleeName === "helper");
     expect(helperCall).toBeDefined();
     expect(helperCall.resolutionState).toBe("RESOLVED");
@@ -91,7 +91,7 @@ describe("Lookup-Map Key Canonicalization (CodeRabbit #3941957284)", () => {
 
     const dataFlowRecord = execution.records.find((r) => r.type === "data-flow-analysis");
     expect(dataFlowRecord).toBeDefined();
-    const graphs = (dataFlowRecord?.payload as any)?.graphs ?? [];
+    const graphs = [...((dataFlowRecord?.payload as any)?.graphs ?? [])];
     const mainGraph = graphs.find((g: any) => g.filePath.includes("main.js"));
     expect(mainGraph).toBeDefined();
     expect(mainGraph.callBindings.length).toBeGreaterThan(0);
@@ -145,7 +145,7 @@ describe("Lookup-Map Key Canonicalization (CodeRabbit #3941957284)", () => {
 
     const semanticRecord = execution.records.find((r) => r.type === "semantic-analysis");
     expect(semanticRecord).toBeDefined();
-    const calls = (semanticRecord?.payload as any)?.calls ?? [];
+    const calls = [...((semanticRecord?.payload as any)?.calls ?? [])];
     const helperCall = calls.find((c: any) => c.calleeName === "helper");
     expect(helperCall).toBeDefined();
     expect(helperCall.resolutionState).toBe("RESOLVED");
@@ -153,7 +153,7 @@ describe("Lookup-Map Key Canonicalization (CodeRabbit #3941957284)", () => {
 
     const dataFlowRecord = execution.records.find((r) => r.type === "data-flow-analysis");
     expect(dataFlowRecord).toBeDefined();
-    const graphs = (dataFlowRecord?.payload as any)?.graphs ?? [];
+    const graphs = [...((dataFlowRecord?.payload as any)?.graphs ?? [])];
     const mainGraph = graphs.find((g: any) => g.filePath.includes("main.js"));
     expect(mainGraph).toBeDefined();
     expect(mainGraph.callBindings.length).toBeGreaterThan(0);
