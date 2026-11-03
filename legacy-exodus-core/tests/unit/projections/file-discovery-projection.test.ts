@@ -113,7 +113,8 @@ describe("FileDiscoveryProjectionAdapter", () => {
       expect(sha).toMatch(/^[0-9a-f]{40}$/);
       expect(spy).toHaveBeenCalledWith(
         "git",
-        ["rev-parse", "HEAD"],
+        // The analyzed repository's program-running config is disabled (see @shared/git).
+        ["--no-optional-locks", "-c", "core.fsmonitor=false", "rev-parse", "HEAD"],
         expect.objectContaining({
           cwd: windowsPath,
           shell: false,

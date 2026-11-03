@@ -72,8 +72,8 @@ export async function findWorkspaceRoots(projectPath: string, files: readonly Fi
     ...workspacePatterns(await readJson(join(projectPath, "package.json"))),
     ...pnpmPatterns(await readText(join(projectPath, "pnpm-workspace.yaml"))),
   ];
-  const include = patterns.filter((pattern) => !pattern.startsWith("!")).map(globToRegExp);
-  const exclude = patterns.filter((pattern) => pattern.startsWith("!")).map((pattern) => globToRegExp(pattern.slice(1)));
+  const include = patterns.filter((pattern) => !pattern.startsWith("!")).flatMap(expandBraces).map(globToRegExp);
+  const exclude = patterns.filter((pattern) => pattern.startsWith("!")).flatMap((pattern) => expandBraces(pattern.slice(1))).map(globToRegExp);
   if (include.length === 0) return [];
   return files
     .map((file) => canonicalizePath(file.path))
@@ -91,9 +91,20 @@ function workspacePatterns(manifest: Record<string, unknown> | undefined): reado
   return list.filter((pattern): pattern is string => typeof pattern === "string" && pattern.length > 0);
 }
 
-/** The `packages:` list of a pnpm-workspace.yaml: block-style `- item` lines, quoted or not. */
+/** `{a,b}/*` → `a/*`, `b/*` (as npm, yarn and pnpm workspace globs allow); nested sets expand too. */
+function expandBraces(pattern: string): string[] {
+  const match = /\{([^{}]*)\}/.exec(pattern);
+  if (match === null) return [pattern];
+  return match[1]!.split(",").flatMap((choice) => expandBraces(`${pattern.slice(0, match.index)}${choice}${pattern.slice(match.index + match[0].length)}`));
+}
+
+/** The `packages:` list of a pnpm-workspace.yaml: block-style `- item` lines or a flow list `[a, b]`, quoted or not. */
 function pnpmPatterns(text: string | undefined): readonly string[] {
   if (text === undefined) return [];
+  const flow = /^packages:\s*\[([^\]]*)\]/m.exec(text);
+  if (flow !== null) {
+    return flow[1]!.split(",").map((item) => item.replace(/#.*$/, "").trim().replace(/^(['"])(.*)\1$/, "$2")).filter((item) => item.length > 0);
+  }
   const patterns: string[] = [];
   let inPackages = false;
   for (const line of text.split(/\r?\n/)) {
