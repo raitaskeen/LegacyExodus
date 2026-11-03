@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import type { ASTNode, ASTResult } from "@parser/index";
 import { canonicalizePath, ModuleResolver, type DependencyGraph } from "@graph/index";
 import type { SymbolTable } from "@symbols/index";
-import { createLexicalScopeId, createSelfScopeId, type CodeSymbol } from "@symbols/index";
+import { createLexicalScopeId, createSelfScopeId, FactKeyer, type CodeSymbol } from "@symbols/index";
 
 import type { SemanticCall, SymbolReference } from "./semantic-contracts";
 import { compareCodePoints } from "@shared/ordering";
@@ -48,7 +48,9 @@ export class DeterministicCallGraphBuilder {
     };
     predeclareScopeBindings(ast.root, initialContext);
     const boundCallees = new Set<ASTNode>();
-    const fileSymbols = createFileSymbolIndex(tablesByPath.get(canonicalizePath(ast.metadata.sourcePath)), ast, unstableExportIds);
+    const table = tablesByPath.get(canonicalizePath(ast.metadata.sourcePath));
+    const fileSymbols = createFileSymbolIndex(table, ast, unstableExportIds);
+    factKeyers.set(fileSymbols, new FactKeyer(ast.metadata.sourcePath, ast.root, fileSymbols.ownerSymbols));
     this.visit(ast.root, ast, initialContext, tablesByPath, importsByFile, targetByImportId, calls, references, boundCallees, fileSymbols, undefined, false);
   }
 
@@ -109,9 +111,11 @@ export class DeterministicCallGraphBuilder {
               : isRebound(fileSymbols, MODULE_SCOPE_ID, calleeName) || isUnstableTarget(fileSymbols, importTarget) ? undefined : importTarget;
           const id = hash(`${ast.metadata.sourcePath}:${nextContext.callerName}:${calleeName}:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`);
           const resolutionState = targetSymbolId === undefined ? "UNRESOLVED" as const : "RESOLVED" as const;
-          const reference: SymbolReference = { id: hash(`reference:${id}`), filePath: ast.metadata.sourcePath, name: calleeName, kind: "call", resolutionState, ...(targetSymbolId === undefined ? {} : { resolvedSymbolId: targetSymbolId }) };
+          const key = factKeyers.get(fileSymbols)?.key("call", calleeName, node.location?.start);
+          const keyed = key === undefined ? {} : { key };
+          const reference: SymbolReference = { id: hash(`reference:${id}`), ...keyed, filePath: ast.metadata.sourcePath, name: calleeName, kind: "call", resolutionState, ...(targetSymbolId === undefined ? {} : { resolvedSymbolId: targetSymbolId }) };
           references.push(reference);
-          calls.push({ id, sourceFilePath: ast.metadata.sourcePath, callerName: nextContext.callerName, calleeName, resolutionState, ...(targetSymbolId === undefined ? {} : { targetSymbolId }), ...(node.location === undefined ? {} : { location: node.location.start }) });
+          calls.push({ id, ...keyed, sourceFilePath: ast.metadata.sourcePath, callerName: nextContext.callerName, calleeName, resolutionState, ...(targetSymbolId === undefined ? {} : { targetSymbolId }), ...(node.location === undefined ? {} : { location: node.location.start }) });
         }
       }
     }
@@ -121,9 +125,11 @@ export class DeterministicCallGraphBuilder {
       const binding = name === undefined ? undefined : resolveLexicalBinding(fileSymbols, name, nextContext.scope);
       if (name !== undefined && binding?.state === "ONE_BINDING") {
         const location = node.location?.start;
-        for (const target of binding.referenceTargets) {
+        const key = factKeyers.get(fileSymbols)?.key("ref", name, location);
+        for (const [index, target] of binding.referenceTargets.entries()) {
           references.push({
             id: hash(`identifier-reference:${ast.metadata.sourcePath}:${target.id}:${location?.line ?? 0}:${location?.column ?? 0}`),
+            ...(key === undefined ? {} : { key: binding.referenceTargets.length > 1 ? `${key}/${index}` : key }),
             filePath: ast.metadata.sourcePath,
             name,
             kind: "identifier",
@@ -141,9 +147,11 @@ export class DeterministicCallGraphBuilder {
       const binding = resolveLexicalBinding(fileSymbols, "React", nextContext.scope);
       if (binding.state === "ONE_BINDING") {
         const location = node.location?.start;
-        for (const target of binding.referenceTargets) {
+        const key = factKeyers.get(fileSymbols)?.key("jsx", "React", location);
+        for (const [index, target] of binding.referenceTargets.entries()) {
           references.push({
             id: hash(`jsx-reference:${ast.metadata.sourcePath}:${target.id}:${location?.line ?? 0}:${location?.column ?? 0}`),
+            ...(key === undefined ? {} : { key: binding.referenceTargets.length > 1 ? `${key}/${index}` : key }),
             filePath: ast.metadata.sourcePath,
             name: "React",
             kind: "identifier",
@@ -181,6 +189,8 @@ interface FileSymbolIndex {
   readonly firstImportByName: ReadonlyMap<string, CodeSymbol>;
   readonly classByLocation: ReadonlyMap<string, CodeSymbol>;
   readonly lexicalBindings: ReadonlyMap<string, LexicalResolution>;
+  /** Function, method and class symbols: the owners fact keys are built from (ADR-008). */
+  readonly ownerSymbols: readonly CodeSymbol[];
   /**
    * For each block of a namespace that is declared in more than one block, the names declared in its
    * other blocks. TypeScript merges the exports of those blocks, so an unqualified name that this
@@ -320,6 +330,7 @@ function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult, u
   const classByLocation = new Map<string, CodeSymbol>();
   const byAnchor = new Map<string, CodeSymbol[]>();
   const classSymbols: CodeSymbol[] = [];
+  const ownerSymbols: CodeSymbol[] = [];
 
   const namespaceBlocks: NamespaceBlocks = new Map();
 
@@ -346,6 +357,7 @@ function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult, u
       firstImportByName.set(symbol.name, symbol);
     }
 
+    if (symbol.kind === "function" || symbol.kind === "method" || symbol.kind === "class") ownerSymbols.push(symbol);
     if (symbol.kind === "class" && symbol.location !== undefined) {
       classSymbols.push(symbol);
       const key = symbolLocationKey(symbol.location.start.line, symbol.location.start.column);
@@ -360,8 +372,11 @@ function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult, u
   const writes = collectBindingWrites(ast.root, declarationsByScopeAndName);
   const classes = collectClassFacts(ast.root, classSymbols);
   const reopened = reopenedNamespaces(namespaceBlocks);
-  return Object.freeze({ byScopeAndName, declarationsByScopeAndName, byName, firstImportByName, classByLocation, lexicalBindings, reopened, writes, unstableExportIds, classes });
+  return Object.freeze({ byScopeAndName, declarationsByScopeAndName, byName, firstImportByName, classByLocation, lexicalBindings, ownerSymbols, reopened, writes, unstableExportIds, classes });
 }
+
+/** Fact keys (ADR-008 step 2) per file, keyed by the file's symbol index for the duration of its visit. */
+const factKeyers = new WeakMap<FileSymbolIndex, FactKeyer>();
 
 const NAMESPACE_BLOCK = "scope:TSModuleDeclaration:";
 
