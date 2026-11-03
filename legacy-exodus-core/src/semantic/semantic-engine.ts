@@ -62,8 +62,12 @@ export class DeterministicSemanticAnalysisEngine {
     const unusedExports = params.symbolTables.filter((table) => !publicModules.has(canonicalizePath(table.filePath))).flatMap((table) => table.symbols.filter((symbol) => symbol.kind === "export" && !exportedIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unused-export", exportState)));
     // A local is a lexical binding: object-literal keys, class members and `x.y =` members are
     // properties, read through objects the references cannot follow, so they are never "unreferenced locals". A leading `_`
-    // marks a binding unused on purpose, as `tsc --noUnusedLocals` treats it (BA-11).
-    const deadCode = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => ["function", "method", "class", "variable"].includes(symbol.kind) && symbol.expression !== true && !symbol.exported && symbol.member !== true && !symbol.name.startsWith("_") && !referencedSymbolIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unreferenced-local-symbol")));
+    // marks a binding unused on purpose, as `tsc --noUnusedLocals` treats it (BA-11). A parameter before a used one
+    // holds a position callers fill, so only parameters after the last used one are dead (ESLint `after-used`).
+    const deadCode = params.symbolTables.flatMap((table) => {
+      const positional = requiredParameterIds(table.symbols, referencedSymbolIds);
+      return table.symbols.filter((symbol) => ["function", "method", "class", "variable"].includes(symbol.kind) && symbol.expression !== true && !symbol.exported && symbol.member !== true && !symbol.name.startsWith("_") && !referencedSymbolIds.has(symbol.id) && !positional.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unreferenced-local-symbol"));
+    });
 
     return createSemanticAnalysis({
       calls: params.calls,
@@ -179,6 +183,22 @@ function moduleTargets(symbolTables: readonly SymbolTable[], dependencyGraph: De
     return resolved === null ? [] : [resolved];
   };
   return { tablesByPath, targetsOf };
+}
+
+/** Unused parameters that precede a used parameter of the same function: they keep later ones in place. */
+function requiredParameterIds(symbols: SymbolTable["symbols"], referenced: ReadonlySet<string>): ReadonlySet<string> {
+  const byFunction = new Map<string, SymbolTable["symbols"][number][]>();
+  for (const symbol of symbols) {
+    if (symbol.declarationKind !== "param" || symbol.scopeId === undefined) continue;
+    byFunction.set(symbol.scopeId, [...(byFunction.get(symbol.scopeId) ?? []), symbol]);
+  }
+  const required = new Set<string>();
+  for (const parameters of byFunction.values()) {
+    const ordered = [...parameters].sort((left, right) => (left.location?.start.line ?? 0) - (right.location?.start.line ?? 0) || (left.location?.start.column ?? 0) - (right.location?.start.column ?? 0));
+    const lastUsed = ordered.map((parameter) => referenced.has(parameter.id)).lastIndexOf(true);
+    for (const parameter of ordered.slice(0, Math.max(lastUsed, 0))) required.add(parameter.id);
+  }
+  return required;
 }
 
 function isLexicalImportBinding(symbol: SymbolTable["symbols"][number]): boolean {

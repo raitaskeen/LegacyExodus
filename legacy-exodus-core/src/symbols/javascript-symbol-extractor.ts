@@ -256,6 +256,9 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         const blockScopeId = createLexicalScopeId(node.type, node.location);
         this.visitChildren(node, ast, {
           ...context,
+          // A declaration's export does not reach the bindings in its body.
+          exported: false,
+          defaultExport: false,
           scopeId: blockScopeId,
           scopeChain: [blockScopeId, ...context.scopeChain],
         }, symbols, pendingExports);
@@ -302,6 +305,9 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         this.extractParameterSymbols(node, ast, fnScopeId, fnSymbol.name, fnSymbol.id, symbols);
         this.visitChildren(node, ast, {
           ...context,
+          // A declaration's export does not reach the bindings in its body.
+          exported: false,
+          defaultExport: false,
           enclosingAssignedName: undefined,
           enclosingAssignedId: undefined,
           scopeId: fnScopeId,
@@ -325,6 +331,9 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         this.extractParameterSymbols(node, ast, fnScopeId, fnName, fnId, symbols);
         this.visitChildren(node, ast, {
           ...context,
+          // A declaration's export does not reach the bindings in its body.
+          exported: false,
+          defaultExport: false,
           enclosingAssignedName: undefined,
           enclosingAssignedId: undefined,
           scopeId: fnScopeId,
@@ -370,6 +379,9 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         this.extractParameterSymbols(node, ast, methodScopeId, methodSymbol.name, methodSymbol.id, symbols);
         this.visitChildren(node, ast, {
           ...context,
+          // A declaration's export does not reach the bindings in its body.
+          exported: false,
+          defaultExport: false,
           scopeId: methodScopeId,
           functionScopeId: methodScopeId,
           scopeChain: [methodScopeId, ...context.scopeChain],
@@ -382,6 +394,9 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
         this.extractParameterSymbols(node, ast, methodScopeId, methodSymbol.name, methodSymbol.id, symbols);
         this.visitChildren(node, ast, {
           ...context,
+          // A declaration's export does not reach the bindings in its body.
+          exported: false,
+          defaultExport: false,
           scopeId: methodScopeId,
           functionScopeId: methodScopeId,
           scopeChain: [methodScopeId, ...context.scopeChain],
@@ -635,6 +650,8 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
   ): void {
     const paramNodes = fnNode.children.filter((child) => child.role === "params" || child.role === "param");
     for (const paramNode of paramNodes) {
+      // `constructor(private x: T)` also declares the class field `x`, read as `this.x`.
+      const property = paramNode.type === "TSParameterProperty";
       const boundNodes = extractBoundIdentifierNodes(paramNode);
       for (const idNode of boundNodes) {
         const name = readIdentifierName(idNode);
@@ -649,6 +666,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
             defaultExport: false,
           }, {
             declarationKind: "param",
+            ...(property ? { member: true as const } : {}),
           }),
         );
       }
@@ -1422,7 +1440,8 @@ function findObjectProperties(node: ASTNode): readonly ExtractedProperty[] {
   const seen = new Set<string>();
 
   for (const child of node.children) {
-    if (child.type !== "ObjectProperty" && child.role !== "properties") continue;
+    // A spread (`{ ...rest }`) names no property; its argument is a reference, not a key.
+    if (child.type !== "ObjectProperty" && child.type !== "ObjectMethod") continue;
     const keyChild = child.children.find((c) => c.role === "key")
       ?? child.children.find((c) => c.type === "Identifier" || c.type === "StringLiteral");
     const valChild = child.children.find((c) => c.role === "value");
