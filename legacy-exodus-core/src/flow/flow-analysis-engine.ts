@@ -112,10 +112,11 @@ export class DeterministicFlowAnalysisEngine {
 
     // A path can pass through joins of any file; each build keeps its own (BA-27).
     const allJoins = new Map(contexts.flatMap(({ state }) => [...state.joins]));
+    const allFactKeys = new Map(contexts.flatMap(({ state }) => [...(state.factKeys ?? [])]));
     const connected = contexts.map(({ graph, state }) => {
       const transfers = crossFileTransfersByGraph.get(graph.filePath) ?? [...graph.interproceduralFlows];
       const unique = [...new Map(transfers.map((transfer) => [transfer.id, transfer] as const)).values()].sort((left, right) => compareCodePoints(left.id, right.id));
-      const taintFlows = this.dataFlowBuilder.computeTaintFlows({ ...state, joins: allJoins }, globalTaintPaths);
+      const taintFlows = this.dataFlowBuilder.computeTaintFlows({ ...state, joins: allJoins, factKeys: allFactKeys }, globalTaintPaths);
 
       return createDataFlowGraph({
         ...graph,
