@@ -1,4 +1,6 @@
 # LegacyExodus Permanent Engineering Charter
+
+> **ARCHIVED (2026-11-03).** Historical governance, kept for reference. The canonical agent operating system is [`.agents/`](../../../.agents/README.md); where this document conflicts with it, `.agents/` governs.
 ## Canonical Constitutional Governance for AI-Assisted and Human Engineering
 
 *Status: Authoritative & Active*

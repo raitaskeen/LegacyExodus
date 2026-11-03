@@ -1,4 +1,6 @@
 # LegacyExodus Multi-Agent Operating Model
+
+> **ARCHIVED (2026-11-03).** Historical governance, kept for reference. The canonical agent operating system is [`.agents/`](../../../.agents/README.md); where this document conflicts with it, `.agents/` governs.
 ## Role Architecture, Delegation Protocols, and Authority Boundaries
 
 *Status: Authoritative & Active*
@@ -121,7 +123,7 @@ flowchart TD
 > **AUTHORITATIVE TRUTH NOTICE:**
 > This section is the repository's **single source of truth** for the forensic code remediation sequence. All engineering agents, copilots, and autonomous assistants MUST execute this exact 20-step sequence in strict, deterministic order. No other document, skill, or instruction may define a competing or independent remediation sequence.
 
-Every code remediation executed by an engineering agent MUST follow this 20-step pipeline within the canonical package root `legacy-exodus-core/` (as documented in [`GOVERNANCE.md`](../../GOVERNANCE.md) and [`CONTRIBUTING.md`](../../CONTRIBUTING.md)):
+Every code remediation executed by an engineering agent MUST follow this 20-step pipeline within the canonical package root `legacy-exodus-core/` (as documented in [`GOVERNANCE.md`](../../../GOVERNANCE.md) and [`CONTRIBUTING.md`](../../../CONTRIBUTING.md)):
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -224,7 +226,7 @@ Every code remediation executed by an engineering agent MUST follow this 20-step
 
 13. **Step 13: Adversarial Red-Team Review Gate**
     * Mandatory checkpoint prior to diff review and commit.
-    * The Red-Team reviewer executes the adversarial review protocol defined in [`.agents/skills/legacyexodus-red-team-review/SKILL.md`](../../.agents/skills/legacyexodus-red-team-review/SKILL.md), operating strictly under read-only/challenge-only authority against an isolated verification environment.
+    * The Red-Team reviewer executes the adversarial review protocol defined in [`.agents/skills/legacyexodus-red-team-review/SKILL.md`](../../../.agents/skills/legacyexodus-red-team-review/SKILL.md), operating strictly under read-only/challenge-only authority against an isolated verification environment.
     * Red-Team evaluates the change against the 11 probing questions and issues a formal verdict:
       * **`RED-TEAM PASS`**: All 11 questions answered satisfactorily; proceed to Step 14.
       * **`RED-TEAM FAIL`**: Defect detected. The review MUST classify the failure into one of two explicit paths without altering canonical sequence numbering:

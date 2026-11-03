@@ -5,8 +5,8 @@
 System, developer, and explicit human task instructions govern this operating
 system. This user-authorized control plane supplies scoped procedures, not
 permission to expand a task. For agent execution it supersedes conflicting
-legacy recipes in docs/governance/AGENT_OPERATING_MODEL.md and
-docs/governance/PERMANENT_CHARTER.md (not their product contracts).
+legacy recipes in docs/archive/governance/AGENT_OPERATING_MODEL.md and
+docs/archive/governance/PERMANENT_CHARTER.md (not their product contracts).
 Those documents remain historical governance references; do not recursively
 load them as competing operating instructions. Report unresolved product
 contract conflicts instead of selecting convenient semantics.
