@@ -52,7 +52,7 @@ export class DeterministicControlFlowGraphBuilder {
   }
 
   private buildScope(filePath: string, scopeName: string, nodes: readonly ASTNode[], statementNodes?: Map<string, ASTNode>, blockClauses?: Map<string, readonly ASTNode[]>): ControlFlowGraph {
-    const state = new FlowState(filePath, scopeName, hasUnsupportedExpressionControl(nodes));
+    const state = new FlowState(filePath, scopeName, collectExpressionControl(nodes));
     const entry = state.createBlock();
     const exit = state.createBlock();
     state.buildStatements(nodes, entry, exit, { exceptionTarget: exit, returnTarget: exit });
@@ -77,12 +77,19 @@ class FlowState {
   public constructor(
     private readonly filePath: string,
     private readonly scopeName: string,
-    private readonly hasUnsupportedExpressionControl: boolean,
+    private readonly expressionControl: ReadonlySet<ASTNode>,
   ) {}
+  /** Expression control nodes split into decision blocks; any other one leaves the graph UNSUPPORTED. */
+  private readonly loweredControl = new Set<ASTNode>();
   public createBlock(): string { const id = hash(`${this.filePath}:${this.scopeName}:block:${this.sequence++}`); const block = { id, statements: [] }; this.blocks.push(block); this.blocksById.set(id, block); return id; }
+  // Constant-time duplicate and incoming checks: a scan per edge made long functions quadratic.
+  private readonly edgeIds = new Set<string>();
+  private readonly blocksWithIncoming = new Set<string>();
   public addEdge(fromBlockId: string, toBlockId: string, kind: ControlFlowEdgeKind): void {
     const id = hash(`${fromBlockId}:${toBlockId}:${kind}`);
-    if (this.edges.some((candidate) => candidate.id === id)) return;
+    if (this.edgeIds.has(id)) return;
+    this.edgeIds.add(id);
+    this.blocksWithIncoming.add(toBlockId);
     this.edges.push({ id, fromBlockId, toBlockId, kind });
   }
   public buildStatements(nodes: readonly ASTNode[], current: string, exit: string | undefined, control: ControlContext | undefined): string {
@@ -98,6 +105,8 @@ class FlowState {
         continue;
       }
       if (isFunction(node)) continue;
+      const own = loweredExpressions(node);
+      if (own !== undefined) block = this.lowerAll(block, own);
       // Header loops attribute each clause's potential exception to the block that evaluates it.
       if (control?.potentialExceptionTarget !== undefined && !hasLoopHeader(node) && hasPotentiallyThrowingEvaluation(node)) {
         this.addEdge(block, control.potentialExceptionTarget, "exception");
@@ -133,44 +142,143 @@ class FlowState {
   }
   private buildIf(node: ASTNode, block: string, control: ControlContext | undefined): string { this.addNode(block, node); const consequent = this.createBlock(); const alternate = this.createBlock(); const join = this.createBlock(); const condition = staticBoolean(node.children.find((child) => child.role === "test")); if (condition !== false) this.addEdge(block, consequent, "true"); if (condition !== true) this.addEdge(block, alternate, "false"); const children = node.children.filter((child) => child.role === "consequent" || child.role === "alternate"); const yes = children.filter((child) => child.role === "consequent").flatMap(statementChildren); const no = children.filter((child) => child.role === "alternate").flatMap(statementChildren); this.buildStatements(yes, consequent, join, control); this.buildStatements(no, alternate, join, control); return join; }
   private buildLabeled(node: ASTNode, block: string, control: ControlContext | undefined): string { this.addNode(block, node); const label = labelName(node); const body = node.children.find((child) => child.role === "body"); if (body === undefined || label === undefined) return block; const potentialExceptionTarget = control?.potentialExceptionTarget; if (body.type === "DoWhileStatement") { if (potentialExceptionTarget !== undefined && hasPotentiallyThrowingEvaluation(body)) this.addEdge(block, potentialExceptionTarget, "exception"); return this.buildDoWhile(body, block, control, label); } if (isLoop(body)) return this.buildLoop(body, block, control, label, potentialExceptionTarget); const after = this.createBlock(); const labels = withLabel(control?.labels, label, { breakTarget: after }); this.buildStatements(statementChildren(body), block, after, { ...control, labels }); return after; }
-  private buildDoWhile(node: ASTNode, block: string, control: ControlContext | undefined, label?: string): string { const body = this.createBlock(); const conditionBlock = this.createBlock(); const after = this.createBlock(); const condition = staticBoolean(node.children.find((child) => child.role === "test")); this.addNode(block, node); this.addEdge(block, body, "next"); const labels = label === undefined ? control?.labels : withLabel(control?.labels, label, { breakTarget: after, continueTarget: conditionBlock }); const content = node.children.filter((child) => child.role === "body").flatMap(statementChildren); const last = this.buildStatements(content, body, undefined, { ...control, breakTarget: after, continueTarget: conditionBlock, labels }); if (this.block(last).terminator === undefined) this.addEdge(last, conditionBlock, "next"); const test = node.children.find((child) => child.role === "test"); if (test !== undefined) this.blockClauses.set(conditionBlock, [test]); if (condition !== false) this.addEdge(conditionBlock, body, "true"); if (condition !== true) this.addEdge(conditionBlock, after, "false"); return after; }
+  private buildDoWhile(node: ASTNode, block: string, control: ControlContext | undefined, label?: string): string { const body = this.createBlock(); const conditionBlock = this.createBlock(); const after = this.createBlock(); const condition = staticBoolean(node.children.find((child) => child.role === "test")); this.addNode(block, node); this.addEdge(block, body, "next"); const labels = label === undefined ? control?.labels : withLabel(control?.labels, label, { breakTarget: after, continueTarget: conditionBlock }); const content = node.children.filter((child) => child.role === "body").flatMap(statementChildren); const last = this.buildStatements(content, body, undefined, { ...control, breakTarget: after, continueTarget: conditionBlock, labels }); if (this.block(last).terminator === undefined) this.addEdge(last, conditionBlock, "next"); const test = node.children.find((child) => child.role === "test"); const tested = test === undefined ? conditionBlock : this.lower(conditionBlock, test); if (test !== undefined) this.blockClauses.set(tested, [test]); if (condition !== false) this.addEdge(tested, body, "true"); if (condition !== true) this.addEdge(tested, after, "false"); return after; }
   private buildLoop(node: ASTNode, block: string, control: ControlContext | undefined, label?: string, potentialExceptionTarget?: string): string {
     // The header holds only the loop test. Clauses evaluated once (for init, for-in/of object) stay
     // in the pre-loop block; a for update gets its own block, which is also the continue target.
     const once = node.children.find((child) => child.role === (node.type === "ForStatement" ? "init" : "right"));
     const updateNode = node.type === "ForStatement" ? node.children.find((child) => child.role === "update") : undefined;
-    if (once !== undefined) this.addClause(block, once, potentialExceptionTarget);
+    const preLoop = once === undefined ? block : this.addClause(block, once, potentialExceptionTarget);
     const header = this.createBlock();
-    this.addEdge(block, header, "next");
-    this.addNode(header, node);
-    if (potentialExceptionTarget !== undefined && node.children.some((child) => (child.role === "test" || child.role === "left") && hasPotentiallyThrowingEvaluation(child))) {
-      this.addEdge(header, potentialExceptionTarget, "exception");
+    this.addEdge(preLoop, header, "next");
+    // The test is lowered from the header (the loop-back target); the loop node completes it.
+    const evaluated = node.children.filter((child) => child.role === "test" || child.role === "left");
+    const test = this.lowerAll(header, evaluated);
+    this.addNode(test, node);
+    if (potentialExceptionTarget !== undefined && evaluated.some(hasPotentiallyThrowingEvaluation)) {
+      this.addEdge(test, potentialExceptionTarget, "exception");
     }
     const body = this.createBlock();
     const after = this.createBlock();
     const update = updateNode === undefined ? undefined : this.createBlock();
     const testNode = node.children.find((child) => child.role === "test");
     const condition = node.type === "ForStatement" && testNode === undefined ? true : staticBoolean(testNode);
-    if (condition !== false) this.addEdge(header, body, "true");
-    if (condition !== true) this.addEdge(header, after, "false");
+    if (condition !== false) this.addEdge(test, body, "true");
+    if (condition !== true) this.addEdge(test, after, "false");
     const continueTarget = update ?? header;
     const labels = label === undefined ? control?.labels : withLabel(control?.labels, label, { breakTarget: after, continueTarget });
     const content = node.children.filter((child) => child.role === "body").flatMap(statementChildren);
     const last = this.buildStatements(content, body, undefined, { ...control, breakTarget: after, continueTarget, labels });
     if (update !== undefined && updateNode !== undefined) {
       if (this.block(last).terminator === undefined) this.addEdge(last, update, "next");
-      this.addClause(update, updateNode, potentialExceptionTarget);
-      if (condition !== false) this.addEdge(update, header, "loop-back");
+      const updated = this.addClause(update, updateNode, potentialExceptionTarget);
+      if (condition !== false) this.addEdge(updated, header, "loop-back");
     } else if (this.block(last).terminator === undefined && condition !== false) {
       this.addEdge(last, header, "loop-back");
     }
     return after;
   }
-  private addClause(blockId: string, clause: ASTNode, potentialExceptionTarget: string | undefined): void {
-    this.addNode(blockId, clause);
-    if (potentialExceptionTarget !== undefined && hasPotentiallyThrowingEvaluation(clause)) this.addEdge(blockId, potentialExceptionTarget, "exception");
+  /** Lowers a clause evaluated in `blockId`, records it in the block it completes in, and returns that block. */
+  private addClause(blockId: string, clause: ASTNode, potentialExceptionTarget: string | undefined): string {
+    const completed = this.lowerAll(blockId, [clause]);
+    this.addNode(completed, clause);
+    if (potentialExceptionTarget !== undefined && hasPotentiallyThrowingEvaluation(clause)) this.addEdge(completed, potentialExceptionTarget, "exception");
+    return completed;
   }
-  private buildSwitch(node: ASTNode, block: string, control: ControlContext | undefined): string { this.addNode(block, node); const after = this.createBlock(); const cases = node.children.filter((child) => child.role === "cases"); if (cases.length === 0) { this.addEdge(block, after, "next"); return after; } const blocks = cases.map(() => this.createBlock()); const hasDefault = cases.some((candidate) => candidate.children.every((child) => child.role !== "test")); for (const [index, branch] of cases.entries()) { const caseBlock = blocks[index]; if (caseBlock === undefined) continue; this.addEdge(block, caseBlock, "case"); const last = this.buildStatements(switchCaseStatements(branch), caseBlock, undefined, { ...control, breakTarget: after, continueTarget: control?.continueTarget }); if (this.block(last).terminator === undefined) { const next = blocks[index + 1] ?? after; this.addEdge(last, next, "next"); } } if (!hasDefault) this.addEdge(block, after, "next"); return after; }
+  /** Lowers each expression in evaluation order and returns the block in which they have all completed. */
+  private lowerAll(blockId: string, expressions: readonly ASTNode[]): string {
+    let block = blockId;
+    for (const expression of expressions) block = this.lower(block, expression);
+    return block;
+  }
+  /**
+   * Splits the branches inside one expression into blocks: `a && b`, `a || b`, `a ?? b`, `c ? x : y`,
+   * `x &&= y` (and `||=`, `??=`) and optional chains. A decision block ends with the deciding expression;
+   * `true` leads where evaluation continues when the left side is truthy (non-nullish for `??` and `?.`),
+   * `false` where it is falsy (nullish). Each arm ends with the operand it evaluates; all arms join. Function
+   * and class bodies are not evaluated here. Data flow still evaluates the whole statement once, in the block
+   * where it completes, so its facts are unchanged; only the shape of control is refined.
+   */
+  private lower(blockId: string, node: ASTNode): string {
+    if (isFunction(node) || node.type === "ClassExpression" || node.type === "ClassDeclaration") return blockId;
+    if (node.type === "LogicalExpression" || isLogicalAssignment(node)) {
+      const left = node.children.find((child) => child.role === "left");
+      const right = node.children.find((child) => child.role === "right");
+      const decision = left === undefined ? blockId : this.lower(blockId, left);
+      return this.branch(decision, node, String(node.attributes.operator).startsWith("&&") ? "true" : "false", right === undefined ? [] : [right]);
+    }
+    if (node.type === "ConditionalExpression") {
+      const test = node.children.find((child) => child.role === "test");
+      const decision = test === undefined ? blockId : this.lower(blockId, test);
+      this.addDecision(decision, node);
+      this.loweredControl.add(node);
+      const join = this.createBlock();
+      for (const [role, kind] of [["consequent", "true"], ["alternate", "false"]] as const) {
+        const arm = this.createBlock();
+        this.addEdge(decision, arm, kind);
+        const operand = node.children.find((child) => child.role === role);
+        const end = operand === undefined ? arm : this.lower(arm, operand);
+        if (operand !== undefined) this.addDecision(end, operand);
+        this.addEdge(end, join, "next");
+      }
+      return join;
+    }
+    if (isOptionalChain(node)) return this.lowerChain(blockId, node);
+    let block = blockId;
+    for (const child of node.children) block = this.lower(block, child);
+    return block;
+  }
+  /** One short-circuit: from `decision`, the `continueOn` edge evaluates `operands`; the other edge skips them. */
+  private branch(decision: string, node: ASTNode, continueOn: "true" | "false", operands: readonly ASTNode[]): string {
+    this.addDecision(decision, node);
+    this.loweredControl.add(node);
+    const arm = this.createBlock();
+    const join = this.createBlock();
+    this.addEdge(decision, arm, continueOn);
+    this.addEdge(decision, join, continueOn === "true" ? "false" : "true");
+    const end = this.lowerAll(arm, operands);
+    for (const operand of operands) this.addDecision(end, operand);
+    this.addEdge(end, join, "next");
+    return join;
+  }
+  /** `a?.b.c(d)`: each optional link tests the value so far; a nullish one skips the rest of the chain. */
+  private lowerChain(blockId: string, root: ASTNode): string {
+    const spine: ASTNode[] = [];
+    let current: ASTNode | undefined = root;
+    while (current !== undefined && isOptionalChain(current)) {
+      spine.push(current);
+      current = current.children.find((child) => child.role === "object" || child.role === "callee");
+    }
+    let block = current === undefined ? blockId : this.lower(blockId, current);
+    const end = this.createBlock();
+    for (const link of spine.reverse()) {
+      if (link.attributes.optional === true) {
+        this.addDecision(block, link);
+        const next = this.createBlock();
+        this.addEdge(block, next, "true");
+        this.addEdge(block, end, "false");
+        block = next;
+      }
+      this.loweredControl.add(link);
+      for (const child of link.children) {
+        if (child.role === "object" || child.role === "callee") continue;
+        block = this.lower(block, child);
+      }
+    }
+    this.addDecision(block, root);
+    this.addEdge(block, end, "next");
+    return end;
+  }
+  /** Records an expression in a block's shape without making it a statement: data flow does not evaluate it. */
+  private addDecision(blockId: string, node: ASTNode): void {
+    const position = node.location === undefined ? `anon-${this.unlocatedStatementSequence++}` : `${node.location.start.line}:${node.location.start.column}`;
+    const origin = `${this.filePath}:expression:${node.type}:${position}`;
+    let id = hash(origin);
+    for (let attempt = 0; this.statementIds.has(id); attempt++) id = hash(`${origin}@${this.copyContext}#${attempt}`);
+    this.statementIds.add(id);
+    this.block(blockId).statements.push({ id, type: node.type, ...(node.location === undefined ? {} : { location: node.location.start }) });
+  }
+  private buildSwitch(node: ASTNode, entry: string, control: ControlContext | undefined): string { const discriminant = node.children.find((child) => child.role === "discriminant"); const block = discriminant === undefined ? entry : this.lower(entry, discriminant); this.addNode(block, node); const after = this.createBlock(); const cases = node.children.filter((child) => child.role === "cases"); if (cases.length === 0) { this.addEdge(block, after, "next"); return after; } const blocks = cases.map(() => this.createBlock()); const hasDefault = cases.some((candidate) => candidate.children.every((child) => child.role !== "test")); for (const [index, branch] of cases.entries()) { const caseBlock = blocks[index]; if (caseBlock === undefined) continue; this.addEdge(block, caseBlock, "case"); const last = this.buildStatements(switchCaseStatements(branch), caseBlock, undefined, { ...control, breakTarget: after, continueTarget: control?.continueTarget }); if (this.block(last).terminator === undefined) { const next = blocks[index + 1] ?? after; this.addEdge(last, next, "next"); } } if (!hasDefault) this.addEdge(block, after, "next"); return after; }
   private buildTry(node: ASTNode, block: string, exit: string, control: ControlContext | undefined): string {
     this.addNode(block, node);
     const after = this.createBlock();
@@ -348,8 +456,7 @@ class FlowState {
     }
   }
   private hasIncomingEdges(toBlockId: string | undefined): boolean {
-    if (toBlockId === undefined) return false;
-    return this.edges.some((candidate) => candidate.toBlockId === toBlockId);
+    return toBlockId !== undefined && this.blocksWithIncoming.has(toBlockId);
   }
   private addNode(blockId: string, node: ASTNode): void {
     const position = node.location === undefined
@@ -375,8 +482,9 @@ class FlowState {
     try { return build(); } finally { this.copyContext = outer; }
   }
   private block(id: string): MutableBlock { const block = this.blocksById.get(id); if (block === undefined) throw new ControlFlowInvariantError(id); return block; }
-  private retagCompletionEdge(fromBlockId: string, toBlockId: string, sourceKind: ControlFlowEdgeKind, targetKind: ControlFlowEdgeKind): void { const edge = this.edges.find((candidate) => candidate.fromBlockId === fromBlockId && candidate.toBlockId === toBlockId && candidate.kind === sourceKind); if (edge === undefined) return; const index = this.edges.indexOf(edge); this.edges[index] = { ...edge, id: hash(`${fromBlockId}:${toBlockId}:${targetKind}`), kind: targetKind }; }
-  private retagIncomingEdges(toBlockId: string | undefined, sourceKind: ControlFlowEdgeKind, targetKind: ControlFlowEdgeKind): void { if (toBlockId === undefined) return; for (const [index, edge] of this.edges.entries()) { if (edge.toBlockId === toBlockId && edge.kind === sourceKind) this.edges[index] = { ...edge, id: hash(`${edge.fromBlockId}:${toBlockId}:${targetKind}`), kind: targetKind }; } }
+  private retagCompletionEdge(fromBlockId: string, toBlockId: string, sourceKind: ControlFlowEdgeKind, targetKind: ControlFlowEdgeKind): void { const edge = this.edges.find((candidate) => candidate.fromBlockId === fromBlockId && candidate.toBlockId === toBlockId && candidate.kind === sourceKind); if (edge === undefined) return; const index = this.edges.indexOf(edge); this.retag(index, { ...edge, id: hash(`${fromBlockId}:${toBlockId}:${targetKind}`), kind: targetKind }); }
+  private retagIncomingEdges(toBlockId: string | undefined, sourceKind: ControlFlowEdgeKind, targetKind: ControlFlowEdgeKind): void { if (toBlockId === undefined) return; for (const [index, edge] of this.edges.entries()) { if (edge.toBlockId === toBlockId && edge.kind === sourceKind) this.retag(index, { ...edge, id: hash(`${edge.fromBlockId}:${toBlockId}:${targetKind}`), kind: targetKind }); } }
+  private retag(index: number, edge: ControlFlowEdge): void { this.edgeIds.delete(this.edges[index]!.id); this.edgeIds.add(edge.id); this.edges[index] = edge; }
   public finish(entry: string, exit: string): ControlFlowGraph {
     const predecessorsByBlock = new Map<string, string[]>();
     const successorsByBlock = new Map<string, string[]>();
@@ -468,7 +576,7 @@ class FlowState {
       id: hash(`cfg:${this.filePath}:${this.scopeName}`),
       filePath: this.filePath,
       scopeName: this.scopeName,
-      state: this.hasUnsupportedExpressionControl ? "UNSUPPORTED" : "RESOLVED",
+      state: [...this.expressionControl].every((node) => this.loweredControl.has(node)) ? "RESOLVED" : "UNSUPPORTED",
       entryBlockId: entry,
       exitBlockId: exit,
       blocks: blocks.sort((left, right) => compareCodePoints(left.id, right.id)),
@@ -510,14 +618,27 @@ function resolveContinueTarget(node: ASTNode, control: ControlContext | undefine
 function resolveBreakFinalizerTarget(node: ASTNode, control: ControlContext | undefined): string | undefined { const label = labelName(node); return label === undefined ? control?.breakFinalizerTarget : control?.labels?.get(label)?.breakFinalizerTarget; }
 function resolveContinueFinalizerTarget(node: ASTNode, control: ControlContext | undefined): string | undefined { const label = labelName(node); return label === undefined ? control?.continueFinalizerTarget : control?.labels?.get(label)?.continueFinalizerTarget; }
 function isFunction(node: ASTNode): boolean { return ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ObjectMethod"].includes(node.type); }
-function hasUnsupportedExpressionControl(nodes: readonly ASTNode[]): boolean {
-  const visit = (node: ASTNode): boolean => {
-    if (isFunction(node)) return false;
-    if (["ConditionalExpression", "LogicalExpression", "OptionalCallExpression", "OptionalMemberExpression"].includes(node.type)) return true;
-    if (node.type === "AssignmentExpression" && ["&&=", "||=", "??="].includes(String(node.attributes.operator))) return true;
-    return node.children.some(visit);
+const EXPRESSION_CONTROL = new Set(["ConditionalExpression", "LogicalExpression", "OptionalCallExpression", "OptionalMemberExpression"]);
+function isLogicalAssignment(node: ASTNode): boolean { return node.type === "AssignmentExpression" && ["&&=", "||=", "??="].includes(String(node.attributes.operator)); }
+function isOptionalChain(node: ASTNode): boolean { return node.type === "OptionalCallExpression" || node.type === "OptionalMemberExpression"; }
+/** Every expression-control node evaluated by this graph's own code (not inside nested functions). */
+function collectExpressionControl(nodes: readonly ASTNode[]): ReadonlySet<ASTNode> {
+  const found = new Set<ASTNode>();
+  const visit = (node: ASTNode): void => {
+    if (isFunction(node)) return;
+    if (EXPRESSION_CONTROL.has(node.type) || isLogicalAssignment(node)) found.add(node);
+    for (const child of node.children) visit(child);
   };
-  return nodes.some(visit);
+  for (const node of nodes) visit(node);
+  return found;
+}
+/** Statements that evaluate expressions before completing: those expressions (the test, for `if`). */
+const LOWERED_STATEMENTS = new Set(["ExpressionStatement", "VariableDeclaration", "ReturnStatement", "ThrowStatement", "ExportNamedDeclaration", "ExportDefaultDeclaration"]);
+function loweredExpressions(node: ASTNode): readonly ASTNode[] | undefined {
+  if (node.type === "IfStatement") return node.children.filter((child) => child.role === "test");
+  if (LOWERED_STATEMENTS.has(node.type)) return node.children;
+  // An arrow function's expression body is its only "statement".
+  return node.type.endsWith("Statement") || node.type.endsWith("Declaration") || node.type === "SwitchCase" ? undefined : [node];
 }
 function hasPotentiallyThrowingEvaluation(node: ASTNode): boolean {
   if (isFunction(node) || node.type === "ThrowStatement") return false;

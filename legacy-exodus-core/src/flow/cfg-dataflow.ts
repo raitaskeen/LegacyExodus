@@ -579,8 +579,12 @@ export function analyzeControlFlow(graph: ControlFlowGraph, nodes: Pick<ControlF
     incoming.set(edge.toBlockId, [...(incoming.get(edge.toBlockId) ?? []), { from: edge.fromBlockId, abrupt: ABRUPT_EDGES.has(edge.kind) }]);
   }
   const order = reversePostorder(graph, successors);
+  const evaluates = new Set(graph.blocks.filter((block) => (nodes.blockClauses.get(block.id)?.length ?? 0) > 0 || block.statements.some((statement) => nodes.statementNodes.has(statement.id))).map((block) => block.id));
 
   const runBlock = (blockId: string, entry: Facts, evaluator: Evaluator): { readonly out: Facts; readonly abrupt: Facts } => {
+    // A block that evaluates nothing (an expression decision or arm; data flow evaluates the whole statement
+    // where it completes) passes its entry state through unchanged and uncopied.
+    if (!evaluates.has(blockId)) return { out: entry, abrupt: entry };
     const overwritten = new Map<string, BindingFacts>();
     const state = new State(new Map(entry), overwritten);
     for (const statement of blocks.get(blockId)?.statements ?? []) {

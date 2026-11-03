@@ -118,9 +118,9 @@ describe("F03-C ordinary member exception reachability", () => {
     expect(graph.edges.filter((edge) => edge.kind === "exception")).toEqual([]);
     expect(graph.state).toBe("RESOLVED");
   });
-  test("T16 optional chaining stays unsupported", async () => {
+  test("T16 optional chaining is lowered; a nullish base skips the member and throws nothing", async () => {
     const graph = graphFor(await parse(wrapped("null?.value;")));
-    expect(graph.state).toBe("UNSUPPORTED");
+    expect(graph.state).toBe("RESOLVED");
     expect(kinds(graph, blockAt(graph, 4), blockAt(graph, 6))).toEqual([]);
     reachable(graph, blockAt(graph, 6), false);
   });
