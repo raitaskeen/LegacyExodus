@@ -44,7 +44,8 @@ describe("DeterministicSemanticAnalysisEngine", () => {
     // INFERRED until per-router middleware, handler and mount paths are modelled (BA-08).
     expect(analysis.routes[0]?.state).toBe("INFERRED");
     expect(analysis.middlewareChains).toEqual([expect.objectContaining({ filePath: "src/server.js", middleware: ["authenticate"] })]);
-    expect(analysis.calls.map((call) => call.id)).toEqual([...analysis.calls].map((call) => call.id).sort());
+    // Ordered by structural key (ADR-008): file, owners, kind and ordinal.
+    expect(analysis.calls.map((call) => call.key ?? call.id)).toEqual([...analysis.calls].map((call) => call.key ?? call.id).sort());
     expect(Object.isFrozen(analysis)).toBe(true);
   });
 
