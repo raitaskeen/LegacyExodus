@@ -1051,6 +1051,8 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
           this.createSymbol("function", targetPath, innermostRight, ast, context, {
             parameters: funcParams,
             anonymous: false,
+            // A value written into an existing binding: that binding's uses are its uses.
+            expression: true,
           }),
         );
       }

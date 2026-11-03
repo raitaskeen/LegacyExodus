@@ -36,7 +36,7 @@ export interface CodeSymbol {
   readonly visibility: "public";
   readonly parameters: readonly string[];
   readonly declarationKind?: "const" | "let" | "var" | "param";
-  /** True for a class created by a class expression: it exists because it is used as a value, so it is never dead code. */
+  /** True for a construct created as a value (a class expression, a function assigned to an existing binding): it is never dead code. */
   readonly expression?: true;
   /**
    * True for a property, not a lexical binding: an object-literal key, a class member, or a member
