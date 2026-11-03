@@ -172,6 +172,11 @@ export class Orchestrator implements RuntimeService {
     }
   }
 
+  /** Removes the fact lists of past runs (ADR-009); only when no record references them any more. */
+  public releaseFacts(): void {
+    this.analyzeProjectHandler.disposeFacts();
+  }
+
   public async stop(): Promise<void> {
     if (this.activeExecution !== null) {
       await this.activeExecution.catch(() => {});

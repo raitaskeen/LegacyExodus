@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { appendFileSync, existsSync, readdirSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { PassThrough } from "node:stream";
 
+import { createLegacyExodusEngine } from "@runtime/composition/services";
 import { FactArray, FactStore, toFactArray } from "@shared/fact-array";
 import { createOwnedStorageRecord } from "@storage/storage-record";
 import { StreamingJsonWriter } from "@storage/projections/streaming-json-writer";
@@ -99,6 +102,33 @@ describe("ADR-009 fact lists on disk", () => {
       expect(first.payload.graphs).toBeInstanceOf(FactArray);
     } finally {
       store.dispose();
+    }
+  });
+});
+
+describe("ADR-009 fact store lifetime", () => {
+  test("one exit hook however many stores come and go", () => {
+    FactStore.create().dispose();
+    const listeners = process.listenerCount("exit");
+    for (let index = 0; index < 20; index++) FactStore.create().dispose();
+    expect(process.listenerCount("exit")).toBe(listeners);
+  });
+
+  test("a session reset releases past runs' fact lists", async () => {
+    const project = mkdtempSync(join(tmpdir(), "lx-facts-project-"));
+    writeFileSync(join(project, "a.js"), "export function f(x) { return x + 1; }\nf(1);\n");
+    const engine = createLegacyExodusEngine({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+    const stores = () => readdirSync(tmpdir()).filter((name) => name.startsWith("legacy-exodus-facts-")).length;
+    try {
+      await engine.initialize();
+      const before = stores();
+      await engine.execute({ id: "00000000-0000-4000-8000-c00000000000", type: "AnalyzeProject", createdAt: new Date("2026-01-01T00:00:00.000Z"), payload: { projectId: "00000000-0000-4000-8000-c00000000001", path: project, refresh: true } });
+      expect(stores()).toBe(before + 1);
+      await engine.resetSession();
+      expect(stores()).toBe(before);
+    } finally {
+      await engine.shutdown();
+      rmSync(project, { recursive: true, force: true });
     }
   });
 });

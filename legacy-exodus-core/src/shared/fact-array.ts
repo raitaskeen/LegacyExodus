@@ -117,7 +117,10 @@ export class FactStore {
 
   public static create(): FactStore {
     const store = new FactStore(mkdtempSync(join(tmpdir(), STORE_PREFIX)));
-    if (liveStores.size === 0) process.once("exit", disposeAllFactStores);
+    if (!exitHookInstalled) {
+      exitHookInstalled = true;
+      process.on("exit", disposeAllFactStores);
+    }
     liveStores.add(store);
     return store;
   }
@@ -142,6 +145,7 @@ export class FactStore {
 
 /** Stores not disposed by their owner (a handler that was never stopped) go when the process exits. */
 const liveStores = new Set<FactStore>();
+let exitHookInstalled = false;
 
 /** Disposes every fact store still open (process exit; test runners, which emit no exit event). */
 export function disposeAllFactStores(): void {
