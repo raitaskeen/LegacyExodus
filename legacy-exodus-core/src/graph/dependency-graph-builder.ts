@@ -20,11 +20,7 @@ export class DeterministicDependencyGraphBuilder {
     );
     const tablesByPath = new Map(orderedTables.map((table) => [canonicalizePath(table.filePath), table]));
     // Sorted by id below, so the order tables are read in does not matter.
-    const nodes: { readonly id: string; readonly filePath: string; readonly symbolId: string }[] = [];
-    for (const table of fullTables) {
-      const filePath = canonicalizePath(table.filePath);
-      for (const symbol of table.symbols) nodes.push({ id: `symbol:${symbol.id}`, filePath, symbolId: symbol.id });
-    }
+    const nodes = [...dependencyGraphNodes(fullTables)];
     const edges: DependencyGraphEdge[] = [];
     const moduleEdges: ModuleDependencyEdge[] = [];
     for (const table of orderedTables) {
@@ -165,6 +161,14 @@ export class DeterministicDependencyGraphBuilder {
     const exports = table.symbols.filter((symbol) => symbol.kind === "export");
     const exact = exports.find((symbol) => (name === "default" ? symbol.defaultExport : symbol.name === name));
     return exact;
+  }
+}
+
+/** The graph's symbol nodes, one per symbol, unsorted: a caller may sort them on disk (ADR-009 step 5). */
+export function* dependencyGraphNodes(fullTables: Iterable<SymbolTable>): Generator<{ readonly id: string; readonly filePath: string; readonly symbolId: string }> {
+  for (const table of fullTables) {
+    const filePath = canonicalizePath(table.filePath);
+    for (const symbol of table.symbols) yield { id: `symbol:${symbol.id}`, filePath, symbolId: symbol.id };
   }
 }
 

@@ -66,7 +66,7 @@ export const symbolTablePayloadSchema = z.object({
 export const dependencyGraphPayloadSchema = z.object({
   projectId: z.string().uuid(),
   analysisRunId: z.string().uuid().optional(),
-  nodes: z.array(z.object({ id: z.string(), filePath: z.string(), symbolId: z.string() })),
+  nodes: factList(z.object({ id: z.string(), filePath: z.string(), symbolId: z.string() })),
   edges: z.array(
     z.object({
       id: z.string(),
@@ -84,8 +84,8 @@ export const dependencyGraphPayloadSchema = z.object({
 export const knowledgeGraphPayloadSchema = z.object({
   projectId: z.string().uuid(),
   analysisRunId: z.string().uuid().optional(),
-  nodes: z.array(z.object({ id: z.string(), kind: z.string(), name: z.string(), filePath: z.string() })),
-  edges: z.array(z.object({ id: z.string(), from: z.string(), to: z.string(), relationship: z.string() })),
+  nodes: factList(z.object({ id: z.string(), kind: z.string(), name: z.string(), filePath: z.string() })),
+  edges: factList(z.object({ id: z.string(), from: z.string(), to: z.string(), relationship: z.string() })),
 });
 
 /**

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 
 import { createLegacyExodusEngine } from "@runtime/composition/services";
-import { FactArray, FactStore, toFactArray } from "@shared/fact-array";
+import { FactArray, FactStore, sortedFactArray, toFactArray } from "@shared/fact-array";
 import { createOwnedStorageRecord } from "@storage/storage-record";
 import { StreamingJsonWriter } from "@storage/projections/streaming-json-writer";
 
@@ -150,6 +150,22 @@ describe("ADR-009 step 2: many small lists in one file", () => {
       expect(await written(both)).toBe(`${JSON.stringify([1, 2, 30], null, 2)}\n`);
       expect(FactArray.concat([a, b]).sha256).toBe(FactArray.concat([a, b]).sha256);
       expect(FactArray.concat([a, b]).sha256).not.toBe(FactArray.concat([b, a]).sha256);
+    } finally {
+      store.dispose();
+    }
+  });
+});
+
+describe("ADR-009 step 5: sorting in bounded memory", () => {
+  test("runs merged from disk give the stable in-memory sort, ties in input order", () => {
+    const store = FactStore.create();
+    try {
+      const items = Array.from({ length: 1_000 }, (_, index) => ({ key: `k${(index * 7919) % 97}`, index }));
+      const expected = [...items].sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : left.index - right.index));
+      for (const runLength of [1, 7, 100, 1_000, 5_000]) {
+        expect([...sortedFactArray(store, items, (item) => item.key, runLength)]).toEqual(expected);
+      }
+      expect([...sortedFactArray(store, [], (item: string) => item, 3)]).toEqual([]);
     } finally {
       store.dispose();
     }
