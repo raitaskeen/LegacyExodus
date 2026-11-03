@@ -1,7 +1,7 @@
 # ADR-009 — Streaming, Sharded Execution
 
 ## Status
-**PROPOSED** (S4/S5 of the remediation queue). Owner decision required before implementation. Recommended before the IR phase.
+**ACCEPTED** (2026-11-03, owner). S4/S5 of the remediation queue; implemented before the IR phase, in the rollout steps below.
 
 ## Context
 `AnalyzeProjectHandler` runs as one in-memory pass over the repository. Per file it builds symbols, calls and references, HTTP facts, CFGs and a data-flow context, and appends each to repository-wide arrays (`symbolTables`, `allCalls`, `allControlFlowGraphs`, `allContexts`, …). Cross-file stages (dependency graph, semantic synthesis, `flowEngine.connect`) then read those arrays. Projections serialize everything once, at the end, into a few large JSON artifacts. Only ASTs are spilled to disk (`run-scoped-ast-store`).
@@ -33,7 +33,7 @@ Follow-ups enabled by this design, decided separately:
 - **Unknowns stay explicit.** A shard that fails to write or verify fails the run for that file, visibly, as dispositions do today.
 
 ## Rollout
-1. Shard writer and manifest, with the existing projections derived from shards (output identical).
+1. Shard writer, with the existing projections derived from shards (output identical). Shards start run-scoped (beside the run-scoped AST store); persisting them under `.discovery/shards` with the manifest comes with S6, which is the first consumer that needs them after the run.
 2. Pass 1 plus summaries plus link, with the dependency graph from summaries (fact-diff 0/0).
 3. Pass 2 per file, with semantic and CFG facts streamed (fact-diff 0/0).
 4. Cross-file taint over interprocedural summaries (fact-diff 0/0).
