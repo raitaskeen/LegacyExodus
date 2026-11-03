@@ -1,3 +1,4 @@
+import { excludedPathSchema } from "./discovery";
 import { analysisDispositionV1Schema } from "./discovery-projection";
 import { z } from "zod";
 import { moduleDependencyLayerSchema } from "@graph/dependency-graph-contracts";
@@ -25,6 +26,7 @@ export const discoveryPayloadSchema = z.object({
       name: z.string().min(1),
       version: z.string().min(1),
       kind: z.enum(["production", "development"]),
+      manifest: z.string().min(1).optional(),
     }),
   ),
   frameworks: z.array(z.object({ name: z.string().min(1), evidence: z.string().min(1) })),
@@ -47,6 +49,7 @@ export const discoveryPayloadSchema = z.object({
       }),
     )
     .optional(),
+  excludedPaths: z.array(excludedPathSchema).optional(),
   discoveredAt: z.string().datetime(),
 });
 

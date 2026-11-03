@@ -120,6 +120,9 @@ export class DiscoveryProjectionService implements RuntimeService {
             ...(payload.manifestFailures && payload.manifestFailures.length > 0
               ? { manifestFailures: payload.manifestFailures }
               : {}),
+            ...(payload.excludedPaths && payload.excludedPaths.length > 0
+              ? { excludedPaths: payload.excludedPaths }
+              : {}),
           },
         },
         { name: "files.json", payload: payload.files },

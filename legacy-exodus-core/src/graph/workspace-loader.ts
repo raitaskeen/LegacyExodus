@@ -13,21 +13,7 @@ import { canonicalizePath, type WorkspacePackage } from "./module-resolver";
  * left out: which one an import means is unknown. Unreadable manifests are skipped.
  */
 export async function loadWorkspacePackages(projectPath: string, files: readonly FileArtifact[]): Promise<Readonly<Record<string, WorkspacePackage>>> {
-  const patterns = [
-    ...workspacePatterns(await readJson(join(projectPath, "package.json"))),
-    ...pnpmPatterns(await readText(join(projectPath, "pnpm-workspace.yaml"))),
-  ];
-  const include = patterns.filter((pattern) => !pattern.startsWith("!")).map(globToRegExp);
-  const exclude = patterns.filter((pattern) => pattern.startsWith("!")).map((pattern) => globToRegExp(pattern.slice(1)));
-  if (include.length === 0) return {};
-
-  const roots = files
-    .map((file) => canonicalizePath(file.path))
-    .filter((path) => path.endsWith("/package.json"))
-    .map((path) => path.slice(0, -"/package.json".length))
-    .filter((root) => include.some((pattern) => pattern.test(`${root}/`)) && !exclude.some((pattern) => pattern.test(`${root}/`)))
-    .sort();
-
+  const roots = await findWorkspaceRoots(projectPath, files);
   const byName = new Map<string, WorkspacePackage | null>();
   for (const root of roots) {
     const manifest = await readJson(join(projectPath, root, "package.json"));
@@ -46,6 +32,23 @@ export async function loadWorkspacePackages(projectPath: string, files: readonly
     if (entry !== null) packages[name] = entry;
   }
   return Object.freeze(packages);
+}
+
+/** Project-relative directories of the workspace packages, sorted; empty without a workspace declaration. */
+export async function findWorkspaceRoots(projectPath: string, files: readonly FileArtifact[]): Promise<readonly string[]> {
+  const patterns = [
+    ...workspacePatterns(await readJson(join(projectPath, "package.json"))),
+    ...pnpmPatterns(await readText(join(projectPath, "pnpm-workspace.yaml"))),
+  ];
+  const include = patterns.filter((pattern) => !pattern.startsWith("!")).map(globToRegExp);
+  const exclude = patterns.filter((pattern) => pattern.startsWith("!")).map((pattern) => globToRegExp(pattern.slice(1)));
+  if (include.length === 0) return [];
+  return files
+    .map((file) => canonicalizePath(file.path))
+    .filter((path) => path.endsWith("/package.json"))
+    .map((path) => path.slice(0, -"/package.json".length))
+    .filter((root) => include.some((pattern) => pattern.test(`${root}/`)) && !exclude.some((pattern) => pattern.test(`${root}/`)))
+    .sort();
 }
 
 function workspacePatterns(manifest: Record<string, unknown> | undefined): readonly string[] {

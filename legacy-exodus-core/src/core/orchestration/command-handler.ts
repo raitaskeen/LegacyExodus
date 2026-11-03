@@ -1,4 +1,4 @@
-import { createAnalysisDisposition, deriveR01Accounting, validateAnalysisDisposition, type AnalysisFileDisposition } from "@contracts/discovery-projection";
+import { createAnalysisDisposition, deriveR01Accounting, isR01DispatchedFile, validateAnalysisDisposition, type AnalysisFileDisposition } from "@contracts/discovery-projection";
 import type {
   AnalyzeProjectCommand,
   DiscoverProjectCommand,
@@ -163,6 +163,7 @@ export class AnalyzeProjectHandler {
               name: d.name,
               version: d.version,
               kind: d.kind,
+              ...(d.manifest !== undefined ? { manifest: d.manifest } : {}),
             })),
             frameworks: frameworksJson.map((f) => ({
               name: f.name,
@@ -171,6 +172,7 @@ export class AnalyzeProjectHandler {
             languages: projectJson.languages ?? [],
             enumerationFailures: snapshotEnumeration,
             manifestFailures: projectJson.manifestFailures ?? [],
+            excludedPaths: projectJson.excludedPaths ?? [],
             discoveredAt: new Date(validation.manifest.analysis.generatedAt),
           });
 
@@ -184,6 +186,7 @@ export class AnalyzeProjectHandler {
             languages: [...discovery.languages],
             enumerationFailures: discovery.enumerationFailures,
             manifestFailures: discovery.manifestFailures.map((failure) => ({ ...failure })),
+            ...(discovery.excludedPaths.length === 0 ? {} : { excludedPaths: discovery.excludedPaths.map((excluded) => ({ ...excluded })) }),
             discoveredAt: discovery.discoveredAt.toISOString(),
             analysisRunId: command.id,
           });
@@ -382,6 +385,7 @@ export class AnalyzeProjectHandler {
       languages: [...discovery.languages],
       enumerationFailures: enumerationFailures.map((failure) => ({ ...failure })),
       manifestFailures: discovery.manifestFailures.map((failure) => ({ ...failure })),
+      ...(discovery.excludedPaths.length === 0 ? {} : { excludedPaths: discovery.excludedPaths.map((excluded) => ({ ...excluded })) }),
       discoveredAt: discovery.discoveredAt.toISOString(),
       analysisRunId: command.id,
     });
@@ -397,7 +401,7 @@ export class AnalyzeProjectHandler {
 
     try {
       for (const file of discovery.files) {
-        if (file.language !== "javascript" && file.language !== "typescript") {
+        if (!isR01DispatchedFile(file)) {
           continue;
         }
 

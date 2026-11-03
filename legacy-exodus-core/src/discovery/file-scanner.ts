@@ -1,11 +1,14 @@
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import type { Dirent } from "node:fs";
-import { readdir, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { relative, resolve, sep } from "node:path";
 
-import type { DiscoveryEnumerationFailure, FileArtifact, FileScanResult } from "@contracts/discovery";
+import type { DiscoveryEnumerationFailure, ExcludedPath, FileArtifact, FileScanResult } from "@contracts/discovery";
 import { LegacyExodusError } from "@shared/errors";
 import { compareCodePoints } from "@shared/ordering";
+
+import { IgnoreRules } from "./ignore-rules";
 
 export type { FileScanResult };
 
@@ -161,15 +164,38 @@ const fileKindByExtension: Readonly<Record<string, FileArtifact["fileKind"]>> = 
 export interface FileScannerOptions {
   readonly readdir?: typeof readdir;
   readonly stat?: typeof stat;
+  readonly readFile?: (path: string, encoding: "utf8") => Promise<string>;
+  /** Files git tracks under the project, relative POSIX; undefined outside a git checkout. */
+  readonly trackedFiles?: (projectPath: string) => Promise<ReadonlySet<string> | undefined>;
 }
+
+/** Paths git tracks, and every directory above one. */
+interface Tracked { readonly files: ReadonlySet<string>; readonly directories: ReadonlySet<string> }
+
+/** `git ls-files` under the project; undefined when it is not a git checkout or git is unavailable. */
+function gitTrackedFiles(projectPath: string): Promise<ReadonlySet<string> | undefined> {
+  return new Promise((resolveTracked) => {
+    execFile("git", ["ls-files", "-z", "--cached"], { cwd: projectPath, maxBuffer: 256 * 1024 * 1024, windowsHide: true }, (error, stdout) => {
+      if (error !== null) { resolveTracked(undefined); return; }
+      resolveTracked(new Set(stdout.split("\0").filter((path) => path.length > 0)));
+    });
+  });
+}
+
+/** Minified bundles are build output even when committed: listed as generated, not analyzed (BA-15). */
+const MINIFIED = /\.min\.(?:js|mjs|cjs)$/i;
 
 export class FileScanner {
   private readonly readdirFn: typeof readdir;
   private readonly statFn: typeof stat;
+  private readonly readFileFn: (path: string, encoding: "utf8") => Promise<string>;
+  private readonly trackedFilesFn: (projectPath: string) => Promise<ReadonlySet<string> | undefined>;
 
   public constructor(options: FileScannerOptions = {}) {
     this.readdirFn = options.readdir ?? readdir;
     this.statFn = options.stat ?? stat;
+    this.readFileFn = options.readFile ?? ((path, encoding) => readFile(path, encoding));
+    this.trackedFilesFn = options.trackedFiles ?? gitTrackedFiles;
   }
 
   public async scan(projectPath: string): Promise<FileScanResult> {
@@ -186,8 +212,18 @@ export class FileScanner {
 
     const files: FileArtifact[] = [];
     const enumerationFailures: DiscoveryEnumerationFailure[] = [];
+    const excludedPaths: ExcludedPath[] = [];
+    // A root .legacyexodusignore (gitignore syntax) is the user's own exclusion list and always applies.
+    const configuredText = await this.readIgnoreFile(resolve(resolvedProjectPath, ".legacyexodusignore"));
+    const configured = configuredText === undefined ? IgnoreRules.none : IgnoreRules.none.withFile("", configuredText, "legacyexodusignore");
+    // As in git, .gitignore rules apply to untracked files only: a committed file is the repository's.
+    const trackedFiles = await this.trackedFilesFn(resolvedProjectPath);
+    const tracked: Tracked | undefined = trackedFiles === undefined ? undefined : {
+      files: trackedFiles,
+      directories: new Set([...trackedFiles].flatMap((path) => path.split("/").slice(0, -1).map((_, index, parts) => parts.slice(0, index + 1).join("/")))),
+    };
 
-    await this.scanDirectory(resolvedProjectPath, resolvedProjectPath, files, enumerationFailures);
+    await this.scanDirectory(resolvedProjectPath, resolvedProjectPath, files, enumerationFailures, excludedPaths, IgnoreRules.none, { configured, tracked });
 
     enumerationFailures.sort((left, right) =>
       compareCodePoints(left.path, right.path) || compareCodePoints(left.kind, right.kind) || compareCodePoints(left.code, right.code),
@@ -196,6 +232,7 @@ export class FileScanner {
     return Object.freeze({
       files: Object.freeze(files),
       enumerationFailures: Object.freeze(enumerationFailures),
+      excludedPaths: Object.freeze(excludedPaths),
     });
   }
 
@@ -204,6 +241,9 @@ export class FileScanner {
     currentPath: string,
     files: FileArtifact[],
     failures: DiscoveryEnumerationFailure[],
+    excludedPaths: ExcludedPath[],
+    inherited: IgnoreRules,
+    policy: { readonly configured: IgnoreRules; readonly tracked: Tracked | undefined },
   ): Promise<void> {
     let entries: Dirent[];
     try {
@@ -218,8 +258,16 @@ export class FileScanner {
       return;
     }
 
+    const directory = relative(projectPath, currentPath).split(sep).join("/");
+    // A directory's own .gitignore applies to everything below it (git's semantics).
+    const gitignore = entries.some((entry) => entry.name === ".gitignore" && entry.isFile())
+      ? await this.readIgnoreFile(resolve(currentPath, ".gitignore"))
+      : undefined;
+    const rules = gitignore === undefined ? inherited : inherited.withFile(directory, gitignore, "gitignore");
+
     for (const entry of entries.sort((left, right) => compareCodePoints(left.name, right.name))) {
       const entryPath = resolve(currentPath, entry.name);
+      const entryRelative = directory === "" ? entry.name : `${directory}/${entry.name}`;
 
       // Intentional traversal policy: Symbolic links are skipped to protect against
       // traversal cycles, duplicate source analysis, and escaping repository boundaries.
@@ -228,14 +276,24 @@ export class FileScanner {
       }
 
       if (entry.isDirectory()) {
-        if (!ignoredDirectories.has(entry.name)) {
-          await this.scanDirectory(projectPath, entryPath, files, failures);
+        if (ignoredDirectories.has(entry.name)) continue;
+        const reason = policy.configured.ignoredBy(entryRelative, true)
+          ?? (policy.tracked?.directories.has(entryRelative) === true ? undefined : rules.ignoredBy(entryRelative, true));
+        if (reason !== undefined) {
+          excludedPaths.push(Object.freeze({ path: entryRelative, kind: "directory", reason }));
+          continue;
         }
-
+        await this.scanDirectory(projectPath, entryPath, files, failures, excludedPaths, rules, policy);
         continue;
       }
 
       if (entry.isFile()) {
+        const reason = policy.configured.ignoredBy(entryRelative, false)
+          ?? (policy.tracked?.files.has(entryRelative) === true ? undefined : rules.ignoredBy(entryRelative, false));
+        if (reason !== undefined) {
+          excludedPaths.push(Object.freeze({ path: entryRelative, kind: "file", reason }));
+          continue;
+        }
         try {
           files.push(await this.createFileArtifact(projectPath, entryPath));
         } catch (error: unknown) {
@@ -261,9 +319,17 @@ export class FileScanner {
       id: createHash("sha256").update(path).digest("hex"),
       path,
       language: known?.language ?? languageByExtension[extension] ?? "unknown",
-      fileKind: known?.fileKind ?? fileKindByExtension[extension] ?? "unknown",
+      fileKind: MINIFIED.test(path) ? "generated" : known?.fileKind ?? fileKindByExtension[extension] ?? "unknown",
       size: fileStats.size,
     });
+  }
+
+  private async readIgnoreFile(path: string): Promise<string | undefined> {
+    try {
+      return await this.readFileFn(path, "utf8");
+    } catch {
+      return undefined;
+    }
   }
 
   private async getProjectStats(projectPath: string): Promise<Awaited<ReturnType<typeof stat>>> {
