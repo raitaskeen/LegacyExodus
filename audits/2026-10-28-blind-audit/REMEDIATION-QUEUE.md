@@ -130,6 +130,18 @@ Next by impact:
 - Extractor: `symbols.find` per function expression is quadratic in symbols per file.
 - Coverage audit: every construct the parser accepts is either analysed by every stage or reported as an explicit unknown. No silent gaps.
 - S4+S5 stay parked: Ghost is about 6 GB / 1.6 GB, and ADR-008's short ids are expected to shrink output.
+ADR-009 (streaming, sharded execution), 2026-11-03 night. The owner approved it; it lands before IR, and Wave 8 order is PHP, Java, Ruby.
+- #251: ADR-009 ACCEPTED.
+- #252: key building without per-node strings, one-shot ids. Engine 6-34% faster; memory -1%.
+- #253: step 1, whole-run fact lists (CFG, DFG, calls, references, scopes) live on disk as FactArray. Records hold handles; the projection streams them.
+- #254: step 3a, calls and references written file by file, already in sorted order; synthesis needs only FactUsage.
+- Ghost peak RSS by stage: 9,878 MB (main before) -> 8,030 (#253) -> **3,919 MB, 211 s** (#254). Budgets 6,785 MB / 360 s are met.
+- Every step so far: fact-diff 0/0 on five corpora and byte-identical artifacts.
+- Open: step 4a (DFG bodies on disk) plus the #253 review fixes (exit hook, resetSession releases lists).
+- Remaining: step 2 (symbol tables as shards plus summary), step 4b (taint over summaries), step 5 (100k-file scale gate, re-baseline Ghost budgets).
+- Known limit: the SQLite driver serializes fact lists in full at commit (S6).
+- Target machine: the owner accepts 32 GB for enterprise scale; the dev machine has 16 GB.
+
 3. When an item merges, mark it here (commit to the audit branch) and start the next queued item whose dependencies are merged.
 4. Ledger check: `bun test tests/conformance` on `main` must pass, and `known-gaps.ts` lists exactly the open findings.
 
