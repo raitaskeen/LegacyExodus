@@ -138,32 +138,57 @@ function entryPoints(paths: readonly string[], calls: readonly { readonly source
   return uniqueByKey([...conventional, ...listeners], (entry) => `${entry.filePath}:${entry.reason}`);
 }
 
+const ROUTE_METHODS = new Set(["get", "post", "put", "patch", "delete", "all", "options", "head"]);
+
+interface UseEvent { readonly order: number; readonly path: string | undefined; readonly middleware: readonly string[]; readonly routers: readonly string[] }
+interface RouteEvent { readonly order: number; readonly node: ASTNode; readonly method: string; readonly path: string; readonly middleware: readonly string[]; readonly handlerName: string | undefined }
+
+/**
+ * Express routes and middleware per proven receiver (BA-08):
+ * - each app or router keeps its own middleware stack, in registration order, and a route gets the
+ *   middleware its receiver registered before it, then its own route-level middleware;
+ * - the handler is the last argument;
+ * - `get(name)` with one argument reads a setting and is not a route;
+ * - `parent.use(path?, router)` mounts a router: its routes are reported under the joined path, after
+ *   the parent's middleware registered before the mount; a router mounted nowhere in this file keeps
+ *   its own paths (it may be mounted from another file);
+ * - middleware is named by its expression (`auth`, `express.json()`); an inline function is
+ *   `<anonymous>`, so none is dropped.
+ * Routes stay INFERRED: mounts from other files and middleware that ends the request are not modelled.
+ */
 export function findHttpCalls(root: ASTNode, filePath: string, symbolTable: SymbolTable | undefined): { readonly routes: readonly ExpressRoute[]; readonly middlewareChains: readonly MiddlewareChain[] } {
   const receivers = expressReceivers(root, symbolTable);
-  const middleware: string[] = [];
-  const routes: ExpressRoute[] = [];
+  const uses = new Map<string, UseEvent[]>();
+  const registrations = new Map<string, RouteEvent[]>();
+  const receiverOrder: string[] = [];
+  let order = 0;
+  const receiverAt = (name: string | undefined, scopeChain: readonly string[]): string | undefined => {
+    if (name === undefined) return undefined;
+    const scope = scopeChain.find((scopeId) => receivers.declarations.get(name)?.has(scopeId) === true);
+    return scope !== undefined && receivers.proven.get(name)?.has(scope) === true ? `${name}@${scope}` : undefined;
+  };
+  const note = (receiver: string): void => { if (!uses.has(receiver)) { uses.set(receiver, []); registrations.set(receiver, []); receiverOrder.push(receiver); } };
   const visit = (node: ASTNode, scopeChain: readonly string[]): void => {
     if (node.type === "CallExpression") {
-      const callee = readCallee(node);
-      const method = callee?.split(".").at(-1)?.toLowerCase();
-      const argumentsNodes = node.children.filter((child) => child.role === "arguments");
-      const receiver = callee?.split(".")[0];
-      const declarationScope = receiver === undefined
-        ? undefined
-        : scopeChain.find((scopeId) => receivers.declarations.get(receiver)?.has(scopeId) === true);
-      const isExpressReceiver = receiver !== undefined
-        && declarationScope !== undefined
-        && receivers.proven.get(receiver)?.has(declarationScope) === true;
-      if (method === "use" && isExpressReceiver) {
-        const names = argumentsNodes.map(readName).filter((name): name is string => name !== undefined && name.trim().length > 0 && !name.startsWith("/"));
-        middleware.push(...names);
-      }
-      if (isExpressReceiver && method !== undefined && ["get", "post", "put", "patch", "delete", "all"].includes(method)) {
-        const path = argumentsNodes.map(readString).find((value): value is string => value !== undefined) ?? "/";
-        const handlerName = argumentsNodes.map(readName).find((name): name is string => name !== undefined && name.trim().length > 0 && name !== path);
-        // The receiver is proven Express, but middleware, handler and mount path are not yet modelled
-        // per router (BA-08), so the route fact as a whole is inferred.
-        routes.push({ id: hash(`route:${filePath}:${method}:${path}:${node.location?.start.line ?? 0}`), filePath, method: method.toUpperCase(), path, ...(handlerName === undefined ? {} : { handlerName }), middleware: uniqueSorted(middleware), state: "INFERRED" });
+      const callee = node.children.find((child) => child.role === "callee");
+      const object = callee?.type === "MemberExpression" && callee.attributes.computed !== true ? callee.children.find((child) => child.role === "object") : undefined;
+      const method = callee === undefined || object === undefined ? undefined : readName(callee.children.find((child) => child.role === "property") ?? callee)?.toLowerCase();
+      const receiver = object?.type === "Identifier" ? receiverAt(readName(object), scopeChain) : undefined;
+      const args = node.children.filter((child) => child.role === "arguments");
+      if (receiver !== undefined && method === "use") {
+        note(receiver);
+        const path = args[0] === undefined ? undefined : readString(args[0]);
+        const rest = path === undefined ? args : args.slice(1);
+        const routers = rest.flatMap((argument) => { const mounted = argument.type === "Identifier" ? receiverAt(readName(argument), scopeChain) : undefined; return mounted === undefined ? [] : [mounted]; });
+        const middleware = rest.filter((argument) => !(argument.type === "Identifier" && receiverAt(readName(argument), scopeChain) !== undefined)).map(middlewareName);
+        uses.get(receiver)!.push({ order: order++, path, middleware, routers });
+      } else if (receiver !== undefined && method !== undefined && ROUTE_METHODS.has(method) && !(method === "get" && args.length === 1)) {
+        note(receiver);
+        const path = args[0] === undefined ? undefined : readString(args[0]);
+        const functions = path === undefined ? args : args.slice(1);
+        const last = functions.at(-1);
+        const handlerName = last === undefined ? undefined : readName(last);
+        registrations.get(receiver)!.push({ order: order++, node, method, path: path ?? "<dynamic>", middleware: functions.slice(0, -1).map(middlewareName), handlerName: handlerName === undefined || handlerName.trim().length === 0 ? undefined : handlerName });
       }
     }
     const nestedScope = createsLexicalScope(node)
@@ -172,7 +197,59 @@ export function findHttpCalls(root: ASTNode, filePath: string, symbolTable: Symb
     for (const child of node.children) visit(child, nestedScope);
   };
   visit(root, ["scope:module"]);
-  return { routes, middlewareChains: middleware.length === 0 ? [] : [{ filePath, middleware: uniqueSorted(middleware) }] };
+
+  // Where each router is mounted: parent, joined prefix, and the parent's middleware before the mount.
+  const mounts = new Map<string, { readonly parent: string; readonly path: string; readonly order: number }[]>();
+  for (const [parent, events] of uses) {
+    for (const event of events) for (const child of event.routers) mounts.set(child, [...(mounts.get(child) ?? []), { parent, path: event.path ?? "/", order: event.order }]);
+  }
+  const stackBefore = (receiver: string, before: number): readonly string[] => (uses.get(receiver) ?? []).filter((event) => event.order < before).flatMap((event) => event.middleware);
+  /** Every way a request reaches `receiver`: the path prefix and middleware it passes on the way. */
+  const entries = (receiver: string, before: number, seen: ReadonlySet<string>): readonly { readonly prefix: string; readonly middleware: readonly string[] }[] => {
+    const own = stackBefore(receiver, before);
+    const via = mounts.get(receiver) ?? [];
+    if (via.length === 0 || seen.has(receiver)) return [{ prefix: "", middleware: own }];
+    const next = new Set([...seen, receiver]);
+    return via.flatMap((mount) => entries(mount.parent, mount.order, next).map((outer) => ({ prefix: joinRoutePath(outer.prefix, mount.path), middleware: [...outer.middleware, ...own] })));
+  };
+
+  const routes: ExpressRoute[] = [];
+  for (const receiver of receiverOrder) {
+    for (const route of registrations.get(receiver) ?? []) {
+      for (const entry of entries(receiver, route.order, new Set())) {
+        const path = route.path === "<dynamic>" ? route.path : joinRoutePath(entry.prefix, route.path);
+        routes.push({
+          id: hash(`route:${filePath}:${route.method}:${path}:${route.node.location?.start.line ?? 0}`),
+          filePath, method: route.method.toUpperCase(), path,
+          ...(route.handlerName === undefined ? {} : { handlerName: route.handlerName }),
+          middleware: Object.freeze([...entry.middleware, ...route.middleware]), state: "INFERRED",
+        });
+      }
+    }
+  }
+  const middlewareChains = receiverOrder.flatMap((receiver) => {
+    const middleware = (uses.get(receiver) ?? []).flatMap((event) => event.middleware);
+    return middleware.length === 0 ? [] : [{ filePath, middleware: Object.freeze(middleware) }];
+  });
+  return { routes, middlewareChains };
+}
+
+/** A middleware argument's name: its identifier or member path, `call()` for a call, `<anonymous>` otherwise. */
+function middlewareName(node: ASTNode): string {
+  const name = readName(node);
+  if (name !== undefined && name.trim().length > 0) return name;
+  if (node.type === "CallExpression") {
+    const callee = readCallee(node);
+    return callee === undefined ? "<anonymous>" : `${callee}()`;
+  }
+  return "<anonymous>";
+}
+
+/** `/admin` + `/secret` → `/admin/secret`; one slash between parts, a leading slash, no trailing one. */
+function joinRoutePath(prefix: string, path: string): string {
+  const joined = `${prefix}/${path}`.replace(/\/{2,}/g, "/");
+  const trimmed = joined.length > 1 ? joined.replace(/\/+$/, "") : joined;
+  return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 }
 
 function expressReceivers(root: ASTNode, symbolTable: SymbolTable | undefined): {
