@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 const BASE32 = "abcdefghijklmnopqrstuvwxyz234567";
 
 /**
@@ -8,7 +6,8 @@ const BASE32 = "abcdefghijklmnopqrstuvwxyz234567";
  * edits elsewhere in the file. Distinct domains keep facts of different kinds with equal keys apart.
  */
 export function stableId(domain: string, key: string): string {
-  const digest = createHash("sha256").update(domain).update("\n").update(key).digest();
+  // One-shot hashing: no hasher object per id (millions in a large repository).
+  const digest = Bun.CryptoHasher.hash("sha256", `${domain}\n${key}`) as Uint8Array;
   let id = "";
   let buffer = 0;
   let bits = 0;
