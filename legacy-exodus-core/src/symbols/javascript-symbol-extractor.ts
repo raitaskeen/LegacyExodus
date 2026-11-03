@@ -63,6 +63,8 @@ const MERGEABLE_DECLARATION: ExportRank = 1;
 /** Interface, type alias: type-only. */
 const TYPE_DECLARATION: ExportRank = 2;
 
+import { assignSymbolKeys } from "./symbol-keys";
+
 export class JavaScriptSymbolExtractor implements SymbolExtractor {
   private unlocatedSequence = 0;
   private moduleReferences: ModuleReference[] = [];
@@ -116,12 +118,13 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     for (const pending of pendingExports) {
       this.markLocalSymbolAsExported(pending.name, symbols, pending.scopeChain);
     }
+    const keyed = assignSymbolKeys(symbols, validatedAst.root, validatedAst.metadata.sourcePath);
 
     return validateSymbolTable({
       filePath: validatedAst.metadata.sourcePath,
       language: validatedAst.metadata.language,
-      symbols,
-      summary: createSummary(symbols),
+      symbols: keyed,
+      summary: createSummary(keyed),
       moduleReferences: this.moduleReferences,
       ...(unresolvedModuleReferences.length === 0 ? {} : { unresolvedModuleReferences }),
     });

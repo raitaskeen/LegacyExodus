@@ -85,6 +85,8 @@ export function extractFacts(discoveryDirectory: string): FactSet {
   for (const dependency of readArtifact(discoveryDirectory, "dependencies.json") ?? []) add("dependencies", `${dependency.name}|${dependency.version}|${dependency.kind}`);
   for (const symbol of symbols) {
     add("symbols", `${symbol.filePath}|${symbol.kind}|${symbol.name}${at(symbol.location)}|${symbol.exported ? "exported" : "local"}|${symbol.containerName ?? "-"}`);
+    // Edit-stable identity (ADR-008): a key that changes or disappears is a lost identity, whatever the reason.
+    if (typeof symbol.key === "string") add("symbol-keys", symbol.key);
   }
   // Every other symbol field, so flag regressions (async, default, parameters, …) are visible.
   addCounted("symbol-details", symbols.map((symbol) => [
