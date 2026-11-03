@@ -341,7 +341,7 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "cfg-expr:logical-and-conditional-resolved", category: "cfg", has: /^expr\.js\|pick@[^|]*\|[^|]*\|blocks=9\|edges=11\|loops=0\|unreachable=0\|dead=0\|state=RESOLVED$/ },
       { id: "cfg-expr:optional-and-logical-assignment-resolved", category: "cfg", has: /^expr\.js\|call@[^|]*\|.*\|state=RESOLVED$/ },
       { id: "cfg-expr:loop-test-lowered", category: "cfg", has: /^expr\.js\|spin@[^|]*\|.*\|loops=1\|.*\|state=RESOLVED$/ },
-      { id: "cfg-expr:unlowered-case-test-stays-unsupported", category: "cfg", has: /^expr\.js\|later@[^|]*\|.*\|state=UNSUPPORTED$/ },
+      { id: "cfg-expr:case-test-chain-resolved", category: "cfg", has: /^expr\.js\|later@[^|]*\|.*\|state=RESOLVED$/ },
     ],
   },
   {
