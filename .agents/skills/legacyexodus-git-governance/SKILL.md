@@ -34,10 +34,9 @@ content edits. Inspection is read-only; preparation may update task Git metadata
 1. Inspect git status --short, branch, HEAD, remotes and git worktree list.
    Verify remote refs live (git ls-remote; bounded fetch when needed).
    Compare expected and actual SHA before pinning a source. Stop if it moved.
-2. Select main for integrated/governance work, core-foundation for core work,
-   docs-foundation for docs work unless task explicitly chooses another baseline.
-   All three long-lived branches are inspection baselines, never experimental
-   workspaces. Do not create new permanent branches.
+2. Select main as the baseline unless the task explicitly chooses another
+   revision. `core-foundation` and `docs-foundation` are retired (2026-10-28).
+   main is an inspection baseline, never an experimental workspace. Do not create new permanent branches.
 3. Preserve dirty primary worktrees and all retained evidence. Create a clean
    isolated worktree at the exact frozen SHA with a dedicated temporary branch:
    git worktree add -b <task-branch> <authorized-path> <frozen-sha>.

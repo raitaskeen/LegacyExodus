@@ -432,7 +432,7 @@ Documentation impact: NONE
 Reason: <why documented product truth is unchanged>
 ```
 
-Required documentation synchronization follows the final verified behavior and uses the relevant `core-foundation` SHA. Do not edit docs merely to create activity, and never alter production code to satisfy prose.
+Required documentation synchronization follows the final verified behavior and uses the relevant `main` SHA. Do not edit docs merely to create activity, and never alter production code to satisfy prose.
 
 ---
 

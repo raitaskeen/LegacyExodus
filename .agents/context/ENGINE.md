@@ -58,9 +58,9 @@ A source map alone does not certify any subsystem as VERIFIED.
 
 ## Documentation truth
 
-Freeze the implementation revision independently from a docs branch. Default core
-truth is verified core-foundation; an explicitly selected integrated main baseline
-takes precedence for that task. Use branch-qualified Git to resolve it, then
+Freeze the implementation revision before reasoning about it. Core truth is
+`main` (`core-foundation` and `docs-foundation` are retired, 2026-10-28); a
+revision the task names explicitly takes precedence. Use branch-qualified Git to resolve it, then
 git show <frozen-implementation-sha>:legacy-exodus-core/src/<path> and equivalent
 tests/benchmark queries throughout. Never use the stale core snapshot in
 docs-foundation, copy core there, or merge main merely to refresh that snapshot.

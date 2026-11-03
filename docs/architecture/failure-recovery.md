@@ -1,5 +1,7 @@
 # Failure Recovery
 
+> **Status: TARGET ARCHITECTURE — NOT IMPLEMENTED.** This document describes a future recovery design. The current core runs analysis in one process and has no worker pools, checkpoints or dead-letter queues; a failed run is rerun from the start.
+
 ## Purpose
 
 LegacyExodus is a long-running, multi-stage modernization system.  

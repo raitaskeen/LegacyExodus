@@ -2,13 +2,9 @@
 
 **Current-status authority:** [CURRENT_IMPLEMENTATION.md](CURRENT_IMPLEMENTATION.md)
 
-**Core integration truth:** `origin/core-foundation`
+**Implementation, documentation and release truth:** `origin/main` (`core-foundation` and `docs-foundation` retired 2026-10-28)
 
-**Main promotion truth:** `origin/main`
-
-**Documentation integration truth:** `origin/docs-foundation`
-
-Documentation work must inspect core source and tests with branch-qualified Git commands. The package snapshot present on a documentation branch is not automatically current implementation evidence.
+Documentation work inspects core source and tests on `main`. The package snapshot on the retired `docs-foundation` branch is not implementation evidence.
 
 LegacyExodus is currently a deterministic local JavaScript/TypeScript repository-intelligence and static-analysis engine. Its longer-term mission is governed legacy modernization, but transformation and generated-system verification are not implemented.
 
@@ -56,7 +52,7 @@ LegacyExodus/
   .agents/                  development-agent procedures (not runtime)
   .github/                  repository automation
   docs/                     documentation and target designs
-  legacy-exodus-core/       authoritative application package on core-foundation
+  legacy-exodus-core/       authoritative application package
     src/                    implementation
     tests/                  executable evidence
     benchmarks/             governance/fidelity tooling and corpora
