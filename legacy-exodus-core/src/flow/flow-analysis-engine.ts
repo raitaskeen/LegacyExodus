@@ -9,6 +9,15 @@ import { createDataFlowGraph, createProvenCallTargets, type ControlFlowGraph, ty
 import { compareCodePoints } from "@shared/ordering";
 import { propagateTaintPaths, setTaintPath } from "./taint-propagation";
 
+/** What connecting needs of a file's data-flow graph; the rest of the graph can wait on disk (ADR-009 step 4a). */
+export type ConnectionGraph = Pick<DataFlowGraph, "filePath" | "functionSummaries" | "callBindings" | "interproceduralFlows">;
+/**
+ * The rest of a file's data-flow graph, which waits on disk as JSON. Call bindings stay in memory: their argument
+ * lists are sparse, and JSON would turn the holes into nulls.
+ */
+export type DataFlowGraphBody = Omit<DataFlowGraph, Exclude<keyof ConnectionGraph, "filePath">>;
+export interface ConnectionContext { readonly graph: ConnectionGraph; readonly state: BuildContextResult["state"] }
+
 export interface FlowAnalysisResult { readonly controlFlowGraphs: readonly ControlFlowGraph[]; readonly dataFlowGraphs: readonly DataFlowGraph[]; }
 export class DeterministicFlowAnalysisEngine {
   public constructor(public readonly controlFlowBuilder: DeterministicControlFlowGraphBuilder = new DeterministicControlFlowGraphBuilder(), public readonly dataFlowBuilder: DeterministicDataFlowGraphBuilder = new DeterministicDataFlowGraphBuilder()) {}
@@ -41,7 +50,7 @@ export class DeterministicFlowAnalysisEngine {
     symbolTables: readonly SymbolTable[] = [],
   ): FlowAnalysisResult {
     const connected: DataFlowGraph[] = [];
-    this.connectDataFlow(contexts, symbolTables, (graph) => connected.push(graph));
+    this.connectDataFlow(contexts, contexts.map(({ graph }) => graph), symbolTables, (graph) => connected.push(graph));
     return Object.freeze({
       controlFlowGraphs: Object.freeze([...controlFlowGraphs]),
       dataFlowGraphs: Object.freeze(connected),
@@ -51,9 +60,12 @@ export class DeterministicFlowAnalysisEngine {
   /**
    * `connect` without the pass-through of control-flow graphs: each file's connected data-flow graph is handed
    * to `emit` as it is made, in context order, so a caller can write it away instead of holding them all.
+   * `graphs` are the files' graphs as built, in context order; they are read once, while emitting, so they can
+   * come from disk while `contexts` keep only what connecting needs.
    */
   public connectDataFlow(
-    contexts: readonly BuildContextResult[],
+    contexts: readonly ConnectionContext[],
+    graphs: Iterable<DataFlowGraphBody>,
     symbolTables: readonly SymbolTable[],
     emit: (graph: DataFlowGraph) => void,
   ): void {
@@ -130,13 +142,18 @@ export class DeterministicFlowAnalysisEngine {
     // A path can pass through joins of any file; each build keeps its own (BA-27).
     const allJoins = new Map(contexts.flatMap(({ state }) => [...state.joins]));
     const allFactKeys = new Map(contexts.flatMap(({ state }) => [...(state.factKeys ?? [])]));
+    const built = graphs[Symbol.iterator]();
     for (const { graph, state } of contexts) {
+      const next = built.next();
+      if (next.done === true || next.value.filePath !== graph.filePath) throw new Error(`Data-flow graph of ${graph.filePath} is missing.`);
       const transfers = crossFileTransfersByGraph.get(graph.filePath) ?? [...graph.interproceduralFlows];
       const unique = [...new Map(transfers.map((transfer) => [transfer.id, transfer] as const)).values()].sort((left, right) => compareCodePoints(left.id, right.id));
       const taintFlows = this.dataFlowBuilder.computeTaintFlows({ ...state, joins: allJoins, factKeys: allFactKeys }, globalTaintPaths);
 
       emit(createDataFlowGraph({
-        ...graph,
+        ...next.value,
+        functionSummaries: graph.functionSummaries,
+        callBindings: graph.callBindings,
         interproceduralFlows: unique,
         taintFlows,
       }));

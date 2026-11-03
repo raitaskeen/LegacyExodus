@@ -89,6 +89,8 @@ export class LegacyExodusEngine {
       .then(async () => {
         await this.context.storage.clearTransient();
         this.context.eventStore.clear();
+        // No record references a fact list now: in-memory records are gone, persisted ones hold the lists inline.
+        this.context.orchestrator.releaseFacts();
       })
       .finally(() => {
         this.resetPromise = null;
