@@ -30,17 +30,26 @@ export class DeterministicSemanticAnalysisEngine {
     });
   }
 
-  public synthesize(params: {
+  public synthesize(params: SynthesisInput & {
     readonly calls: readonly SemanticCall[];
     readonly references: readonly SymbolReference[];
-    readonly symbolTables: readonly SymbolTable[];
-    readonly dependencyGraph: DependencyGraph;
-    readonly filePaths: readonly string[];
-    readonly httpCalls: readonly { readonly routes: readonly ExpressRoute[]; readonly middlewareChains: readonly MiddlewareChain[] }[];
-    /** Package entry modules (main, exports, bin): their exports are public API, used outside the project (BA-11). */
-    readonly publicModules?: ReadonlySet<string>;
   }): SemanticAnalysis {
-    const referencedSymbolIds = new Set(params.references.flatMap((reference) => reference.resolvedSymbolId === undefined ? [] : [reference.resolvedSymbolId]));
+    const usage = new FactUsage();
+    usage.add(params.calls, params.references);
+    return createSemanticAnalysis({ calls: params.calls, references: params.references, ...this.findings(params, usage) });
+  }
+
+  /**
+   * `synthesize` for a run whose calls and references were written away file by file (ADR-009 step 3): it needs
+   * only what `usage` gathered of them, and its analysis carries no calls or references; the caller holds those.
+   */
+  public synthesizeFromUsage(params: SynthesisInput & { readonly usage: FactUsage }): Omit<SemanticAnalysis, "calls" | "references"> {
+    const { calls: _calls, references: _references, ...analysis } = createSemanticAnalysis({ calls: [], references: [], ...this.findings(params, params.usage) });
+    return analysis;
+  }
+
+  private findings(params: SynthesisInput, usage: FactUsage): Omit<SemanticAnalysis, "calls" | "references"> {
+    const referencedSymbolIds = usage.referencedSymbolIds;
     const modules = moduleTargets(params.symbolTables, params.dependencyGraph, this.callGraphBuilder.resolver);
     const exportedIds = new Set([
       ...params.dependencyGraph.edges.map((edge) => edge.targetExportSymbolId),
@@ -49,13 +58,7 @@ export class DeterministicSemanticAnalysisEngine {
       ...reexportChainIds(params.symbolTables, modules),
     ]);
     const publicModules = params.publicModules ?? new Set<string>();
-    // One pass groups references by file; filtering all references per file was files × references (BA-17).
-    const referencedNamesByFile = new Map<string, string[]>();
-    for (const reference of params.references) {
-      const names = referencedNamesByFile.get(reference.filePath);
-      if (names === undefined) referencedNamesByFile.set(reference.filePath, [reference.name]);
-      else names.push(reference.name);
-    }
+    const referencedNamesByFile = usage.referencedNamesByFile;
     const scopes = params.symbolTables.map((table) => createScope(table.filePath, table.symbols.map((symbol) => symbol.name), referencedNamesByFile.get(table.filePath) ?? []));
     const unusedImports = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => isLexicalImportBinding(symbol) && !referencedSymbolIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unused-import")));
     // A computed `import(name)` or `require(name)` can load any module, so no export is provably unused (BA-10).
@@ -70,17 +73,43 @@ export class DeterministicSemanticAnalysisEngine {
       return table.symbols.filter((symbol) => ["function", "method", "class", "variable"].includes(symbol.kind) && symbol.expression !== true && !symbol.exported && symbol.member !== true && !symbol.name.startsWith("_") && !referencedSymbolIds.has(symbol.id) && !positional.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unreferenced-local-symbol"));
     });
 
-    return createSemanticAnalysis({
-      calls: params.calls,
-      references: params.references,
+    return {
       scopes,
       deadCode,
       unusedImports,
       unusedExports,
-      entryPoints: entryPoints(params.filePaths, params.calls),
+      entryPoints: entryPoints(params.filePaths, usage.listenerFiles),
       routes: params.httpCalls.flatMap((analysis) => analysis.routes),
       middlewareChains: params.httpCalls.flatMap((analysis) => analysis.middlewareChains),
-    });
+    };
+  }
+}
+
+interface SynthesisInput {
+  readonly symbolTables: readonly SymbolTable[];
+  readonly dependencyGraph: DependencyGraph;
+  readonly filePaths: readonly string[];
+  readonly httpCalls: readonly { readonly routes: readonly ExpressRoute[]; readonly middlewareChains: readonly MiddlewareChain[] }[];
+  /** Package entry modules (main, exports, bin): their exports are public API, used outside the project (BA-11). */
+  readonly publicModules?: ReadonlySet<string>;
+}
+
+/** What synthesis needs of a run's calls and references, gathered one file at a time (ADR-009 step 3). */
+export class FactUsage {
+  public readonly referencedSymbolIds = new Set<string>();
+  /** Referenced names by file, in reference order: one pass, not files × references (BA-17). */
+  public readonly referencedNamesByFile = new Map<string, string[]>();
+  /** Files of `*.listen` calls, in call order. */
+  public readonly listenerFiles: string[] = [];
+
+  public add(calls: Iterable<{ readonly sourceFilePath: string; readonly calleeName: string }>, references: Iterable<SymbolReference>): void {
+    for (const call of calls) if (call.calleeName.endsWith(".listen")) this.listenerFiles.push(call.sourceFilePath);
+    for (const reference of references) {
+      if (reference.resolvedSymbolId !== undefined) this.referencedSymbolIds.add(reference.resolvedSymbolId);
+      const names = this.referencedNamesByFile.get(reference.filePath);
+      if (names === undefined) this.referencedNamesByFile.set(reference.filePath, [reference.name]);
+      else names.push(reference.name);
+    }
   }
 }
 
@@ -215,9 +244,9 @@ function finding(symbolId: string, filePath: string, name: string, reason: DeadC
   return { symbolId, filePath, name, reason, state };
 }
 
-function entryPoints(paths: readonly string[], calls: readonly { readonly sourceFilePath: string; readonly calleeName: string }[]): readonly SemanticEntryPoint[] {
+function entryPoints(paths: readonly string[], listenerFiles: readonly string[]): readonly SemanticEntryPoint[] {
   const conventional = paths.filter((path) => /(^|\/)(index|main|server|app)\.[cm]?[jt]sx?$/.test(path)).map((filePath) => ({ filePath, reason: "conventional-file" as const }));
-  const listeners = calls.filter((call) => call.calleeName.endsWith(".listen")).map((call) => ({ filePath: call.sourceFilePath, reason: "http-listener" as const }));
+  const listeners = listenerFiles.map((filePath) => ({ filePath, reason: "http-listener" as const }));
   return uniqueByKey([...conventional, ...listeners], (entry) => `${entry.filePath}:${entry.reason}`);
 }
 

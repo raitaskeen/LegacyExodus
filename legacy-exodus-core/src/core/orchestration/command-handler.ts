@@ -26,7 +26,7 @@ import { DeterministicKnowledgeGraphBuilder } from "@knowledge/index";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { ParserManager, type ASTResult } from "@parser/index";
-import { collectUnstableExportIds, DeterministicCallGraphBuilder, DeterministicSemanticAnalysisEngine, findHttpCalls, type ExpressRoute, type MiddlewareChain, type SemanticAnalysis, type SemanticCall, type SymbolReference } from "@semantic/index";
+import { callSchema, collectUnstableExportIds, DeterministicCallGraphBuilder, DeterministicSemanticAnalysisEngine, FactUsage, findHttpCalls, referenceSchema, SortedFactList, type ExpressRoute, type MiddlewareChain, type SemanticAnalysis, type SemanticCall, type SymbolReference } from "@semantic/index";
 import { createOwnedStorageRecord, createStorageRecord, type StorageRecord } from "@storage/index";
 import { JavaScriptSymbolExtractor, validateCodeSymbols, type CodeSymbol, type SymbolTable } from "@symbols/index";
 import { RunScopedAstStore, type AnalysisAstStoreFactory } from "./run-scoped-ast-store";
@@ -532,12 +532,14 @@ export class AnalyzeProjectHandler {
       const controlFlowBuilder = new DeterministicControlFlowGraphBuilder();
       const dataFlowBuilder = new DeterministicDataFlowGraphBuilder();
 
-      let allCalls: SemanticCall[] | undefined = [];
-      let allReferences: SymbolReference[] | undefined = [];
       let allHttpCalls: { readonly routes: readonly ExpressRoute[]; readonly middlewareChains: readonly MiddlewareChain[] }[] | undefined = [];
       // Whole-run fact lists are written to disk as they are made (ADR-009); records hold only their handles.
       const facts = this.factStore();
       const controlFlowGraphs = facts.writer<ControlFlowGraph>();
+      // Calls and references go to disk file by file, in their final order; synthesis needs only their usage.
+      const calls = new SortedFactList(facts, callSchema);
+      const references = new SortedFactList(facts, referenceSchema);
+      const usage = new FactUsage();
       let allContexts: BuildContextResult[] | undefined = [];
 
       const sortedFiles = [...successfullyParsedFiles].sort((left, right) => compareCodePoints(left.path, right.path));
@@ -572,8 +574,9 @@ export class AnalyzeProjectHandler {
         const fileCalls: SemanticCall[] = [];
         const fileReferences: SymbolReference[] = [];
         callGraphBuilder.buildForFile(ast, tablesByPath, importsByFile, targetByImportId, unstableExportIds, fileCalls, fileReferences);
-        allCalls.push(...fileCalls);
-        allReferences.push(...fileReferences);
+        usage.add(fileCalls, fileReferences);
+        calls.appendFile(fileCalls);
+        references.appendFile(fileReferences);
 
         const httpCalls = findHttpCalls(
           ast.root,
@@ -605,25 +608,22 @@ export class AnalyzeProjectHandler {
       }
 
       const semanticEngine = new DeterministicSemanticAnalysisEngine(callGraphBuilder);
-      let semantic: SemanticAnalysis | undefined = semanticEngine.synthesize({
-        calls: allCalls,
-        references: allReferences,
+      let semantic: Omit<SemanticAnalysis, "calls" | "references"> | undefined = semanticEngine.synthesizeFromUsage({
+        usage,
         symbolTables,
         dependencyGraph,
         filePaths: completedFiles.map((file) => file.path),
         httpCalls: allHttpCalls,
         publicModules: await findPackageEntryFiles(discovery.projectPath, discovery.files),
       });
-      allCalls = undefined;
-      allReferences = undefined;
       allHttpCalls = undefined;
 
       records.push(
         createOwnedStorageRecord("semantic-analysis", {
           projectId: discovery.projectId,
           analysisRunId: command.id,
-          calls: toFactArray(facts, semantic.calls),
-          references: toFactArray(facts, semantic.references),
+          calls: calls.seal(),
+          references: references.seal(),
           scopes: toFactArray(facts, semantic.scopes),
           deadCode: semantic.deadCode,
           unusedImports: semantic.unusedImports,
