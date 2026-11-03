@@ -60,7 +60,9 @@ export class DeterministicControlFlowGraphBuilder {
     // Parameters are evaluated on entry: their defaults run only for an undefined argument.
     const parameters = root?.children.filter((child) => child.role === "params" || child.role === "param") ?? [];
     // An unlocated root has no owner range to key it by; its scope name (with its anon ordinal) tells it apart.
-    const graphKey = keys === undefined ? undefined : root === undefined ? `${filePath}#` : root.location === undefined ? `${filePath}#${scopeName}/` : keys.keyer.ownerKey(root.location.start);
+    const graphKey = keys === undefined ? undefined : root === undefined ? `${filePath}#` : root.location === undefined ? `${filePath}#${scopeName}/`
+      // A field initializer is no owner of its own: it is keyed under its class by the field's name.
+      : isFieldInitializer(root) ? `${keys.keyer.ownerKey(root.location.start)}field:${functionName(root)}/` : keys.keyer.ownerKey(root.location.start);
     const state = new FlowState(filePath, scopeName, collectExpressionControl([...parameters, ...nodes]), keys, graphKey);
     const entry = state.createBlock();
     const exit = state.createBlock();
@@ -350,7 +352,39 @@ class FlowState {
     this.statementIds.add(id);
     this.block(blockId).statements.push({ id, ...this.keyOf(role === "test" ? "tests" : "values", node), type: node.type, ...(node.location === undefined ? {} : { location: node.location.start }) });
   }
-  private buildSwitch(node: ASTNode, entry: string, control: ControlContext | undefined): string { const discriminant = node.children.find((child) => child.role === "discriminant"); const block = discriminant === undefined ? entry : this.lower(entry, discriminant); this.addNode(block, node); const after = this.createBlock(); const cases = node.children.filter((child) => child.role === "cases"); if (cases.length === 0) { this.addEdge(block, after, "next"); return after; } const blocks = cases.map(() => this.createBlock()); const hasDefault = cases.some((candidate) => candidate.children.every((child) => child.role !== "test")); for (const [index, branch] of cases.entries()) { const caseBlock = blocks[index]; if (caseBlock === undefined) continue; this.addEdge(block, caseBlock, "case"); const last = this.buildStatements(switchCaseStatements(branch), caseBlock, undefined, { ...control, breakTarget: after, continueTarget: control?.continueTarget }); if (this.block(last).terminator === undefined) { const next = blocks[index + 1] ?? after; this.addEdge(last, next, "next"); } } if (!hasDefault) this.addEdge(block, after, "next"); return after; }
+  private buildSwitch(node: ASTNode, entry: string, control: ControlContext | undefined): string {
+    const discriminant = node.children.find((child) => child.role === "discriminant");
+    const block = discriminant === undefined ? entry : this.lower(entry, discriminant);
+    this.addNode(block, node);
+    const after = this.createBlock();
+    const cases = node.children.filter((child) => child.role === "cases");
+    if (cases.length === 0) { this.addEdge(block, after, "next"); return after; }
+    const blocks = cases.map(() => this.createBlock());
+    const tests = cases.map((branch) => branch.children.find((child) => child.role === "test"));
+    const defaultIndex = tests.findIndex((test) => test === undefined);
+    if (tests.some((test) => test !== undefined && collectExpressionControl([test]).size > 0)) {
+      // Case tests run in source order until one matches, then the default: a test that branches is
+      // lowered where it runs, and each test decides between its case (`case`) and the next test (`false`).
+      let probe = block;
+      for (const [index, test] of tests.entries()) {
+        if (test === undefined) continue;
+        const tested = this.lowerAll(probe, [test], control?.potentialExceptionTarget);
+        this.addDecision(tested, cases[index]!, "test");
+        this.addEdge(tested, blocks[index]!, "case");
+        probe = this.createBlock();
+        this.addEdge(tested, probe, "false");
+      }
+      this.addEdge(probe, defaultIndex >= 0 ? blocks[defaultIndex]! : after, defaultIndex >= 0 ? "case" : "next");
+    } else {
+      for (const caseBlock of blocks) this.addEdge(block, caseBlock, "case");
+      if (defaultIndex < 0) this.addEdge(block, after, "next");
+    }
+    for (const [index, branch] of cases.entries()) {
+      const last = this.buildStatements(switchCaseStatements(branch), blocks[index]!, undefined, { ...control, breakTarget: after, continueTarget: control?.continueTarget });
+      if (this.block(last).terminator === undefined) this.addEdge(last, blocks[index + 1] ?? after, "next");
+    }
+    return after;
+  }
   private buildTry(node: ASTNode, block: string, exit: string, control: ControlContext | undefined): string {
     this.addNode(block, node);
     const after = this.createBlock();
@@ -676,8 +710,8 @@ function collectFunctions(root: ASTNode): readonly { readonly name: string; read
   const functions: { name: string; node: ASTNode }[] = [];
   let unlocatedSequence = 0;
   const visit = (node: ASTNode): void => {
-    if (isFunction(node)) {
-      const name = functionName(node);
+    if (isFunction(node) || isFieldInitializer(node)) {
+      const name = isFieldInitializer(node) ? `${functionName(node)}=` : functionName(node);
       const position = node.location === undefined
         ? `anon-${unlocatedSequence++}`
         : `${node.location.start.line}:${node.location.start.column}`;
@@ -706,10 +740,18 @@ function resolveBreakFinalizerTarget(node: ASTNode, control: ControlContext | un
 function resolveContinueFinalizerTarget(node: ASTNode, control: ControlContext | undefined): string | undefined { const label = labelName(node); return label === undefined ? control?.continueFinalizerTarget : control?.labels?.get(label)?.continueFinalizerTarget; }
 /** Code that runs as a unit of its own and gets its own graph: functions, methods (private too) and class static blocks. */
 function isFunction(node: ASTNode): boolean { return ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ClassPrivateMethod", "ObjectMethod", "StaticBlock"].includes(node.type); }
+const FIELD_TYPES = new Set(["ClassProperty", "ClassPrivateProperty", "ClassAccessorProperty", "PropertyDefinition"]);
+/** A class field with a non-function initializer: the initializer runs as code of its own (at construction, or at definition if static). */
+function isFieldInitializer(node: ASTNode): boolean {
+  if (!FIELD_TYPES.has(node.type)) return false;
+  const value = node.children.find((child) => child.role === "value");
+  return value !== undefined && !isFunction(value);
+}
 function isPattern(node: ASTNode | undefined): boolean { return node !== undefined && (node.type === "ObjectPattern" || node.type === "ArrayPattern"); }
 /** The statements a graph analyses: a function's body (or its expression body), or a static block's statements. */
 function graphStatements(node: ASTNode): readonly ASTNode[] {
   if (node.type === "StaticBlock") return node.children;
+  if (isFieldInitializer(node)) return node.children.filter((child) => child.role === "value");
   return statementChildren(node.children.find((child) => child.role === "body") ?? node);
 }
 const EXPRESSION_CONTROL = new Set(["ConditionalExpression", "LogicalExpression", "OptionalCallExpression", "OptionalMemberExpression", "AssignmentPattern"]);
@@ -719,7 +761,7 @@ function isOptionalChain(node: ASTNode): boolean { return node.type === "Optiona
 function collectExpressionControl(nodes: readonly ASTNode[]): ReadonlySet<ASTNode> {
   const found = new Set<ASTNode>();
   const visit = (node: ASTNode): void => {
-    if (isFunction(node)) return;
+    if (isFunction(node) || isFieldInitializer(node)) return;
     if (EXPRESSION_CONTROL.has(node.type) || isLogicalAssignment(node)) found.add(node);
     for (const child of node.children) visit(child);
   };

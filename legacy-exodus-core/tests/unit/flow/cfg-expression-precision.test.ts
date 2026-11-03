@@ -94,11 +94,28 @@ describe("CFG expression-level control (branches inside expressions)", () => {
     expect(JSON.stringify(await graphOf(source))).toBe(JSON.stringify(await graphOf(source)));
   });
 
-  test.each([
-    ["a switch case test", "switch (a) { case b ?? 1: go(); }"],
-    ["a class field initializer", "class A { x = a ?? b; }"],
-  ])("control in %s is not lowered yet, so the graph stays UNSUPPORTED", async (_label, statement) => {
-    expect((await graphOf(`function run(a, b) { ${statement} return 1; }`)).state).toBe("UNSUPPORTED");
+  test("a branching case test makes dispatch a chain of tests in source order, then the default", async () => {
+    const graph = await graphOf("function run(a, b) { switch (a) { case b ?? 1: return 1; default: return 2; case 3: return 3; } }");
+    expect(graph.state).toBe("RESOLVED");
+    const decisions = graph.blocks.filter((block) => block.statements.some((node) => node.type === "SwitchCase"));
+    expect(decisions).toHaveLength(2);
+    for (const decision of decisions) expect(graph.edges.filter((edge) => edge.fromBlockId === decision.id).map((edge) => edge.kind).sort()).toEqual(["case", "false"]);
+    // Default is reached after both tests fail, not straight from the switch.
+    const switchBlock = holding(graph, "SwitchStatement");
+    expect(graph.edges.filter((edge) => edge.fromBlockId === switchBlock.id && edge.kind === "case")).toHaveLength(0);
+  });
+
+  test("without branching case tests, every case is still reached straight from the switch", async () => {
+    const graph = await graphOf("function run(a) { switch (a) { case 1: return 1; case 2: return 2; } return 0; }");
+    expect(graph.edges.filter((edge) => edge.fromBlockId === holding(graph, "SwitchStatement").id).map((edge) => edge.kind).sort()).toEqual(["case", "case", "next"]);
+  });
+
+  test("a class field initializer is a graph of its own, not control of the enclosing code", async () => {
+    const source = "function run(a, b) { class A { x = a ?? b; } return A; }";
+    expect((await graphOf(source)).state).toBe("RESOLVED");
+    const field = await graphOf(source, "x=@");
+    expect(field.state).toBe("RESOLVED");
+    expect(field.edges.map((edge) => edge.kind).filter((kind) => kind === "true" || kind === "false").sort()).toEqual(["false", "true"]);
   });
 
   test("statement-level conditional control is unchanged", async () => {
