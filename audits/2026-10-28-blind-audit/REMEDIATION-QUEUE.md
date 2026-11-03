@@ -107,8 +107,15 @@ Notes:
 - Causes fixed: sort keys built per comparison; scopes cost files × references; whole-payload record copies; all projection payloads held at once.
 - Ghost budgets are now 360 s / 6,785 MiB.
 
+S4/S5 investigated 2026-11-03, nothing merged:
+- **Live data is not the peak on mid-size repos.** After a forced GC, zod's live heap is about 290 MB against a 1.5 GB peak; the rest is short-lived garbage collected late. On Ghost, live heap is 1.9 GB against a 6.0 GB peak.
+- **Compact records plus a spooled CFG record** (identical ids, all tests green) made zod worse: 1,496 → 1,607 MB and 36 → 48 s. JSON strings held more than the objects they replaced. Reverted.
+- **Explicit GC at phase boundaries:** zod −20%, but Ghost only −2% at +10% time. Reverted.
+- **Compact output JSON** would save only about 24% (1.6 → 1.24 GB); repeated 64-hex ids dominate. That belongs with BA-18 (identity).
+- **Conclusion:** going below about 6 GB on Ghost needs a streaming execution model, where the cross-file passes consume per-file results from disk, not a storage tweak. That is a design decision; it is parked until a larger repository needs it.
+
 Next by impact:
-- S4+S5 (per-file shards, compact storage): Ghost is still about 6 GB at the start of projection and writes 1.6 GB; target under 3 GB.
+- S4+S5 (parked, see above): Ghost is about 6 GB / 1.6 GB.
 - S3 workspace resolution (`@tryghost/*`).
 - Then BA-07.
 3. When an item merges, mark it here (commit to the audit branch) and start the next queued item whose dependencies are merged.
