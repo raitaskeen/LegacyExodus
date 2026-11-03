@@ -47,6 +47,8 @@ export interface SemanticEntryPoint {
 
 export interface ExpressRoute {
   readonly id: string;
+  /** Edit-stable key: file, method and full path (ADR-008). */
+  readonly key?: string;
   readonly filePath: string;
   readonly method: string;
   readonly path: string;
@@ -56,6 +58,8 @@ export interface ExpressRoute {
 }
 
 export interface MiddlewareChain {
+  /** Edit-stable key: owners of the receiver's scope and its name (ADR-008). */
+  readonly key?: string;
   readonly filePath: string;
   readonly middleware: readonly string[];
 }
@@ -80,8 +84,8 @@ const scopeSchema = z.object({ id: z.string().min(1), filePath: z.string().min(1
 const evidenceStateSchema = z.enum(["CONFIRMED", "INFERRED", "UNRESOLVED", "UNSUPPORTED", "REQUIRES_REVIEW"]);
 const findingSchema = z.object({ symbolId: z.string().min(1), filePath: z.string().min(1), name: z.string().min(1), reason: z.enum(["unreferenced-local-symbol", "unused-import", "unused-export"]), state: evidenceStateSchema });
 const entryPointSchema = z.object({ filePath: z.string().min(1), reason: z.enum(["conventional-file", "http-listener"]) });
-const routeSchema = z.object({ id: z.string().min(1), filePath: z.string().min(1), method: z.string().min(1), path: z.string().min(1), handlerName: z.string().min(1).optional(), middleware: z.array(z.string().min(1)), state: evidenceStateSchema });
-const middlewareSchema = z.object({ filePath: z.string().min(1), middleware: z.array(z.string().min(1)) });
+const routeSchema = z.object({ id: z.string().min(1), key: z.string().min(1).optional(), filePath: z.string().min(1), method: z.string().min(1), path: z.string().min(1), handlerName: z.string().min(1).optional(), middleware: z.array(z.string().min(1)), state: evidenceStateSchema });
+const middlewareSchema = z.object({ key: z.string().min(1).optional(), filePath: z.string().min(1), middleware: z.array(z.string().min(1)) });
 export const semanticAnalysisSchema = z.object({ calls: z.array(callSchema), references: z.array(referenceSchema), scopes: z.array(scopeSchema), deadCode: z.array(findingSchema), unusedImports: z.array(findingSchema), unusedExports: z.array(findingSchema), entryPoints: z.array(entryPointSchema), routes: z.array(routeSchema), middlewareChains: z.array(middlewareSchema) });
 
 export function createSemanticAnalysis(analysis: SemanticAnalysis): SemanticAnalysis {

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import type { ASTNode } from "@parser/index";
 
 import { canonicalizePath, ModuleResolver, type DependencyGraph } from "@graph/index";
-import { createLexicalScopeId, type SymbolTable } from "@symbols/index";
+import { createLexicalScopeId, FactKeyer, numberRepeats, type SymbolTable } from "@symbols/index";
 
 import { DeterministicCallGraphBuilder } from "./call-graph-builder";
 import { createSemanticAnalysis, type DeadCodeFinding, type ExpressRoute, type MiddlewareChain, type ScopeAnalysis, type SemanticAnalysis, type SemanticCall, type SemanticEntryPoint, type SymbolReference } from "./semantic-contracts";
@@ -303,12 +303,17 @@ export function findHttpCalls(root: ASTNode, filePath: string, symbolTable: Symb
     })));
   };
 
-  const routes: ExpressRoute[] = [];
+  // Edit-stable keys (ADR-008): a route by the owners of the code that registers it, its method and full path; a
+  // middleware chain by the owners of the scope declaring its receiver, and the receiver's name.
+  const keyer = new FactKeyer(filePath, root, (symbolTable?.symbols ?? []).filter((symbol) => symbol.kind === "function" || symbol.kind === "method" || symbol.kind === "class"));
+  const unkeyed: Omit<ExpressRoute, "key">[] = [];
+  const routeBases: string[] = [];
   for (const receiver of receiverOrder) {
     for (const route of registrations.get(receiver) ?? []) {
       for (const entry of entries(receiver, route.order, new Set())) for (const routePath of route.paths) {
         const path = routePath === DYNAMIC_PATH || entry.prefix === DYNAMIC_PATH ? DYNAMIC_PATH : joinRoutePath(entry.prefix, routePath);
-        routes.push({
+        routeBases.push(`${keyer.ownerKey(route.node.location?.start)}route:${route.method.toUpperCase()} ${path}`);
+        unkeyed.push({
           id: hash(`route:${filePath}:${route.method}:${path}:${route.node.location?.start.line ?? 0}`),
           filePath, method: route.method.toUpperCase(), path,
           ...(route.handlerName === undefined ? {} : { handlerName: route.handlerName }),
@@ -317,10 +322,15 @@ export function findHttpCalls(root: ASTNode, filePath: string, symbolTable: Symb
       }
     }
   }
-  const middlewareChains = receiverOrder.flatMap((receiver) => {
+  const routeKeys = numberRepeats(routeBases);
+  const routes: ExpressRoute[] = unkeyed.map((route, index) => ({ ...route, key: routeKeys[index]! }));
+  const chained = receiverOrder.flatMap((receiver) => {
     const middleware = (uses.get(receiver) ?? []).flatMap((event) => event.middleware);
-    return middleware.length === 0 ? [] : [{ filePath, middleware: Object.freeze(middleware) }];
+    const at = receiver.indexOf("@");
+    return middleware.length === 0 ? [] : [{ base: `${keyer.scopeKey(receiver.slice(at + 1))}middleware:${receiver.slice(0, at)}`, middleware: Object.freeze(middleware) }];
   });
+  const chainKeys = numberRepeats(chained.map((chain) => chain.base));
+  const middlewareChains = chained.map((chain, index) => ({ key: chainKeys[index]!, filePath, middleware: chain.middleware }));
   return { routes, middlewareChains };
 }
 

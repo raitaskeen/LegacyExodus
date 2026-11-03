@@ -12,7 +12,7 @@ import type { CodeSymbol } from "./symbol-contracts";
  * anonymous function or class is `<node type>@<n>`, numbered among the anonymous constructs of that type in
  * the same owner, in source order. Blocks add nothing. A class member hangs under its class; an object-literal
  * key or an `x.y =` member is named `<container>.<name>`. Symbols that would still share a key (overloads,
- * a redeclared `var`, a shadowing block binding) carry `~<n>` in source order.
+ * a redeclared `var`, a shadowing block binding) are numbered by `numberRepeats`: the first keeps the plain key.
  *
  * Positions are used only to find, within one revision, the node a scope id or symbol belongs to. They never
  * enter a key, so an edit that adds or removes lines elsewhere leaves every other key unchanged.
@@ -21,15 +21,26 @@ export function assignSymbolKeys(symbols: readonly CodeSymbol[], root: ASTNode, 
   const chains = ownerChains(root, symbols);
   const draft = symbols.map((symbol) => `${path}#${chainFor(symbol, chains)}${namePart(symbol)}:${symbol.kind}`);
 
-  const occurrences = new Map<string, number[]>();
-  draft.forEach((key, index) => occurrences.set(key, [...(occurrences.get(key) ?? []), index]));
-  const keys = [...draft];
-  for (const [key, indexes] of occurrences) {
-    if (indexes.length < 2) continue;
-    const ordered = [...indexes].sort((left, right) => position(symbols[left]!) - position(symbols[right]!) || left - right);
-    ordered.forEach((index, ordinal) => { keys[index] = `${key}~${ordinal}`; });
-  }
+  const order = symbols.map((_, index) => index).sort((left, right) => position(symbols[left]!) - position(symbols[right]!) || left - right);
+  const keys = numberRepeats(draft, order);
   return symbols.map((symbol, index) => ({ ...symbol, key: keys[index]! }));
+}
+
+/**
+ * Tells apart facts that would share a key (ADR-008). In `order` (default: as given), the first fact with each
+ * base keeps the plain base; each later one gets `~1`, `~2`, …. Appending a repeat therefore leaves every existing
+ * key unchanged; only a repeat inserted before an existing one shifts the ones after it.
+ */
+export function numberRepeats(bases: readonly string[], order: readonly number[] = bases.map((_, index) => index)): string[] {
+  const keys = [...bases];
+  const seen = new Map<string, number>();
+  for (const index of order) {
+    const base = bases[index]!;
+    const ordinal = seen.get(base) ?? 0;
+    seen.set(base, ordinal + 1);
+    if (ordinal > 0) keys[index] = `${base}~${ordinal}`;
+  }
+  return keys;
 }
 
 interface Chains {
@@ -51,10 +62,13 @@ interface OwnerRange { readonly start: number; readonly end: number; readonly ch
  */
 export class FactKeyer {
   private readonly owners: readonly OwnerRange[];
+  private readonly byScopeId: ReadonlyMap<string, string>;
   private readonly counts = new Map<string, number>();
 
   public constructor(private readonly path: string, root: ASTNode, symbols: readonly CodeSymbol[]) {
-    this.owners = ownerChains(root, symbols).owners;
+    const chains = ownerChains(root, symbols);
+    this.owners = chains.owners;
+    this.byScopeId = chains.byScopeId;
   }
 
   public key(kind: string, subject: string, at: { readonly line: number; readonly column: number } | undefined): string {
@@ -65,6 +79,11 @@ export class FactKeyer {
   }
 
   /** `<path>#<owners>` of the innermost owner containing `at`: the key of the code a graph or scope analyses. */
+  /** `<path>#<owners>` of the code whose lexical scope `scopeId` names (as symbols record it). */
+  public scopeKey(scopeId: string): string {
+    return `${this.path}#${this.byScopeId.get(scopeId) ?? ""}`;
+  }
+
   public ownerKey(at: { readonly line: number; readonly column: number } | undefined): string {
     return `${this.path}#${at === undefined ? "" : this.chainAt(packed(at.line, at.column))}`;
   }
@@ -130,21 +149,13 @@ function ownerChains(root: ASTNode, symbols: readonly CodeSymbol[]): Chains {
   for (const child of root.children) visit(child, topLevel, -1);
 
   // Phase 2, depth by depth so a parent's chain is final first: owners sharing a segment under the same parent
-  // (a getter and its setter, same-named object methods) are all numbered `~n` in source order, as symbol keys are.
+  // (a getter and its setter, same-named object methods) are numbered by `numberRepeats` in source order.
   const chains: string[] = new Array(records.length);
-  const maxDepth = records.reduce((deepest, record) => Math.max(deepest, record.depth), -1);
-  for (let depth = 0; depth <= maxDepth; depth++) {
-    const level = records.map((record, index) => ({ record, index })).filter(({ record }) => record.depth === depth);
-    const group = ({ record }: { readonly record: OwnerRecord }): string => `${record.parent < 0 ? "" : chains[record.parent]}${record.segment}`;
-    const sizes = new Map<string, number>();
-    for (const entry of level) sizes.set(group(entry), (sizes.get(group(entry)) ?? 0) + 1);
-    const seen = new Map<string, number>();
-    for (const entry of level) {
-      const base = group(entry);
-      const ordinal = seen.get(base) ?? 0;
-      seen.set(base, ordinal + 1);
-      chains[entry.index] = `${base}${(sizes.get(base) ?? 0) > 1 ? `~${ordinal}` : ""}/`;
-    }
+  const levels: number[][] = [];
+  records.forEach((record, index) => (levels[record.depth] ??= []).push(index));
+  for (const level of levels) {
+    const bases = level.map((index) => `${records[index]!.parent < 0 ? "" : chains[records[index]!.parent]}${records[index]!.segment}`);
+    numberRepeats(bases).forEach((chain, position) => { chains[level[position]!] = `${chain}/`; });
   }
 
   const chainOf = (owner: number): string => owner < 0 ? "" : chains[owner]!;

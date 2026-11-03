@@ -109,6 +109,8 @@ export function extractFacts(discoveryDirectory: string): FactSet {
   addCounted("calls", (semantic?.calls ?? []).map((call: any) =>
     `${call.sourceFilePath}${at(call.location)}|${call.callerName}|${call.calleeName}|${call.resolutionState}|${describe(call.targetSymbolId)}`));
   for (const call of semantic?.calls ?? []) if (typeof call.key === "string") add("call-keys", call.key);
+  for (const route of semantic?.routes ?? []) if (typeof route.key === "string") add("route-keys", route.key);
+  for (const chain of semantic?.middlewareChains ?? []) if (typeof chain.key === "string") add("middleware-keys", chain.key);
   const dataFlow = readArtifact(discoveryDirectory, "data-flow.json");
   for (const graph of dataFlow?.graphs ?? []) {
     for (const definition of graph.definitions ?? []) if (typeof definition.key === "string") add("definition-keys", definition.key);
