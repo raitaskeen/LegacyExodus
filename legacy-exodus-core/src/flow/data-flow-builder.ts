@@ -527,6 +527,8 @@ export class DeterministicDataFlowGraphBuilder {
         const name = identifierName(node);
         const definition = name === undefined ? undefined : resolve(scope, name);
         this.use(name, node, scope, filePath, state);
+        const sourceId = this.source(node, filePath);
+        if (sourceId !== undefined) return { kind: "source", id: sourceId };
         return definition === undefined ? { kind: "combined", values: [] } : { kind: "definition", id: definition.id };
       }
       case "MemberExpression": {
