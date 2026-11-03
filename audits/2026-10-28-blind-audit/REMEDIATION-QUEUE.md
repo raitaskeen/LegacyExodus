@@ -50,12 +50,14 @@ session resumes from here.
 | 2 | Dynamic `import()` and computed loads | BA-10 | module-reference and graph contracts, extractor, graph builder, semantic engine, `fact-diff.ts` | #218 (stacked) | merged #219 `7210e8d`. Follow-up: literal `require('./x')` in expression position |
 | 2 | Follow-ups: `.d.ts` implicit exports; surface tsconfig diagnostics; namespace calls through aliases; `profile.ts` alias reader | BA-02, BA-03 | per item | #213, #214 | queued |
 | 3 | Data flow rebuilt on the CFG; design in WAVE3-DFG-DESIGN.md (steps 3a–3d) | BA-05, BA-04, BA-06, BA-27, BA-28 | 3a: `control-flow-builder.ts` (`buildAllWithNodes`), new `cfg-dataflow.ts` | design done | 3a merged #220 `041ccee` (core, not wired). 3b merged #221 `9abc7e9`: the CFG verdict decides same-function taint, while the legacy builder keeps defs, uses and cross-call paths. Closes BA-05, BA-06, BA-27 and BA-04 within a file; ledger 35 → 9. 3c merged #222 `405d56f`: cross-file `argumentSourceIds`, so BA-04 is fully closed. 3d merged #223 `09aa02f`. On the BA-28 shape the stage now grows ×1.5/×1.7/×2.1 per doubling (9.7 s → 0.5 s at 4k functions). The scale gate test is in, and Ghost v6.73.0 is pinned as the `scale` tier with ceiling budgets. Still open: long single functions are quadratic, and the Ghost run waits for the owner |
-| 3 | Taint policy packs | BA-07 | flow policy module | DFG rebuild | queued |
+| 3 | Taint policy packs | BA-07 | flow policy module | DFG rebuild | merged #228 `841dbea`: one versioned policy (`builtin-1`) keyed by resolved bindings (module sinks through any local name, Express handler params from proven receivers, destructured sources); fact-diff 0/0 on CI corpora |
 | S | Scale and storage track (from the Ghost run, below) | BA-17, BA-28, new | per item | see track | queued; S1 rides with 3d |
-| 4 | Express model; dead-code precision; React; discovery policy | BA-08, BA-11, BA-24, BA-15 | semantic modules; `src/discovery/**` | Wave 3 | queued |
-| 5 | Stable identity (ADR first) | BA-18 | ids | Wave 4 | queued; required before IR |
-| 5 | Manifest location without plaintext path | BA-26 | `src/storage/projections/**`, `src/discovery/discovery-validator.ts`, `snapshot-trust.ts`, tests | Wave 4 | queued. Design (lead, 2026-10-28): the validator binds reuse to the canonical absolute path (`discovery-validator.ts:280, :405`, the F-001 location binding), so a relative path alone would weaken trust. Replace `repository.path` with `repository.locationDigest = HMAC(localKey, canonicalPath)`, recomputed on validate, and bump the manifest contract so old snapshots refresh |
-| Docs | Docs/governance session (incl. remaining `core-foundation` mentions in GOVERNANCE, CONTRIBUTING, PR template, `.agents`) | BA-23, BA-22 rest | `docs/**`, root docs, `.agents/**` | anytime | queued |
+| 4 | Discovery policy | BA-15 | `src/discovery/**` | Wave 3 | merged #227 `1e24e42`: full gitignore semantics (tracked files kept, as git does), root `.legacyexodusignore`, every exclusion in `excludedPaths`, minified bundles `generated`, frameworks from manifests only. Ghost: 3 tracked files kept, +519 workspace dependencies |
+| 4 | Express model | BA-08 | `semantic-engine.ts` | Wave 3 | PR open: per-router stacks in registration order, mounts joined, handler is the last argument, path arrays per path, trailing slash kept. Ghost: middleware chains 15 → 23, routes re-pathed through mounts |
+| 4 | Dead-code precision; React | BA-11, BA-24 | `semantic-engine.ts`, extractor (`member` flag), `workspace-loader.ts` | BA-08 (stacked) | branch `fix/ba11-ba24-findings`: namespace/re-export/package-entry exports used; properties never unreferenced locals; JSX uses `React` |
+| 5 | Stable identity (ADR first) | BA-18 | ids | Wave 4 | ADR-008 merged #229 (PROPOSED design: structural key, short digest id, location as a field; four-step rollout). Implementation queued; required before IR |
+| 5 | Manifest location without plaintext path (PR open: `locationDigest` HMAC, schema 2, no path in `project.json`; conformance checks every artifact) | BA-26 | `src/storage/projections/**`, `src/discovery/discovery-validator.ts`, `snapshot-trust.ts`, tests | Wave 4 | queued. Design (lead, 2026-10-28): the validator binds reuse to the canonical absolute path (`discovery-validator.ts:280, :405`, the F-001 location binding), so a relative path alone would weaken trust. Replace `repository.path` with `repository.locationDigest = HMAC(localKey, canonicalPath)`, recomputed on validate, and bump the manifest contract so old snapshots refresh |
+| Docs | Docs/governance session | BA-23, BA-22 rest | `docs/**`, root docs, `.agents/**` | anytime | merged #230 `c0e47cc`: one branch of truth everywhere, 122 empty files removed, failure-recovery fenced. Owner decisions left: archive `docs/governance/*` (the kernel cites it), fold `copilot-instructions.md` into a pointer, Diátaxis layout, `.discovery` schema reference |
 
 ## Scale and storage track (Ghost run, 2026-10-29)
 
@@ -71,7 +73,7 @@ Each item is the smallest change that moves a measured number. Every one keeps o
 |---|---|---|---|
 | S1 | Ghost pinned as a benchmark (commit and tree hash, like the other corpora). The stage timer and peak RSS are recorded in the benchmark report | Baseline recorded; from then on a run may not regress time or RSS by more than 10% | BA-28. Pinned in #223 (`cli.ts scale ghost`). First run 2026-11-03: 768 s (was about 26 min), 11,431 MiB peak, 1.6 GB output, 17 taint flows; budgets set to measured +10% in #224 `e18a19c` |
 | S2 | Linear-cost data flow (Wave 3a–3b persistent state, no per-`if` scope copies) | Stage doubling ratio ≤ 2.5× at 1k→2k→4k functions | BA-28, BA-05. Done in #223 (×1.5/×1.7/×2.1). Long single functions are still quadratic: shared-prefix taint paths and persistent CFG state, only if Ghost needs them |
-| S3 | Workspace package resolution: read `workspaces` (npm/yarn) and `pnpm-workspace.yaml`, then map package names to their source roots via each package's `exports`/`main`/`types`. No network, no `node_modules` crawling | Ghost import bindings rise from 37.5% relative-only; the fact-diff gains are explained | new (coverage) |
+| S3 (merged #226 `475ec53`: module edges +3,470, import edges +7,844, 3,277 more calls resolved, −1,314 unused exports on Ghost) | Workspace package resolution: read `workspaces` (npm/yarn) and `pnpm-workspace.yaml`, then map package names to their source roots via each package's `exports`/`main`/`types`. No network, no `node_modules` crawling | Ghost import bindings rise from 37.5% relative-only; the fact-diff gains are explained | new (coverage) |
 | S4 | Streamed, per-file sharded output. Write each file's facts when the file is done and drop its AST. The project-level indexes are built from shards, and the HMAC manifest covers shard digests | Peak RSS bounded by the largest file plus the indexes, not the repository. Target for Ghost: under 3 GB | BA-17 |
 | S5 | Compact storage. Minified JSON shards. The knowledge graph references symbol ids instead of duplicating symbol records. Projections written once, not re-serialized | Ghost output under 400 MB with no fact lost (fact-diff 0/0) | BA-17 |
 | S6 | Incremental runs: a shard keyed by content hash plus engine and config version is reused when unchanged, and invalidation follows the module graph | Second Ghost run with one file changed in under 10% of the full run; output byte-identical to a clean run | new (speed) |
@@ -114,10 +116,12 @@ S4/S5 investigated 2026-11-03, nothing merged:
 - **Compact output JSON** would save only about 24% (1.6 → 1.24 GB); repeated 64-hex ids dominate. That belongs with BA-18 (identity).
 - **Conclusion:** going below about 6 GB on Ghost needs a streaming execution model, where the cross-file passes consume per-file results from disk, not a storage tweak. That is a design decision; it is parked until a larger repository needs it.
 
+Status 2026-11-03 (later): S3, BA-15, BA-07, ADR-008 and the docs session are merged (#226–#230). In flight: BA-08 and BA-26 PRs, then BA-11/BA-24, stacked on BA-08. After a squash merge, rebase the next stacked branch with `git rebase --onto origin/main <old parent sha>`.
+
 Next by impact:
-- S4+S5 (parked, see above): Ghost is about 6 GB / 1.6 GB.
-- S3 workspace resolution (`@tryghost/*`).
-- Then BA-07.
+- Implement ADR-008 (BA-18), step 1: symbol keys plus the insert-a-line identity check in fact-diff.
+- Coverage audit: every construct the parser accepts is either analysed by every stage or reported as an explicit unknown. No silent gaps.
+- S4+S5 stay parked: Ghost is about 6 GB / 1.6 GB, and ADR-008's short ids are expected to shrink output.
 3. When an item merges, mark it here (commit to the audit branch) and start the next queued item whose dependencies are merged.
 4. Ledger check: `bun test tests/conformance` on `main` must pass, and `known-gaps.ts` lists exactly the open findings.
 
