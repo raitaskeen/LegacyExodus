@@ -1,7 +1,7 @@
 # ADR-008 — Edit-Stable Fact Identity
 
 ## Status
-**ACCEPTED, rollout in progress** (BA-18). Steps 1 and 2 are implemented: every symbol, call, reference, CFG graph, block and node, definition, use and taint flow carries a structural `key` (`src/symbols/symbol-keys.ts`, `FactKeyer`). Identity tests over the engine's own source check every kind is unique and unchanged by edits above it, and fact-diff tracks each as a `*-keys` category. Step 3 is under way: symbol, call, reference and route ids are now `stableId(domain, key)` (`src/shared/identity.ts`, 20 base32 characters), with a collision check per file; CFG and data-flow ids follow. Step 4 (drop position ids) must land before the IR schema is frozen and before incremental runs (S6).
+**ACCEPTED, implemented** (BA-18). Steps 1–3 are in: every symbol, call, reference, route, middleware chain, CFG graph, block, node and edge, definition, use, source, sink and taint flow carries a structural `key` (`src/symbols/symbol-keys.ts`, `FactKeyer`), and its id is `stableId(domain, key)` (`src/shared/identity.ts`, 20 base32 characters) with a collision check. Identity tests over the engine's own source check that keys and ids are unique and unchanged by edits above them; fact-diff tracks keys as `*-keys` categories. Step 4: production never builds position ids any more (both pipelines pass the file's symbols); the position formulas remain only for callers that pass no symbols, such as unit tests that address facts by position. Content-hash ids (files, module edges, storage records) were already stable and are unchanged.
 
 ## Context
 Every fact id hashes its source position:
