@@ -3,6 +3,7 @@ import type { ASTNode, ASTResult } from "@parser/index";
 import { createControlFlowGraph, type BasicBlock, type ControlFlowEdge, type ControlFlowEdgeKind, type ControlFlowGraph, type ControlFlowNode } from "./flow-contracts";
 import { ControlFlowInvariantError } from "./flow-errors";
 import { compareCodePoints } from "@shared/ordering";
+import { FactKeyer, type CodeSymbol } from "@symbols/index";
 
 export interface ControlFlowGraphsWithNodes {
   readonly graphs: readonly ControlFlowGraph[];
@@ -11,7 +12,9 @@ export interface ControlFlowGraphsWithNodes {
   /** The Program or function node each graph id analyses. */
   readonly graphRoots: ReadonlyMap<string, ASTNode>;
 }
-interface MutableBlock { readonly id: string; readonly statements: ControlFlowNode[]; terminator?: string; }
+interface MutableBlock { readonly id: string; readonly key?: string; readonly statements: ControlFlowNode[]; terminator?: string; }
+/** One file's fact keys (ADR-008): shared by all of its graphs, so ordinals count across the file's owners. */
+interface FileKeys { readonly keyer: FactKeyer; readonly statements: WeakMap<ASTNode, string>; readonly tests: WeakMap<ASTNode, string>; readonly values: WeakMap<ASTNode, string> }
 interface LabelTarget { readonly breakTarget: string; readonly continueTarget?: string; readonly breakFinalizerTarget?: string; readonly continueFinalizerTarget?: string; }
 interface PendingLabelFinalizer { readonly label: string; readonly target: LabelTarget; readonly breakFinalizer?: string; readonly continueFinalizer?: string; }
 interface ControlContext {
@@ -38,21 +41,23 @@ export class DeterministicControlFlowGraphBuilder {
    * `buildAll` plus, for data flow (Wave 3), the AST node behind each statement id and the clauses a
    * block evaluates without a statement of its own (a do-while test). Neither map is persisted.
    */
-  public buildAllWithNodes(ast: ASTResult): ControlFlowGraphsWithNodes {
+  /** @param owners - the file's function, method and class symbols; given, every graph, block and node is keyed. */
+  public buildAllWithNodes(ast: ASTResult, owners?: readonly CodeSymbol[]): ControlFlowGraphsWithNodes {
+    const keys: FileKeys | undefined = owners === undefined ? undefined : { keyer: new FactKeyer(ast.metadata.sourcePath, ast.root, owners), statements: new WeakMap(), tests: new WeakMap(), values: new WeakMap() };
     const statementNodes = new Map<string, ASTNode>();
     const blockClauses = new Map<string, readonly ASTNode[]>();
     const graphRoots = new Map<string, ASTNode>();
     const functions = collectFunctions(ast.root);
     const rooted = (graph: ControlFlowGraph, root: ASTNode): ControlFlowGraph => { graphRoots.set(graph.id, root); return graph; };
     const graphs = [
-      rooted(this.buildScope(ast.metadata.sourcePath, "module", ast.root.children, statementNodes, blockClauses), ast.root),
-      ...functions.map((candidate) => rooted(this.buildScope(ast.metadata.sourcePath, candidate.name, statementChildren(candidate.node.children.find((child) => child.role === "body") ?? candidate.node), statementNodes, blockClauses), candidate.node)),
+      rooted(this.buildScope(ast.metadata.sourcePath, "module", ast.root.children, statementNodes, blockClauses, keys, undefined), ast.root),
+      ...functions.map((candidate) => rooted(this.buildScope(ast.metadata.sourcePath, candidate.name, statementChildren(candidate.node.children.find((child) => child.role === "body") ?? candidate.node), statementNodes, blockClauses, keys, candidate.node), candidate.node)),
     ].sort((left, right) => compareCodePoints(left.id, right.id));
     return { graphs: Object.freeze(graphs), statementNodes, blockClauses, graphRoots };
   }
 
-  private buildScope(filePath: string, scopeName: string, nodes: readonly ASTNode[], statementNodes?: Map<string, ASTNode>, blockClauses?: Map<string, readonly ASTNode[]>): ControlFlowGraph {
-    const state = new FlowState(filePath, scopeName, collectExpressionControl(nodes));
+  private buildScope(filePath: string, scopeName: string, nodes: readonly ASTNode[], statementNodes?: Map<string, ASTNode>, blockClauses?: Map<string, readonly ASTNode[]>, keys?: FileKeys, root?: ASTNode): ControlFlowGraph {
+    const state = new FlowState(filePath, scopeName, collectExpressionControl(nodes), keys, keys === undefined ? undefined : root === undefined ? `${filePath}#` : keys.keyer.ownerKey(root.location?.start));
     const entry = state.createBlock();
     const exit = state.createBlock();
     state.buildStatements(nodes, entry, exit, { exceptionTarget: exit, returnTarget: exit });
@@ -78,10 +83,24 @@ class FlowState {
     private readonly filePath: string,
     private readonly scopeName: string,
     private readonly expressionControl: ReadonlySet<ASTNode>,
+    private readonly keys?: FileKeys,
+    private readonly graphKey?: string,
   ) {}
   /** Expression control nodes split into decision blocks; any other one leaves the graph UNSUPPORTED. */
   private readonly loweredControl = new Set<ASTNode>();
-  public createBlock(): string { const id = hash(`${this.filePath}:${this.scopeName}:block:${this.sequence++}`); const block = { id, statements: [] }; this.blocks.push(block); this.blocksById.set(id, block); return id; }
+  public createBlock(): string { const sequence = this.sequence++; const id = hash(`${this.filePath}:${this.scopeName}:block:${sequence}`); const block = { id, ...(this.graphKey === undefined ? {} : { key: `${this.graphKey}/block@${sequence}` }), statements: [] }; this.blocks.push(block); this.blocksById.set(id, block); return id; }
+  /**
+   * A node's fact key: the first instance of a node gets the next ordinal; a finally copy reuses it with its copy
+   * context, so copies never shift the ordinals of other statements.
+   */
+  private readonly recordedValues = new Map<string, WeakSet<ASTNode>>();
+  private keyOf(kind: "statements" | "tests" | "values", node: ASTNode): { readonly key?: string } {
+    if (this.keys === undefined) return {};
+    const known = this.keys[kind].get(node);
+    const base = known ?? this.keys.keyer.key(kind === "statements" ? "stmt" : kind === "tests" ? "test" : "value", node.type, node.location?.start);
+    if (known === undefined) this.keys[kind].set(node, base);
+    return { key: this.copyContext === "" || known === undefined ? base : `${base}/copy:${this.copyContext}` };
+  }
   // Constant-time duplicate and incoming checks: a scan per edge made long functions quadratic.
   private readonly edgeIds = new Set<string>();
   private readonly blocksWithIncoming = new Set<string>();
@@ -210,7 +229,7 @@ class FlowState {
     if (node.type === "ConditionalExpression") {
       const test = node.children.find((child) => child.role === "test");
       const decision = test === undefined ? blockId : this.lower(blockId, test);
-      this.addDecision(decision, node);
+      this.addDecision(decision, node, "test");
       this.loweredControl.add(node);
       const join = this.createBlock();
       for (const [role, kind] of [["consequent", "true"], ["alternate", "false"]] as const) {
@@ -218,7 +237,7 @@ class FlowState {
         this.addEdge(decision, arm, kind);
         const operand = node.children.find((child) => child.role === role);
         const end = operand === undefined ? arm : this.lower(arm, operand);
-        if (operand !== undefined) this.addDecision(end, operand);
+        if (operand !== undefined) this.addDecision(end, operand, "value");
         this.addEdge(end, join, "next");
       }
       return join;
@@ -230,14 +249,14 @@ class FlowState {
   }
   /** One short-circuit: from `decision`, the `continueOn` edge evaluates `operands`; the other edge skips them. */
   private branch(decision: string, node: ASTNode, continueOn: "true" | "false", operands: readonly ASTNode[]): string {
-    this.addDecision(decision, node);
+    this.addDecision(decision, node, "test");
     this.loweredControl.add(node);
     const arm = this.createBlock();
     const join = this.createBlock();
     this.addEdge(decision, arm, continueOn);
     this.addEdge(decision, join, continueOn === "true" ? "false" : "true");
     const end = this.lowerAll(arm, operands);
-    for (const operand of operands) this.addDecision(end, operand);
+    for (const operand of operands) this.addDecision(end, operand, "value");
     this.addEdge(end, join, "next");
     return join;
   }
@@ -253,7 +272,7 @@ class FlowState {
     const end = this.createBlock();
     for (const link of spine.reverse()) {
       if (link.attributes.optional === true) {
-        this.addDecision(block, link);
+        this.addDecision(block, link, "test");
         const next = this.createBlock();
         this.addEdge(block, next, "true");
         this.addEdge(block, end, "false");
@@ -265,18 +284,28 @@ class FlowState {
         block = this.lower(block, child);
       }
     }
-    this.addDecision(block, root);
+    this.addDecision(block, root, "value");
     this.addEdge(block, end, "next");
     return end;
   }
-  /** Records an expression in a block's shape without making it a statement: data flow does not evaluate it. */
-  private addDecision(blockId: string, node: ASTNode): void {
+  /**
+   * Records an expression in a block's shape without making it a statement (data flow does not evaluate it):
+   * as the `test` a decision block ends with, or as the `value` an arm completes. A value already recorded for
+   * this node in this copy is the same completion point and is not recorded again.
+   */
+  private addDecision(blockId: string, node: ASTNode, role: "test" | "value"): void {
+    if (role === "value") {
+      const recorded = this.recordedValues.get(this.copyContext) ?? new WeakSet<ASTNode>();
+      if (recorded.has(node)) return;
+      recorded.add(node);
+      this.recordedValues.set(this.copyContext, recorded);
+    }
     const position = node.location === undefined ? `anon-${this.unlocatedStatementSequence++}` : `${node.location.start.line}:${node.location.start.column}`;
     const origin = `${this.filePath}:expression:${node.type}:${position}`;
     let id = hash(origin);
     for (let attempt = 0; this.statementIds.has(id); attempt++) id = hash(`${origin}@${this.copyContext}#${attempt}`);
     this.statementIds.add(id);
-    this.block(blockId).statements.push({ id, type: node.type, ...(node.location === undefined ? {} : { location: node.location.start }) });
+    this.block(blockId).statements.push({ id, ...this.keyOf(role === "test" ? "tests" : "values", node), type: node.type, ...(node.location === undefined ? {} : { location: node.location.start }) });
   }
   private buildSwitch(node: ASTNode, entry: string, control: ControlContext | undefined): string { const discriminant = node.children.find((child) => child.role === "discriminant"); const block = discriminant === undefined ? entry : this.lower(entry, discriminant); this.addNode(block, node); const after = this.createBlock(); const cases = node.children.filter((child) => child.role === "cases"); if (cases.length === 0) { this.addEdge(block, after, "next"); return after; } const blocks = cases.map(() => this.createBlock()); const hasDefault = cases.some((candidate) => candidate.children.every((child) => child.role !== "test")); for (const [index, branch] of cases.entries()) { const caseBlock = blocks[index]; if (caseBlock === undefined) continue; this.addEdge(block, caseBlock, "case"); const last = this.buildStatements(switchCaseStatements(branch), caseBlock, undefined, { ...control, breakTarget: after, continueTarget: control?.continueTarget }); if (this.block(last).terminator === undefined) { const next = blocks[index + 1] ?? after; this.addEdge(last, next, "next"); } } if (!hasDefault) this.addEdge(block, after, "next"); return after; }
   private buildTry(node: ASTNode, block: string, exit: string, control: ControlContext | undefined): string {
@@ -471,6 +500,7 @@ class FlowState {
     this.statementNodes.set(id, node);
     this.block(blockId).statements.push({
       id,
+      ...this.keyOf("statements", node),
       type: node.type,
       ...(node.location === undefined ? {} : { location: node.location.start }),
     });
@@ -535,6 +565,7 @@ class FlowState {
 
     const blocks: BasicBlock[] = activeBlocks.map((block) => ({
       id: block.id,
+      ...(block.key === undefined ? {} : { key: block.key }),
       statements: block.statements,
       predecessorIds: (predecessorsByBlock.get(block.id) ?? []).sort(),
       successorIds: (successorsByBlock.get(block.id) ?? []).sort(),
@@ -574,6 +605,7 @@ class FlowState {
     const unreachableBlockIds = blocks.filter((block) => !reachable.has(block.id)).map((block) => block.id).sort();
     return createControlFlowGraph({
       id: hash(`cfg:${this.filePath}:${this.scopeName}`),
+      ...(this.graphKey === undefined ? {} : { key: this.graphKey }),
       filePath: this.filePath,
       scopeName: this.scopeName,
       state: [...this.expressionControl].every((node) => this.loweredControl.has(node)) ? "RESOLVED" : "UNSUPPORTED",

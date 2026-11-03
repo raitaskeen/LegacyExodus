@@ -566,7 +566,8 @@ export class AnalyzeProjectHandler {
         );
         allHttpCalls.push(httpCalls);
 
-        const controlFlow = controlFlowBuilder.buildAllWithNodes(ast);
+        const owners = (tablesByPath.get(canonicalizePath(file.path))?.symbols ?? []).filter((symbol) => symbol.kind === "function" || symbol.kind === "method" || symbol.kind === "class");
+        const controlFlow = controlFlowBuilder.buildAllWithNodes(ast, owners);
         allControlFlowGraphs.push(...controlFlow.graphs);
 
         const provenTargets = createProvenCallTargets(
