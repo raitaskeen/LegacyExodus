@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { UNTRUSTED_GIT_ARGS } from "@shared/git";
 import { lstat, mkdir, readFile, realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -65,7 +66,8 @@ function unsafeProjectionPath(path: string, reason: string, cause?: unknown): Le
  */
 export function resolveGitCommitSha(cwd: string): string | undefined {
   try {
-    const result = spawnSync("git", ["rev-parse", "HEAD"], {
+    // `cwd` may be the analyzed (untrusted) repository: its program-running config is disabled.
+    const result = spawnSync("git", [...UNTRUSTED_GIT_ARGS, "rev-parse", "HEAD"], {
       cwd,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],

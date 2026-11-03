@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { UNTRUSTED_GIT_ARGS } from "@shared/git";
 import { createHash } from "node:crypto";
 import type { Dirent } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
@@ -167,19 +168,54 @@ export interface FileScannerOptions {
   readonly readFile?: (path: string, encoding: "utf8") => Promise<string>;
   /** Files git tracks under the project, relative POSIX; undefined outside a git checkout. */
   readonly trackedFiles?: (projectPath: string) => Promise<ReadonlySet<string> | undefined>;
+  /** Ignore files and case rules git applies from outside the project; undefined outside a git checkout. */
+  readonly gitIgnoreContext?: (projectPath: string) => Promise<GitIgnoreContext | undefined>;
 }
 
 /** Paths git tracks, and every directory above one. */
 interface Tracked { readonly files: ReadonlySet<string>; readonly directories: ReadonlySet<string> }
 
-/** `git ls-files` under the project; undefined when it is not a git checkout or git is unavailable. */
-function gitTrackedFiles(projectPath: string): Promise<ReadonlySet<string> | undefined> {
-  return new Promise((resolveTracked) => {
-    execFile("git", ["ls-files", "-z", "--cached"], { cwd: projectPath, maxBuffer: 256 * 1024 * 1024, windowsHide: true }, (error, stdout) => {
-      if (error !== null) { resolveTracked(undefined); return; }
-      resolveTracked(new Set(stdout.split("\0").filter((path) => path.length > 0)));
+/** Runs git on the (untrusted) repository with its program-running config disabled; undefined on failure. */
+function untrustedGit(projectPath: string, args: readonly string[]): Promise<string | undefined> {
+  return new Promise((resolveOutput) => {
+    execFile("git", [...UNTRUSTED_GIT_ARGS, ...args], { cwd: projectPath, maxBuffer: 256 * 1024 * 1024, windowsHide: true }, (error, stdout) => {
+      resolveOutput(error === null ? stdout : undefined);
     });
   });
+}
+
+/** `git ls-files` under the project; undefined when it is not a git checkout or git is unavailable. */
+async function gitTrackedFiles(projectPath: string): Promise<ReadonlySet<string> | undefined> {
+  const output = await untrustedGit(projectPath, ["ls-files", "-z", "--cached"]);
+  return output === undefined ? undefined : new Set(output.split("\0").filter((path) => path.length > 0));
+}
+
+/** How git matches ignore patterns around the project: an ignore file outside it, with the project's offset. */
+export interface GitIgnoreContext {
+  /** `core.ignorecase` (git's default on Windows and macOS): patterns match regardless of case. */
+  readonly ignoreCase: boolean;
+  /** `.git/info/exclude`, then the `.gitignore` files above the project, lowest precedence first. */
+  readonly outer: readonly { readonly text: string; readonly prefix: string }[];
+}
+
+async function gitIgnoreContext(projectPath: string): Promise<GitIgnoreContext | undefined> {
+  const located = await untrustedGit(projectPath, ["rev-parse", "--show-toplevel", "--git-common-dir", "--show-prefix"]);
+  if (located === undefined) return undefined;
+  const [top, commonDir, rawPrefix] = located.split(/\r?\n/);
+  if (top === undefined || commonDir === undefined) return undefined;
+  const prefix = (rawPrefix ?? "").replace(/\/+$/, "");
+  const ignoreCase = (await untrustedGit(projectPath, ["config", "--bool", "core.ignorecase"]))?.trim() === "true";
+  const read = async (path: string): Promise<string | undefined> => { try { return await readFile(path, "utf8"); } catch { return undefined; } };
+  const outer: { text: string; prefix: string }[] = [];
+  const exclude = await read(resolve(projectPath, commonDir, "info", "exclude"));
+  if (exclude !== undefined) outer.push({ text: exclude, prefix });
+  // Each directory from the top down to the project's parent: its .gitignore sees the project at the rest of the prefix.
+  const segments = prefix.length === 0 ? [] : prefix.split("/");
+  for (let depth = 0; depth < segments.length; depth++) {
+    const text = await read(resolve(top, ...segments.slice(0, depth), ".gitignore"));
+    if (text !== undefined) outer.push({ text, prefix: segments.slice(depth).join("/") });
+  }
+  return { ignoreCase, outer };
 }
 
 /** Minified bundles are build output even when committed: listed as generated, not analyzed (BA-15). */
@@ -190,12 +226,14 @@ export class FileScanner {
   private readonly statFn: typeof stat;
   private readonly readFileFn: (path: string, encoding: "utf8") => Promise<string>;
   private readonly trackedFilesFn: (projectPath: string) => Promise<ReadonlySet<string> | undefined>;
+  private readonly gitIgnoreContextFn: (projectPath: string) => Promise<GitIgnoreContext | undefined>;
 
   public constructor(options: FileScannerOptions = {}) {
     this.readdirFn = options.readdir ?? readdir;
     this.statFn = options.stat ?? stat;
     this.readFileFn = options.readFile ?? ((path, encoding) => readFile(path, encoding));
     this.trackedFilesFn = options.trackedFiles ?? gitTrackedFiles;
+    this.gitIgnoreContextFn = options.gitIgnoreContext ?? gitIgnoreContext;
   }
 
   public async scan(projectPath: string): Promise<FileScanResult> {
@@ -214,8 +252,13 @@ export class FileScanner {
     const enumerationFailures: DiscoveryEnumerationFailure[] = [];
     const excludedPaths: ExcludedPath[] = [];
     // A root .legacyexodusignore (gitignore syntax) is the user's own exclusion list and always applies.
+    const context = await this.gitIgnoreContextFn(resolvedProjectPath);
+    const casing = context?.ignoreCase === true ? IgnoreRules.none.ignoringCase() : IgnoreRules.none;
     const configuredText = await this.readIgnoreFile(resolve(resolvedProjectPath, ".legacyexodusignore"));
-    const configured = configuredText === undefined ? IgnoreRules.none : IgnoreRules.none.withFile("", configuredText, "legacyexodusignore");
+    const configured = configuredText === undefined ? casing : casing.withFile("", configuredText, "legacyexodusignore");
+    // git's own precedence: info/exclude, then the .gitignore files above the project, then the project's own.
+    let outer = casing;
+    for (const file of context?.outer ?? []) outer = outer.withFile("", file.text, "gitignore", file.prefix);
     // As in git, .gitignore rules apply to untracked files only: a committed file is the repository's.
     const trackedFiles = await this.trackedFilesFn(resolvedProjectPath);
     const tracked: Tracked | undefined = trackedFiles === undefined ? undefined : {
@@ -223,7 +266,7 @@ export class FileScanner {
       directories: new Set([...trackedFiles].flatMap((path) => path.split("/").slice(0, -1).map((_, index, parts) => parts.slice(0, index + 1).join("/")))),
     };
 
-    await this.scanDirectory(resolvedProjectPath, resolvedProjectPath, files, enumerationFailures, excludedPaths, IgnoreRules.none, { configured, tracked });
+    await this.scanDirectory(resolvedProjectPath, resolvedProjectPath, files, enumerationFailures, excludedPaths, outer, { configured, tracked });
 
     enumerationFailures.sort((left, right) =>
       compareCodePoints(left.path, right.path) || compareCodePoints(left.kind, right.kind) || compareCodePoints(left.code, right.code),

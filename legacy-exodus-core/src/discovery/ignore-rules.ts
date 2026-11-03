@@ -14,17 +14,27 @@ interface Rule {
   readonly negated: boolean;
   readonly directoryOnly: boolean;
   readonly source: IgnoreSource;
+  /** For an ignore file above the project: the project's path from that file's directory ("" otherwise). */
+  readonly prefix: string;
 }
 
 export class IgnoreRules {
-  public static readonly none = new IgnoreRules([]);
+  public static readonly none = new IgnoreRules([], false);
 
-  private constructor(private readonly rules: readonly Rule[]) {}
+  private constructor(private readonly rules: readonly Rule[], private readonly ignoreCase: boolean) {}
 
-  /** These rules plus those of an ignore file in `directory`, which take precedence. */
-  public withFile(directory: string, text: string, source: IgnoreSource): IgnoreRules {
-    const added = parseIgnoreFile(directory, text, source);
-    return added.length === 0 ? this : new IgnoreRules([...this.rules, ...added]);
+  /** The same rules, with every pattern added from now on matching regardless of case (`core.ignorecase`). */
+  public ignoringCase(): IgnoreRules {
+    return new IgnoreRules(this.rules, true);
+  }
+
+  /**
+   * These rules plus those of an ignore file in `directory`, which take precedence. `prefix` places a file
+   * from above the project: its patterns see a project path as `<prefix>/<path>`.
+   */
+  public withFile(directory: string, text: string, source: IgnoreSource, prefix = ""): IgnoreRules {
+    const added = parseIgnoreFile(directory, text, source, prefix, this.ignoreCase);
+    return added.length === 0 ? this : new IgnoreRules([...this.rules, ...added], this.ignoreCase);
   }
 
   /**
@@ -44,7 +54,8 @@ export class IgnoreRules {
     for (let index = this.rules.length - 1; index >= 0; index--) {
       const rule = this.rules[index]!;
       if (rule.directoryOnly && !isDirectory) continue;
-      const relative = rule.base === "" ? path : path.startsWith(`${rule.base}/`) ? path.slice(rule.base.length + 1) : undefined;
+      const seen = rule.prefix === "" ? path : `${rule.prefix}/${path}`;
+      const relative = rule.base === "" ? seen : seen.startsWith(`${rule.base}/`) ? seen.slice(rule.base.length + 1) : undefined;
       if (relative === undefined || !rule.pattern.test(relative)) continue;
       return rule.negated ? undefined : rule.source;
     }
@@ -52,7 +63,7 @@ export class IgnoreRules {
   }
 }
 
-function parseIgnoreFile(base: string, text: string, source: IgnoreSource): Rule[] {
+function parseIgnoreFile(base: string, text: string, source: IgnoreSource, prefix: string, ignoreCase: boolean): Rule[] {
   const rules: Rule[] = [];
   for (const rawLine of text.split(/\r?\n/)) {
     let line = rawLine.replace(/(?<!\\)\s+$/, "");
@@ -66,7 +77,7 @@ function parseIgnoreFile(base: string, text: string, source: IgnoreSource): Rule
     const anchored = line.includes("/");
     if (line.startsWith("/")) line = line.slice(1);
     const glob = anchored ? line : `**/${line}`;
-    rules.push({ base, pattern: new RegExp(`^${globToSource(glob)}$`), negated, directoryOnly, source });
+    rules.push({ base, pattern: new RegExp(`^${globToSource(glob)}$`, ignoreCase ? "i" : ""), negated, directoryOnly, source, prefix });
   }
   return rules;
 }

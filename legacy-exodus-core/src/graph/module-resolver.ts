@@ -147,16 +147,26 @@ export class ModuleResolver {
     if (workspacePackage === undefined) return null;
     const root = canonicalizePath(workspacePackage.root);
     const subpath = specifier === name ? "." : `./${specifier.slice(name.length + 1)}`;
-    const file = (target: string): string | null => {
+    const located = (target: string): string | null => {
       const relative = target.startsWith("./") || target.startsWith("../") ? target : `./${target}`;
       const path = canonicalizePath(posix.join(root, relative));
       if (path !== root && !path.startsWith(`${root}/`)) return null;
       return firstKnown(candidatesFor(path, importerIsTypeScript), knownPaths);
     };
+    // A target in build output that is not in the repository (`dist/x.js`, `build/x.cjs`) is compiled from the
+    // package's own `src/x`; analysis wants that source. Only an existing file is accepted.
+    const file = (target: string): string | null => {
+      const direct = located(target);
+      if (direct !== null) return direct;
+      const built = /^(?:\.\/)?(?:dist|build|lib|es|esm|cjs|out)\/(.+?)(?:\.(?:umd|cjs|esm|es|min))*\.(?:d\.ts|[cm]?js)$/.exec(target);
+      return built === null ? null : located(`./src/${built[1]}`);
+    };
 
     if (workspacePackage.exports !== undefined && workspacePackage.exports !== null) {
       const match = matchExports(workspacePackage.exports, subpath);
-      return match === undefined ? null : resolveExportTarget(match.target, match.captured, file);
+      if (match === undefined) return null;
+      // A root export only to a bundle (`dist/name.umd.js`) has no same-named source; the package's entry is src/index.
+      return resolveExportTarget(match.target, match.captured, file) ?? (subpath === "." && match.target !== null ? located("./src/index") : null);
     }
     if (subpath !== ".") return file(subpath);
     for (const field of [workspacePackage.source, workspacePackage.module, workspacePackage.main]) {
@@ -164,7 +174,7 @@ export class ModuleResolver {
       const resolved = file(field);
       if (resolved !== null) return resolved;
     }
-    return file("./index");
+    return located("./index") ?? located("./src/index");
   }
 }
 
