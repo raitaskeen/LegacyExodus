@@ -45,7 +45,7 @@ function use(r: Result, marker: string, expected: string, name = "x") {
 }
 function join(r: Result, marker: string, incoming: (string | undefined)[], depth = 0, name = "x") {
   const id = hash(`join:${filePath}:${name}:${r.position(marker)}:${depth}:${incoming.map((i) => i ?? "unbound").join(":")}`);
-  expect(r.graph.definitions.find((d) => d.id === id)).toEqual({ id, filePath, name, kind: "assignment" });
+  expect(r.graph.definitions.find((d) => d.id === id)).toEqual({ id, key: expect.any(String), filePath, name, kind: "assignment" });
   expect(r.state.transfers.filter((t) => t.targetDefinitionId === id).map((t) => t.sourceDefinitionId).sort())
     .toEqual([...new Set(incoming.filter((i): i is string => i !== undefined))].sort());
   return id;

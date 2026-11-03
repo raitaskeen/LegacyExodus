@@ -51,7 +51,8 @@ const cfgAddedFlows: Readonly<Record<string, string>> = {
 
 function legacyHash(result: BuildContextResult): string {
   const graph = { ...result.graph, taintFlows: result.graph.taintFlows.filter((flow) => flow.path.length > 2) };
-  return hash(JSON.stringify({ graph, transfers: result.state.transfers }));
+  // Pinned before fact keys existed (ADR-008): keys are identity, not semantics, so they are left out.
+  return hash(JSON.stringify({ graph, transfers: result.state.transfers }, (name, value) => (name === "key" ? undefined : value)));
 }
 
 function expectCfgAddedFlows(result: BuildContextResult, statement: string): void {

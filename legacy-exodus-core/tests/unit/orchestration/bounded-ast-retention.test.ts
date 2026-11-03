@@ -152,8 +152,8 @@ describe("F-09: Bounded Per-File AST Lifecycle & Whole-Repository Retention Inva
     const context = dfgBuilder.buildContext(ast, undefined, []);
 
     // The compact connection state must not own function maps capable of retaining AST nodes.
-    // `joins` (BA-27) and `localDefinitionIds` (Wave 3b) hold ids only.
-    expect(Object.keys(context.state).sort()).toEqual(["joins", "localDefinitionIds", "sinks", "taintPaths", "transfers"]);
+    // `joins` (BA-27) and `localDefinitionIds` (Wave 3b) hold ids only; `factKeys` (ADR-008) maps ids to key strings.
+    expect(Object.keys(context.state).sort()).toEqual(["factKeys", "joins", "localDefinitionIds", "sinks", "taintPaths", "transfers"]);
     expect([...context.state.localDefinitionIds].every((id) => typeof id === "string")).toBe(true);
     expect([...context.state.joins.values()].every((join) => typeof join.id === "string" && join.incoming.every((id) => id === undefined || typeof id === "string"))).toBe(true);
     expect("functions" in context.state).toBe(false);
