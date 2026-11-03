@@ -18,8 +18,15 @@ import type { CodeSymbol } from "./symbol-contracts";
  * enter a key, so an edit that adds or removes lines elsewhere leaves every other key unchanged.
  */
 export function assignSymbolKeys(symbols: readonly CodeSymbol[], root: ASTNode, path: string): readonly CodeSymbol[] {
-  const chains = ownerChains(root, symbols);
-  const draft = symbols.map((symbol) => `${path}#${chainFor(symbol, chains)}${namePart(symbol)}:${symbol.kind}`);
+  const tree = ownerTree(root, symbols);
+  // Only the scopes symbols name are resolved, so nodes that open no named scope cost no strings.
+  const wanted = new Set<number>();
+  for (const symbol of symbols) {
+    const at = symbol.scopeId === undefined ? undefined : scopePosition(symbol.scopeId);
+    if (at !== undefined) wanted.add(at);
+  }
+  const byScopeId = scopeChains(root, tree, wanted);
+  const draft = symbols.map((symbol) => `${path}#${chainFor(symbol, byScopeId, tree.byClassId)}${namePart(symbol)}:${symbol.kind}`);
 
   const order = symbols.map((_, index) => index).sort((left, right) => position(symbols[left]!) - position(symbols[right]!) || left - right);
   const keys = numberRepeats(draft, order);
@@ -43,9 +50,11 @@ export function numberRepeats(bases: readonly string[], order: readonly number[]
   return keys;
 }
 
-interface Chains {
-  /** Owner chain (with a trailing `/` when non-empty) of the scope each scope id names. */
-  readonly byScopeId: ReadonlyMap<string, string>;
+interface OwnerTree {
+  /** Owner chain (with a trailing `/`) of each owner record, in source order. */
+  readonly chains: readonly string[];
+  /** The record index of each owner node. */
+  readonly indexOf: ReadonlyMap<ASTNode, number>;
   /** Owner chain of the class each class symbol id declares, including the class itself. */
   readonly byClassId: ReadonlyMap<string, string>;
   /** Every located owner, in source order, with its chain and the index of the owner enclosing it. */
@@ -61,26 +70,29 @@ interface OwnerRange { readonly start: number; readonly end: number; readonly ch
  * same-subject facts of the one owner it touches.
  */
 export class FactKeyer {
+  private readonly tree: OwnerTree;
   private readonly owners: readonly OwnerRange[];
-  private readonly byScopeId: ReadonlyMap<string, string>;
+  /** Built on the first `scopeKey`: most keyers never resolve a scope id. */
+  private byScopeId: ReadonlyMap<string, string> | undefined;
+  /** Facts keyed so far, by key without the path prefix (the same in every key of this file). */
   private readonly counts = new Map<string, number>();
 
-  public constructor(private readonly path: string, root: ASTNode, symbols: readonly CodeSymbol[]) {
-    const chains = ownerChains(root, symbols);
-    this.owners = chains.owners;
-    this.byScopeId = chains.byScopeId;
+  public constructor(private readonly path: string, private readonly root: ASTNode, symbols: readonly CodeSymbol[]) {
+    this.tree = ownerTree(root, symbols);
+    this.owners = this.tree.owners;
   }
 
   public key(kind: string, subject: string, at: { readonly line: number; readonly column: number } | undefined): string {
-    const base = `${this.path}#${at === undefined ? "" : this.chainAt(packed(at.line, at.column))}${kind}:${subject}`;
+    const base = `${at === undefined ? "" : this.chainAt(packed(at.line, at.column))}${kind}:${subject}`;
     const ordinal = this.counts.get(base) ?? 0;
     this.counts.set(base, ordinal + 1);
-    return `${base}@${ordinal}`;
+    return `${this.path}#${base}@${ordinal}`;
   }
 
   /** `<path>#<owners>` of the innermost owner containing `at`: the key of the code a graph or scope analyses. */
   /** `<path>#<owners>` of the code whose lexical scope `scopeId` names (as symbols record it). */
   public scopeKey(scopeId: string): string {
+    this.byScopeId ??= scopeChains(this.root, this.tree);
     return `${this.path}#${this.byScopeId.get(scopeId) ?? ""}`;
   }
 
@@ -104,32 +116,32 @@ export class FactKeyer {
   }
 }
 
-function packed(line: number, column: number): number { return line * 1_000_000 + column; }
+/** A position as one number, in source order; columns up to 2^26 (minified lines run past a million). */
+function packed(line: number, column: number): number { return line * 67_108_864 + column; }
 
 const FUNCTION_TYPES = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ClassPrivateMethod", "ObjectMethod", "TSDeclareFunction", "TSDeclareMethod"]);
 const CLASS_TYPES = new Set(["ClassDeclaration", "ClassExpression"]);
 
-function ownerChains(root: ASTNode, symbols: readonly CodeSymbol[]): Chains {
-  const at = (symbol: CodeSymbol): string | undefined => symbol.location === undefined ? undefined : `${symbol.location.start.line}:${symbol.location.start.column}`;
-  const named = new Map<string, CodeSymbol>();
-  const classes = new Map<string, CodeSymbol>();
+function ownerTree(root: ASTNode, symbols: readonly CodeSymbol[]): OwnerTree {
+  const named = new Map<number, CodeSymbol>();
+  const classes = new Map<number, CodeSymbol>();
   for (const symbol of symbols) {
-    const key = at(symbol);
-    if (key === undefined) continue;
-    if ((symbol.kind === "function" || symbol.kind === "method") && !named.has(key)) named.set(key, symbol);
-    if (symbol.kind === "class" && !classes.has(key)) classes.set(key, symbol);
+    if (symbol.location === undefined) continue;
+    const point = packed(symbol.location.start.line, symbol.location.start.column);
+    if ((symbol.kind === "function" || symbol.kind === "method") && !named.has(point)) named.set(point, symbol);
+    if (symbol.kind === "class" && !classes.has(point)) classes.set(point, symbol);
   }
 
-  // Phase 1: every owner in source order, with its raw segment and enclosing owner; every scope id, with its owner.
+  // Phase 1: every owner in source order, with its raw segment and enclosing owner.
   interface OwnerRecord { readonly node: ASTNode; readonly segment: string; readonly parent: number; readonly depth: number; readonly classId?: string }
   const records: OwnerRecord[] = [];
-  const scopeOwners: [string, number][] = [];
+  const indexOf = new Map<ASTNode, number>();
   const visit = (node: ASTNode, anonymous: Map<string, number>, enclosing: number): void => {
-    const where = node.location === undefined ? undefined : `${node.location.start.line}:${node.location.start.column}`;
     let innerOwner = enclosing;
     let inner = anonymous;
-    if (FUNCTION_TYPES.has(node.type) || CLASS_TYPES.has(node.type) || node.type === "TSModuleDeclaration" || node.type === "StaticBlock") {
-      const declared = where === undefined ? undefined : CLASS_TYPES.has(node.type) ? classes.get(where) : named.get(where);
+    if (isOwner(node)) {
+      const point = node.location === undefined ? undefined : packed(node.location.start.line, node.location.start.column);
+      const declared = point === undefined ? undefined : CLASS_TYPES.has(node.type) ? classes.get(point) : named.get(point);
       records.push({
         node,
         segment: segment(node, declared, anonymous),
@@ -138,11 +150,9 @@ function ownerChains(root: ASTNode, symbols: readonly CodeSymbol[]): Chains {
         ...(CLASS_TYPES.has(node.type) && declared !== undefined ? { classId: declared.id } : {}),
       });
       innerOwner = records.length - 1;
+      indexOf.set(node, innerOwner);
       inner = new Map();
-      // A named function or class expression binds its own name in a scope between it and its parent.
-      if (where !== undefined) scopeOwners.push([`self:${node.type}:${where}`, enclosing]);
     }
-    if (where !== undefined) scopeOwners.push([`scope:${node.type}:${where}`, innerOwner]);
     for (const child of node.children) visit(child, inner, innerOwner);
   };
   const topLevel = new Map<string, number>();
@@ -158,9 +168,6 @@ function ownerChains(root: ASTNode, symbols: readonly CodeSymbol[]): Chains {
     numberRepeats(bases).forEach((chain, position) => { chains[level[position]!] = `${chain}/`; });
   }
 
-  const chainOf = (owner: number): string => owner < 0 ? "" : chains[owner]!;
-  const byScopeId = new Map<string, string>([["scope:module", ""]]);
-  for (const [scopeId, owner] of scopeOwners) byScopeId.set(scopeId, chainOf(owner));
   const byClassId = new Map<string, string>();
   const owners: OwnerRange[] = [];
   const rangeOf = new Map<number, number>();
@@ -173,7 +180,44 @@ function ownerChains(root: ASTNode, symbols: readonly CodeSymbol[]): Chains {
     owners.push({ start: packed(location.start.line, location.start.column), end: packed(location.end.line, location.end.column), chain: chains[index]!, parent: parent < 0 ? -1 : rangeOf.get(parent)! });
     rangeOf.set(index, owners.length - 1);
   });
-  return { byScopeId, byClassId, owners };
+  return { chains, indexOf, byClassId, owners };
+}
+
+function isOwner(node: ASTNode): boolean {
+  return FUNCTION_TYPES.has(node.type) || CLASS_TYPES.has(node.type) || node.type === "TSModuleDeclaration" || node.type === "StaticBlock";
+}
+
+/**
+ * The owner chain of the scope each scope id names: `scope:<type>:<line>:<column>` is the scope a node opens
+ * (inside it, if it is an owner), `self:…` the scope a named function or class expression binds its own name
+ * in, between it and its parent. With `wanted` (packed start positions), only nodes starting there are named.
+ */
+function scopeChains(root: ASTNode, tree: OwnerTree, wanted?: ReadonlySet<number>): ReadonlyMap<string, string> {
+  const chainOf = (owner: number): string => owner < 0 ? "" : tree.chains[owner]!;
+  const byScopeId = new Map<string, string>([["scope:module", ""]]);
+  const visit = (node: ASTNode, enclosing: number): void => {
+    const owner = tree.indexOf.get(node);
+    const inner = owner ?? enclosing;
+    const start = node.location?.start;
+    if (start !== undefined && (wanted === undefined || wanted.has(packed(start.line, start.column)))) {
+      const where = `${start.line}:${start.column}`;
+      if (owner !== undefined) byScopeId.set(`self:${node.type}:${where}`, chainOf(enclosing));
+      byScopeId.set(`scope:${node.type}:${where}`, chainOf(inner));
+    }
+    for (const child of node.children) visit(child, inner);
+  };
+  for (const child of root.children) visit(child, -1);
+  return byScopeId;
+}
+
+/** The packed start position a positional scope id (`<prefix>:<type>:<line>:<column>`) names. */
+function scopePosition(scopeId: string): number | undefined {
+  const column = scopeId.lastIndexOf(":");
+  const line = scopeId.lastIndexOf(":", column - 1);
+  if (line < 0) return undefined;
+  const lineNumber = Number(scopeId.slice(line + 1, column));
+  const columnNumber = Number(scopeId.slice(column + 1));
+  return Number.isInteger(lineNumber) && Number.isInteger(columnNumber) ? packed(lineNumber, columnNumber) : undefined;
 }
 
 function segment(node: ASTNode, symbol: CodeSymbol | undefined, anonymous: Map<string, number>): string {
@@ -189,13 +233,13 @@ function segment(node: ASTNode, symbol: CodeSymbol | undefined, anonymous: Map<s
   return `${node.type}@${ordinal}`;
 }
 
-function chainFor(symbol: CodeSymbol, chains: Chains): string {
+function chainFor(symbol: CodeSymbol, byScopeId: ReadonlyMap<string, string>, byClassId: ReadonlyMap<string, string>): string {
   // A class member is declared in the class body, whatever lexical scope it was recorded in.
   if (symbol.member === true && symbol.containerId !== undefined) {
-    const owner = chains.byClassId.get(symbol.containerId);
+    const owner = byClassId.get(symbol.containerId);
     if (owner !== undefined) return owner;
   }
-  return symbol.scopeId === undefined ? "" : chains.byScopeId.get(symbol.scopeId) ?? "";
+  return symbol.scopeId === undefined ? "" : byScopeId.get(symbol.scopeId) ?? "";
 }
 
 function namePart(symbol: CodeSymbol): string {
