@@ -68,12 +68,15 @@ export class DeterministicDataFlowGraphBuilder {
   /** This file's fact keys (ADR-008), by fact id: the first creation of an id assigns its ordinal, repeats reuse it. */
   private keyer: FactKeyer | undefined;
   private factKeys = new Map<string, string>();
+  /** The source and sink subset of `factKeys`: all that cross-file flow keying reads, so all the connection state keeps. */
+  private boundaryKeys = new Map<string, string>();
   private keyFor(id: string, kind: string, subject: string, node: ASTNode | undefined): { readonly key?: string } {
     if (this.keyer === undefined) return {};
     const known = this.factKeys.get(id);
     if (known !== undefined) return { key: known };
     const key = this.keyer.key(kind, subject, node?.location?.start);
     this.factKeys.set(id, key);
+    if (kind === "source" || kind === "sink") this.boundaryKeys.set(id, key);
     return { key };
   }
 
@@ -90,6 +93,7 @@ export class DeterministicDataFlowGraphBuilder {
     this.policy = filePolicy(ast.root, bindings);
     this.keyer = new FactKeyer(ast.metadata.sourcePath, ast.root, symbols.filter((symbol) => symbol.kind === "function" || symbol.kind === "method" || symbol.kind === "class"));
     this.factKeys = new Map();
+    this.boundaryKeys = new Map();
     this.visit(ast.root, createScope(), ast.metadata.sourcePath, state);
     this.connectCalls(state);
     this.propagateTaint(state);
@@ -137,7 +141,7 @@ export class DeterministicDataFlowGraphBuilder {
       taintPaths: state.taintPaths,
       sinks: state.sinks,
       joins: state.joins,
-      factKeys: new Map(this.factKeys),
+      factKeys: new Map(this.boundaryKeys),
       localDefinitionIds: new Set(state.definitions.filter((definition) => (definition.kind === "declaration" || definition.kind === "assignment") && !receivers.has(definition.id)).map((definition) => definition.id)),
     });
   }
@@ -1196,7 +1200,7 @@ function bindingOwner(scope: Scope | undefined, name: string): Scope | undefined
   return undefined;
 }
 function resolve(scope: Scope | undefined, name: string): VariableDefinition | undefined { return bindingOwner(scope, name)?.definitions.get(name); }
-function isFunction(node: ASTNode): boolean { return ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ObjectMethod"].includes(node.type); }
+function isFunction(node: ASTNode): boolean { return ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ClassPrivateMethod", "ObjectMethod"].includes(node.type); }
 function functionName(node: ASTNode): string | undefined { return identifierName(node.children.find((child) => child.role === "id" || child.role === "key")); }
 function identifierName(node: ASTNode | undefined): string | undefined { const value = node?.attributes.name; return typeof value === "string" && value.length > 0 ? value : undefined; }
 function memberPath(node: ASTNode | undefined): string | undefined { if (node?.type !== "MemberExpression") return undefined; const object = memberPath(node.children.find((child) => child.role === "object")) ?? identifierName(node.children.find((child) => child.role === "object")); const property = identifierName(node.children.find((child) => child.role === "property")) ?? stringValue(node.children.find((child) => child.role === "property")); return object === undefined || property === undefined ? undefined : `${object}.${property}`; }
