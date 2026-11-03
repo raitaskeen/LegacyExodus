@@ -116,7 +116,8 @@ export class FactKeyer {
   }
 }
 
-function packed(line: number, column: number): number { return line * 1_000_000 + column; }
+/** A position as one number, in source order; columns up to 2^26 (minified lines run past a million). */
+function packed(line: number, column: number): number { return line * 67_108_864 + column; }
 
 const FUNCTION_TYPES = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ClassPrivateMethod", "ObjectMethod", "TSDeclareFunction", "TSDeclareMethod"]);
 const CLASS_TYPES = new Set(["ClassDeclaration", "ClassExpression"]);
