@@ -15,9 +15,10 @@ import type { LexicalBindings } from "./lexical-bindings";
  * still match, so code that does not wire handlers visibly (a handler exported to another file) keeps
  * its flows. Unknown calls are neither sources nor sinks.
  */
-export const TAINT_POLICY_VERSION = "builtin-1";
+export const TAINT_POLICY_VERSION = "builtin-2";
 
-const REQUEST_SOURCES = new Set(["body", "params", "query", "headers", "cookies", "signedCookies", "files"]);
+// Everything the client controls: the payload, and the request line (`url`, `path`, host and address).
+const REQUEST_SOURCES = new Set(["body", "params", "query", "headers", "cookies", "signedCookies", "files", "url", "originalUrl", "path", "baseUrl", "hostname", "host", "ip", "ips", "subdomains", "protocol"]);
 const REQUEST_SOURCE_METHODS = new Set(["get", "header", "param"]);
 const RESPONSE_SINKS = new Set(["send", "json", "jsonp", "write", "end", "redirect", "render", "sendFile", "download"]);
 const PROCESS_SOURCES = new Set(["env", "argv"]);
@@ -33,6 +34,7 @@ const MODULE_SANITIZERS: Readonly<Record<string, ReadonlySet<string>>> = {
 };
 const SPELLED_SANITIZERS = new Set(["sanitize", "validator.escape"]);
 const ROUTE_METHODS = new Set(["get", "post", "put", "patch", "delete", "all", "use", "options", "head"]);
+const METHOD_TYPES = new Set(["ObjectMethod", "ClassMethod", "ClassPrivateMethod"]);
 
 export interface FilePolicy {
   /** Canonical source path (`req.body.x`, `process.env.X`, `req.get`) of a member read or request-method call. */
@@ -50,7 +52,7 @@ function role(node: ASTNode, name: string): ASTNode | undefined { return node.ch
 function nameOf(node: ASTNode | undefined): string | undefined { const value = node?.attributes.name; return typeof value === "string" && value.length > 0 ? value : undefined; }
 function stringOf(node: ASTNode | undefined): string | undefined { const value = node?.attributes.value; return typeof value === "string" ? value : undefined; }
 function moduleName(specifier: string): string { return specifier.startsWith("node:") ? specifier.slice(5) : specifier; }
-const FUNCTION_TYPES = new Set(["FunctionExpression", "ArrowFunctionExpression", "FunctionDeclaration"]);
+const FUNCTION_TYPES = new Set(["FunctionExpression", "ArrowFunctionExpression", "FunctionDeclaration", "ObjectMethod", "ClassMethod", "ClassPrivateMethod"]);
 
 /** `require("m")` → "m". */
 function requiredModule(node: ASTNode | undefined): string | undefined {
@@ -79,7 +81,10 @@ export function filePolicy(root: ASTNode, bindings: LexicalBindings): FilePolicy
   const keyOf = (node: ASTNode | undefined): string | undefined => (node === undefined ? undefined : bindings.keyOf.get(node));
   const modules = new Map<string, ModuleBinding>();
   const functionsByKey = new Map<string, ASTNode>();
+  // Methods by name, for handlers passed as `controller.create` or `this.create`; a name declared twice is ambiguous.
+  const methodsByName = new Map<string, ASTNode[]>();
   const declarators: ASTNode[] = [];
+  const assignments: ASTNode[] = [];
   const calls: ASTNode[] = [];
   const visit = (node: ASTNode): void => {
     if (node.type === "ImportDeclaration") {
@@ -97,7 +102,12 @@ export function filePolicy(root: ASTNode, bindings: LexicalBindings): FilePolicy
       }
     }
     if (node.type === "VariableDeclarator") declarators.push(node);
+    if (node.type === "AssignmentExpression" && node.attributes.operator === "=") assignments.push(node);
     if (node.type === "FunctionDeclaration") { const key = keyOf(role(node, "id")); if (key !== undefined) functionsByKey.set(key, node); }
+    const method = METHOD_TYPES.has(node.type) ? node
+      : node.type === "ObjectProperty" || node.type === "ClassProperty" ? (FUNCTION_TYPES.has(role(node, "value")?.type ?? "") ? role(node, "value") : undefined) : undefined;
+    const methodName = method === undefined || node.attributes.computed === true ? undefined : nameOf(role(node, "key"));
+    if (method !== undefined && methodName !== undefined) methodsByName.set(methodName, [...(methodsByName.get(methodName) ?? []), method]);
     if (node.type === "CallExpression") calls.push(node);
     for (const child of node.children) visit(child);
   };
@@ -108,6 +118,8 @@ export function filePolicy(root: ASTNode, bindings: LexicalBindings): FilePolicy
     const id = role(declarator, "id");
     const init = role(declarator, "init");
     if (id === undefined || init === undefined) continue;
+    // `const handler = (req, res) => …`: a handler passed by name.
+    if (id.type === "Identifier" && FUNCTION_TYPES.has(init.type)) { const key = keyOf(id); if (key !== undefined) functionsByKey.set(key, init); }
     const whole = requiredModule(init);
     const member = init.type === "MemberExpression" && init.attributes.computed !== true ? requiredModule(role(init, "object")) : undefined;
     if (whole !== undefined && id.type === "Identifier") { const key = keyOf(id); if (key !== undefined) modules.set(key, { module: whole, member: "*" }); }
@@ -146,11 +158,56 @@ export function filePolicy(root: ASTNode, bindings: LexicalBindings): FilePolicy
     return false;
   };
   const receivers = new Set<string>();
+  const isFactoryCall = (node: ASTNode | undefined): boolean => (node?.type === "CallExpression" || node?.type === "NewExpression") && isExpressFactory(role(node, "callee"));
   for (const declarator of declarators) {
-    const init = role(declarator, "init");
     const key = keyOf(role(declarator, "id"));
-    if (key !== undefined && init?.type === "CallExpression" && isExpressFactory(role(init, "callee"))) receivers.add(key);
+    if (key !== undefined && isFactoryCall(role(declarator, "init"))) receivers.add(key);
   }
+  // `let app; app = express();`
+  for (const assignment of assignments) {
+    const left = role(assignment, "left");
+    const key = left?.type === "Identifier" ? keyOf(left) : undefined;
+    if (key !== undefined && isFactoryCall(role(assignment, "right"))) receivers.add(key);
+  }
+  // A proven app or router, or a route chain on one: `app.route("/x").get(h).post(h2)`.
+  const isReceiver = (node: ASTNode | undefined): boolean => {
+    if (node === undefined) return false;
+    if (node.type === "Identifier") return receivers.has(keyOf(node) ?? "");
+    if (node.type !== "CallExpression") return false;
+    const callee = role(node, "callee");
+    const method = callee?.type === "MemberExpression" && callee.attributes.computed !== true ? nameOf(role(callee, "property")) : undefined;
+    return method !== undefined && (method === "route" || ROUTE_METHODS.has(method)) && isReceiver(role(callee!, "object"));
+  };
+  // The function a handler argument denotes: inline, a declared or const-bound function, a uniquely named method, or `h.bind(…)`.
+  const handlerOf = (argument: ASTNode): ASTNode | undefined => {
+    if (FUNCTION_TYPES.has(argument.type)) return argument;
+    if (argument.type === "Identifier") return functionsByKey.get(keyOf(argument) ?? "");
+    if (argument.type === "MemberExpression" && argument.attributes.computed !== true) {
+      const candidates = methodsByName.get(nameOf(role(argument, "property")) ?? "") ?? [];
+      return candidates.length === 1 ? candidates[0] : undefined;
+    }
+    if (argument.type === "CallExpression") {
+      const callee = role(argument, "callee");
+      if (callee?.type === "MemberExpression" && nameOf(role(callee, "property")) === "bind") {
+        const bound = role(callee, "object");
+        return bound === undefined ? undefined : handlerOf(bound);
+      }
+    }
+    return undefined;
+  };
+  // Request paths of bindings destructured from a handler's request parameter: `({ body: { cmd } }) => …`.
+  const paramPaths = new Map<string, string>();
+  const destructure = (pattern: ASTNode | undefined, path: string): void => {
+    if (pattern === undefined) return;
+    if (pattern.type === "Identifier") { const key = keyOf(pattern); if (key !== undefined) paramPaths.set(key, path); return; }
+    if (pattern.type === "AssignmentPattern") { destructure(role(pattern, "left"), path); return; }
+    if (pattern.type !== "ObjectPattern") return;
+    for (const property of pattern.children) {
+      if (property.type !== "ObjectProperty" || property.attributes.computed === true) continue;
+      const name = nameOf(role(property, "key")) ?? stringOf(role(property, "key"));
+      if (name !== undefined) destructure(role(property, "value"), `${path}.${name}`);
+    }
+  };
 
   // Parameters of proven handlers: `app.get(path, (req, res) => …)`, `router.use(handler)`.
   const requests = new Set<string>();
@@ -158,15 +215,14 @@ export function filePolicy(root: ASTNode, bindings: LexicalBindings): FilePolicy
   for (const call of calls) {
     const callee = role(call, "callee");
     if (callee?.type !== "MemberExpression" || callee.attributes.computed === true) continue;
-    const receiver = keyOf(role(callee, "object"));
     const method = nameOf(role(callee, "property"));
-    if (receiver === undefined || !receivers.has(receiver) || method === undefined || !ROUTE_METHODS.has(method)) continue;
+    if (!isReceiver(role(callee, "object")) || method === undefined || !ROUTE_METHODS.has(method)) continue;
     for (const argument of call.children.filter((child) => child.role === "arguments")) {
-      const handler = FUNCTION_TYPES.has(argument.type) ? argument
-        : argument.type === "Identifier" ? functionsByKey.get(keyOf(argument) ?? "") : undefined;
+      const handler = handlerOf(argument);
       if (handler === undefined) continue;
       const params = handler.children.filter((child) => child.role === "params");
       const [request, response] = params.length === 4 ? [params[1], params[2]] : [params[0], params[1]];
+      if (request?.type === "ObjectPattern") destructure(request, "req");
       const requestKey = request?.type === "Identifier" ? keyOf(request) : undefined;
       const responseKey = response?.type === "Identifier" ? keyOf(response) : undefined;
       if (requestKey !== undefined) requests.add(requestKey);
@@ -183,6 +239,8 @@ export function filePolicy(root: ASTNode, bindings: LexicalBindings): FilePolicy
     return undefined;
   };
   const sourceFor = (base: ASTNode, properties: readonly string[]): string | undefined => {
+    const destructured = paramPaths.get(keyOf(base) ?? "");
+    if (destructured !== undefined) return [destructured, ...properties].join(".");
     const kind = baseRole(base);
     const first = properties[0];
     if (first === undefined) return undefined;
@@ -193,6 +251,8 @@ export function filePolicy(root: ASTNode, bindings: LexicalBindings): FilePolicy
 
   return {
     sourcePath(node) {
+      // A binding destructured from a handler's request: reading it reads that part of the request.
+      if (node.type === "Identifier") return paramPaths.get(keyOf(node) ?? "");
       if (node.type === "CallExpression") {
         const callee = role(node, "callee");
         if (callee?.type !== "MemberExpression" || callee.attributes.computed === true) return undefined;
@@ -241,10 +301,11 @@ export function filePolicy(root: ASTNode, bindings: LexicalBindings): FilePolicy
         const method = nameOf(role(callee, "property"));
         const object = moduleOf(role(callee, "object"));
         if (method !== undefined && object !== undefined && (object.member === "*" || object.member === "default") && MODULE_SANITIZERS[object.module]?.has(method)) return true;
-        const spelled = callee.type === "MemberExpression" ? `${nameOf(role(callee, "object")) ?? ""}.${method ?? ""}` : undefined;
-        if (spelled !== undefined && SPELLED_SANITIZERS.has(spelled)) return true;
+        const spelledObject = role(callee, "object");
+        const spelled = `${nameOf(spelledObject) ?? ""}.${method ?? ""}`;
+        if (SPELLED_SANITIZERS.has(spelled) && keyOf(spelledObject) === `global:${nameOf(spelledObject)}`) return true;
       }
-      return callee.type === "Identifier" && SPELLED_SANITIZERS.has(nameOf(callee) ?? "");
+      return callee.type === "Identifier" && SPELLED_SANITIZERS.has(nameOf(callee) ?? "") && keyOf(callee) === `global:${nameOf(callee)}`;
     },
   };
 }

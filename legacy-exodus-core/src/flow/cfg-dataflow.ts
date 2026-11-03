@@ -284,7 +284,9 @@ class Evaluator {
         const binding = this.bindingOf(node, name);
         const facts = this.read(binding, state);
         if (this.silent === 0) this.uses?.push({ node, binding, definitions: [...facts.definitions].sort(compareCodePoints), taint: entries(facts.taint) });
-        return facts.taint;
+        // A binding destructured from a request source is itself that source.
+        const source = this.source(node);
+        return source === undefined ? facts.taint : combineTaint(facts.taint, source);
       }
       case "AssignmentExpression": return this.assignment(node, state);
       case "UpdateExpression": {

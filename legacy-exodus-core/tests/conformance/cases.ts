@@ -413,6 +413,41 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // Review of #228: handler forms and request fields the policy must reach, and a sanitizer it must not trust.
+    id: "taint-policy-handlers",
+    files: {
+      "app.js": [
+        "const express = require('express');",
+        "const { exec } = require('child_process');",
+        "const controller = { create(request, response) { exec(request.body.a); } };",
+        "class Users { list(request, response) { exec(request.query.b); } }",
+        "const users = new Users();",
+        "const router = new express.Router();",
+        "router.post('/m', controller.create);",
+        "router.get('/u', users.list.bind(users));",
+        "let app;",
+        "app = express();",
+        "const handler = (request, response) => { exec(request.query.c); };",
+        "app.get('/h', handler);",
+        "app.post('/d', ({ body }, response) => { exec(body.cmd); });",
+        "app.route('/r').get((request, response) => { response.redirect(request.originalUrl); });",
+        "app.get('/u2', (request, response) => { response.redirect(request.url); });",
+        "function sanitize(x) { return x; }",
+        "app.get('/s', (request, response) => { exec(sanitize(request.query.d)); });",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "policy:object-method-handler", check: (directory) => taintKeys(directory).some((key) => key.includes("source:request.body.a@") && key.includes("sink:child_process.exec@")) },
+      { id: "policy:bound-class-method-on-new-router", check: (directory) => taintKeys(directory).some((key) => key.includes("source:request.query.b@")) },
+      { id: "policy:const-bound-handler", check: (directory) => taintKeys(directory).some((key) => key.includes("source:request.query.c@")) },
+      { id: "policy:destructured-request-param", check: (directory) => taintKeys(directory).some((key) => key.includes("source:body.cmd@")) },
+      { id: "policy:route-chain-and-original-url", check: (directory) => taintKeys(directory).some((key) => key.includes("source:request.originalUrl@") && key.includes("sink:res.redirect@")) },
+      { id: "policy:request-url-source", check: (directory) => taintKeys(directory).some((key) => key.includes("source:request.url@")) },
+      { id: "policy:local-sanitize-is-not-trusted", check: (directory) => taintKeys(directory).some((key) => key.includes("source:request.query.d@")) },
+    ],
+  },
+  {
     // BA-07: the taint policy follows what names resolve to (s06-taint's handlers, plus controls).
     id: "taint-policy",
     files: {
@@ -482,6 +517,11 @@ export const conformanceCases: readonly ConformanceCase[] = [
   },
   ...taintCases,
 ];
+
+/** Keys of every taint flow in the analysis (each names its source and its sink). */
+function taintKeys(directory: string): string[] {
+  return (readJson(directory, "data-flow.json").graphs ?? []).flatMap((graph: any) => (graph.taintFlows ?? []).map((flow: any) => String(flow.key ?? "")));
+}
 
 function readJson(directory: string, name: string): any {
   return JSON.parse(readFileSync(join(directory, name), "utf8"));
