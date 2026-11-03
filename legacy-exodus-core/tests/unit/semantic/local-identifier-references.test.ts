@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { DeterministicDependencyGraphBuilder } from "@graph/index";
+import { stableId } from "@shared/identity";
 import { JavaScriptParser, type ASTNode, type ASTResult } from "@parser/index";
 import { DeterministicSemanticAnalysisEngine } from "@semantic/index";
 import { JavaScriptSymbolExtractor, type CodeSymbol, type SymbolTable } from "@symbols/index";
@@ -208,7 +209,7 @@ describe("F08 local lexical identifier references", () => {
     const local = { ...imported, id: "opaque-local", kind: "variable" as const, declarationKind: "const" as const };
     expect(targets(analyze(f, { ...f.table, moduleReferences: importedFixture.table.moduleReferences, symbols: [imported, local] }), "shared")).toEqual([]);
   });
-  test("unlocated repeated uses preserve multiplicity and frozen ID formula", async () => {
+  test("unlocated repeated uses keep their multiplicity, each with its own stable id (ADR-008)", async () => {
     const f = await fixture("const x = 1; foo(x); foo(x);");
     const stripUses = (node: ASTNode): ASTNode => ({
       ...node, ...(node.type === "Identifier" && node.role === "arguments" ? { location: undefined } : {}),
@@ -217,9 +218,11 @@ describe("F08 local lexical identifier references", () => {
     const ast: ASTResult = { ...f.ast, root: stripUses(f.ast.root) };
     const x = exact(f.table, "x");
     const refs = analyze(f, f.table, ast).references.filter(r => r.kind === "identifier" && r.name === "x");
-    const id = createHash("sha256").update(`identifier-reference:${path}:${x.id}:0:0`).digest("hex");
+    expect(x).toBeDefined();
     expect(refs).toHaveLength(2);
-    expect(refs.map(r => r.id)).toEqual([id, id]);
+    // Ids are digests of keys; position (absent here) plays no part, and the two uses stay two facts.
+    expect(refs.map(r => r.key)).toEqual([`${path}#ref:x@0`, `${path}#ref:x@1`]);
+    expect(refs.map(r => r.id)).toEqual(refs.map(r => stableId("reference", r.key!)));
   });
   test("partial CommonJS metadata cannot invent a scalar initializer companion", async () => {
     const f = await fixture("const helper = 1; foo(helper);");

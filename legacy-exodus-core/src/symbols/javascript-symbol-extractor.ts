@@ -13,7 +13,7 @@ import {
   createLexicalScopeId,
   createSelfScopeId,
 } from "./symbol-contracts";
-import { UnsupportedSymbolLanguageError } from "./symbol-errors";
+import { SymbolExtractionError, UnsupportedSymbolLanguageError } from "./symbol-errors";
 
 interface ExtractionContext {
   readonly exported: boolean;
@@ -63,6 +63,7 @@ const MERGEABLE_DECLARATION: ExportRank = 1;
 /** Interface, type alias: type-only. */
 const TYPE_DECLARATION: ExportRank = 2;
 
+import { stableId } from "@shared/identity";
 import { assignSymbolKeys } from "./symbol-keys";
 
 export class JavaScriptSymbolExtractor implements SymbolExtractor {
@@ -119,13 +120,38 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       this.markLocalSymbolAsExported(pending.name, symbols, pending.scopeChain);
     }
     const keyed = assignSymbolKeys(symbols, validatedAst.root, validatedAst.metadata.sourcePath);
+    // ADR-008 step 3: a symbol's id is the digest of its key. Extraction links symbols by their working
+    // (position) ids, so every id-valued field is remapped once all keys are known.
+    const ids = new Map<string, string>();
+    for (const symbol of keyed) if (!ids.has(symbol.id)) ids.set(symbol.id, stableId("symbol", symbol.key!));
+    const identified = keyed.map((symbol) => ({
+      ...symbol,
+      id: stableId("symbol", symbol.key!),
+      ...(symbol.containerId === undefined ? {} : { containerId: ids.get(symbol.containerId) ?? symbol.containerId }),
+    }));
+    if (new Set(identified.map((symbol) => symbol.id)).size !== identified.length) {
+      throw new SymbolExtractionError("Two symbols share an identity.", "IDENTITY_COLLISION", { filePath: validatedAst.metadata.sourcePath });
+    }
+    // Two symbols could share a working id (`exports = module.exports = require("x")` binds two imports at one
+    // position); a reference listing it twice means each of them, in order.
+    const idsByWorkingId = new Map<string, string[]>();
+    keyed.forEach((symbol, index) => idsByWorkingId.set(symbol.id, [...(idsByWorkingId.get(symbol.id) ?? []), identified[index]!.id]));
+    const moduleReferences = this.moduleReferences.map((reference) => {
+      const seen = new Map<string, number>();
+      return { ...reference, importSymbolIds: reference.importSymbolIds.map((id) => {
+        const candidates = idsByWorkingId.get(id) ?? [id];
+        const occurrence = seen.get(id) ?? 0;
+        seen.set(id, occurrence + 1);
+        return candidates[Math.min(occurrence, candidates.length - 1)]!;
+      }) };
+    });
 
     return validateSymbolTable({
       filePath: validatedAst.metadata.sourcePath,
       language: validatedAst.metadata.language,
-      symbols: keyed,
-      summary: createSummary(keyed),
-      moduleReferences: this.moduleReferences,
+      symbols: identified,
+      summary: createSummary(identified),
+      moduleReferences,
       ...(unresolvedModuleReferences.length === 0 ? {} : { unresolvedModuleReferences }),
     });
   }

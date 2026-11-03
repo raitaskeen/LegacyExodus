@@ -98,10 +98,12 @@ export function createSemanticAnalysis(analysis: SemanticAnalysis): SemanticAnal
 }
 
 /** `items` are fresh from the schema parse, so they are frozen in place rather than copied again (BA-17). */
-function freezeSorted<T extends { readonly id?: string; readonly filePath?: string; readonly name?: string }>(items: readonly T[]): readonly T[] {
+function freezeSorted<T extends { readonly id?: string; readonly key?: string; readonly filePath?: string; readonly name?: string }>(items: readonly T[]): readonly T[] {
   return Object.freeze(sortByKey(items, stableKey).map((item) => Object.freeze(item)));
 }
 
-function stableKey(item: { readonly id?: string; readonly filePath?: string; readonly name?: string }): string {
-  return `${item.id ?? ""}:${item.filePath ?? ""}:${item.name ?? ""}`;
+// By structural key where a fact has one (ADR-008): file, owners, kind and ordinal, so the order is meaningful
+// and survives edits elsewhere; ids are digests and order nothing.
+function stableKey(item: { readonly id?: string; readonly key?: string; readonly filePath?: string; readonly name?: string }): string {
+  return `${item.key ?? item.id ?? ""}:${item.filePath ?? ""}:${item.name ?? ""}`;
 }

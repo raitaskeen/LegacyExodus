@@ -6,6 +6,7 @@ import type { SymbolTable } from "@symbols/index";
 import { createLexicalScopeId, createSelfScopeId, FactKeyer, type CodeSymbol } from "@symbols/index";
 
 import type { SemanticCall, SymbolReference } from "./semantic-contracts";
+import { stableId } from "@shared/identity";
 import { compareCodePoints } from "@shared/ordering";
 
 export class DeterministicCallGraphBuilder {
@@ -113,9 +114,10 @@ export class DeterministicCallGraphBuilder {
           const resolutionState = targetSymbolId === undefined ? "UNRESOLVED" as const : "RESOLVED" as const;
           const key = factKeyers.get(fileSymbols)?.key("call", calleeName, node.location?.start);
           const keyed = key === undefined ? {} : { key };
-          const reference: SymbolReference = { id: hash(`reference:${id}`), ...keyed, filePath: ast.metadata.sourcePath, name: calleeName, kind: "call", resolutionState, ...(targetSymbolId === undefined ? {} : { resolvedSymbolId: targetSymbolId }) };
+          const callId = key === undefined ? id : stableId("call", key);
+          const reference: SymbolReference = { id: key === undefined ? hash(`reference:${id}`) : stableId("call-reference", key), ...keyed, filePath: ast.metadata.sourcePath, name: calleeName, kind: "call", resolutionState, ...(targetSymbolId === undefined ? {} : { resolvedSymbolId: targetSymbolId }) };
           references.push(reference);
-          calls.push({ id, ...keyed, sourceFilePath: ast.metadata.sourcePath, callerName: nextContext.callerName, calleeName, resolutionState, ...(targetSymbolId === undefined ? {} : { targetSymbolId }), ...(node.location === undefined ? {} : { location: node.location.start }) });
+          calls.push({ id: callId, ...keyed, sourceFilePath: ast.metadata.sourcePath, callerName: nextContext.callerName, calleeName, resolutionState, ...(targetSymbolId === undefined ? {} : { targetSymbolId }), ...(node.location === undefined ? {} : { location: node.location.start }) });
         }
       }
     }
@@ -127,9 +129,10 @@ export class DeterministicCallGraphBuilder {
         const location = node.location?.start;
         const key = factKeyers.get(fileSymbols)?.key("ref", name, location);
         for (const [index, target] of binding.referenceTargets.entries()) {
+          const referenceKey = key === undefined ? undefined : binding.referenceTargets.length > 1 ? `${key}/${index}` : key;
           references.push({
-            id: hash(`identifier-reference:${ast.metadata.sourcePath}:${target.id}:${location?.line ?? 0}:${location?.column ?? 0}`),
-            ...(key === undefined ? {} : { key: binding.referenceTargets.length > 1 ? `${key}/${index}` : key }),
+            id: referenceKey === undefined ? hash(`identifier-reference:${ast.metadata.sourcePath}:${target.id}:${location?.line ?? 0}:${location?.column ?? 0}`) : stableId("reference", referenceKey),
+            ...(referenceKey === undefined ? {} : { key: referenceKey }),
             filePath: ast.metadata.sourcePath,
             name,
             kind: "identifier",
@@ -149,9 +152,10 @@ export class DeterministicCallGraphBuilder {
         const location = node.location?.start;
         const key = factKeyers.get(fileSymbols)?.key("jsx", "React", location);
         for (const [index, target] of binding.referenceTargets.entries()) {
+          const referenceKey = key === undefined ? undefined : binding.referenceTargets.length > 1 ? `${key}/${index}` : key;
           references.push({
-            id: hash(`jsx-reference:${ast.metadata.sourcePath}:${target.id}:${location?.line ?? 0}:${location?.column ?? 0}`),
-            ...(key === undefined ? {} : { key: binding.referenceTargets.length > 1 ? `${key}/${index}` : key }),
+            id: referenceKey === undefined ? hash(`jsx-reference:${ast.metadata.sourcePath}:${target.id}:${location?.line ?? 0}:${location?.column ?? 0}`) : stableId("reference", referenceKey),
+            ...(referenceKey === undefined ? {} : { key: referenceKey }),
             filePath: ast.metadata.sourcePath,
             name: "React",
             kind: "identifier",

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type { ASTNode } from "@parser/index";
 
 import { canonicalizePath, ModuleResolver, type DependencyGraph } from "@graph/index";
+import { stableId } from "@shared/identity";
 import { createLexicalScopeId, FactKeyer, numberRepeats, type SymbolTable } from "@symbols/index";
 
 import { DeterministicCallGraphBuilder } from "./call-graph-builder";
@@ -323,7 +324,7 @@ export function findHttpCalls(root: ASTNode, filePath: string, symbolTable: Symb
     }
   }
   const routeKeys = numberRepeats(routeBases);
-  const routes: ExpressRoute[] = unkeyed.map((route, index) => ({ ...route, key: routeKeys[index]! }));
+  const routes: ExpressRoute[] = unkeyed.map((route, index) => ({ ...route, id: stableId("route", routeKeys[index]!), key: routeKeys[index]! }));
   const chained = receiverOrder.flatMap((receiver) => {
     const middleware = (uses.get(receiver) ?? []).flatMap((event) => event.middleware);
     const at = receiver.indexOf("@");
