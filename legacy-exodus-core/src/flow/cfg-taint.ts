@@ -2,7 +2,7 @@ import type { ASTNode } from "@parser/index";
 
 import { analyzeControlFlow, combineTaint, joinTaint, mayOnly, type ControlFlowDataFlow, type DataFlowContext, type Taint } from "./cfg-dataflow";
 import type { ControlFlowGraphsWithNodes } from "./control-flow-builder";
-import { resolveLexicalBindings } from "./lexical-bindings";
+import { resolveLexicalBindings, type LexicalBindings } from "./lexical-bindings";
 
 /**
  * Wave 3b: taint verdicts at sinks from CFG data flow, for every graph of one file.
@@ -20,6 +20,8 @@ export interface SinkVerdict {
 
 export interface CfgTaintHooks {
   sourceOf(node: ASTNode): string | undefined;
+  /** Source id when `keys` destructured from `object` name a source (`const { body } = req`). */
+  sourceOfDestructured?(object: ASTNode, keys: readonly string[], at: ASTNode): string | undefined;
   /** Sink id of a call, if it is a sink. */
   sinkIdOf(call: ASTNode): string | undefined;
   callValue(call: ASTNode, callee: Taint, args: readonly Taint[]): Taint;
@@ -37,8 +39,8 @@ function sameHeld(left: ReadonlyMap<string, Taint>, right: ReadonlyMap<string, T
   return true;
 }
 
-export function cfgSinkVerdicts(root: ASTNode, built: ControlFlowGraphsWithNodes, hooks: CfgTaintHooks): ReadonlyMap<string, SinkVerdict> {
-  const bindings = resolveLexicalBindings(root);
+export function cfgSinkVerdicts(root: ASTNode, built: ControlFlowGraphsWithNodes, hooks: CfgTaintHooks, lexical?: LexicalBindings): ReadonlyMap<string, SinkVerdict> {
+  const bindings = lexical ?? resolveLexicalBindings(root);
   // A function declaration nothing references or exports never runs, so its writes reach nothing.
   const references = new Map<string, number>();
   for (const key of bindings.keyOf.values()) references.set(key, (references.get(key) ?? 0) + 1);
@@ -62,6 +64,7 @@ export function cfgSinkVerdicts(root: ASTNode, built: ControlFlowGraphsWithNodes
       const context: DataFlowContext = {
         definitionId: (node, binding) => `${binding}@${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`,
         sourceOf: hooks.sourceOf,
+        ...(hooks.sourceOfDestructured === undefined ? {} : { sourceOfDestructured: hooks.sourceOfDestructured }),
         bindingOf: (node, name) => bindings.keyOf.get(node) ?? `global:${name}`,
         callValue: hooks.callValue,
         readTaint: (binding, taint) => {
