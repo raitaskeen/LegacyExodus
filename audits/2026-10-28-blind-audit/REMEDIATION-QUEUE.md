@@ -138,7 +138,8 @@ ADR-009 (streaming, sharded execution), 2026-11-03 night. The owner approved it;
 - Ghost peak RSS by stage: 9,878 MB (main before) -> 8,030 (#253) -> **3,919 MB, 211 s** (#254). Budgets 6,785 MB / 360 s are met.
 - Every step so far: fact-diff 0/0 on five corpora and byte-identical artifacts.
 - #255: step 4a, DFG bodies on disk plus #253 review fixes. Same-session A/B: main 288 s / 3,468 MB vs **241 s / 2,732 MB**.
-- Remaining: step 2 (symbol tables as shards plus summary), step 4b (taint over summaries), step 5 (100k-file scale gate, re-baseline Ghost budgets).
+- #256: step 2, full symbol tables on disk (one spool file), cross-file stages read summaries (imports, exports, exported declarations, module references). Ghost fact-diff 0/0 (7,172 files). Back to back: peak 2,668 -> 2,057 MB, live heap after pass 1 677 -> 243 MB.
+- Remaining: step 4b (taint over summaries), step 5 (100k-file scale gate, re-baseline Ghost budgets).
 - Known limit: the SQLite driver serializes fact lists in full at commit (S6).
 - Target machine: the owner accepts 32 GB for enterprise scale; the dev machine has 16 GB.
 
