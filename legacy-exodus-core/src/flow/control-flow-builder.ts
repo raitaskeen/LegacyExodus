@@ -3,6 +3,7 @@ import type { ASTNode, ASTResult } from "@parser/index";
 import { createControlFlowGraph, type BasicBlock, type ControlFlowEdge, type ControlFlowEdgeKind, type ControlFlowGraph, type ControlFlowNode } from "./flow-contracts";
 import { ControlFlowInvariantError } from "./flow-errors";
 import { compareCodePoints } from "@shared/ordering";
+import { stableId } from "@shared/identity";
 import { FactKeyer, type CodeSymbol } from "@symbols/index";
 
 export interface ControlFlowGraphsWithNodes {
@@ -94,7 +95,7 @@ class FlowState {
   ) {}
   /** Expression control nodes split into decision blocks; any other one leaves the graph UNSUPPORTED. */
   private readonly loweredControl = new Set<ASTNode>();
-  public createBlock(): string { const sequence = this.sequence++; const id = hash(`${this.filePath}:${this.scopeName}:block:${sequence}`); const block = { id, ...(this.graphKey === undefined ? {} : { key: `${this.graphKey}/block@${sequence}` }), statements: [] }; this.blocks.push(block); this.blocksById.set(id, block); return id; }
+  public createBlock(): string { const sequence = this.sequence++; const key = this.graphKey === undefined ? undefined : `${this.graphKey}/block@${sequence}`; const id = key === undefined ? hash(`${this.filePath}:${this.scopeName}:block:${sequence}`) : stableId("cfg-block", key); const block = { id, ...(key === undefined ? {} : { key }), statements: [] }; this.blocks.push(block); this.blocksById.set(id, block); return id; }
   /**
    * A node's fact key: the first instance of a node gets the next ordinal; a finally copy reuses it with its copy
    * context, so copies never shift the ordinals of other statements.
@@ -111,7 +112,7 @@ class FlowState {
   private readonly edgeIds = new Map<string, number>();
   private readonly blocksWithIncoming = new Set<string>();
   public addEdge(fromBlockId: string, toBlockId: string, kind: ControlFlowEdgeKind): void {
-    const id = hash(`${fromBlockId}:${toBlockId}:${kind}`);
+    const id = this.edgeId(fromBlockId, toBlockId, kind);
     if (this.edgeIds.has(id)) return;
     this.edgeIds.set(id, 1);
     this.blocksWithIncoming.add(toBlockId);
@@ -346,11 +347,9 @@ class FlowState {
       this.recordedValues.set(this.copyContext, recorded);
     }
     const position = node.location === undefined ? `anon-${this.unlocatedStatementSequence++}` : `${node.location.start.line}:${node.location.start.column}`;
-    const origin = `${this.filePath}:expression:${node.type}:${position}`;
-    let id = hash(origin);
-    for (let attempt = 0; this.statementIds.has(id); attempt++) id = hash(`${origin}@${this.copyContext}#${attempt}`);
-    this.statementIds.add(id);
-    this.block(blockId).statements.push({ id, ...this.keyOf(role === "test" ? "tests" : "values", node), type: node.type, ...(node.location === undefined ? {} : { location: node.location.start }) });
+    const keyed = this.keyOf(role === "test" ? "tests" : "values", node);
+    const id = this.nodeId(`${this.filePath}:expression:${node.type}:${position}`, keyed.key);
+    this.block(blockId).statements.push({ id, ...keyed, type: node.type, ...(node.location === undefined ? {} : { location: node.location.start }) });
   }
   private buildSwitch(node: ASTNode, entry: string, control: ControlContext | undefined): string {
     const discriminant = node.children.find((child) => child.role === "discriminant");
@@ -571,13 +570,12 @@ class FlowState {
     const origin = `${this.filePath}:${node.type}:${position}`;
     // The first occurrence keeps its source-position id; a later one (a finally copy) derives its id from the copy
     // context, probing until unused (a copy holding an original and an original holding a copy can share a context).
-    let id = hash(origin);
-    for (let attempt = 0; this.statementIds.has(id); attempt++) id = hash(`${origin}@${this.copyContext}#${attempt}`);
-    this.statementIds.add(id);
+    const keyed = this.keyOf("statements", node);
+    const id = this.nodeId(origin, keyed.key);
     this.statementNodes.set(id, node);
     this.block(blockId).statements.push({
       id,
-      ...this.keyOf("statements", node),
+      ...keyed,
       type: node.type,
       ...(node.location === undefined ? {} : { location: node.location.start }),
     });
@@ -589,8 +587,18 @@ class FlowState {
     try { return build(); } finally { this.copyContext = outer; }
   }
   private block(id: string): MutableBlock { const block = this.blocksById.get(id); if (block === undefined) throw new ControlFlowInvariantError(id); return block; }
-  private retagCompletionEdge(fromBlockId: string, toBlockId: string, sourceKind: ControlFlowEdgeKind, targetKind: ControlFlowEdgeKind): void { const edge = this.edges.find((candidate) => candidate.fromBlockId === fromBlockId && candidate.toBlockId === toBlockId && candidate.kind === sourceKind); if (edge === undefined) return; const index = this.edges.indexOf(edge); this.retag(index, { ...edge, id: hash(`${fromBlockId}:${toBlockId}:${targetKind}`), kind: targetKind }); }
-  private retagIncomingEdges(toBlockId: string | undefined, sourceKind: ControlFlowEdgeKind, targetKind: ControlFlowEdgeKind): void { if (toBlockId === undefined) return; for (const [index, edge] of this.edges.entries()) { if (edge.toBlockId === toBlockId && edge.kind === sourceKind) this.retag(index, { ...edge, id: hash(`${edge.fromBlockId}:${toBlockId}:${targetKind}`), kind: targetKind }); } }
+  private retagCompletionEdge(fromBlockId: string, toBlockId: string, sourceKind: ControlFlowEdgeKind, targetKind: ControlFlowEdgeKind): void { const edge = this.edges.find((candidate) => candidate.fromBlockId === fromBlockId && candidate.toBlockId === toBlockId && candidate.kind === sourceKind); if (edge === undefined) return; const index = this.edges.indexOf(edge); this.retag(index, { ...edge, id: this.edgeId(fromBlockId, toBlockId, targetKind), kind: targetKind }); }
+  private retagIncomingEdges(toBlockId: string | undefined, sourceKind: ControlFlowEdgeKind, targetKind: ControlFlowEdgeKind): void { if (toBlockId === undefined) return; for (const [index, edge] of this.edges.entries()) { if (edge.toBlockId === toBlockId && edge.kind === sourceKind) this.retag(index, { ...edge, id: this.edgeId(edge.fromBlockId, toBlockId, targetKind), kind: targetKind }); } }
+  private edgeId(fromBlockId: string, toBlockId: string, kind: ControlFlowEdgeKind): string {
+    return this.graphKey === undefined ? hash(`${fromBlockId}:${toBlockId}:${kind}`) : stableId("cfg-edge", `${fromBlockId}>${toBlockId}:${kind}`);
+  }
+  /** A node's id: the digest of its key when keys are known, else its source position (probed for finally copies). */
+  private nodeId(origin: string, key: string | undefined): string {
+    let id = key === undefined ? hash(origin) : stableId("cfg-node", key);
+    for (let attempt = 0; this.statementIds.has(id); attempt++) id = key === undefined ? hash(`${origin}@${this.copyContext}#${attempt}`) : stableId("cfg-node", `${key}#${attempt}`);
+    this.statementIds.add(id);
+    return id;
+  }
   private retag(index: number, edge: ControlFlowEdge): void {
     const old = this.edges[index]!.id;
     const remaining = (this.edgeIds.get(old) ?? 1) - 1;
@@ -687,7 +695,7 @@ class FlowState {
       );
     const unreachableBlockIds = blocks.filter((block) => !reachable.has(block.id)).map((block) => block.id).sort();
     return createControlFlowGraph({
-      id: hash(`cfg:${this.filePath}:${this.scopeName}`),
+      id: this.graphKey === undefined ? hash(`cfg:${this.filePath}:${this.scopeName}`) : stableId("cfg", this.graphKey),
       ...(this.graphKey === undefined ? {} : { key: this.graphKey }),
       filePath: this.filePath,
       scopeName: this.scopeName,
