@@ -580,6 +580,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
                 containerName: name,
               }, {
                 declarationKind,
+                member: true,
               }),
             );
           }
@@ -619,7 +620,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
     symbols: CodeSymbol[],
   ): CodeSymbol {
     const name = getName(node) ?? "anonymous-method";
-    const symbol = this.createSymbol("method", name, node, ast, context, { parameters: getParameters(node) });
+    const symbol = this.createSymbol("method", name, node, ast, context, { parameters: getParameters(node), member: true });
     symbols.push(symbol);
     return symbol;
   }
@@ -678,6 +679,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       const methodSymbol = this.createSymbol("method", name, node, ast, context, {
         parameters: getParameters(initializer),
         async: initializer.attributes.async === true,
+        member: true,
       });
       symbols.push(methodSymbol);
       this.visitChildren(node, ast, {
@@ -691,6 +693,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
       symbols.push(
         this.createSymbol("variable", name, node, ast, context, {
           ...(value === undefined ? {} : { value }),
+          member: true,
         }),
       );
     }
@@ -990,6 +993,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
               exported: true,
             }, {
               sourceSymbolName: sourceSymbolName ?? propName,
+              member: true,
             }),
           );
         }
@@ -1008,6 +1012,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
             }, {
               parameters: funcParams,
               sourceSymbolName: funcName !== propName ? funcName : undefined,
+              member: true,
             }),
           );
         } else {
@@ -1018,6 +1023,7 @@ export class JavaScriptSymbolExtractor implements SymbolExtractor {
               containerName: receiverName,
             }, {
               ...(sourceSymbolName === undefined ? {} : { sourceSymbolName }),
+              member: true,
             }),
           );
         }

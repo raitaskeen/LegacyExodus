@@ -34,6 +34,38 @@ export async function loadWorkspacePackages(projectPath: string, files: readonly
   return Object.freeze(packages);
 }
 
+/**
+ * Files a package publishes as entry points (BA-11): `main`, `module`, `types`/`typings`, `bin` and
+ * every target of `exports`, for the root package and each workspace package. Their exports are the
+ * package's public API, used from outside the project. Targets are matched to discovered files (with
+ * the usual extensions and index files); build output that is not in the repository matches nothing.
+ */
+export async function findPackageEntryFiles(projectPath: string, files: readonly FileArtifact[]): Promise<ReadonlySet<string>> {
+  const known = new Set(files.map((file) => canonicalizePath(file.path)));
+  const entries = new Set<string>();
+  for (const root of ["", ...await findWorkspaceRoots(projectPath, files)]) {
+    const manifest = await readJson(join(projectPath, root, "package.json"));
+    if (manifest === undefined) continue;
+    const targets: string[] = [];
+    for (const field of ["main", "module", "types", "typings"]) if (typeof manifest[field] === "string") targets.push(manifest[field] as string);
+    if (typeof manifest.bin === "string") targets.push(manifest.bin);
+    else if (typeof manifest.bin === "object" && manifest.bin !== null) targets.push(...Object.values(manifest.bin).filter((value): value is string => typeof value === "string"));
+    const collect = (value: unknown): void => {
+      if (typeof value === "string") { if (!value.includes("*")) targets.push(value); return; }
+      if (Array.isArray(value)) { value.forEach(collect); return; }
+      if (typeof value === "object" && value !== null) Object.values(value).forEach(collect);
+    };
+    collect(manifest.exports);
+    for (const target of targets) {
+      const path = canonicalizePath(posix.join(root, target.replace(/^\.\//, "")));
+      if (root !== "" && path !== root && !path.startsWith(`${root}/`)) continue;
+      const found = [path, ...[".js", ".ts", ".mjs", ".cjs", ".tsx", ".jsx"].map((extension) => `${path}${extension}`), ...["index.js", "index.ts", "index.mjs", "index.cjs"].map((index) => posix.join(path, index))].find((candidate) => known.has(candidate));
+      if (found !== undefined) entries.add(found);
+    }
+  }
+  return entries;
+}
+
 /** Project-relative directories of the workspace packages, sorted; empty without a workspace declaration. */
 export async function findWorkspaceRoots(projectPath: string, files: readonly FileArtifact[]): Promise<readonly string[]> {
   const patterns = [
