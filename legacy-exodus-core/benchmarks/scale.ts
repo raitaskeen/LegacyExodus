@@ -7,12 +7,13 @@
  * The corpus is fetched at its pinned commit (and its tree verified) if it is not cached yet.
  */
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { executeBenchmarkRun } from "./harness";
 import { CACHE_DIR, RESULTS_DIR } from "./paths";
 import { ensureCorpusCheckout, findCorpusManifest } from "./scripts/acquire";
+import { ensureSyntheticCorpus } from "./synthetic";
 
 export interface ScaleResult {
   readonly name: string;
@@ -55,5 +56,42 @@ export async function runScaleBenchmark(name: string): Promise<ScaleResult> {
   };
   await mkdir(RESULTS_DIR, { recursive: true });
   await writeFile(join(RESULTS_DIR, `scale-${manifest.name}.json`), `${JSON.stringify(result, null, 2)}\n`);
+  return result;
+}
+
+/**
+ * Peak-memory ceilings for synthetic corpora (ADR-009 step 5), by file count. Memory must stay bounded as the
+ * repository grows: the gate fails a change that brings back whole-run state.
+ */
+export const SYNTHETIC_BUDGETS: Readonly<Record<number, { readonly maxWallMs: number; readonly maxPeakRssMb: number }>> = {
+  // Measured 2026-11-04: 2,212 MiB, 115 s on the CI runner (ubuntu-latest); 1,509-1,666 MiB on a 16 GB Windows
+  // dev machine. The ceiling is the CI peak plus about 25%.
+  10_000: { maxWallMs: 600_000, maxPeakRssMb: 2_800 },
+};
+
+/** One fresh analysis of the synthetic corpus of `files` modules, checked against its budgets. */
+export async function runSyntheticScale(files: number): Promise<ScaleResult> {
+  const budgets = SYNTHETIC_BUDGETS[files];
+  if (budgets === undefined) throw new Error(`No synthetic budget for ${files} files (have: ${Object.keys(SYNTHETIC_BUDGETS).join(", ")}).`);
+  const corpus = await ensureSyntheticCorpus(CACHE_DIR, files);
+  // A snapshot from an earlier run would be reused instead of analysed.
+  await rm(join(corpus, ".discovery"), { recursive: true, force: true });
+
+  const started = performance.now();
+  const run = await executeBenchmarkRun(corpus, 0);
+  const wallMs = Math.round(performance.now() - started);
+  const peak = Math.max(peakRssMb(), run.peakRssMb);
+  const result: ScaleResult = {
+    name: `synthetic-${files}`,
+    commit: undefined,
+    wallMs,
+    peakRssMb: peak,
+    filesDiscovered: run.disposition.filesDiscovered,
+    filesAnalyzed: run.disposition.filesAnalyzed,
+    budgets,
+    withinBudget: wallMs <= budgets.maxWallMs && peak <= budgets.maxPeakRssMb && run.disposition.filesAnalyzed === files,
+  };
+  await mkdir(RESULTS_DIR, { recursive: true });
+  await writeFile(join(RESULTS_DIR, `scale-${result.name}.json`), `${JSON.stringify(result, null, 2)}\n`);
   return result;
 }

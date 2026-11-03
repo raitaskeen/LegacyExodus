@@ -37,7 +37,7 @@ import { detectTerminalCapabilities } from "../src/cli/presentation/capabilities
 import { ErrorPresenter } from "../src/cli/presentation/errors";
 import { LayoutRenderer } from "../src/cli/presentation/layout";
 import { VerificationPresenter } from "../src/cli/presentation/verification";
-import { runScaleBenchmark } from "./scale";
+import { runScaleBenchmark, runSyntheticScale } from "./scale";
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -166,7 +166,7 @@ async function main(): Promise<void> {
         console.error("Usage: bun run benchmarks/cli.ts scale <name>");
         process.exit(1);
       }
-      const result = await runScaleBenchmark(name);
+      const result = name === "synthetic" ? await runSyntheticScale(Number(args[2] ?? "10000")) : await runScaleBenchmark(name);
       console.log(`${result.name} @ ${result.commit ?? "?"}: ${result.filesAnalyzed}/${result.filesDiscovered} files, ${(result.wallMs / 1000).toFixed(1)} s (budget ${(result.budgets.maxWallMs / 1000).toFixed(0)} s), peak ${result.peakRssMb} MiB (budget ${result.budgets.maxPeakRssMb} MiB)`);
       if (!result.withinBudget) {
         console.error("Scale budget exceeded.");
@@ -246,6 +246,7 @@ function printUsage(): void {
     "    fidelity [target-path]             Validate migration discovery fidelity against ground truth",
     "    fact-diff --base D --head D C...   Diff projected facts of two engines on corpus dirs",
     "    scale <name>                       Time and peak memory of a scale corpus against its budgets",
+    "    scale synthetic <files>            The same for the synthetic corpus of <files> modules (10000)",
     "    help                               Show this help message",
     "",
     layout.renderDivider(),

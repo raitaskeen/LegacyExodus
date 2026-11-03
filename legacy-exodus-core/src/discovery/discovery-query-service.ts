@@ -240,7 +240,7 @@ export class DiscoveryQueryService {
   public async getDependencyGraph(
     projectId: string,
     analysisRunId?: string,
-  ): Promise<DependencyGraphPayload | null> {
+  ): Promise<Materialized<DependencyGraphPayload> | null> {
     const targetRunId = analysisRunId ?? (await this.getLatestCompletedRunId(projectId));
     if (targetRunId === null) {
       return null;
@@ -256,7 +256,7 @@ export class DiscoveryQueryService {
   public async getKnowledgeGraph(
     projectId: string,
     analysisRunId?: string,
-  ): Promise<KnowledgeGraphPayload | null> {
+  ): Promise<Materialized<KnowledgeGraphPayload> | null> {
     const targetRunId = analysisRunId ?? (await this.getLatestCompletedRunId(projectId));
     if (targetRunId === null) {
       return null;
@@ -322,7 +322,7 @@ export class DiscoveryQueryService {
     schema: z.ZodType<T>,
     projectId: string,
     analysisRunId: string | undefined,
-  ): T | null {
+  ): Materialized<T> | null {
     if (records.length === 0) {
       return null;
     }
@@ -352,7 +352,10 @@ export class DiscoveryQueryService {
   }
 }
 
+/** A payload whose fact lists are plain arrays. */
+export type Materialized<T> = { [Key in keyof T]: T[Key] extends FactArray<infer Item> | readonly (infer Item)[] ? Item[] : T[Key] };
+
 /** A query answers with plain data: fact lists kept on disk (ADR-009) are read in full here. */
-function materialized<T extends object>(payload: T): T {
-  return Object.fromEntries(Object.entries(payload).map(([key, value]) => [key, value instanceof FactArray ? [...value] : value])) as T;
+function materialized<T extends object>(payload: T): Materialized<T> {
+  return Object.fromEntries(Object.entries(payload).map(([key, value]) => [key, value instanceof FactArray ? [...value] : value])) as Materialized<T>;
 }

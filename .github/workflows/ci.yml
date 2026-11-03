@@ -57,6 +57,33 @@ jobs:
       - name: Git diff check
         run: git diff --check
 
+  scale-gate:
+    name: Scale Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: legacy-exodus-core
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # ADR-009: peak memory must stay bounded as the repository grows.
+      - name: Synthetic corpus within its memory ceiling
+        run: bun run benchmarks/cli.ts scale synthetic 10000
+
   windows-smoke:
     name: Windows Path Smoke
     runs-on: windows-latest

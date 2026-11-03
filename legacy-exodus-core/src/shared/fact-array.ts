@@ -3,6 +3,8 @@ import { closeSync, mkdtempSync, openSync, readSync, rmSync, writeSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { compareCodePoints, sortByKey } from "./ordering";
+
 const CHUNK_BYTES = 1 << 20;
 const STORE_PREFIX = "legacy-exodus-facts-";
 
@@ -241,6 +243,72 @@ let exitHookInstalled = false;
 /** Disposes every fact store still open (process exit; test runners, which emit no exit event). */
 export function disposeAllFactStores(): void {
   for (const store of [...liveStores]) store.dispose();
+}
+
+/**
+ * `items` sorted by `key` (code-point order), in bounded memory (ADR-009 step 5): runs of at most `runLength`
+ * items are sorted and written out, then merged. Equal keys keep their input order, so the list equals a stable
+ * in-memory sort of all items.
+ */
+export function sortedFactArray<T>(store: FactStore, items: Iterable<T>, key: (item: T) => string, runLength = 100_000): FactArray<T> {
+  const runs: FactArray<T>[] = [];
+  let run: T[] = [];
+  const flush = (): void => {
+    if (run.length === 0) return;
+    runs.push(toFactArray(store, sortByKey(run, key)));
+    run = [];
+  };
+  for (const item of items) {
+    run.push(item);
+    if (run.length >= runLength) flush();
+  }
+  if (runs.length === 0) return toFactArray(store, sortByKey(run, key));
+  flush();
+  return toFactArray(store, mergeRuns(runs, key));
+}
+
+/** The items of sorted `runs` in one order; on equal keys an earlier run comes first. */
+function* mergeRuns<T>(runs: readonly FactArray<T>[], key: (item: T) => string): Generator<T> {
+  interface Head { readonly key: string; readonly run: number; readonly item: T; readonly rest: Iterator<T> }
+  const heap: Head[] = [];
+  const before = (left: Head, right: Head): boolean => compareCodePoints(left.key, right.key) < 0 || (left.key === right.key && left.run < right.run);
+  const push = (head: Head): void => {
+    heap.push(head);
+    for (let child = heap.length - 1; child > 0;) {
+      const parent = (child - 1) >> 1;
+      if (!before(heap[child]!, heap[parent]!)) break;
+      [heap[child], heap[parent]] = [heap[parent]!, heap[child]!];
+      child = parent;
+    }
+  };
+  const pop = (): Head => {
+    const top = heap[0]!;
+    const last = heap.pop()!;
+    if (heap.length > 0) {
+      heap[0] = last;
+      for (let parent = 0; ;) {
+        const left = parent * 2 + 1;
+        const right = left + 1;
+        let first = parent;
+        if (left < heap.length && before(heap[left]!, heap[first]!)) first = left;
+        if (right < heap.length && before(heap[right]!, heap[first]!)) first = right;
+        if (first === parent) break;
+        [heap[first], heap[parent]] = [heap[parent]!, heap[first]!];
+        parent = first;
+      }
+    }
+    return top;
+  };
+  const advance = (run: number, rest: Iterator<T>): void => {
+    const next = rest.next();
+    if (next.done !== true) push({ key: key(next.value), run, item: next.value, rest });
+  };
+  runs.forEach((list, run) => advance(run, list[Symbol.iterator]()));
+  while (heap.length > 0) {
+    const head = pop();
+    yield head.item;
+    advance(head.run, head.rest);
+  }
 }
 
 /** Writes `items` to a new list in `store` (or in `spool`, beside other lists). */

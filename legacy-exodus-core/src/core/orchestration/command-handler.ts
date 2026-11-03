@@ -20,9 +20,9 @@ import type {
 import { createDomainEvent, type DomainEvent } from "@core/events/domain-event";
 import { validateProjectDiscovery, type FileArtifact } from "@contracts/discovery";
 import { DiscoveryEngine, DiscoveryValidator, type DiscoveryResult } from "@discovery/index";
-import { DeterministicDependencyGraphBuilder, ModuleResolver, canonicalizePath, findPackageEntryFiles, loadTsConfigResolution, loadWorkspacePackages, validateCurrentDependencyGraph, type TsConfigDiagnostic } from "@graph/index";
+import { dependencyGraphNodes, DeterministicDependencyGraphBuilder, ModuleResolver, canonicalizePath, findPackageEntryFiles, loadTsConfigResolution, loadWorkspacePackages, validateCurrentDependencyGraph, type TsConfigDiagnostic } from "@graph/index";
 import { DeterministicControlFlowGraphBuilder, DeterministicDataFlowGraphBuilder, DeterministicFlowAnalysisEngine, createProvenCallTargets, type ConnectionContext, type ControlFlowGraph, type DataFlowGraphBody } from "@flow/index";
-import { DeterministicKnowledgeGraphBuilder } from "@knowledge/index";
+import { buildKnowledgeGraphOnDisk } from "@knowledge/index";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { ParserManager, type ASTResult } from "@parser/index";
@@ -31,7 +31,7 @@ import { createOwnedStorageRecord, createStorageRecord, type StorageRecord } fro
 import { JavaScriptSymbolExtractor, validateCodeSymbols, type CodeSymbol, type SymbolTable } from "@symbols/index";
 import { RunScopedAstStore, type AnalysisAstStoreFactory } from "./run-scoped-ast-store";
 import { compareCodePoints } from "@shared/ordering";
-import { FactStore, toFactArray, type FactArray, type FactSpool } from "@shared/fact-array";
+import { FactStore, sortedFactArray, toFactArray, type FactArray, type FactSpool } from "@shared/fact-array";
 
 export interface CommandExecution {
   readonly events: readonly DomainEvent[];
@@ -524,12 +524,14 @@ export class AnalyzeProjectHandler {
       this.tsConfigDiagnostics = tsConfig.diagnostics;
       // One resolver for the run: tsconfig aliases and workspace packages (S3) mean the same everywhere.
       const resolver = new ModuleResolver({ ...tsConfig.options, packages: await loadWorkspacePackages(discovery.projectPath, discovery.files) });
-      const dependencyGraph = new DeterministicDependencyGraphBuilder(resolver).build(symbolTables, discovery.files, fullTables());
+      // Symbol nodes, one per symbol, are sorted on disk (ADR-009 step 5); the graph in memory keeps the import edges.
+      const dependencyGraph = new DeterministicDependencyGraphBuilder(resolver).build(symbolTables, discovery.files, []);
+      const dependencyNodes = sortedFactArray(this.factStore(), dependencyGraphNodes(fullTables()), (node) => node.id);
       records.push(
         createOwnedStorageRecord("dependency-graph", {
           projectId: discovery.projectId,
           analysisRunId: command.id,
-          nodes: dependencyGraph.nodes,
+          nodes: dependencyNodes,
           edges: dependencyGraph.edges,
           cycles: dependencyGraph.cycles,
           moduleGraph: dependencyGraph.moduleGraph,
@@ -693,7 +695,7 @@ export class AnalyzeProjectHandler {
           graphs: dataFlowGraphs.seal(),
         }),
       );
-      const knowledgeGraph = new DeterministicKnowledgeGraphBuilder().build(fullTables(), dependencyGraph);
+      const knowledgeGraph = buildKnowledgeGraphOnDisk(facts, fullTables(), dependencyGraph);
       records.push(
         createOwnedStorageRecord("knowledge-graph", {
           projectId: discovery.projectId,
