@@ -21,7 +21,7 @@ import { createDomainEvent, type DomainEvent } from "@core/events/domain-event";
 import { validateProjectDiscovery, type FileArtifact } from "@contracts/discovery";
 import { DiscoveryEngine, DiscoveryValidator, type DiscoveryResult } from "@discovery/index";
 import { DeterministicDependencyGraphBuilder, ModuleResolver, canonicalizePath, findPackageEntryFiles, loadTsConfigResolution, loadWorkspacePackages, validateCurrentDependencyGraph, type TsConfigDiagnostic } from "@graph/index";
-import { DeterministicControlFlowGraphBuilder, DeterministicDataFlowGraphBuilder, DeterministicFlowAnalysisEngine, createProvenCallTargets, type ControlFlowGraph, type BuildContextResult } from "@flow/index";
+import { DeterministicControlFlowGraphBuilder, DeterministicDataFlowGraphBuilder, DeterministicFlowAnalysisEngine, createProvenCallTargets, type ConnectionContext, type ControlFlowGraph, type DataFlowGraphBody } from "@flow/index";
 import { DeterministicKnowledgeGraphBuilder } from "@knowledge/index";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -540,7 +540,9 @@ export class AnalyzeProjectHandler {
       const calls = new SortedFactList(facts, callSchema);
       const references = new SortedFactList(facts, referenceSchema);
       const usage = new FactUsage();
-      let allContexts: BuildContextResult[] | undefined = [];
+      // Each file's data-flow graph waits on disk; only what connecting needs stays (ADR-009 step 4a).
+      const builtDataFlowGraphs = facts.writer<DataFlowGraphBody>();
+      let allContexts: ConnectionContext[] | undefined = [];
 
       const sortedFiles = [...successfullyParsedFiles].sort((left, right) => compareCodePoints(left.path, right.path));
       const completedFiles: FileArtifact[] = [];
@@ -602,7 +604,10 @@ export class AnalyzeProjectHandler {
           symbolsByPath.get(canonicalizePath(file.path)) ?? [],
           controlFlow,
         );
-        allContexts.push(contextResult);
+        const { functionSummaries, callBindings, interproceduralFlows, ...body } = contextResult.graph;
+        builtDataFlowGraphs.append(body);
+        const { filePath } = body;
+        allContexts.push({ graph: { filePath, functionSummaries, callBindings, interproceduralFlows }, state: contextResult.state });
 
         ast = undefined;
       }
@@ -637,7 +642,7 @@ export class AnalyzeProjectHandler {
 
       const flowEngine = new DeterministicFlowAnalysisEngine(controlFlowBuilder, dataFlowBuilder);
       const dataFlowGraphs = facts.writer<unknown>();
-      flowEngine.connectDataFlow(allContexts, symbolTables, (graph) => dataFlowGraphs.append({
+      flowEngine.connectDataFlow(allContexts, builtDataFlowGraphs.seal(), symbolTables, (graph) => dataFlowGraphs.append({
         ...graph,
         callBindings: graph.callBindings.map((binding) => ({
           callId: binding.callId,
