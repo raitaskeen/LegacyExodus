@@ -1065,7 +1065,7 @@ describe("R01 complete accounting and capability oracles", () => {
         // Symbol-table membership/counts and serialized symbols are checked separately;
         // pre-existing convenience summary metadata is outside this R01 contract.
         const tableSymbols = (execution: typeof warm) => execution.records.filter((r) => r.type === "symbol-table")
-          .map((r) => ({ path: (r.payload as { path: string }).path, symbols: (r.payload as { symbols: unknown }).symbols }))
+          .map((r) => ({ path: (r.payload as { path: string }).path, symbols: [...(r.payload as { symbols: Iterable<unknown> }).symbols] }))
           .sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
         expect(JSON.stringify(tableSymbols(warm))).toBe(JSON.stringify(tableSymbols(f.cold)));
         expect(warm.events.filter((event) => event.type === "ParserFailure")).toEqual([]);
@@ -1097,7 +1097,7 @@ describe("R01 complete accounting and capability oracles", () => {
           expect(calls).toHaveLength(1);
           expect(calls[0]).toMatchObject({ sourceFilePath: "b.js", resolutionState: "RESOLVED" });
           const target = validateCodeSymbols(f.cold.records.filter((r) => r.type === "symbol-table")
-            .flatMap((r) => (r.payload as { symbols: unknown[] }).symbols)).find((symbol) => symbol.id === calls[0]!.targetSymbolId);
+            .flatMap((r) => [...(r.payload as { symbols: Iterable<unknown> }).symbols])).find((symbol) => symbol.id === calls[0]!.targetSymbolId);
           expect(target).toMatchObject({ filePath: "a.js", name: "alpha" });
           f.recovery();
           const recovered = await f.run(true);
@@ -1225,7 +1225,7 @@ describe("R01 complete accounting and capability oracles", () => {
         expect(vector(result)).toEqual([2,1,0,0,0,1,0,0,0,true]);
         assertAccounting(result, "PASS");
         const symbols = validateCodeSymbols(result.records.filter((record) => record.type === "symbol-table")
-          .flatMap((record) => (record.payload as { symbols: unknown[] }).symbols));
+          .flatMap((record) => [...(record.payload as { symbols: Iterable<unknown> }).symbols]));
         expect(symbols.map((symbol) => symbol.name)).toEqual(changed ? ["bravo", "bravo"] : ["alpha", "alpha"]);
         expect(disposition(result).files).toHaveLength(1);
       } finally { await f.close(); }

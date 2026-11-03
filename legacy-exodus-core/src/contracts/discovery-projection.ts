@@ -162,7 +162,7 @@ type DispositionFile = {
   readonly fileKind?: string;
 };
 type DispositionSymbol = { readonly filePath: string };
-type DispositionTable = { readonly path: string; readonly fileId?: string; readonly symbols: readonly DispositionSymbol[] };
+type DispositionTable = { readonly path: string; readonly fileId?: string; readonly symbols: Iterable<DispositionSymbol> & { readonly length: number } };
 
 /** JavaScript and TypeScript sources are analyzed; generated files (minified bundles) are listed, not analyzed (BA-15). */
 export function isR01DispatchedFile(file: DispositionFile): boolean {
@@ -220,11 +220,16 @@ const r01SummarySchema = z.object({
 });
 
 /** Reject contradictions; never repair identities or infer missing successful tables. */
+function everySymbolIn(table: DispositionTable): boolean {
+  for (const symbol of table.symbols) if (symbol.filePath !== table.path) return false;
+  return true;
+}
+
 export function validateAnalysisDisposition(
   input: unknown,
   evidence: {
     readonly files: readonly DispositionFile[];
-    readonly symbols: readonly DispositionSymbol[];
+    readonly symbols: Iterable<DispositionSymbol>;
     readonly tables?: readonly DispositionTable[];
     readonly summary: unknown;
     readonly enumerationFailures: number;
@@ -261,7 +266,7 @@ export function validateAnalysisDisposition(
       if (tablePaths.has(table.path) || entry?.kind !== "analyzed" ||
         (table.fileId !== undefined && table.fileId !== entry.fileId) ||
         table.symbols.length !== entry.symbolCount ||
-        table.symbols.some((symbol) => symbol.filePath !== table.path)) invalid("Stored table contradicts successful membership.");
+        !everySymbolIn(table)) invalid("Stored table contradicts successful membership.");
       tablePaths.add(table.path);
     }
     if (disposition.files.some((entry) => entry.kind === "analyzed" && !tablePaths.has(entry.path))) invalid("Successful disposition lacks an actual stored table.");

@@ -9,18 +9,22 @@ import { compareCodePoints } from "@shared/ordering";
 export class DeterministicDependencyGraphBuilder {
   public constructor(private readonly resolver: ModuleResolver = new ModuleResolver()) {}
 
-  public build(symbolTables: readonly SymbolTable[], files: KnownPathLookup): CurrentDependencyGraph {
+  /**
+   * @param symbolTables - tables with at least each file's imports and exports: that is all import resolution reads.
+   * @param fullTables - every table in full, read once, for the graph's symbol nodes (ADR-009 step 2); by default
+   *   `symbolTables` themselves.
+   */
+  public build(symbolTables: readonly SymbolTable[], files: KnownPathLookup, fullTables: Iterable<SymbolTable> = symbolTables): CurrentDependencyGraph {
     const orderedTables = [...symbolTables].sort((left, right) =>
       compareCodePoints(canonicalizePath(left.filePath), canonicalizePath(right.filePath)),
     );
     const tablesByPath = new Map(orderedTables.map((table) => [canonicalizePath(table.filePath), table]));
-    const nodes = orderedTables.flatMap((table) =>
-      table.symbols.map((symbol) => ({
-        id: `symbol:${symbol.id}`,
-        filePath: canonicalizePath(table.filePath),
-        symbolId: symbol.id,
-      })),
-    );
+    // Sorted by id below, so the order tables are read in does not matter.
+    const nodes: { readonly id: string; readonly filePath: string; readonly symbolId: string }[] = [];
+    for (const table of fullTables) {
+      const filePath = canonicalizePath(table.filePath);
+      for (const symbol of table.symbols) nodes.push({ id: `symbol:${symbol.id}`, filePath, symbolId: symbol.id });
+    }
     const edges: DependencyGraphEdge[] = [];
     const moduleEdges: ModuleDependencyEdge[] = [];
     for (const table of orderedTables) {

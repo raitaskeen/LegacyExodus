@@ -18,6 +18,7 @@ import type { StorageManager } from "@storage/storage-manager";
 
 import { FileDiscoveryProjectionAdapter } from "./file-discovery-projection";
 import { compareCodePoints } from "@shared/ordering";
+import { FactArray } from "@shared/fact-array";
 
 type RunScopedPayload = { readonly projectId: string; readonly analysisRunId?: string };
 
@@ -84,7 +85,10 @@ export class DiscoveryProjectionService implements RuntimeService {
       })
       .filter((candidate): candidate is z.infer<typeof symbolTableStoragePayloadSchema> => candidate !== undefined)
       .sort((left, right) => compareCodePoints(left.path, right.path));
-    const symbols = tables.flatMap((candidate) => candidate.symbols);
+    // Tables whose symbols wait on disk (ADR-009 step 2) are read one after another, never gathered.
+    const symbols = tables.every((candidate) => candidate.symbols instanceof FactArray)
+      ? FactArray.concat(tables.map((candidate) => candidate.symbols as FactArray<(typeof tables)[number]["symbols"] extends Iterable<infer Item> ? Item : never>))
+      : tables.flatMap((candidate) => [...candidate.symbols]);
     // Historical discovery/analysis projections remain readable. Only an exact,
     // unambiguous current completed run can authorize the R01 capability.
     const matchingRuns = runRecords.filter((record) => {
@@ -153,7 +157,7 @@ export class DiscoveryProjectionService implements RuntimeService {
           : [
               deferredArtifact("dependency-graph.json", graph),
               { name: "modules.json" as const, payload: payload.files.map((file) => ({ path: file.path, language: file.language, ...(file.fileKind === undefined ? {} : { fileKind: file.fileKind }) })) },
-              { name: "symbols.json" as const, payload: symbols },
+              deferredArtifact("symbols.json", () => symbols),
               ...(knowledge === undefined ? [] : [deferredArtifact("knowledge.json", knowledge)]),
               ...(semantic === undefined ? [] : [deferredArtifact("semantic.json", semantic)]),
               ...(controlFlow === undefined ? [] : [deferredArtifact("control-flow.json", controlFlow)]),

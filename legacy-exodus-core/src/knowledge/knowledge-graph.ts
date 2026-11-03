@@ -34,7 +34,8 @@ const graphSchema = z.object({
 });
 
 export class DeterministicKnowledgeGraphBuilder {
-  public build(symbolTables: readonly SymbolTable[], dependencyGraph: DependencyGraph): KnowledgeGraph {
+  /** `symbolTables` are read once, in order (they can come from disk one at a time). */
+  public build(symbolTables: Iterable<SymbolTable>, dependencyGraph: DependencyGraph): KnowledgeGraph {
     const nodes: KnowledgeNode[] = [];
     const edges: KnowledgeEdge[] = [];
     for (const table of symbolTables) {

@@ -88,7 +88,7 @@ export class StreamingJsonWriter {
   public async writeToStream(payload: unknown, stream: Writable): Promise<StreamWriteResult> {
     const writer = new BoundedStreamBuffer(stream, this.bufferThreshold);
 
-    if (Array.isArray(payload)) {
+    if (Array.isArray(payload) || payload instanceof FactArray) {
       if (payload.length === 0) {
         await writer.write("[]\n");
         await writer.flush();
@@ -97,9 +97,11 @@ export class StreamingJsonWriter {
 
       await writer.write("[\n");
       const len = payload.length;
-      for (let i = 0; i < len; i++) {
-        const itemStr = JSON.stringify(payload[i], null, 2).replace(/\n/g, "\n" + PAD_2);
+      let i = 0;
+      for (const item of payload as Iterable<unknown>) {
+        const itemStr = JSON.stringify(item, null, 2).replace(/\n/g, "\n" + PAD_2);
         await writer.write("  " + itemStr + (i < len - 1 ? ",\n" : "\n"));
+        i++;
       }
       await writer.write("]\n");
       await writer.flush();
