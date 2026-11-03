@@ -4,6 +4,8 @@ import { copyFile, rename, unlink } from "node:fs/promises";
 import { finished } from "node:stream/promises";
 import type { Writable } from "node:stream";
 
+import { FactArray } from "@shared/fact-array";
+
 const PAD_2 = "  ";
 const PAD_4 = "    ";
 const DEFAULT_BUFFER_THRESHOLD = 64 * 1024; // 64 KB bounded flush threshold
@@ -122,15 +124,18 @@ export class StreamingJsonWriter {
         const isLastKey = i === keyCount - 1;
         const keyPrefix = "  " + JSON.stringify(key) + ": ";
 
-        if (Array.isArray(val)) {
+        // A fact list on disk (ADR-009) is written as the array it stands for, one item read at a time.
+        if (Array.isArray(val) || val instanceof FactArray) {
           if (val.length === 0) {
             await writer.write(keyPrefix + "[]" + (isLastKey ? "\n" : ",\n"));
           } else {
             await writer.write(keyPrefix + "[\n");
             const elemCount = val.length;
-            for (let j = 0; j < elemCount; j++) {
-              const elemStr = JSON.stringify(val[j], null, 2).replace(/\n/g, "\n" + PAD_4);
+            let j = 0;
+            for (const elem of val as Iterable<unknown>) {
+              const elemStr = JSON.stringify(elem, null, 2).replace(/\n/g, "\n" + PAD_4);
               await writer.write("    " + elemStr + (j < elemCount - 1 ? ",\n" : "\n"));
+              j++;
             }
             await writer.write("  ]" + (isLastKey ? "\n" : ",\n"));
           }

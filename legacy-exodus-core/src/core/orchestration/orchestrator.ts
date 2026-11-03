@@ -177,6 +177,8 @@ export class Orchestrator implements RuntimeService {
       await this.activeExecution.catch(() => {});
     }
     this.status = "stopped";
+    // The engine stops services only after its executions (projections included) have settled.
+    this.analyzeProjectHandler.disposeFacts();
   }
 
   public replay(): ProjectState {

@@ -40,6 +40,23 @@ export class DeterministicFlowAnalysisEngine {
     contexts: readonly BuildContextResult[],
     symbolTables: readonly SymbolTable[] = [],
   ): FlowAnalysisResult {
+    const connected: DataFlowGraph[] = [];
+    this.connectDataFlow(contexts, symbolTables, (graph) => connected.push(graph));
+    return Object.freeze({
+      controlFlowGraphs: Object.freeze([...controlFlowGraphs]),
+      dataFlowGraphs: Object.freeze(connected),
+    });
+  }
+
+  /**
+   * `connect` without the pass-through of control-flow graphs: each file's connected data-flow graph is handed
+   * to `emit` as it is made, in context order, so a caller can write it away instead of holding them all.
+   */
+  public connectDataFlow(
+    contexts: readonly BuildContextResult[],
+    symbolTables: readonly SymbolTable[],
+    emit: (graph: DataFlowGraph) => void,
+  ): void {
 
     const summaries = new Map(contexts.flatMap(({ graph }) => graph.functionSummaries.map((summary) => [summary.symbolId, summary] as const)));
     for (const table of symbolTables) {
@@ -113,22 +130,17 @@ export class DeterministicFlowAnalysisEngine {
     // A path can pass through joins of any file; each build keeps its own (BA-27).
     const allJoins = new Map(contexts.flatMap(({ state }) => [...state.joins]));
     const allFactKeys = new Map(contexts.flatMap(({ state }) => [...(state.factKeys ?? [])]));
-    const connected = contexts.map(({ graph, state }) => {
+    for (const { graph, state } of contexts) {
       const transfers = crossFileTransfersByGraph.get(graph.filePath) ?? [...graph.interproceduralFlows];
       const unique = [...new Map(transfers.map((transfer) => [transfer.id, transfer] as const)).values()].sort((left, right) => compareCodePoints(left.id, right.id));
       const taintFlows = this.dataFlowBuilder.computeTaintFlows({ ...state, joins: allJoins, factKeys: allFactKeys }, globalTaintPaths);
 
-      return createDataFlowGraph({
+      emit(createDataFlowGraph({
         ...graph,
         interproceduralFlows: unique,
         taintFlows,
-      });
-    });
-
-    return Object.freeze({
-      controlFlowGraphs: Object.freeze([...controlFlowGraphs]),
-      dataFlowGraphs: Object.freeze(connected),
-    });
+      }));
+    }
   }
 }
 

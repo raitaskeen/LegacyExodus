@@ -4,7 +4,9 @@ import { z } from "zod";
 import { moduleDependencyLayerSchema } from "@graph/dependency-graph-contracts";
 
 import { callFlowBindingSchema, controlFlowGraphSchema, dataFlowGraphSchema } from "@flow/flow-contracts";
-import { semanticAnalysisSchema } from "@semantic/semantic-contracts";
+import { callSchema, referenceSchema, scopeSchema, semanticAnalysisSchema } from "@semantic/semantic-contracts";
+import { LegacyExodusError } from "@shared/errors";
+import { FactArray } from "@shared/fact-array";
 import { codeSymbolSchema } from "@symbols/symbol-contracts";
 
 export const discoveryPayloadSchema = z.object({
@@ -86,7 +88,27 @@ export const knowledgeGraphPayloadSchema = z.object({
   edges: z.array(z.object({ id: z.string(), from: z.string(), to: z.string(), relationship: z.string() })),
 });
 
+/**
+ * A fact list held inline or on disk (ADR-009 step 1). A list on disk is not read here: each item is validated
+ * as it is read, so a projection holds one item at a time.
+ */
+function factList<Item extends z.ZodTypeAny>(item: Item) {
+  return z.union([
+    z.array(item),
+    z.instanceof(FactArray).transform((list) => (list as FactArray<unknown>).map((value): z.output<Item> => {
+      const parsed = item.safeParse(value);
+      if (!parsed.success) {
+        throw new LegacyExodusError({ code: "DISCOVERY_RECORD_INVALID", message: "Stored fact is invalid.", metadata: { issues: parsed.error.issues } });
+      }
+      return parsed.data;
+    })),
+  ]);
+}
+
 export const semanticAnalysisPayloadSchema = semanticAnalysisSchema.extend({
+  calls: factList(callSchema),
+  references: factList(referenceSchema),
+  scopes: factList(scopeSchema),
   projectId: z.string().uuid(),
   analysisRunId: z.string().uuid().optional(),
 });
@@ -94,7 +116,7 @@ export const semanticAnalysisPayloadSchema = semanticAnalysisSchema.extend({
 export const controlFlowPayloadSchema = z.object({
   projectId: z.string().uuid(),
   analysisRunId: z.string().uuid().optional(),
-  graphs: z.array(controlFlowGraphSchema),
+  graphs: factList(controlFlowGraphSchema),
 });
 
 const persistedCallFlowBindingSchema = callFlowBindingSchema.extend({
@@ -108,7 +130,7 @@ const persistedDataFlowGraphSchema = dataFlowGraphSchema.extend({
 export const dataFlowPayloadSchema = z.object({
   projectId: z.string().uuid(),
   analysisRunId: z.string().uuid().optional(),
-  graphs: z.array(persistedDataFlowGraphSchema),
+  graphs: factList(persistedDataFlowGraphSchema),
 });
 
 export const analysisRunStatusSchema = z.enum(["created", "running", "completed", "failed"]);

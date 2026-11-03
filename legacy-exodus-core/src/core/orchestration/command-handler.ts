@@ -26,11 +26,12 @@ import { DeterministicKnowledgeGraphBuilder } from "@knowledge/index";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { ParserManager, type ASTResult } from "@parser/index";
-import { collectUnstableExportIds, DeterministicCallGraphBuilder, DeterministicSemanticAnalysisEngine, findHttpCalls, type ExpressRoute, type MiddlewareChain, type SemanticCall, type SymbolReference } from "@semantic/index";
+import { collectUnstableExportIds, DeterministicCallGraphBuilder, DeterministicSemanticAnalysisEngine, findHttpCalls, type ExpressRoute, type MiddlewareChain, type SemanticAnalysis, type SemanticCall, type SymbolReference } from "@semantic/index";
 import { createOwnedStorageRecord, createStorageRecord, type StorageRecord } from "@storage/index";
 import { JavaScriptSymbolExtractor, validateCodeSymbols, type CodeSymbol, type SymbolTable } from "@symbols/index";
 import { RunScopedAstStore, type AnalysisAstStoreFactory } from "./run-scoped-ast-store";
 import { compareCodePoints } from "@shared/ordering";
+import { FactStore, toFactArray } from "@shared/fact-array";
 
 export interface CommandExecution {
   readonly events: readonly DomainEvent[];
@@ -96,6 +97,8 @@ export class UpdateKnowledgeHandler {
 export class AnalyzeProjectHandler {
   private astStoreCleanupFailures: AstStoreCleanupFailure[] = [];
   private tsConfigDiagnostics: readonly TsConfigDiagnostic[] = [];
+  /** Holds the fact lists of every run's records; it lives until `disposeFacts` (engine shutdown). */
+  private facts: FactStore | undefined;
 
   public constructor(
     private readonly discoveryEngine: DiscoveryEngine,
@@ -104,6 +107,17 @@ export class AnalyzeProjectHandler {
     private readonly discoveryValidator: DiscoveryValidator = new DiscoveryValidator(),
     private readonly astStoreFactory: AnalysisAstStoreFactory = () => RunScopedAstStore.create(),
   ) {}
+
+  /** Removes the fact lists of all runs; records made by this handler cannot be read after it. */
+  public disposeFacts(): void {
+    this.facts?.dispose();
+    this.facts = undefined;
+  }
+
+  private factStore(): FactStore {
+    this.facts ??= FactStore.create();
+    return this.facts;
+  }
 
   public getAstStoreCleanupFailures(): readonly AstStoreCleanupFailure[] {
     return Object.freeze([...this.astStoreCleanupFailures]);
@@ -521,7 +535,9 @@ export class AnalyzeProjectHandler {
       let allCalls: SemanticCall[] | undefined = [];
       let allReferences: SymbolReference[] | undefined = [];
       let allHttpCalls: { readonly routes: readonly ExpressRoute[]; readonly middlewareChains: readonly MiddlewareChain[] }[] | undefined = [];
-      const allControlFlowGraphs: ControlFlowGraph[] = [];
+      // Whole-run fact lists are written to disk as they are made (ADR-009); records hold only their handles.
+      const facts = this.factStore();
+      const controlFlowGraphs = facts.writer<ControlFlowGraph>();
       let allContexts: BuildContextResult[] | undefined = [];
 
       const sortedFiles = [...successfullyParsedFiles].sort((left, right) => compareCodePoints(left.path, right.path));
@@ -568,7 +584,7 @@ export class AnalyzeProjectHandler {
 
         const owners = (tablesByPath.get(canonicalizePath(file.path))?.symbols ?? []).filter((symbol) => symbol.kind === "function" || symbol.kind === "method" || symbol.kind === "class");
         const controlFlow = controlFlowBuilder.buildAllWithNodes(ast, owners);
-        allControlFlowGraphs.push(...controlFlow.graphs);
+        for (const graph of controlFlow.graphs) controlFlowGraphs.append(graph);
 
         const provenTargets = createProvenCallTargets(
           fileCalls.flatMap((call) =>
@@ -589,7 +605,7 @@ export class AnalyzeProjectHandler {
       }
 
       const semanticEngine = new DeterministicSemanticAnalysisEngine(callGraphBuilder);
-      const semantic = semanticEngine.synthesize({
+      let semantic: SemanticAnalysis | undefined = semanticEngine.synthesize({
         calls: allCalls,
         references: allReferences,
         symbolTables,
@@ -606,9 +622,9 @@ export class AnalyzeProjectHandler {
         createOwnedStorageRecord("semantic-analysis", {
           projectId: discovery.projectId,
           analysisRunId: command.id,
-          calls: semantic.calls,
-          references: semantic.references,
-          scopes: semantic.scopes,
+          calls: toFactArray(facts, semantic.calls),
+          references: toFactArray(facts, semantic.references),
+          scopes: toFactArray(facts, semantic.scopes),
           deadCode: semantic.deadCode,
           unusedImports: semantic.unusedImports,
           unusedExports: semantic.unusedExports,
@@ -617,32 +633,34 @@ export class AnalyzeProjectHandler {
           middlewareChains: semantic.middlewareChains,
         }),
       );
+      semantic = undefined;
 
       const flowEngine = new DeterministicFlowAnalysisEngine(controlFlowBuilder, dataFlowBuilder);
-      const flow = flowEngine.connect(allControlFlowGraphs, allContexts, symbolTables);
+      const dataFlowGraphs = facts.writer<unknown>();
+      flowEngine.connectDataFlow(allContexts, symbolTables, (graph) => dataFlowGraphs.append({
+        ...graph,
+        callBindings: graph.callBindings.map((binding) => ({
+          callId: binding.callId,
+          targetSymbolId: binding.targetSymbolId,
+          argumentDefinitionIds: binding.argumentDefinitionIds.map((definitionId) => definitionId ?? null),
+          ...(binding.receiverDefinitionId === undefined ? {} : { receiverDefinitionId: binding.receiverDefinitionId }),
+          ...(binding.argumentSourceIds === undefined ? {} : { argumentSourceIds: binding.argumentSourceIds.map((sourceId) => sourceId ?? null) }),
+        })),
+      }));
       allContexts = undefined;
 
       records.push(
         createOwnedStorageRecord("control-flow-analysis", {
           projectId: discovery.projectId,
           analysisRunId: command.id,
-          graphs: flow.controlFlowGraphs,
+          graphs: controlFlowGraphs.seal(),
         }),
       );
       records.push(
         createOwnedStorageRecord("data-flow-analysis", {
           projectId: discovery.projectId,
           analysisRunId: command.id,
-          graphs: flow.dataFlowGraphs.map((graph) => ({
-            ...graph,
-            callBindings: graph.callBindings.map((binding) => ({
-              callId: binding.callId,
-              targetSymbolId: binding.targetSymbolId,
-              argumentDefinitionIds: binding.argumentDefinitionIds.map((definitionId) => definitionId ?? null),
-              ...(binding.receiverDefinitionId === undefined ? {} : { receiverDefinitionId: binding.receiverDefinitionId }),
-              ...(binding.argumentSourceIds === undefined ? {} : { argumentSourceIds: binding.argumentSourceIds.map((sourceId) => sourceId ?? null) }),
-            })),
-          })),
+          graphs: dataFlowGraphs.seal(),
         }),
       );
       const knowledgeGraph = new DeterministicKnowledgeGraphBuilder().build(symbolTables, dependencyGraph);
