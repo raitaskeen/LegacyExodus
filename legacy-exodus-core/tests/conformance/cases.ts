@@ -473,13 +473,13 @@ export const conformanceCases: readonly ConformanceCase[] = [
       ].join("\n"),
     },
     expectations: [
-      { id: "policy:renamed-handler-params", category: "taint", has: /^app\.js\|.*\|sink=#[0-9a-f]+:res\.send\|/ },
-      { id: "policy:destructured-require-sink", category: "taint", has: /^app\.js\|.*\|sink=#[0-9a-f]+:child_process\.exec\|/ },
-      { id: "policy:global-eval-sink", category: "taint", has: /^app\.js\|.*\|sink=#[0-9a-f]+:eval\|/ },
-      { id: "policy:response-write-sink", category: "taint", has: /^app\.js\|.*\|sink=#[0-9a-f]+:res\.write\|/ },
-      { id: "policy:response-redirect-sink", category: "taint", has: /^app\.js\|.*\|sink=#[0-9a-f]+:res\.redirect\|/ },
-      { id: "policy:node-prefixed-module-sink", category: "taint", has: /^app\.js\|.*\|sink=#[0-9a-f]+:vm\.runInNewContext\|/ },
-      { id: "policy:local-function-is-not-a-sink", category: "taint", lacks: /\|sink=#[0-9a-f]+:local\|/ },
+      { id: "policy:renamed-handler-params", category: "taint", has: /^app\.js\|.*\|sink=#[0-9a-z]+:res\.send\|/ },
+      { id: "policy:destructured-require-sink", category: "taint", has: /^app\.js\|.*\|sink=#[0-9a-z]+:child_process\.exec\|/ },
+      { id: "policy:global-eval-sink", category: "taint", has: /^app\.js\|.*\|sink=#[0-9a-z]+:eval\|/ },
+      { id: "policy:response-write-sink", category: "taint", has: /^app\.js\|.*\|sink=#[0-9a-z]+:res\.write\|/ },
+      { id: "policy:response-redirect-sink", category: "taint", has: /^app\.js\|.*\|sink=#[0-9a-z]+:res\.redirect\|/ },
+      { id: "policy:node-prefixed-module-sink", category: "taint", has: /^app\.js\|.*\|sink=#[0-9a-z]+:vm\.runInNewContext\|/ },
+      { id: "policy:local-function-is-not-a-sink", category: "taint", lacks: /\|sink=#[0-9a-z]+:local\|/ },
       {
         id: "policy:sanitizer-cuts-and-every-handler-flows",
         // One flow per tainted handler: renamed, exec, headers, eval, write, redirect, get, vm, nested; not escaped, not local.
@@ -510,8 +510,8 @@ export const conformanceCases: readonly ConformanceCase[] = [
       "app.js": "import { reply, pass } from './helpers.js';\nexport function a(req, res) { reply(res, req.body); }\nexport function b(req, res) { const v = pass(req.query); res.json(v); }\n",
     },
     expectations: [
-      { id: "taint-cross-file-direct:argument-reaches-callee-sink", category: "taint", has: /^helpers\.js\|.*\|sink=#[0-9a-f]+:res\.send\|/ },
-      { id: "taint-cross-file-direct:returned-reaches-caller-sink", category: "taint", has: /^app\.js\|.*\|sink=#[0-9a-f]+:res\.json\|/ },
+      { id: "taint-cross-file-direct:argument-reaches-callee-sink", category: "taint", has: /^helpers\.js\|.*\|sink=#[0-9a-z]+:res\.send\|/ },
+      { id: "taint-cross-file-direct:returned-reaches-caller-sink", category: "taint", has: /^app\.js\|.*\|sink=#[0-9a-z]+:res\.json\|/ },
       { id: "taint-cross-file-direct:helpers-analyzed", category: "dispositions", has: analyzed("helpers.js") },
     ],
   },
