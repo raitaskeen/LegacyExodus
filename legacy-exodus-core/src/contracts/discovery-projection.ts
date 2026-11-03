@@ -164,8 +164,9 @@ type DispositionFile = {
 type DispositionSymbol = { readonly filePath: string };
 type DispositionTable = { readonly path: string; readonly fileId?: string; readonly symbols: readonly DispositionSymbol[] };
 
+/** JavaScript and TypeScript sources are analyzed; generated files (minified bundles) are listed, not analyzed (BA-15). */
 export function isR01DispatchedFile(file: DispositionFile): boolean {
-  return file.language === "javascript" || file.language === "typescript";
+  return (file.language === "javascript" || file.language === "typescript") && file.fileKind !== "generated";
 }
 
 /** Canonical schema order and fixed code-unit path order, independent of record order. */

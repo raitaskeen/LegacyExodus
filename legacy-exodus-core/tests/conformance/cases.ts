@@ -244,7 +244,32 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "discovery:no-express-from-directory-name", category: "frameworks", lacks: /^express\|/ },
       { id: "discovery:no-react-from-directory-name", category: "frameworks", lacks: /^react\|/ },
       { id: "discovery:build-output-not-analyzed", category: "dispositions", lacks: /^dist\/bundle\.min\.js\|analyzed$/ },
+      // Not analyzed, but never silently gone: it is listed, and as generated.
+      { id: "discovery:build-output-listed-as-generated", category: "files", has: /^dist\/bundle\.min\.js\|javascript\|generated$/ },
       { id: "discovery:ruby-file-discovered", category: "files", has: /^app\/controllers\/users_controller\.rb\|ruby\|/ },
+    ],
+  },
+  {
+    // BA-15: gitignored paths are not the project's source; each is reported as excluded, not dropped.
+    id: "discovery-gitignore",
+    files: {
+      ".gitignore": "out/\n*.log\n!keep.log\n",
+      "src/app.js": "export function run() { return 1; }\nrun();\n",
+      "out/app.js": "export function run() { return 2; }\n",
+      "debug.log": "noise\n",
+      "keep.log": "kept\n",
+    },
+    expectations: [
+      { id: "gitignore:source-analyzed", category: "dispositions", has: analyzed("src/app.js") },
+      { id: "gitignore:ignored-directory-not-discovered", category: "files", lacks: /^out\// },
+      { id: "gitignore:negation-re-includes", category: "files", has: /^keep\.log\|/ },
+      {
+        id: "gitignore:exclusions-reported",
+        check: (directory) => JSON.stringify(readJson(directory, "project.json").excludedPaths) === JSON.stringify([
+          { path: "debug.log", kind: "file", reason: "gitignore" },
+          { path: "out", kind: "directory", reason: "gitignore" },
+        ]),
+      },
     ],
   },
   {

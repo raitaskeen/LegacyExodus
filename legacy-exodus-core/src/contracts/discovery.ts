@@ -31,6 +31,8 @@ export interface DependencyArtifact {
   readonly name: string;
   readonly version: string;
   readonly kind: "production" | "development";
+  /** The workspace package.json that declares it; absent for the root manifest. */
+  readonly manifest?: string;
 }
 
 export interface FrameworkArtifact {
@@ -50,9 +52,17 @@ export interface DiscoveryManifestFailure {
   readonly code: string;
 }
 
+/** A path left out on purpose because an ignore rule says it is not the project's source (BA-15). */
+export interface ExcludedPath {
+  readonly path: string;
+  readonly kind: "directory" | "file";
+  readonly reason: "gitignore" | "legacyexodusignore";
+}
+
 export interface FileScanResult {
   readonly files: readonly FileArtifact[];
   readonly enumerationFailures: readonly DiscoveryEnumerationFailure[];
+  readonly excludedPaths?: readonly ExcludedPath[];
 }
 
 export interface ProjectDiscovery {
@@ -65,6 +75,8 @@ export interface ProjectDiscovery {
   readonly languages: readonly string[];
   readonly enumerationFailures: readonly DiscoveryEnumerationFailure[];
   readonly manifestFailures: readonly DiscoveryManifestFailure[];
+  /** Paths ignore rules leave out of analysis; listed so nothing disappears silently. */
+  readonly excludedPaths: readonly ExcludedPath[];
   readonly discoveredAt: Date;
 }
 
@@ -88,10 +100,17 @@ const discoveryManifestFailureSchema = z.object({
   code: z.string().min(1),
 });
 
+export const excludedPathSchema = z.object({
+  path: z.string().min(1),
+  kind: z.enum(["directory", "file"]),
+  reason: z.enum(["gitignore", "legacyexodusignore"]),
+}).strict();
+
 const dependencyArtifactSchema = z.object({
   name: z.string().min(1),
   version: z.string().min(1),
   kind: z.enum(["production", "development"]),
+  manifest: z.string().min(1).optional(),
 });
 
 const frameworkArtifactSchema = z.object({
@@ -109,6 +128,7 @@ const projectDiscoverySchema = z.object({
   languages: z.array(z.string().min(1)),
   enumerationFailures: z.array(discoveryEnumerationFailureSchema).optional(),
   manifestFailures: z.array(discoveryManifestFailureSchema).optional(),
+  excludedPaths: z.array(excludedPathSchema).optional(),
   discoveredAt: z.date(),
 });
 
@@ -138,6 +158,9 @@ export function validateProjectDiscovery(discovery: unknown): ProjectDiscovery {
     ),
     manifestFailures: Object.freeze(
       (parsedDiscovery.data.manifestFailures ?? []).map((failure) => Object.freeze({ ...failure })),
+    ),
+    excludedPaths: Object.freeze(
+      (parsedDiscovery.data.excludedPaths ?? []).map((excluded) => Object.freeze({ ...excluded })),
     ),
   });
 }

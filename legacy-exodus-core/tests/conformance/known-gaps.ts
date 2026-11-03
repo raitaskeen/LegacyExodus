@@ -12,11 +12,6 @@ const gaps: Readonly<Record<string, readonly string[]>> = {
     "express:handler-is-last-argument",
     "express:mount-path-applied",
   ],
-  "BA-15 discovery policy": [
-    "discovery:no-express-from-directory-name",
-    "discovery:no-react-from-directory-name",
-    "discovery:build-output-not-analyzed",
-  ],
   "BA-26 relative manifest path": ["projection:manifest-path-not-absolute"],
 };
 

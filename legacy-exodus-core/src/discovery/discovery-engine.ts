@@ -16,7 +16,7 @@ export class DiscoveryEngine {
   ) {}
 
   public async discover(context: DiscoveryContext): Promise<DiscoveryResult> {
-    const { files, enumerationFailures } = await this.fileScanner.scan(context.projectPath);
+    const { files, enumerationFailures, excludedPaths = [] } = await this.fileScanner.scan(context.projectPath);
     const detection = await this.projectDetector.detect(context.projectPath, files);
 
     return validateProjectDiscovery({
@@ -29,6 +29,7 @@ export class DiscoveryEngine {
       languages: detection.languages,
       enumerationFailures,
       manifestFailures: detection.manifestFailures,
+      excludedPaths,
       discoveredAt: new Date(),
     });
   }
