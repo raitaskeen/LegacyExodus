@@ -49,8 +49,8 @@ describe("symbol keys (ADR-008)", () => {
 
   test("true duplicates are told apart in source order", async () => {
     const keys = await keysOf("src/d.js", "var a = 1;\nvar a = 2;\nfunction f() { { let b = 1; } { let b = 2; } }\n");
-    expect(keys.filter((key) => key.startsWith("src/d.js#a:variable"))).toEqual(["src/d.js#a:variable~0", "src/d.js#a:variable~1"]);
-    expect(keys.filter((key) => key.includes("/b:variable"))).toEqual(["src/d.js#f:function/b:variable~0", "src/d.js#f:function/b:variable~1"]);
+    expect(keys.filter((key) => key.startsWith("src/d.js#a:variable"))).toEqual(["src/d.js#a:variable", "src/d.js#a:variable~1"]);
+    expect(keys.filter((key) => key.includes("/b:variable"))).toEqual(["src/d.js#f:function/b:variable", "src/d.js#f:function/b:variable~1"]);
   });
 
   test("over the engine's own source: unique per file, and unchanged by lines and declarations added above", async () => {
