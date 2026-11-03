@@ -115,7 +115,6 @@ export class DiscoveryProjectionService implements RuntimeService {
           name: "project.json",
           payload: {
             name: payload.projectName,
-            path: payload.projectPath,
             languages: payload.languages,
             ...(payload.manifestFailures && payload.manifestFailures.length > 0
               ? { manifestFailures: payload.manifestFailures }

@@ -15,7 +15,9 @@ export {
   computeManifestMac,
   discoveryManifestSchema,
   manifestKeyId,
+  manifestLocationDigest,
   MANIFEST_MAC_ALGORITHM,
+  MANIFEST_SCHEMA_VERSION,
   verifyManifestMac,
 } from "./discovery-manifest";
 export { FileScanner } from "./file-scanner";

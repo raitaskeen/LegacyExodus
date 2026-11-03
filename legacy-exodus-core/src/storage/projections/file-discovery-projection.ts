@@ -8,7 +8,9 @@ import {
   computeWorkspaceDigest,
   createSnapshotTrust,
   manifestKeyId,
+  manifestLocationDigest,
   MANIFEST_MAC_ALGORITHM,
+  MANIFEST_SCHEMA_VERSION,
   type DiscoveryManifest,
   type SnapshotTrust,
 } from "@discovery/index";
@@ -187,10 +189,9 @@ export class FileDiscoveryProjectionAdapter {
       : undefined;
 
     const unsignedManifest: DiscoveryManifest = {
-      schemaVersion: 1,
+      schemaVersion: MANIFEST_SCHEMA_VERSION,
       repository: {
         name: projection.metadata?.projectName ?? pkgName ?? basename(projection.projectPath),
-        path: canonicalProjectPath,
         ...(pkgVersion ? { packageVersion: pkgVersion } : {}),
         ...(repoCommitSha ? { commitSha: repoCommitSha } : {}),
         sourceDigest,
@@ -231,11 +232,15 @@ export class FileDiscoveryProjectionAdapter {
 
     try {
       const key = await keyStore.getOrCreateKey();
+      const located: DiscoveryManifest = {
+        ...manifest,
+        repository: { ...manifest.repository, locationDigest: manifestLocationDigest(canonicalProjectPath, key) },
+      };
       // Signing also fails for manifests outside the contract (e.g. a non-string repository
       // version); such snapshots stay unsigned and unreusable, as they were never reusable before.
       return {
-        ...manifest,
-        integrity: { algorithm: MANIFEST_MAC_ALGORITHM, keyId: manifestKeyId(key), mac: computeManifestMac(manifest, key) },
+        ...located,
+        integrity: { algorithm: MANIFEST_MAC_ALGORITHM, keyId: manifestKeyId(key), mac: computeManifestMac(located, key) },
       };
     } catch {
       return manifest;

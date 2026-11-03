@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { computeManifestMac, manifestKeyId, MANIFEST_MAC_ALGORITHM, verifyManifestMac, type DiscoveryManifest } from "@discovery/discovery-manifest";
+import { computeManifestMac, manifestKeyId, manifestLocationDigest, MANIFEST_MAC_ALGORITHM, MANIFEST_SCHEMA_VERSION, verifyManifestMac, type DiscoveryManifest } from "@discovery/discovery-manifest";
 import { DiscoveryValidator } from "@discovery/discovery-validator";
 import { createSnapshotTrust, SNAPSHOT_KEY_FILE_NAME, SnapshotKeyStore } from "@discovery/snapshot-trust";
 import { computeAnalyzerFingerprint } from "@runtime/analyzer-fingerprint";
@@ -22,14 +22,14 @@ async function withScratch(run: (root: string) => Promise<void>): Promise<void> 
 }
 
 /** Builds a minimal integrity-valid snapshot and returns its unsigned manifest. */
-async function createSnapshot(projectPath: string, repositoryPath: string): Promise<DiscoveryManifest> {
+async function createSnapshot(projectPath: string, locationDigest?: string): Promise<DiscoveryManifest> {
   await mkdir(join(projectPath, ".discovery"), { recursive: true });
   await writeFile(join(projectPath, "index.js"), "module.exports = 1;\n");
   const files = JSON.stringify([{ path: "index.js", size: 20 }]);
   await writeFile(join(projectPath, ".discovery", "files.json"), files);
   return {
-    schemaVersion: 1,
-    repository: { name: "fixture", path: repositoryPath },
+    schemaVersion: MANIFEST_SCHEMA_VERSION,
+    repository: { name: "fixture", ...(locationDigest === undefined ? {} : { locationDigest }) },
     engine: { packageVersion: "0.1.0", commitSha: "local", bunVersion: "bun-test" },
     analysis: { projectId: "00000000-0000-4000-8000-000000000000", generatedAt: new Date(0).toISOString() },
     requiredArtifacts: ["files.json"],
@@ -91,13 +91,13 @@ describe("discovery manifest MAC", () => {
     await withScratch(async (root) => {
       const key = await new SnapshotKeyStore(join(root, "home")).getOrCreateKey();
       const other = await new SnapshotKeyStore(join(root, "other")).getOrCreateKey();
-      const manifest = sign(await createSnapshot(join(root, "p"), join(root, "p")), key);
+      const manifest = sign(await createSnapshot(join(root, "p"), manifestLocationDigest(join(root, "p"), key)), key);
       expect(verifyManifestMac(manifest, key)).toBe(true);
       expect(verifyManifestMac(manifest, other)).toBe(false);
 
       const mutations: ((m: any) => void)[] = [
         (m) => { m.artifacts["files.json"].sha256 = "f".repeat(64); },
-        (m) => { m.repository.path = join(root, "elsewhere"); },
+        (m) => { m.repository.locationDigest = manifestLocationDigest(join(root, "elsewhere"), key); },
         (m) => { m.repository.sourceDigest = "0".repeat(64); },
         (m) => { m.analyzer.fingerprint = `lx-analyzer-v1:${"d".repeat(64)}`; },
         (m) => { m.requiredArtifacts = []; },
@@ -117,7 +117,7 @@ describe("DiscoveryValidator reuse authorization", () => {
     const projectPath = join(root, "project");
     const keyDirectory = join(root, "home");
     const key = await new SnapshotKeyStore(keyDirectory).getOrCreateKey();
-    const manifest = await createSnapshot(projectPath, await realpath(join(root)).then((r) => join(r, "project")));
+    const manifest = await createSnapshot(projectPath, manifestLocationDigest(join(await realpath(root), "project"), key));
     return { projectPath, keyDirectory, key, manifest };
   }
 
@@ -183,14 +183,32 @@ describe("DiscoveryValidator reuse authorization", () => {
     });
   });
 
-  it("rejects a signed manifest with a relative repository path as PATH_MISMATCH", async () => {
+  it("rejects a signed snapshot bound to another location as PATH_MISMATCH, with or without reuse", async () => {
     await withScratch(async (root) => {
       const { projectPath, keyDirectory, key, manifest } = await setup(root);
-      await writeManifest(projectPath, sign({ ...manifest, repository: { ...manifest.repository, path: "." } }, key));
+      const moved = { ...manifest, repository: { ...manifest.repository, locationDigest: manifestLocationDigest(join(root, "elsewhere"), key) } };
+      await writeManifest(projectPath, sign(moved, key));
+      expect((await validator(keyDirectory).validate({ projectPath, authorizeReuse: true })).status).toBe("PATH_MISMATCH");
+      expect((await validator(keyDirectory).validate({ projectPath })).status).toBe("PATH_MISMATCH");
+    });
+  });
+
+  it("rejects a signed snapshot without a location digest for reuse", async () => {
+    await withScratch(async (root) => {
+      const { projectPath, keyDirectory, key } = await setup(root);
+      await writeManifest(projectPath, sign(await createSnapshot(projectPath), key));
+      expect((await validator(keyDirectory).validate({ projectPath, authorizeReuse: true })).status).toBe("PATH_MISMATCH");
+    });
+  });
+
+  it("resolves a relative project path to the same canonical location", async () => {
+    await withScratch(async (root) => {
+      const { projectPath, keyDirectory, key, manifest } = await setup(root);
+      await writeManifest(projectPath, sign(manifest, key));
       const originalCwd = process.cwd();
       try {
         process.chdir(projectPath);
-        expect((await validator(keyDirectory).validate({ projectPath: ".", authorizeReuse: true })).status).toBe("PATH_MISMATCH");
+        expect((await validator(keyDirectory).validate({ projectPath: ".", authorizeReuse: true })).status).toBe("VALID");
       } finally {
         process.chdir(originalCwd);
       }

@@ -785,7 +785,7 @@ describe("Phase 3A P0.4 — Discovery Snapshot Reuse & Invalidation", () => {
     await writeFile(join(discoveryDir, "summary.json"), JSON.stringify(summaryPayload), "utf8");
 
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "disc-only", path: dummyDir },
       engine: { packageVersion: "0.1.0", commitSha: "test", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: randomUUID(), generatedAt: new Date().toISOString() },
