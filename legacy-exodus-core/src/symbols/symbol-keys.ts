@@ -64,6 +64,11 @@ export class FactKeyer {
     return `${base}@${ordinal}`;
   }
 
+  /** `<path>#<owners>` of the innermost owner containing `at`: the key of the code a graph or scope analyses. */
+  public ownerKey(at: { readonly line: number; readonly column: number } | undefined): string {
+    return `${this.path}#${at === undefined ? "" : this.chainAt(packed(at.line, at.column))}`;
+  }
+
   /** The chain of the innermost owner whose range contains `point` ("" at module level). */
   private chainAt(point: number): string {
     let low = 0;
@@ -96,33 +101,67 @@ function ownerChains(root: ASTNode, symbols: readonly CodeSymbol[]): Chains {
     if (symbol.kind === "class" && !classes.has(key)) classes.set(key, symbol);
   }
 
-  const byScopeId = new Map<string, string>([["scope:module", ""]]);
-  const byClassId = new Map<string, string>();
-  const owners: OwnerRange[] = [];
-  const visit = (node: ASTNode, chain: string, anonymous: Map<string, number>, enclosing: number): void => {
+  // Phase 1: every owner in source order, with its raw segment and enclosing owner; every scope id, with its owner.
+  interface OwnerRecord { readonly node: ASTNode; readonly segment: string; readonly parent: number; readonly depth: number; readonly classId?: string }
+  const records: OwnerRecord[] = [];
+  const scopeOwners: [string, number][] = [];
+  const visit = (node: ASTNode, anonymous: Map<string, number>, enclosing: number): void => {
     const where = node.location === undefined ? undefined : `${node.location.start.line}:${node.location.start.column}`;
-    let own = chain;
-    let inner = anonymous;
     let innerOwner = enclosing;
+    let inner = anonymous;
     if (FUNCTION_TYPES.has(node.type) || CLASS_TYPES.has(node.type) || node.type === "TSModuleDeclaration" || node.type === "StaticBlock") {
-      own = `${chain}${segment(node, where === undefined ? undefined : CLASS_TYPES.has(node.type) ? classes.get(where) : named.get(where), anonymous)}/`;
+      const declared = where === undefined ? undefined : CLASS_TYPES.has(node.type) ? classes.get(where) : named.get(where);
+      records.push({
+        node,
+        segment: segment(node, declared, anonymous),
+        parent: enclosing,
+        depth: enclosing < 0 ? 0 : records[enclosing]!.depth + 1,
+        ...(CLASS_TYPES.has(node.type) && declared !== undefined ? { classId: declared.id } : {}),
+      });
+      innerOwner = records.length - 1;
       inner = new Map();
-      if (node.location !== undefined) {
-        owners.push({ start: packed(node.location.start.line, node.location.start.column), end: packed(node.location.end.line, node.location.end.column), chain: own, parent: enclosing });
-        innerOwner = owners.length - 1;
-      }
-      if (CLASS_TYPES.has(node.type) && where !== undefined) {
-        const declared = classes.get(where);
-        if (declared !== undefined) byClassId.set(declared.id, own);
-      }
       // A named function or class expression binds its own name in a scope between it and its parent.
-      if (where !== undefined) byScopeId.set(`self:${node.type}:${where}`, chain);
+      if (where !== undefined) scopeOwners.push([`self:${node.type}:${where}`, enclosing]);
     }
-    if (where !== undefined) byScopeId.set(`scope:${node.type}:${where}`, own);
-    for (const child of node.children) visit(child, own, inner, innerOwner);
+    if (where !== undefined) scopeOwners.push([`scope:${node.type}:${where}`, innerOwner]);
+    for (const child of node.children) visit(child, inner, innerOwner);
   };
   const topLevel = new Map<string, number>();
-  for (const child of root.children) visit(child, "", topLevel, -1);
+  for (const child of root.children) visit(child, topLevel, -1);
+
+  // Phase 2, depth by depth so a parent's chain is final first: owners sharing a segment under the same parent
+  // (a getter and its setter, same-named object methods) are all numbered `~n` in source order, as symbol keys are.
+  const chains: string[] = new Array(records.length);
+  const maxDepth = records.reduce((deepest, record) => Math.max(deepest, record.depth), -1);
+  for (let depth = 0; depth <= maxDepth; depth++) {
+    const level = records.map((record, index) => ({ record, index })).filter(({ record }) => record.depth === depth);
+    const group = ({ record }: { readonly record: OwnerRecord }): string => `${record.parent < 0 ? "" : chains[record.parent]}${record.segment}`;
+    const sizes = new Map<string, number>();
+    for (const entry of level) sizes.set(group(entry), (sizes.get(group(entry)) ?? 0) + 1);
+    const seen = new Map<string, number>();
+    for (const entry of level) {
+      const base = group(entry);
+      const ordinal = seen.get(base) ?? 0;
+      seen.set(base, ordinal + 1);
+      chains[entry.index] = `${base}${(sizes.get(base) ?? 0) > 1 ? `~${ordinal}` : ""}/`;
+    }
+  }
+
+  const chainOf = (owner: number): string => owner < 0 ? "" : chains[owner]!;
+  const byScopeId = new Map<string, string>([["scope:module", ""]]);
+  for (const [scopeId, owner] of scopeOwners) byScopeId.set(scopeId, chainOf(owner));
+  const byClassId = new Map<string, string>();
+  const owners: OwnerRange[] = [];
+  const rangeOf = new Map<number, number>();
+  records.forEach((record, index) => {
+    if (record.classId !== undefined) byClassId.set(record.classId, chains[index]!);
+    const location = record.node.location;
+    if (location === undefined) return;
+    let parent = record.parent;
+    while (parent >= 0 && !rangeOf.has(parent)) parent = records[parent]!.parent;
+    owners.push({ start: packed(location.start.line, location.start.column), end: packed(location.end.line, location.end.column), chain: chains[index]!, parent: parent < 0 ? -1 : rangeOf.get(parent)! });
+    rangeOf.set(index, owners.length - 1);
+  });
   return { byScopeId, byClassId, owners };
 }
 

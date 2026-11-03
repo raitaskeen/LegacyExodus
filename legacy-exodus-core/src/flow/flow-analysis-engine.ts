@@ -30,7 +30,8 @@ export class DeterministicFlowAnalysisEngine {
         symbolsByPath.get(ast.metadata.sourcePath) ?? [],
       ),
     );
-    const controlFlowGraphs = results.flatMap((ast) => this.controlFlowBuilder.buildAll(ast));
+    const owners = (path: string) => (symbolsByPath.get(path) ?? []).filter((symbol) => symbol.kind === "function" || symbol.kind === "method" || symbol.kind === "class");
+    const controlFlowGraphs = results.flatMap((ast) => this.controlFlowBuilder.buildAllWithNodes(ast, owners(ast.metadata.sourcePath)).graphs);
     return this.connect(controlFlowGraphs, contexts, symbolTables);
   }
 
