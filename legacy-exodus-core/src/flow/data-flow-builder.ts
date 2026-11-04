@@ -10,6 +10,7 @@ import { propagateTaintPaths, setTaintPath } from "./taint-propagation";
 import { DeterministicControlFlowGraphBuilder, type ControlFlowGraphsWithNodes } from "./control-flow-builder";
 import { resolveLexicalBindings, type LexicalBindings } from "./lexical-bindings";
 import { filePolicy, type FilePolicy } from "./taint-policy";
+import { immutable } from "@shared/immutability";
 
 export interface Scope { readonly parent?: Scope; readonly definitions: Map<string, VariableDefinition>; }
 export interface FunctionRecord { readonly name: string; readonly parameters: VariableDefinition[][]; readonly returns: VariableDefinition[]; readonly symbolId?: string; }
@@ -145,7 +146,7 @@ export class DeterministicDataFlowGraphBuilder {
 
   private connectionState(state: FlowState): FlowConnectionState {
     const receivers = new Set(state.interproceduralFlows.map((flow) => flow.targetDefinitionId));
-    return Object.freeze({
+    return immutable({
       transfers: state.transfers,
       taintPaths: state.taintPaths,
       sinks: state.sinks,
@@ -242,7 +243,7 @@ export class DeterministicDataFlowGraphBuilder {
         [...(taintPaths.get(definitionId)?.entries() ?? [])].map(([sourceId, path]) => ({
           sourceId,
           sinkId: sink.id,
-          path: Object.freeze([...path, sink.name]),
+          path: immutable([...path, sink.name]),
           state: isConfirmed(definitionId, sourceId) ? "CONFIRMED" as const : "INFERRED" as const,
         })),
       ),
@@ -266,13 +267,13 @@ export class DeterministicDataFlowGraphBuilder {
       }
       for (const [sourceId, must] of verdict.taint) {
         const key = sourceId + ":" + sink.id;
-        if (!unique.has(key)) unique.set(key, { sourceId, sinkId: sink.id, path: Object.freeze([sourceId, sink.name]), state: must ? "CONFIRMED" : "INFERRED" });
+        if (!unique.has(key)) unique.set(key, { sourceId, sinkId: sink.id, path: immutable([sourceId, sink.name]), state: must ? "CONFIRMED" : "INFERRED" });
       }
     }
     const sorted = [...unique.values()].sort((left, right) =>
       compareCodePoints(`${left.sourceId}:${left.sinkId}`, `${right.sourceId}:${right.sinkId}`),
     );
-    return Object.freeze(state.factKeys === undefined ? sorted : keyTaintFlows(sorted, state.factKeys));
+    return immutable(state.factKeys === undefined ? sorted : keyTaintFlows(sorted, state.factKeys));
   }
 
   private visit(node: ASTNode, scope: Scope, filePath: string, state: FlowState, currentFunction?: FunctionRecord, receiverDefinitionId?: string): void {
@@ -365,7 +366,7 @@ export class DeterministicDataFlowGraphBuilder {
         const identity = this.identify(hash("join:" + filePath + ":" + name + ":" + position + ":" + index + ":" + incoming.map((value) => value ?? "unbound").join(":")), "join", `${name}/${index}`, node, "definition");
         const id = identity.id;
         const definition: VariableDefinition = { ...identity, filePath, name, kind: "assignment" };
-        state.joins.set(id, state.joins.get(id) ?? { id, incoming: Object.freeze(incoming) });
+        state.joins.set(id, state.joins.get(id) ?? { id, incoming: immutable(incoming) });
         state.definitions.push(definition);
         for (const input of incoming) if (input !== undefined) this.addTransfer(state, input, id);
         // These are the original owner frames, never the transient branch scopes.
@@ -1067,7 +1068,7 @@ export class DeterministicDataFlowGraphBuilder {
       }
     };
     visit(node);
-    return Object.freeze([...new Set(results)].sort());
+    return immutable([...new Set(results)].sort());
   }
 
   private collectDefinitions(node: ASTNode, scope: Scope, filePath: string, state: FlowState): readonly VariableDefinition[] {
@@ -1126,7 +1127,7 @@ export class DeterministicDataFlowGraphBuilder {
         unique.push(def);
       }
     }
-    return Object.freeze(unique.sort(byId));
+    return immutable(unique.sort(byId));
   }
 
   private propagateTaint(state: FlowState): void {

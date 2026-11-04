@@ -8,6 +8,7 @@ import { createLexicalScopeId, createSelfScopeId, FactKeyer, type CodeSymbol } f
 import type { SemanticCall, SymbolReference } from "./semantic-contracts";
 import { stableId } from "@shared/identity";
 import { compareCodePoints } from "@shared/ordering";
+import { immutable } from "@shared/immutability";
 
 export class DeterministicCallGraphBuilder {
   /** @param resolver - the run's resolver (tsconfig aliases, workspace packages), shared with the dependency graph. */
@@ -25,7 +26,7 @@ export class DeterministicCallGraphBuilder {
       this.buildForFile(ast, tablesByPath, importsByFile, targetByImportId, unstableExportIds, calls, references);
     }
 
-    return Object.freeze({ calls: Object.freeze(calls), references: Object.freeze(references) });
+    return immutable({ calls: immutable(calls), references: immutable(references) });
   }
 
   /**
@@ -304,7 +305,7 @@ interface ResolutionContext {
 }
 
 function createScope(id: string, parent?: ScopeFrame, selfName?: string): ScopeFrame {
-  return Object.freeze({ id, ...(parent === undefined ? {} : { parent }), ...(selfName === undefined ? {} : { selfName }) });
+  return immutable({ id, ...(parent === undefined ? {} : { parent }), ...(selfName === undefined ? {} : { selfName }) });
 }
 
 function createsScope(node: ASTNode): boolean {
@@ -376,7 +377,7 @@ function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult, u
   const writes = collectBindingWrites(ast.root, declarationsByScopeAndName);
   const classes = collectClassFacts(ast.root, classSymbols);
   const reopened = reopenedNamespaces(namespaceBlocks);
-  return Object.freeze({ byScopeAndName, declarationsByScopeAndName, byName, firstImportByName, classByLocation, lexicalBindings, ownerSymbols, reopened, writes, unstableExportIds, classes });
+  return immutable({ byScopeAndName, declarationsByScopeAndName, byName, firstImportByName, classByLocation, lexicalBindings, ownerSymbols, reopened, writes, unstableExportIds, classes });
 }
 
 /** Fact keys (ADR-008 step 2) per file, keyed by the file's symbol index for the duration of its visit. */
@@ -444,7 +445,7 @@ function collectClassFacts(root: ASTNode, symbols: readonly CodeSymbol[]): Class
     nodes.set(symbol.id, node);
     if (isDecorated(node)) decorated.add(symbol.id);
   }
-  return Object.freeze({ nodes, decorated, members });
+  return immutable({ nodes, decorated, members });
 }
 
 /**
@@ -817,7 +818,7 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
     }
   };
   visit(root, { scope: createScope(MODULE_SCOPE_ID), contextId: MODULE_SCOPE_ID, loopIds: [], unconditional: true }, undefined);
-  return Object.freeze({ reboundBindings, propertyWrites, unknownPropertyWrites, propertyWriteSites, declaredValues, writeSites, declaringContext, callSites, scopeFrames, unscopedBindings, blockFunctionVars });
+  return immutable({ reboundBindings, propertyWrites, unknownPropertyWrites, propertyWriteSites, declaredValues, writeSites, declaringContext, callSites, scopeFrames, unscopedBindings, blockFunctionVars });
 }
 
 const classFieldTypes = new Set(["ClassProperty", "ClassPrivateProperty", "PropertyDefinition", "ClassAccessorProperty"]);

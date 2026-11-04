@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { immutable } from "@shared/immutability";
 
 export type SourceAnchor =
   | { readonly kind: "offset"; readonly start: number; readonly end: number }
@@ -41,17 +42,17 @@ export const unresolvedModuleReferenceSchema = z.object({
 }).strict();
 
 export function freezeSourceAnchor(anchor: SourceAnchor): SourceAnchor {
-  return anchor.kind === "offset" ? Object.freeze({ ...anchor }) : Object.freeze({
-    ...anchor, start: Object.freeze({ ...anchor.start }), end: Object.freeze({ ...anchor.end }),
+  return anchor.kind === "offset" ? immutable({ ...anchor }) : immutable({
+    ...anchor, start: immutable({ ...anchor.start }), end: immutable({ ...anchor.end }),
   });
 }
 export function freezeUnresolvedModuleReference(reference: UnresolvedModuleReference): UnresolvedModuleReference {
-  return Object.freeze({ ...reference, ...(reference.sourceAnchor === undefined ? {} : { sourceAnchor: freezeSourceAnchor(reference.sourceAnchor) }) });
+  return immutable({ ...reference, ...(reference.sourceAnchor === undefined ? {} : { sourceAnchor: freezeSourceAnchor(reference.sourceAnchor) }) });
 }
 export function freezeModuleReference(reference: ModuleReference): ModuleReference {
-  return Object.freeze({
+  return immutable({
     ...reference,
     ...(reference.sourceAnchor === undefined ? {} : { sourceAnchor: freezeSourceAnchor(reference.sourceAnchor) }),
-    importSymbolIds: Object.freeze([...reference.importSymbolIds]),
+    importSymbolIds: immutable([...reference.importSymbolIds]),
   });
 }

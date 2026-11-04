@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { EngineStatus } from "@core/engine/engine-status";
 import type { ProjectDiscovery } from "@contracts/discovery";
 import type { AnalyzeProjectCommand } from "./commands";
+import { immutable } from "@shared/immutability";
 
 export interface SystemStatusCommand {
   readonly id: string;
@@ -67,7 +68,7 @@ export function createAnalysisSummary(summary: AnalysisSummary): AnalysisSummary
   const parsed = analysisSummarySchema.parse(summary);
   const enumerationFailures = parsed.enumerationFailures ?? 0;
   const discoveryComplete = parsed.discoveryComplete ?? (enumerationFailures === 0);
-  return Object.freeze({
+  return immutable({
     ...parsed,
     enumerationFailures,
     discoveryComplete,

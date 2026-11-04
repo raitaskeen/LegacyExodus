@@ -1,6 +1,7 @@
 import { dirname, posix } from "node:path";
 
 import type { FileArtifact } from "@contracts/discovery";
+import { immutable } from "@shared/immutability";
 
 export interface ResolvedImport {
   readonly importerPath: string;
@@ -62,11 +63,11 @@ export class ModuleResolver {
 
     if (!rawNormalizedSpecifier.startsWith(".")) {
       const resolvedPath = this.resolveNonRelative(rawNormalizedSpecifier, knownPaths, importerIsTypeScript);
-      return Object.freeze({ importerPath, moduleSpecifier, resolvedPath });
+      return immutable({ importerPath, moduleSpecifier, resolvedPath });
     }
 
     const basePath = canonicalizePath(posix.join(dirname(normalizedImporter), rawNormalizedSpecifier));
-    return Object.freeze({
+    return immutable({
       importerPath,
       moduleSpecifier,
       resolvedPath: firstKnown(candidatesFor(basePath, importerIsTypeScript), knownPaths),
@@ -318,8 +319,8 @@ function candidatesFor(basePath: string, importerIsTypeScript: boolean): readonl
     ...(importerIsTypeScript ? INDEX_FILES_FOR_TYPESCRIPT : INDEX_FILES_FOR_JAVASCRIPT).map((index) => posix.join(clean, index)),
   ];
   const substitutes = typeScriptSubstitutes(clean);
-  if (substitutes.length === 0) return Object.freeze(extensionless);
-  return Object.freeze(importerIsTypeScript
+  if (substitutes.length === 0) return immutable(extensionless);
+  return immutable(importerIsTypeScript
     ? [...substitutes, ...extensionless]
     : [clean, ...substitutes, ...extensionless.slice(1)]);
 }

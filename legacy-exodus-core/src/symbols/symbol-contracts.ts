@@ -5,6 +5,7 @@ import {
   moduleReferenceSchema, freezeModuleReference, unresolvedModuleReferenceSchema, freezeUnresolvedModuleReference,
   type ModuleReference, type UnresolvedModuleReference,
 } from "./module-reference-contracts";
+import { immutable } from "@shared/immutability";
 
 /**
  * `enum` and `namespace` declare runtime bindings; `interface` and `type-alias` are type-only and declare
@@ -151,13 +152,13 @@ export function validateSymbolTable(table: unknown): SymbolTable {
     });
   }
 
-  return Object.freeze({
+  return immutable({
     filePath: parsedTable.data.filePath,
     language: parsedTable.data.language,
-    symbols: Object.freeze(parsedTable.data.symbols.map(freezeCodeSymbol)),
-    summary: Object.freeze({ ...parsedTable.data.summary }),
-    ...(parsedTable.data.moduleReferences === undefined ? {} : { moduleReferences: Object.freeze(parsedTable.data.moduleReferences.map(freezeModuleReference)) }),
-    ...(parsedTable.data.unresolvedModuleReferences === undefined ? {} : { unresolvedModuleReferences: Object.freeze(parsedTable.data.unresolvedModuleReferences.map(freezeUnresolvedModuleReference)) }),
+    symbols: immutable(parsedTable.data.symbols.map(freezeCodeSymbol)),
+    summary: immutable({ ...parsedTable.data.summary }),
+    ...(parsedTable.data.moduleReferences === undefined ? {} : { moduleReferences: immutable(parsedTable.data.moduleReferences.map(freezeModuleReference)) }),
+    ...(parsedTable.data.unresolvedModuleReferences === undefined ? {} : { unresolvedModuleReferences: immutable(parsedTable.data.unresolvedModuleReferences.map(freezeUnresolvedModuleReference)) }),
   });
 }
 
@@ -172,7 +173,7 @@ export function validateCodeSymbols(symbols: unknown): readonly CodeSymbol[] {
     });
   }
 
-  return Object.freeze(parsedSymbols.data.map(freezeCodeSymbol));
+  return immutable(parsedSymbols.data.map(freezeCodeSymbol));
 }
 
 export function createLexicalScopeId(
@@ -195,15 +196,15 @@ export function createSelfScopeId(
 }
 
 function freezeCodeSymbol(symbol: CodeSymbol): CodeSymbol {
-  return Object.freeze({
+  return immutable({
     ...symbol,
-    parameters: Object.freeze([...symbol.parameters]),
+    parameters: immutable([...symbol.parameters]),
     location:
       symbol.location === undefined
         ? undefined
-        : Object.freeze({
-            start: Object.freeze({ ...symbol.location.start }),
-            end: Object.freeze({ ...symbol.location.end }),
+        : immutable({
+            start: immutable({ ...symbol.location.start }),
+            end: immutable({ ...symbol.location.end }),
           }),
   });
 }

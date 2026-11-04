@@ -8,6 +8,7 @@ import { discoveryManifestSchema, MANIFEST_SCHEMA_VERSION, manifestKeyId, manife
 import { FileScanner } from "./file-scanner";
 import { createSnapshotTrust, type SnapshotTrust } from "./snapshot-trust";
 import { compareCodePoints } from "@shared/ordering";
+import { immutable } from "@shared/immutability";
 
 export type { DiscoveryManifest };
 
@@ -392,7 +393,7 @@ export class DiscoveryValidator {
       valid: true,
       status: "VALID",
       manifest,
-      validatedArtifacts: Object.freeze(validatedArtifacts),
+      validatedArtifacts: immutable(validatedArtifacts),
     };
   }
 

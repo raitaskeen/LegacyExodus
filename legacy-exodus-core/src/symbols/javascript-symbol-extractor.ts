@@ -14,6 +14,7 @@ import {
   createSelfScopeId,
 } from "./symbol-contracts";
 import { SymbolExtractionError, UnsupportedSymbolLanguageError } from "./symbol-errors";
+import { immutable } from "@shared/immutability";
 
 interface ExtractionContext {
   readonly exported: boolean;
@@ -39,12 +40,12 @@ interface PendingExportBinding {
   readonly scopeChain: readonly string[];
 }
 
-const initialContext: ExtractionContext = Object.freeze({
+const initialContext: ExtractionContext = immutable({
   exported: false,
   defaultExport: false,
   scopeId: "scope:module",
   functionScopeId: "scope:module",
-  scopeChain: Object.freeze(["scope:module"]),
+  scopeChain: immutable(["scope:module"]),
 });
 
 const supportedLanguages = new Set(["javascript", "typescript"]);

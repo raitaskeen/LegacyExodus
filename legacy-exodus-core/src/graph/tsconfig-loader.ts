@@ -2,6 +2,7 @@ import { readFile, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import type { ModuleResolutionOptions } from "./module-resolver";
+import { immutable } from "@shared/immutability";
 
 /* ------------------------------------------------------------------------------------------ *
  * JSONC
@@ -229,7 +230,7 @@ export async function loadTsConfigResolution(projectPath: string): Promise<TsCon
   const projectRoot = resolve(projectPath);
   const diagnostics: TsConfigDiagnostic[] = [];
   const done = (options: ModuleResolutionOptions, configFile: TsConfigResolution["configFile"]): TsConfigResolution =>
-    Object.freeze({ options: Object.freeze(options), diagnostics: Object.freeze(diagnostics), configFile });
+    immutable({ options: immutable(options), diagnostics: immutable(diagnostics), configFile });
 
   try {
     for (const name of ROOT_CONFIG_FILES) {
@@ -362,7 +363,7 @@ function toResolutionOptions(effective: EffectiveOptions, context: LoadContext):
         }
         converted.push(relativeTarget);
       }
-      if (converted.length > 0) paths[pattern] = Object.freeze(converted);
+      if (converted.length > 0) paths[pattern] = immutable(converted);
     }
   }
   return {

@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 
 import { computeAnalyzerFingerprint, getAnalyzerFingerprint } from "@runtime/analyzer-fingerprint";
 import { LegacyExodusError } from "@shared/errors";
+import { immutable } from "@shared/immutability";
 
 export const SNAPSHOT_KEY_FILE_NAME = "snapshot-hmac.key";
 export const SNAPSHOT_KEY_BYTES = 32;
@@ -105,7 +106,7 @@ export function createSnapshotTrust(options: SnapshotTrustOptions = {}): Snapsho
   const loaded = options.analyzerFingerprint === undefined
     ? getAnalyzerFingerprint()
     : readCurrent().catch(() => undefined);
-  return Object.freeze({
+  return immutable({
     keyStore: new SnapshotKeyStore(options.keyDirectory ?? defaultSnapshotKeyDirectory()),
     analyzerFingerprint: () => loaded,
     currentAnalyzerFingerprint: () => readCurrent().catch(() => undefined),

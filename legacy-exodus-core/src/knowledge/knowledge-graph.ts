@@ -6,6 +6,7 @@ import type { DependencyGraph } from "@graph/index";
 import type { SymbolTable } from "@symbols/index";
 import { sortedFactArray, type FactArray, type FactStore } from "@shared/fact-array";
 import { compareCodePoints } from "@shared/ordering";
+import { immutable } from "@shared/immutability";
 
 export type KnowledgeNodeKind = "file" | "symbol";
 export type KnowledgeRelationship = "contains" | "imports";
@@ -51,9 +52,9 @@ export class DeterministicKnowledgeGraphBuilder {
       edges.push(createEdge(`symbol:${edge.importSymbolId}`, `symbol:${edge.targetExportSymbolId}`, "imports"));
     }
     const parsed = graphSchema.parse({ nodes, edges });
-    return Object.freeze({
-      nodes: Object.freeze(parsed.nodes.sort((left, right) => compareCodePoints(left.id, right.id)).map((node) => Object.freeze(node))),
-      edges: Object.freeze(parsed.edges.sort((left, right) => compareCodePoints(left.id, right.id)).map((edge) => Object.freeze(edge))),
+    return immutable({
+      nodes: immutable(parsed.nodes.sort((left, right) => compareCodePoints(left.id, right.id)).map((node) => immutable(node))),
+      edges: immutable(parsed.edges.sort((left, right) => compareCodePoints(left.id, right.id)).map((edge) => immutable(edge))),
     });
   }
 }

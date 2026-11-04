@@ -32,6 +32,7 @@ import { JavaScriptSymbolExtractor, validateCodeSymbols, type CodeSymbol, type S
 import { RunScopedAstStore, type AnalysisAstStoreFactory } from "./run-scoped-ast-store";
 import { compareCodePoints } from "@shared/ordering";
 import { FactStore, sortedFactArray, toFactArray, type FactArray, type FactSpool } from "@shared/fact-array";
+import { immutable } from "@shared/immutability";
 
 export interface CommandExecution {
   readonly events: readonly DomainEvent[];
@@ -60,7 +61,7 @@ export class InitializeProjectHandler {
       },
     });
 
-    return { events: Object.freeze([event]), records: Object.freeze([]) };
+    return { events: immutable([event]), records: immutable([]) };
   }
 }
 
@@ -76,7 +77,7 @@ export class DiscoverProjectHandler {
       },
     });
 
-    return { events: Object.freeze([event]), records: Object.freeze([]) };
+    return { events: immutable([event]), records: immutable([]) };
   }
 }
 
@@ -90,7 +91,7 @@ export class UpdateKnowledgeHandler {
       },
     });
 
-    return { events: Object.freeze([event]), records: Object.freeze([]) };
+    return { events: immutable([event]), records: immutable([]) };
   }
 }
 
@@ -120,7 +121,7 @@ export class AnalyzeProjectHandler {
   }
 
   public getAstStoreCleanupFailures(): readonly AstStoreCleanupFailure[] {
-    return Object.freeze([...this.astStoreCleanupFailures]);
+    return immutable([...this.astStoreCleanupFailures]);
   }
 
   /** What the last run could not use of the project's tsconfig.json / jsconfig.json; empty when it was read in full. */
@@ -369,8 +370,8 @@ export class AnalyzeProjectHandler {
           ];
 
           return {
-            events: Object.freeze(events),
-            records: Object.freeze(records),
+            events: immutable(events),
+            records: immutable(records),
             discovery,
             analysis: analysisSummary,
             isReused: true,
@@ -749,8 +750,8 @@ export class AnalyzeProjectHandler {
       );
 
       return {
-        events: Object.freeze(events),
-        records: Object.freeze(records),
+        events: immutable(events),
+        records: immutable(records),
         discovery,
         analysis: analysisSummary,
       };
@@ -782,15 +783,15 @@ export class AnalyzeProjectHandler {
       ];
 
       return {
-        events: Object.freeze(failedEvents),
-        records: Object.freeze(failedRecords),
+        events: immutable(failedEvents),
+        records: immutable(failedRecords),
         discovery,
       };
     } finally {
       try {
         await astStore.dispose();
       } catch (error: unknown) {
-        this.astStoreCleanupFailures.push(Object.freeze({
+        this.astStoreCleanupFailures.push(immutable({
           projectId: discovery.projectId,
           analysisRunId: command.id,
           error,

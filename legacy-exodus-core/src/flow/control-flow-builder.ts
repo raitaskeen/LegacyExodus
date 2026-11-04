@@ -5,6 +5,7 @@ import { ControlFlowInvariantError } from "./flow-errors";
 import { compareCodePoints } from "@shared/ordering";
 import { stableId } from "@shared/identity";
 import { FactKeyer, type CodeSymbol } from "@symbols/index";
+import { immutable } from "@shared/immutability";
 
 export interface ControlFlowGraphsWithNodes {
   readonly graphs: readonly ControlFlowGraph[];
@@ -54,7 +55,7 @@ export class DeterministicControlFlowGraphBuilder {
       rooted(this.buildScope(ast.metadata.sourcePath, "module", ast.root.children, statementNodes, blockClauses, keys, undefined), ast.root),
       ...functions.map((candidate) => rooted(this.buildScope(ast.metadata.sourcePath, candidate.name, graphStatements(candidate.node), statementNodes, blockClauses, keys, candidate.node), candidate.node)),
     ].sort((left, right) => compareCodePoints(left.id, right.id));
-    return { graphs: Object.freeze(graphs), statementNodes, blockClauses, graphRoots };
+    return { graphs: immutable(graphs), statementNodes, blockClauses, graphRoots };
   }
 
   private buildScope(filePath: string, scopeName: string, nodes: readonly ASTNode[], statementNodes?: Map<string, ASTNode>, blockClauses?: Map<string, readonly ASTNode[]>, keys?: FileKeys, root?: ASTNode): ControlFlowGraph {

@@ -8,6 +8,7 @@ import type { ParseResponse } from "@parser/models/parse-response";
 
 import { mapJavaScriptNode } from "./javascript-node-mapper";
 import { javascriptParserOptionsFor } from "./javascript-parser-options";
+import { immutable } from "@shared/immutability";
 
 interface BabelParseError {
   readonly code?: string;
@@ -23,8 +24,8 @@ export class JavaScriptParser implements Parser {
   public readonly id = "javascript-parser";
   public readonly name = "JavaScript Parser";
   public readonly version = "1.0.0";
-  public readonly supportedLanguages = Object.freeze(["javascript", "typescript"]);
-  public readonly capabilities = Object.freeze(["ast", "comments", "exports", "imports", "locations"] as const);
+  public readonly supportedLanguages = immutable(["javascript", "typescript"]);
+  public readonly capabilities = immutable(["ast", "comments", "exports", "imports", "locations"] as const);
 
   public canHandle(request: ParseRequest): boolean {
     return ["javascript", "typescript"].includes(request.file.language.toLowerCase());
@@ -52,7 +53,7 @@ export class JavaScriptParser implements Parser {
             nodeCount: mapping.nodeCount,
           },
           warnings: [],
-          errors: Object.freeze(parsedFile.errors.map(mapSyntaxError)),
+          errors: immutable(parsedFile.errors.map(mapSyntaxError)),
         },
       };
     } catch (error: unknown) {
@@ -69,7 +70,7 @@ export class JavaScriptParser implements Parser {
             nodeCount: 1,
           },
           warnings: [],
-          errors: Object.freeze([mapSyntaxError(error)]),
+          errors: immutable([mapSyntaxError(error)]),
         },
       };
     }

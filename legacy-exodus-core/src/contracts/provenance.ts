@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { immutable } from "@shared/immutability";
 
 /** Stable references linking analysis artifacts without duplicating their payloads. */
 export interface AnalysisProvenance {
@@ -17,5 +18,5 @@ const schema = z.object({
 }).refine((value) => Object.keys(value).length > 1, "Provenance must reference at least one canonical entity.");
 
 export function createAnalysisProvenance(value: AnalysisProvenance): AnalysisProvenance {
-  return Object.freeze({ ...schema.parse(value) });
+  return immutable({ ...schema.parse(value) });
 }

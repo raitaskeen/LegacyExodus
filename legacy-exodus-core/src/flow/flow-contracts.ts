@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { sortByKey } from "@shared/ordering";
+import { immutable } from "@shared/immutability";
 
 /** Certainty of an analysis result. Missing facts must never be treated as resolved facts. */
 export type AnalysisState = "RESOLVED" | "INFERRED" | "UNRESOLVED" | "UNSUPPORTED" | "CONFLICTING" | "REQUIRES_REVIEW";
@@ -46,8 +47,8 @@ export const controlFlowGraphSchema = cfgSchema;
 export function createControlFlowGraph(graph: ControlFlowGraph): ControlFlowGraph { return freeze(controlFlowGraphSchema.parse(graph)); }
 export function createDataFlowGraph(graph: DataFlowGraph): DataFlowGraph { return freeze(dataFlowGraphSchema.parse(graph)); }
 export function createProvenCallTargets(targets: readonly ProvenCallTarget[]): readonly ProvenCallTarget[] {
-  return Object.freeze(sortByKey(provenCallTargetSchema.array().parse(targets).map((target) => Object.freeze({ ...target, location: Object.freeze({ ...target.location }) })), (target) => `${target.sourceFilePath}:${target.location.line}:${target.location.column}:${target.callId}`));
+  return immutable(sortByKey(provenCallTargetSchema.array().parse(targets).map((target) => immutable({ ...target, location: immutable({ ...target.location }) })), (target) => `${target.sourceFilePath}:${target.location.line}:${target.location.column}:${target.callId}`));
 }
 
 function freeze<T>(value: T): T { return deepFreeze(value); }
-function deepFreeze<T>(value: T): T { if (value === null || typeof value !== "object") return value; for (const nested of Object.values(value)) deepFreeze(nested); return Object.freeze(value); }
+function deepFreeze<T>(value: T): T { if (value === null || typeof value !== "object") return value; for (const nested of Object.values(value)) deepFreeze(nested); return immutable(value); }

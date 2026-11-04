@@ -5,6 +5,7 @@ import {
   sourceAnchorSchema, moduleReferenceFormSchema, sourcePhaseSchema, freezeSourceAnchor, unresolvedModuleReferenceSchema, freezeUnresolvedModuleReference,
   type SourceAnchor, type UnresolvedModuleReference,
 } from "@symbols/module-reference-contracts";
+import { immutable } from "@shared/immutability";
 
 export interface DependencyGraphNode {
   readonly id: string;
@@ -89,15 +90,15 @@ const graphSchema = z.object({ nodes: z.array(nodeSchema), edges: z.array(edgeSc
 export function validateDependencyGraph(graph: unknown): DependencyGraph {
   const parsedGraph = graphSchema.parse(graph);
 
-  return Object.freeze({
-    nodes: Object.freeze(parsedGraph.nodes.map((node) => Object.freeze({ ...node }))),
-    edges: Object.freeze(parsedGraph.edges.map((edge) => Object.freeze({ ...edge }))),
-    cycles: Object.freeze(parsedGraph.cycles.map((cycle) => Object.freeze([...cycle]))),
-    ...(parsedGraph.moduleGraph === undefined ? {} : { moduleGraph: Object.freeze({
+  return immutable({
+    nodes: immutable(parsedGraph.nodes.map((node) => immutable({ ...node }))),
+    edges: immutable(parsedGraph.edges.map((edge) => immutable({ ...edge }))),
+    cycles: immutable(parsedGraph.cycles.map((cycle) => immutable([...cycle]))),
+    ...(parsedGraph.moduleGraph === undefined ? {} : { moduleGraph: immutable({
       contract: parsedGraph.moduleGraph.contract,
-      edges: Object.freeze(parsedGraph.moduleGraph.edges.map((edge) => Object.freeze({ ...edge, sourceAnchor: freezeSourceAnchor(edge.sourceAnchor) }))),
+      edges: immutable(parsedGraph.moduleGraph.edges.map((edge) => immutable({ ...edge, sourceAnchor: freezeSourceAnchor(edge.sourceAnchor) }))),
       ...(parsedGraph.moduleGraph.unresolvedReferences === undefined ? {} : {
-        unresolvedReferences: Object.freeze(parsedGraph.moduleGraph.unresolvedReferences.map((reference) => Object.freeze({
+        unresolvedReferences: immutable(parsedGraph.moduleGraph.unresolvedReferences.map((reference) => immutable({
           ...freezeUnresolvedModuleReference(reference), sourceFilePath: reference.sourceFilePath,
         }))),
       }),
@@ -108,5 +109,5 @@ export function validateDependencyGraph(graph: unknown): DependencyGraph {
 export function validateCurrentDependencyGraph(graph: unknown): CurrentDependencyGraph {
   const validated = validateDependencyGraph(graph);
   if (validated.moduleGraph === undefined) throw new Error("Current dependency graph requires f07-import-relations-v1.");
-  return Object.freeze({ ...validated, moduleGraph: validated.moduleGraph });
+  return immutable({ ...validated, moduleGraph: validated.moduleGraph });
 }
