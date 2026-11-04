@@ -1,4 +1,5 @@
 import type { ParserOptions } from "@babel/parser";
+import { immutable } from "@shared/immutability";
 
 type ParserPlugins = NonNullable<ParserOptions["plugins"]>;
 type SourceType = NonNullable<ParserOptions["sourceType"]>;
@@ -10,7 +11,7 @@ function dialect(
   sourceType: SourceType,
   allowReturnOutsideFunction = false,
 ): Readonly<ParserOptions> {
-  return Object.freeze({
+  return immutable({
     allowReturnOutsideFunction,
     errorRecovery: true,
     plugins,

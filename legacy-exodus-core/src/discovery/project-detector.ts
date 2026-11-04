@@ -10,6 +10,7 @@ import type {
 } from "@contracts/discovery";
 import { findWorkspaceRoots } from "@graph/workspace-loader";
 import { compareCodePoints } from "@shared/ordering";
+import { immutable } from "@shared/immutability";
 
 interface ProjectManifest {
   readonly name?: string;
@@ -24,7 +25,7 @@ const projectManifestSchema = z.object({
 }).passthrough();
 
 // UPGRADE: Expanded enterprise framework signatures
-const frameworkSignatures = Object.freeze([
+const frameworkSignatures = immutable([
   { framework: "express", dependencies: ["express"] },
   { framework: "mongodb", dependencies: ["mongodb", "mongoose"] },
   { framework: "react", dependencies: ["react", "react-dom"] },
@@ -73,15 +74,15 @@ export class ProjectDetector {
     const languages = [...new Set(files.map((file) => file.language).filter((language) => language !== "unknown"))]
       .sort();
     const manifestFailures = result.status === "failure"
-      ? [Object.freeze(result.failure)]
+      ? [immutable(result.failure)]
       : [];
 
-    return Object.freeze({
+    return immutable({
       projectName: manifest?.name?.trim() || basename(projectPath),
-      dependencies: Object.freeze(dependencies),
-      frameworks: Object.freeze(frameworks),
-      languages: Object.freeze(languages),
-      manifestFailures: Object.freeze(manifestFailures),
+      dependencies: immutable(dependencies),
+      frameworks: immutable(frameworks),
+      languages: immutable(languages),
+      manifestFailures: immutable(manifestFailures),
     });
   }
 
@@ -93,7 +94,7 @@ export class ProjectDetector {
     const hasPackageJson = files.some((file) => file.path === "package.json");
 
     if (!hasPackageJson) {
-      return Object.freeze({ status: "absent" });
+      return immutable({ status: "absent" });
     }
 
     let fileContent: string;
@@ -102,7 +103,7 @@ export class ProjectDetector {
     } catch (error: unknown) {
       const code = getErrorCode(error);
       return code === "ENOENT"
-        ? Object.freeze({ status: "absent" })
+        ? immutable({ status: "absent" })
         : createManifestFailure("manifest-read", code);
     }
 
@@ -118,7 +119,7 @@ export class ProjectDetector {
 
     const parsedManifest = projectManifestSchema.safeParse(parsedJson);
     return parsedManifest.success
-      ? Object.freeze({ status: "valid", manifest: Object.freeze(parsedManifest.data) })
+      ? immutable({ status: "valid", manifest: immutable(parsedManifest.data) })
       : createManifestFailure("manifest-validation", "SCHEMA_INVALID");
   }
 
@@ -157,7 +158,7 @@ export class ProjectDetector {
 
     return [...dependencies, ...developmentDependencies]
       .sort((left, right) => compareCodePoints(left.name, right.name))
-      .map((dependency) => Object.freeze(dependency));
+      .map((dependency) => immutable(dependency));
   }
 
   /**
@@ -185,7 +186,7 @@ export class ProjectDetector {
     evidence: string,
   ): void {
     if (detected && !frameworks.some((framework) => framework.name === name)) {
-      frameworks.push(Object.freeze({ name, evidence }));
+      frameworks.push(immutable({ name, evidence }));
     }
   }
 }
@@ -194,9 +195,9 @@ function createManifestFailure(
   kind: DiscoveryManifestFailure["kind"],
   code: string,
 ): ManifestResult {
-  return Object.freeze({
+  return immutable({
     status: "failure",
-    failure: Object.freeze({ path: "package.json", kind, code }),
+    failure: immutable({ path: "package.json", kind, code }),
   });
 }
 

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { LegacyExodusError } from "@shared/errors";
+import { immutable } from "@shared/immutability";
 
 export interface FileArtifact {
   readonly id: string;
@@ -143,24 +144,24 @@ export function validateProjectDiscovery(discovery: unknown): ProjectDiscovery {
     });
   }
 
-  return Object.freeze({
+  return immutable({
     ...parsedDiscovery.data,
-    files: Object.freeze(parsedDiscovery.data.files.map((file) => Object.freeze({ ...file }))),
-    dependencies: Object.freeze(
-      parsedDiscovery.data.dependencies.map((dependency) => Object.freeze({ ...dependency })),
+    files: immutable(parsedDiscovery.data.files.map((file) => immutable({ ...file }))),
+    dependencies: immutable(
+      parsedDiscovery.data.dependencies.map((dependency) => immutable({ ...dependency })),
     ),
-    frameworks: Object.freeze(
-      parsedDiscovery.data.frameworks.map((framework) => Object.freeze({ ...framework })),
+    frameworks: immutable(
+      parsedDiscovery.data.frameworks.map((framework) => immutable({ ...framework })),
     ),
-    languages: Object.freeze([...parsedDiscovery.data.languages]),
-    enumerationFailures: Object.freeze(
-      (parsedDiscovery.data.enumerationFailures ?? []).map((failure) => Object.freeze({ ...failure })),
+    languages: immutable([...parsedDiscovery.data.languages]),
+    enumerationFailures: immutable(
+      (parsedDiscovery.data.enumerationFailures ?? []).map((failure) => immutable({ ...failure })),
     ),
-    manifestFailures: Object.freeze(
-      (parsedDiscovery.data.manifestFailures ?? []).map((failure) => Object.freeze({ ...failure })),
+    manifestFailures: immutable(
+      (parsedDiscovery.data.manifestFailures ?? []).map((failure) => immutable({ ...failure })),
     ),
-    excludedPaths: Object.freeze(
-      (parsedDiscovery.data.excludedPaths ?? []).map((excluded) => Object.freeze({ ...excluded })),
+    excludedPaths: immutable(
+      (parsedDiscovery.data.excludedPaths ?? []).map((excluded) => immutable({ ...excluded })),
     ),
   });
 }

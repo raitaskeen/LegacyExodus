@@ -1,4 +1,5 @@
 import { sortByKey } from "@shared/ordering";
+import { immutable } from "@shared/immutability";
 
 /** A taint transfer: whatever reaches the source definition reaches the target. */
 export interface TaintEdge { readonly sourceDefinitionId: string; readonly targetDefinitionId: string }
@@ -15,7 +16,7 @@ export function setTaintPath(taintPaths: TaintPaths, definitionId: string, sourc
   if (existing !== undefined && existing.length <= path.length) return false;
   if (path.slice(0, -1).includes(definitionId)) return false;
   if (existing !== undefined && existing.join(":") <= path.join(":")) return false;
-  paths.set(sourceId, Object.freeze([...path]));
+  paths.set(sourceId, immutable([...path]));
   taintPaths.set(definitionId, paths);
   return true;
 }

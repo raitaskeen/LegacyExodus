@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { toFactArray, type FactArray, type FactArrayWriter, type FactStore } from "@shared/fact-array";
 import { compareCodePoints, sortByKey } from "@shared/ordering";
+import { immutable } from "@shared/immutability";
 
 export interface SemanticCall {
   readonly id: string;
@@ -91,7 +92,7 @@ export const semanticAnalysisSchema = z.object({ calls: z.array(callSchema), ref
 
 export function createSemanticAnalysis(analysis: SemanticAnalysis): SemanticAnalysis {
   const parsed = semanticAnalysisSchema.parse(analysis);
-  return Object.freeze({
+  return immutable({
     calls: freezeSorted(parsed.calls), references: freezeSorted(parsed.references), scopes: freezeSorted(parsed.scopes),
     deadCode: freezeSorted(parsed.deadCode), unusedImports: freezeSorted(parsed.unusedImports), unusedExports: freezeSorted(parsed.unusedExports),
     entryPoints: freezeSorted(parsed.entryPoints), routes: freezeSorted(parsed.routes), middlewareChains: freezeSorted(parsed.middlewareChains),
@@ -100,7 +101,7 @@ export function createSemanticAnalysis(analysis: SemanticAnalysis): SemanticAnal
 
 /** `items` are fresh from the schema parse, so they are frozen in place rather than copied again (BA-17). */
 function freezeSorted<T extends { readonly id?: string; readonly key?: string; readonly filePath?: string; readonly name?: string }>(items: readonly T[]): readonly T[] {
-  return Object.freeze(sortByKey(items, stableKey).map((item) => Object.freeze(item)));
+  return immutable(sortByKey(items, stableKey).map((item) => immutable(item)));
 }
 
 // By structural key where a fact has one (ADR-008): file, owners, kind and ordinal, so the order is meaningful

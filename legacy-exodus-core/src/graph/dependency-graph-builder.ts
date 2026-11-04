@@ -5,6 +5,7 @@ import type { CodeSymbol, SymbolTable } from "@symbols/index";
 import { validateCurrentDependencyGraph, type CurrentDependencyGraph, type DependencyGraphEdge, type ModuleDependencyEdge } from "./dependency-graph-contracts";
 import { canonicalizePath, type KnownPathLookup, ModuleResolver } from "./module-resolver";
 import { compareCodePoints } from "@shared/ordering";
+import { immutable } from "@shared/immutability";
 
 export class DeterministicDependencyGraphBuilder {
   public constructor(private readonly resolver: ModuleResolver = new ModuleResolver()) {}
@@ -237,7 +238,7 @@ function findCycleInComponent(component: readonly string[], adjacency: ReadonlyM
   const members = new Set(component);
   const start = component[0];
   if (start === undefined) {
-    return Object.freeze([]);
+    return immutable([]);
   }
 
   const path: string[] = [];
@@ -265,12 +266,12 @@ function findCycleInComponent(component: readonly string[], adjacency: ReadonlyM
     return undefined;
   };
 
-  return visit(start) ?? Object.freeze([start, start]);
+  return visit(start) ?? immutable([start, start]);
 }
 
 function canonicalizeCycle(cycle: readonly string[]): readonly string[] {
   const body = cycle.slice(0, -1);
   const rotations = body.map((_, index) => [...body.slice(index), ...body.slice(0, index)]);
   const canonical = rotations.sort((left, right) => compareCodePoints(left.join("\u0000"), right.join("\u0000")))[0] ?? [];
-  return Object.freeze([...canonical, canonical[0] ?? ""]);
+  return immutable([...canonical, canonical[0] ?? ""]);
 }

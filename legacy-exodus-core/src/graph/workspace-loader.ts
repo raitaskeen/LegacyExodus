@@ -4,6 +4,7 @@ import { join, posix } from "node:path";
 import type { FileArtifact } from "@contracts/discovery";
 
 import { canonicalizePath, type WorkspacePackage } from "./module-resolver";
+import { immutable } from "@shared/immutability";
 
 /**
  * Workspace packages of a monorepo by name (S3): the patterns of the root `package.json`
@@ -31,7 +32,7 @@ export async function loadWorkspacePackages(projectPath: string, files: readonly
   for (const [name, entry] of [...byName].sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))) {
     if (entry !== null) packages[name] = entry;
   }
-  return Object.freeze(packages);
+  return immutable(packages);
 }
 
 /**

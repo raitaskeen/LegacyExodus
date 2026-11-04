@@ -10,6 +10,7 @@ import { LegacyExodusError } from "@shared/errors";
 import { compareCodePoints } from "@shared/ordering";
 
 import { IgnoreRules } from "./ignore-rules";
+import { immutable } from "@shared/immutability";
 
 export type { FileScanResult };
 
@@ -272,10 +273,10 @@ export class FileScanner {
       compareCodePoints(left.path, right.path) || compareCodePoints(left.kind, right.kind) || compareCodePoints(left.code, right.code),
     );
 
-    return Object.freeze({
-      files: Object.freeze(files),
-      enumerationFailures: Object.freeze(enumerationFailures),
-      excludedPaths: Object.freeze(excludedPaths),
+    return immutable({
+      files: immutable(files),
+      enumerationFailures: immutable(enumerationFailures),
+      excludedPaths: immutable(excludedPaths),
     });
   }
 
@@ -293,7 +294,7 @@ export class FileScanner {
       entries = (await this.readdirFn(currentPath, { withFileTypes: true })) as unknown as Dirent[];
     } catch (error: unknown) {
       const relPath = relative(projectPath, currentPath).split(sep).join("/");
-      failures.push(Object.freeze({
+      failures.push(immutable({
         path: relPath === "" ? "." : relPath,
         kind: "directory-read",
         code: getErrorCode(error),
@@ -323,7 +324,7 @@ export class FileScanner {
         const reason = policy.configured.ignoredBy(entryRelative, true)
           ?? (policy.tracked?.directories.has(entryRelative) === true ? undefined : rules.ignoredBy(entryRelative, true));
         if (reason !== undefined) {
-          excludedPaths.push(Object.freeze({ path: entryRelative, kind: "directory", reason }));
+          excludedPaths.push(immutable({ path: entryRelative, kind: "directory", reason }));
           continue;
         }
         await this.scanDirectory(projectPath, entryPath, files, failures, excludedPaths, rules, policy);
@@ -334,14 +335,14 @@ export class FileScanner {
         const reason = policy.configured.ignoredBy(entryRelative, false)
           ?? (policy.tracked?.files.has(entryRelative) === true ? undefined : rules.ignoredBy(entryRelative, false));
         if (reason !== undefined) {
-          excludedPaths.push(Object.freeze({ path: entryRelative, kind: "file", reason }));
+          excludedPaths.push(immutable({ path: entryRelative, kind: "file", reason }));
           continue;
         }
         try {
           files.push(await this.createFileArtifact(projectPath, entryPath));
         } catch (error: unknown) {
           const relPath = relative(projectPath, entryPath).split(sep).join("/");
-          failures.push(Object.freeze({
+          failures.push(immutable({
             path: relPath,
             kind: "entry-stat",
             code: getErrorCode(error),
@@ -358,7 +359,7 @@ export class FileScanner {
     const extension = extensionIndex < 0 ? "" : path.slice(extensionIndex).toLowerCase();
 
     const known = knownFiles[path.split("/").at(-1)?.toLowerCase() ?? ""];
-    return Object.freeze({
+    return immutable({
       id: createHash("sha256").update(path).digest("hex"),
       path,
       language: known?.language ?? languageByExtension[extension] ?? "unknown",

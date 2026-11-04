@@ -18,6 +18,7 @@ import type {
   StorageProvider,
   StorageQueryCriteria,
 } from "../storage-provider";
+import { immutable } from "@shared/immutability";
 
 export const SQLITE_SCHEMA_VERSION = 1;
 
@@ -332,7 +333,7 @@ export class SqliteStorageProvider implements StorageProvider {
       throw new StorageValidationError(`Failed to deserialize SQLite storage record ${row.id}`);
     }
 
-    return Object.freeze({
+    return immutable({
       id: row.id,
       type: row.type,
       payload: deepFreeze(payload),

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { FactArray } from "@shared/fact-array";
 
 import { StorageValidationError } from "./storage-errors";
+import { immutable, isImmutable } from "@shared/immutability";
 
 export interface SerializedObject {
   readonly [key: string]: unknown;
@@ -89,7 +90,7 @@ export function createOwnedStorageRecord<Payload extends SerializedPayload>(
 function freezeEverything(value: SerializedPayload): void {
   if (value === null || typeof value !== "object") return;
   for (const nested of Object.values(value) as SerializedPayload[]) freezeEverything(nested);
-  Object.freeze(value);
+  immutable(value);
 }
 
 /** Stable content identity; timestamps remain observability metadata only. */
@@ -154,11 +155,11 @@ export function validateStorageRecord<Payload extends SerializedPayload>(
     throw new StorageValidationError("Storage record updatedAt must not precede createdAt.");
   }
 
-  if (Object.isFrozen(record) && Object.isFrozen(record.payload)) {
+  if (isImmutable(record) && isImmutable(record.payload)) {
     return record;
   }
 
-  return Object.freeze({
+  return immutable({
     id: record.id,
     type: record.type,
     payload: deepFreeze(record.payload),
@@ -170,7 +171,7 @@ export function validateStorageRecord<Payload extends SerializedPayload>(
 export function cloneStorageRecord<Payload extends SerializedPayload>(
   record: StorageRecord<Payload>,
 ): StorageRecord<Payload> {
-  return Object.freeze({
+  return immutable({
     id: record.id,
     type: record.type,
     payload: deepFreeze(structuredClone(record.payload)),
@@ -188,7 +189,7 @@ export function cloneStorageRecord<Payload extends SerializedPayload>(
  * @returns The deeply frozen object reference.
  */
 export function deepFreeze<Payload extends SerializedPayload>(payload: Payload): Payload {
-  if (payload === null || typeof payload !== "object" || Object.isFrozen(payload)) {
+  if (payload === null || typeof payload !== "object" || isImmutable(payload)) {
     return payload;
   }
 
@@ -196,7 +197,7 @@ export function deepFreeze<Payload extends SerializedPayload>(payload: Payload):
     deepFreeze(value);
   }
 
-  return Object.freeze(payload) as Payload;
+  return immutable(payload) as Payload;
 }
 
 export interface StorageRecordMetadata {

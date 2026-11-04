@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { compareCodePoints, sortByKey } from "./ordering";
+import { immutable } from "@shared/immutability";
 
 const CHUNK_BYTES = 1 << 20;
 const STORE_PREFIX = "legacy-exodus-facts-";
@@ -27,7 +28,7 @@ export class FactArray<T> implements Iterable<T> {
 
   private constructor(segments: readonly Segment[], public readonly length: number, public readonly sha256: string) {
     this.#segments = segments;
-    Object.freeze(this);
+    immutable(this);
   }
 
   /** @internal The list a writer sealed. */

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { LegacyExodusError } from "@shared/errors";
+import { immutable, isImmutable } from "@shared/immutability";
 
 export type DiscoveryArtifactName =
   | "manifest.json"
@@ -79,7 +80,7 @@ const deferred = Symbol("deferred discovery artifact");
  * return the same content on every call.
  */
 export function deferredArtifact(name: DiscoveryArtifactName, load: () => unknown): DiscoveryArtifact {
-  return Object.freeze({ name, get payload(): unknown { return deepFreeze(load()); }, [deferred]: true });
+  return immutable({ name, get payload(): unknown { return deepFreeze(load()); }, [deferred]: true });
 }
 
 function isDeferred(artifact: DiscoveryArtifact): boolean {
@@ -101,14 +102,14 @@ export function createDiscoveryProjection(projection: DiscoveryProjection): Disc
     });
   }
 
-  return Object.freeze({
+  return immutable({
     projectPath: parsedProjection.data.projectPath,
-    artifacts: Object.freeze(
+    artifacts: immutable(
       projection.artifacts.map((artifact) =>
-        isDeferred(artifact) ? artifact : Object.freeze({ name: artifact.name, payload: deepFreeze(artifact.payload) }),
+        isDeferred(artifact) ? artifact : immutable({ name: artifact.name, payload: deepFreeze(artifact.payload) }),
       ),
     ),
-    ...(parsedProjection.data.metadata ? { metadata: Object.freeze({ ...parsedProjection.data.metadata }) } : {}),
+    ...(parsedProjection.data.metadata ? { metadata: immutable({ ...parsedProjection.data.metadata }) } : {}),
   });
 }
 
@@ -117,7 +118,7 @@ function deepFreeze(value: unknown): unknown {
     return value;
   }
 
-  if (Object.isFrozen(value)) {
+  if (isImmutable(value)) {
     return value;
   }
 
@@ -125,7 +126,7 @@ function deepFreeze(value: unknown): unknown {
     deepFreeze(nestedValue);
   }
 
-  return Object.freeze(value);
+  return immutable(value);
 }
 
 // Current reuse requires this nested capability; historical projections remain readable.
@@ -172,15 +173,15 @@ export function isR01DispatchedFile(file: DispositionFile): boolean {
 /** Canonical schema order and fixed code-unit path order, independent of record order. */
 export function createAnalysisDisposition(files: readonly AnalysisFileDisposition[]): AnalysisDispositionV1 {
   const parsed = analysisDispositionV1Schema.parse({ contract: "r01-analysis-disposition-v1", files });
-  return Object.freeze({
+  return immutable({
     contract: parsed.contract,
-    files: Object.freeze([...parsed.files].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0).map((file) =>
+    files: immutable([...parsed.files].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0).map((file) =>
       file.kind === "analyzed"
-        ? Object.freeze({
+        ? immutable({
           fileId: file.fileId, path: file.path, kind: file.kind, symbolCount: file.symbolCount,
-          ...(file.secondPassFailure === undefined ? {} : { secondPassFailure: Object.freeze({ code: file.secondPassFailure.code }) }),
+          ...(file.secondPassFailure === undefined ? {} : { secondPassFailure: immutable({ code: file.secondPassFailure.code }) }),
         })
-        : Object.freeze({ fileId: file.fileId, path: file.path, kind: file.kind, code: file.code }),
+        : immutable({ fileId: file.fileId, path: file.path, kind: file.kind, code: file.code }),
     )),
   });
 }

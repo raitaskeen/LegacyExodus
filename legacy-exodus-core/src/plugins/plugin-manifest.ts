@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { InvalidPluginManifestError } from "./plugin-errors";
+import { immutable } from "@shared/immutability";
 
 export type PluginType = "parser" | "storage" | "ai-provider" | "migration" | "validator";
 
@@ -25,5 +26,5 @@ export function validatePluginManifest(manifest: unknown): PluginManifest {
     throw new InvalidPluginManifestError({ issues: parsedManifest.error.issues });
   }
 
-  return Object.freeze(parsedManifest.data);
+  return immutable(parsedManifest.data);
 }

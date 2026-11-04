@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { LegacyExodusError } from "@shared/errors";
+import { immutable } from "@shared/immutability";
 
 export interface ParserStatistics {
   readonly durationMs: number;
@@ -23,5 +24,5 @@ export function validateParserStatistics(statistics: unknown): ParserStatistics 
     });
   }
 
-  return Object.freeze({ ...parsedStatistics.data });
+  return immutable({ ...parsedStatistics.data });
 }

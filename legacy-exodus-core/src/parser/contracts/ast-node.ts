@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { LegacyExodusError } from "@shared/errors";
+import { immutable, isImmutable } from "@shared/immutability";
 
 export interface SourcePosition {
   readonly line: number;
@@ -79,12 +80,12 @@ export function freezeNode(node: ASTNode): ASTNode {
     return node;
   }
 
-  return Object.freeze({
+  return immutable({
     ...node,
     role: node.role,
     location: freezeLocation(node.location),
-    attributes: Object.isFrozen(node.attributes) ? node.attributes : Object.freeze({ ...node.attributes }),
-    children: Object.freeze(node.children.map(freezeNode)),
+    attributes: isImmutable(node.attributes) ? node.attributes : immutable({ ...node.attributes }),
+    children: immutable(node.children.map(freezeNode)),
   });
 }
 
@@ -94,16 +95,16 @@ function freezeLocation(location: SourceLocation | undefined): SourceLocation | 
   }
 
   if (
-    Object.isFrozen(location) &&
-    Object.isFrozen(location.start) &&
-    Object.isFrozen(location.end)
+    isImmutable(location) &&
+    isImmutable(location.start) &&
+    isImmutable(location.end)
   ) {
     return location;
   }
 
-  return Object.freeze({
-    start: Object.isFrozen(location.start) ? location.start : Object.freeze({ ...location.start }),
-    end: Object.isFrozen(location.end) ? location.end : Object.freeze({ ...location.end }),
+  return immutable({
+    start: isImmutable(location.start) ? location.start : immutable({ ...location.start }),
+    end: isImmutable(location.end) ? location.end : immutable({ ...location.end }),
   });
 }
 
@@ -118,14 +119,14 @@ function isDeeplyFrozenASTNode(value: unknown): boolean {
   if (
     typeof value !== "object" ||
     value === null ||
-    !Object.isFrozen(value) ||
+    !isImmutable(value) ||
     !("type" in value) ||
     typeof (value as { readonly type: unknown }).type !== "string" ||
     !("attributes" in value) ||
-    !Object.isFrozen((value as ASTNode).attributes) ||
+    !isImmutable((value as ASTNode).attributes) ||
     !("children" in value) ||
     !Array.isArray((value as ASTNode).children) ||
-    !Object.isFrozen((value as ASTNode).children)
+    !isImmutable((value as ASTNode).children)
   ) {
     return false;
   }
@@ -133,9 +134,9 @@ function isDeeplyFrozenASTNode(value: unknown): boolean {
   const location = (value as ASTNode).location;
   if (
     location !== undefined &&
-    (!Object.isFrozen(location) ||
-      !Object.isFrozen(location.start) ||
-      !Object.isFrozen(location.end))
+    (!isImmutable(location) ||
+      !isImmutable(location.start) ||
+      !isImmutable(location.end))
   ) {
     return false;
   }

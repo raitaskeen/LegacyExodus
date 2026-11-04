@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { immutable } from "@shared/immutability";
 
 export type Immutable<Value> = Value extends (...arguments_: never[]) => unknown
   ? Value
@@ -53,5 +54,5 @@ function deepFreeze<Value>(value: Value, seen: WeakSet<object> = new WeakSet<obj
     deepFreeze(nestedValue, seen);
   }
 
-  return Object.freeze(value) as Immutable<Value>;
+  return immutable(value) as Immutable<Value>;
 }

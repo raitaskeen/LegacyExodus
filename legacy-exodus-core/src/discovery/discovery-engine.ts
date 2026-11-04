@@ -8,6 +8,7 @@ import type { DiscoveryContext } from "./discovery-context";
 import type { DiscoveryResult } from "./discovery-result";
 import { FileScanner } from "./file-scanner";
 import { ProjectDetector } from "./project-detector";
+import { immutable } from "@shared/immutability";
 
 export class DiscoveryEngine {
   public constructor(
@@ -75,6 +76,6 @@ export class DiscoveryEngine {
       },
     });
 
-    return Object.freeze([...fileEvents, ...dependencyEvents, ...frameworkEvents, ...failureEvents, completionEvent]);
+    return immutable([...fileEvents, ...dependencyEvents, ...frameworkEvents, ...failureEvents, completionEvent]);
   }
 }

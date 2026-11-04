@@ -8,6 +8,7 @@ import { DeterministicDataFlowGraphBuilder } from "./data-flow-builder";
 import { createDataFlowGraph, createProvenCallTargets, type ControlFlowGraph, type DataFlowGraph, type InterproceduralFlow } from "./flow-contracts";
 import { compareCodePoints } from "@shared/ordering";
 import { propagateTaintPaths, setTaintPath } from "./taint-propagation";
+import { immutable } from "@shared/immutability";
 
 /** What connecting needs of a file's data-flow graph; the rest of the graph can wait on disk (ADR-009 step 4a). */
 export type ConnectionGraph = Pick<DataFlowGraph, "filePath" | "functionSummaries" | "callBindings" | "interproceduralFlows">;
@@ -51,9 +52,9 @@ export class DeterministicFlowAnalysisEngine {
   ): FlowAnalysisResult {
     const connected: DataFlowGraph[] = [];
     this.connectDataFlow(contexts, contexts.map(({ graph }) => graph), symbolTables, (graph) => connected.push(graph));
-    return Object.freeze({
-      controlFlowGraphs: Object.freeze([...controlFlowGraphs]),
-      dataFlowGraphs: Object.freeze(connected),
+    return immutable({
+      controlFlowGraphs: immutable([...controlFlowGraphs]),
+      dataFlowGraphs: immutable(connected),
     });
   }
 

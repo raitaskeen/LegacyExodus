@@ -10,6 +10,7 @@ import { DeterministicCallGraphBuilder } from "./call-graph-builder";
 import { createSemanticAnalysis, type DeadCodeFinding, type ExpressRoute, type MiddlewareChain, type ScopeAnalysis, type SemanticAnalysis, type SemanticCall, type SemanticEntryPoint, type SymbolReference } from "./semantic-contracts";
 import type { SemanticContext } from "./semantic-context";
 import { compareCodePoints } from "@shared/ordering";
+import { immutable } from "@shared/immutability";
 
 export class DeterministicSemanticAnalysisEngine {
   public constructor(public readonly callGraphBuilder: DeterministicCallGraphBuilder = new DeterministicCallGraphBuilder()) {}
@@ -353,7 +354,7 @@ export function findHttpCalls(root: ASTNode, filePath: string, symbolTable: Symb
           id: hash(`route:${filePath}:${route.method}:${path}:${route.node.location?.start.line ?? 0}`),
           filePath, method: route.method.toUpperCase(), path,
           ...(route.handlerName === undefined ? {} : { handlerName: route.handlerName }),
-          middleware: Object.freeze([...entry.middleware, ...route.middleware]), state: "INFERRED",
+          middleware: immutable([...entry.middleware, ...route.middleware]), state: "INFERRED",
         });
       }
     }
@@ -363,7 +364,7 @@ export function findHttpCalls(root: ASTNode, filePath: string, symbolTable: Symb
   const chained = receiverOrder.flatMap((receiver) => {
     const middleware = (uses.get(receiver) ?? []).flatMap((event) => event.middleware);
     const at = receiver.indexOf("@");
-    return middleware.length === 0 ? [] : [{ base: `${keyer.scopeKey(receiver.slice(at + 1))}middleware:${receiver.slice(0, at)}`, middleware: Object.freeze(middleware) }];
+    return middleware.length === 0 ? [] : [{ base: `${keyer.scopeKey(receiver.slice(at + 1))}middleware:${receiver.slice(0, at)}`, middleware: immutable(middleware) }];
   });
   const chainKeys = numberRepeats(chained.map((chain) => chain.base));
   const middlewareChains = chained.map((chain, index) => ({ key: chainKeys[index]!, filePath, middleware: chain.middleware }));
@@ -525,7 +526,7 @@ function readString(node: ASTNode): string | undefined {
 }
 
 function uniqueSorted(values: readonly string[]): readonly string[] {
-  return Object.freeze([...new Set(values)].sort());
+  return immutable([...new Set(values)].sort());
 }
 
 function uniqueByKey<T>(items: readonly T[], key: (item: T) => string): readonly T[] {

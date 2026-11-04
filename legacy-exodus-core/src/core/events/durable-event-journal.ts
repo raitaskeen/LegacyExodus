@@ -5,6 +5,7 @@ import { createStorageRecord, deepFreeze } from "@storage/index";
 
 import type { DomainEvent } from "./domain-event";
 import { compareCodePoints } from "@shared/ordering";
+import { immutable } from "@shared/immutability";
 
 export const DURABLE_EVENT_RECORD_TYPE = "domain-event";
 
@@ -98,7 +99,7 @@ export async function loadDurableEvents(
     compareCodePoints(left.event.id, right.event.id),
   );
 
-  return Object.freeze(parsed.map((entry) => deepFreeze({
+  return immutable(parsed.map((entry) => deepFreeze({
     id: entry.event.id,
     type: entry.event.type,
     timestamp: new Date(entry.event.timestamp),
