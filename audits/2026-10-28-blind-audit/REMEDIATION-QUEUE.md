@@ -143,6 +143,8 @@ ADR-009 (streaming, sharded execution), 2026-11-03 night. The owner approved it;
 - #257: step 5, dependency and knowledge graph lists sorted on disk (sortedFactArray), Scale Gate CI job (synthetic 10k files, 2,800 MiB ceiling; CI measured 2,212 MiB / 115 s), Ghost budget 6,785 -> 2,560 MiB. Ghost back to back 2,613 -> 1,847 MiB. Ghost fact-diff 0/0.
 - OPEN (next memory item): memory still grows with files. Synthetic 10k 1.67 GB, 20k 2.97 GB. Live heap is only ~22 KB/file (225 MB at 10k after forced GC); the rest is late GC garbage that scales with the live heap. Per-file live state: events/records committed at the end, summary symbols, sparse call bindings. Periodic GC gave only ~10%.
 - Per-file live state, found 2026-11-04: in Bun/JSC every frozen array is ArrayStorage with a SparseArrayValueMap (273 vs 113 bytes; about 28 per file). Records and events are held until the final commit (about 7 KB per file). Options, each an owner decision: relax DAT-01 deep freeze for arrays, commit records and events per batch, S7 worker processes.
+- #258 (owner approved, for speed): arrays frozen only in tests/CI (immutable()/isImmutable()). Ghost 374 -> 258 s, fact-diff 0/0 incl. Ghost; memory unchanged. Fix 2 (batch commit) rejected by owner. Bounding memory for 500k files = S7 worker processes, before enterprise.
+- NEXT: IR phase (Wave 6), first path JS -> TypeScript.
 - Remaining: step 4b (taint over summaries), step 5 (100k-file scale gate, re-baseline Ghost budgets).
 - Known limit: the SQLite driver serializes fact lists in full at commit (S6).
 - Target machine: the owner accepts 32 GB for enterprise scale; the dev machine has 16 GB.
