@@ -58,8 +58,31 @@ describe("fact diff", () => {
 
     const references = diffFacts(extractFacts(base), extractFacts(head)).categories.find((category) => category.category === "references");
 
-    expect(references?.lost).toEqual(["main.js|identifier|b|RESOLVED|function:b@2:0@lib.js ×2"]);
-    expect(references?.gained).toEqual(["main.js|identifier|b|RESOLVED|function:b@2:0@lib.js"]);
+    // Exactly the missing occurrence is lost; the one that stays is not reported as gained.
+    expect(references?.lost).toEqual(["main.js|identifier|b|RESOLVED|function:b@2:0@lib.js #2"]);
+    expect(references?.gained).toEqual([]);
+  });
+
+  it("reports a rising count as gained occurrences, never as a loss", () => {
+    const reference = { id: "r", filePath: "main.js", name: "b", kind: "identifier", resolutionState: "RESOLVED", resolvedSymbolId: symbolB.id };
+    const base = discovery({ "symbols.json": [symbolB], "semantic.json": { references: [reference] } });
+    const head = discovery({ "symbols.json": [symbolB], "semantic.json": { references: [reference, { ...reference, id: "s" }, { ...reference, id: "t" }] } });
+
+    const references = diffFacts(extractFacts(base), extractFacts(head)).categories.find((category) => category.category === "references");
+
+    expect(references?.lost).toEqual([]);
+    expect(references?.gained).toEqual(["main.js|identifier|b|RESOLVED|function:b@2:0@lib.js #2", "main.js|identifier|b|RESOLVED|function:b@2:0@lib.js #3"]);
+  });
+
+  it("reports a name added to a scope as a gain and a removed one as a loss, not as a changed scope", () => {
+    const scope = (referencedNames: readonly string[]) => ({ "semantic.json": { scopes: [{ filePath: "a.js", name: "module", declaredSymbols: ["f"], referencedNames }] } });
+    const diff = diffFacts(extractFacts(discovery(scope(["f", "g"]))), extractFacts(discovery(scope(["f", "h"]))));
+    const category = (name: string) => diff.categories.find((entry) => entry.category === name);
+
+    expect(category("scopes")?.lost).toEqual([]);
+    expect(category("scopes")?.gained).toEqual([]);
+    expect(category("scope-referenced")?.lost).toEqual(["a.js|module|g"]);
+    expect(category("scope-referenced")?.gained).toEqual(["a.js|module|h"]);
   });
 
   // Red-team counterexamples on PR #204: each of these changes must be visible as a lost fact.
@@ -100,7 +123,7 @@ describe("fact diff", () => {
     const route = { filePath: "app.js", method: "GET", path: "/t", handlerName: "h", middleware: [], state: "INFERRED" };
 
     expect(lostIn({ "semantic.json": { routes: [route, route] } }, { "semantic.json": { routes: [route] } }, "routes"))
-      .toEqual(["app.js|GET /t|handler=h|middleware=[]|INFERRED ×2"]);
+      .toEqual(["app.js|GET /t|handler=h|middleware=[]|INFERRED #2"]);
   });
 
   it("sees a symbol flag change that the summary symbol fact does not carry", () => {
