@@ -70,7 +70,10 @@ export class DeterministicSemanticAnalysisEngine {
       // marks a binding unused on purpose, as `tsc --noUnusedLocals` treats it (BA-11). A parameter before a used one
       // holds a position callers fill, so only parameters after the last used one are dead (ESLint `after-used`).
       const positional = requiredParameterIds(table.symbols, referencedSymbolIds);
-      deadCode.push(...table.symbols.filter((symbol) => ["function", "method", "class", "variable"].includes(symbol.kind) && symbol.expression !== true && !symbol.exported && symbol.member !== true && !symbol.name.startsWith("_") && !referencedSymbolIds.has(symbol.id) && !positional.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unreferenced-local-symbol")));
+      deadCode.push(...table.symbols.filter((symbol) => ["function", "method", "class", "variable"].includes(symbol.kind) && symbol.expression !== true && !symbol.exported && symbol.member !== true && !symbol.name.startsWith("_") && !referencedSymbolIds.has(symbol.id) && !positional.has(symbol.id)
+        // Only a function declaration can be the hidden target of an unresolved call by its name (duplicate sloppy
+        // declarations, Annex B); a parameter or variable of the same name elsewhere in the file is not (NA-09).
+        && (symbol.kind !== "function" || usage.unresolvedCallNamesByFile.get(table.filePath)?.has(symbol.name) !== true)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unreferenced-local-symbol")));
     }
     const unusedImports = params.symbolTables.flatMap((table) => table.symbols.filter((symbol) => isLexicalImportBinding(symbol) && !referencedSymbolIds.has(symbol.id)).map((symbol) => finding(symbol.id, symbol.filePath, symbol.name, "unused-import")));
     // A computed `import(name)` or `require(name)` can load any module, so no export is provably unused (BA-10).
@@ -101,6 +104,9 @@ interface SynthesisInput {
   readonly publicModules?: ReadonlySet<string>;
 }
 
+/** An identifier, not a member path or a synthetic name like `mk().run` (NA-01). */
+const PLAIN_NAME = /^[A-Za-z_$][\w$]*$/;
+
 /** What synthesis needs of a run's calls and references, gathered one file at a time (ADR-009 step 3). */
 export class FactUsage {
   public readonly referencedSymbolIds = new Set<string>();
@@ -108,11 +114,22 @@ export class FactUsage {
   public readonly referencedNamesByFile = new Map<string, string[]>();
   /** Files of `*.listen` calls, in call order. */
   public readonly listenerFiles: string[] = [];
+  /**
+   * Plain names of calls the call graph could not resolve, by file (NA-09): the name may still denote a local
+   * function declaration (duplicate sloppy declarations, an Annex B block function, a direct `eval`), so no
+   * function declaration of that name is claimed unreferenced.
+   */
+  public readonly unresolvedCallNamesByFile = new Map<string, Set<string>>();
 
   public add(calls: Iterable<{ readonly sourceFilePath: string; readonly calleeName: string }>, references: Iterable<SymbolReference>): void {
     for (const call of calls) if (call.calleeName.endsWith(".listen")) this.listenerFiles.push(call.sourceFilePath);
     for (const reference of references) {
       if (reference.resolvedSymbolId !== undefined) this.referencedSymbolIds.add(reference.resolvedSymbolId);
+      else if (reference.kind === "call" && PLAIN_NAME.test(reference.name)) {
+        const names = this.unresolvedCallNamesByFile.get(reference.filePath) ?? new Set<string>();
+        names.add(reference.name);
+        this.unresolvedCallNamesByFile.set(reference.filePath, names);
+      }
       const names = this.referencedNamesByFile.get(reference.filePath);
       if (names === undefined) this.referencedNamesByFile.set(reference.filePath, [reference.name]);
       else names.push(reference.name);
