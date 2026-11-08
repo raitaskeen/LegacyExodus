@@ -70,7 +70,7 @@ export class JavaScriptParser implements Parser {
             nodeCount: 1,
           },
           warnings: [],
-          errors: immutable([mapSyntaxError(error)]),
+          errors: immutable([error instanceof RangeError ? resourceLimitError(error) : mapSyntaxError(error)]),
         },
       };
     }
@@ -82,6 +82,17 @@ function createEmptyProgram(): ASTNode {
     type: "Program",
     attributes: {},
     children: [],
+  };
+}
+
+/**
+ * A valid file can still be too deeply nested (or too long a chain) for the parser's call stack: that is a
+ * resource limit, not a syntax error, and is reported as one (NA-10).
+ */
+function resourceLimitError(error: RangeError): ParserError {
+  return {
+    code: "PARSER_RESOURCE_LIMIT",
+    message: `The parser ran out of call stack on this file (very deep nesting or a very long expression), so it is not analysed. This is not a syntax error. (${error.message})`,
   };
 }
 

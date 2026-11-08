@@ -99,3 +99,18 @@ describe("JavaScriptParser", () => {
     expect(result.errors[0]?.location?.line).toBe(1);
   });
 });
+
+describe("NA-10 resource limits are not syntax errors", () => {
+  test("a valid file too long for the parser's call stack is a PARSER_RESOURCE_LIMIT", async () => {
+    const source = `let y = 1${" + 1".repeat(100_000)};\n`;
+    const response = await new JavaScriptParser().parse(createRequest(source));
+    expect(response.result.errors.map((error) => error.code)).toEqual(["PARSER_RESOURCE_LIMIT"]);
+    expect(response.result.errors[0]?.message).toContain("not a syntax error");
+  });
+
+  test("a real syntax error keeps its syntax error code", async () => {
+    const response = await new JavaScriptParser().parse(createRequest("let = ;\n"));
+    expect(response.result.errors.length).toBeGreaterThan(0);
+    expect(response.result.errors.map((error) => error.code)).not.toContain("PARSER_RESOURCE_LIMIT");
+  });
+});
