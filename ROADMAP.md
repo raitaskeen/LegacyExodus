@@ -16,7 +16,50 @@ Every capability and milestone is strictly classified into one of the following 
 
 ---
 
-## Track 3 — Scalability, Verification Hardening & Migration Fidelity
+## Where we are (2026-11-08)
+
+```mermaid
+flowchart LR
+    A["Waves 0–5<br/>blind-audit fixes<br/>BA-01…BA-28"]:::done --> B["ADR-008 / ADR-009<br/>stable ids,<br/>streaming execution"]:::done
+    B --> C["Fresh-audit fixes<br/>NA-01…NA-16"]:::now
+    C --> D["Wave 6<br/>Semantic IR"]:::next
+    D --> E["Wave 7<br/>JS → TypeScript<br/>migration"]:::next
+    E --> F["Wave 8<br/>PHP → Java → Ruby"]:::later
+    classDef done fill:#138a6a,color:#fff,stroke:#138a6a
+    classDef now fill:#b24418,color:#fff,stroke:#b24418
+    classDef next fill:#ffe6d6,color:#16130f,stroke:#b24418
+    classDef later fill:#ececea,color:#16130f,stroke:#a3a39f
+```
+
+| Track | Scope | Status | Evidence |
+|---|---|:---:|---|
+| **Waves 0–5** | Fixes for the 2026-10-28 blind audit: parser dialects, TS declarations and resolution, CFG-based data flow, taint policy, Express model, discovery policy, dead code, stable identity | **`COMPLETED`** | PRs #204–#250; the conformance ledger was empty at the end. BA-19 (knowledge-graph unification) and BA-25 (plugin capabilities) are not scheduled |
+| **ADR-008, ADR-009** | Edit-stable fact identity; whole-run fact lists on disk | **`COMPLETED`** | #238–#257. Ghost peak memory fell from 9.9 GB to about 2 GB, with fact-diff 0/0 at every step |
+| **Fresh-audit fixes** | NA-01…NA-16 from the [2026-11-08 audit](https://github.com/raitaskeen/LegacyExodus/pull/203) | **`IN PROGRESS`** | Merged: NA-01, NA-02, NA-03a to NA-03e, NA-04, NA-05, NA-07, NA-08, NA-09, NA-10, NA-11, NA-13; dependency updates are merging one at a time behind a fact-diff (NA-14). NA-06 step 1 (ADR-010, byte-identical fact artifacts) merged; Open: NA-16 (ADR-011 accepted), ADR-010 step 2, NA-12, NA-15 (this refresh) |
+| **Accuracy harness** | Recall and precision per fact category on the conformance corpus; runtime-proven taint ground truth | **`IN PROGRESS`** | `bun run benchmarks/cli.ts accuracy`; CI publishes it with every PR (#273) |
+| **Wave 6, Semantic IR** | A language-neutral IR built from proven facts only, each unit carrying its evidence state | **`PLANNED`** | Starts after the fresh-audit fixes. Entry criteria are in the remediation queue |
+| **Wave 7, first migration** | JS → TypeScript (owner decision, 2026-11-03), verified by the project's own tests plus characterization tests | **`PLANNED`** | Builds on Wave 6 |
+| **Wave 8, languages** | PHP, then Java, then Ruby on Rails, each through the existing adapter seams with its own conformance corpus and pinned benchmark | **`PLANNED`** | Owner order, 2026-11-03 |
+
+### Gates every change passes
+
+```mermaid
+flowchart LR
+    PR["Pull request"] --> T["Typecheck<br/>+ 2,300+ tests"]
+    T --> C["Conformance corpus<br/>+ known-gaps ledger"]
+    C --> F["Fact Diff<br/>fixture · src · Express · Fastify"]
+    F --> S["Scale Gate<br/>10,000-file corpus"]
+    S --> R["Review<br/>+ owner sign-off<br/>for lost facts"]
+    R --> M["main"]
+```
+
+A fact the engine loses fails Fact Diff unless the owner labels the PR `facts-lost-explained` after the PR explains every loss. Ghost (about 7,200 analyzed files) is diffed locally for engine changes.
+
+---
+
+## Track 3 (historical) — Scalability, Verification Hardening & Migration Fidelity
+
+> Tracks 3 and 4 record milestones as they were closed in August and September 2026; their test counts are of that time. Current status is the table above.
 
 | Milestone | Scope | Status | Verified Evidence / Notes |
 |---|---|:---:|---|
@@ -37,7 +80,7 @@ Every capability and milestone is strictly classified into one of the following 
 
 ---
 
-## Track 4 — Enterprise Intelligence Scaling & Documentation Foundation
+## Track 4 (historical) — Enterprise Intelligence Scaling & Documentation Foundation
 
 | Milestone | Scope | Status | Notes |
 |---|---|:---:|---|

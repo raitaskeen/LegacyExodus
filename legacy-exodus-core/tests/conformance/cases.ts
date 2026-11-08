@@ -86,6 +86,7 @@ const taintSnippets: Readonly<Record<string, { readonly code: string; readonly r
   "audit-array-element": { runtime: "flow", code: `const a = [req.body]; res.send(a[0]);` },
   "audit-template": { runtime: "flow", code: "res.send(`<b>${req.body}</b>`);" },
   "audit-callback": { runtime: "flow", code: `[req.body].forEach((v) => res.send(v));` },
+  "audit-callback-index-is-not-the-element": { runtime: "none", code: `[req.body].forEach((v, i) => res.send(i));` },
   "audit-returned-object-field": { runtime: "flow", code: `function wrap(v) { return { inner: v }; } res.send(wrap(req.body).inner);` },
   "audit-getter": { runtime: "flow", code: `const o = { get p() { return req.body; } }; res.send(o.p);` },
   "audit-control-only": { runtime: "none", code: `res.send(req.body.length > 3 ? "ok" : "no");` },
@@ -550,9 +551,14 @@ export const conformanceCases: readonly ConformanceCase[] = [
     id: "taint-sql-client",
     files: {
       "db.js": "const mysql = require(\"mysql\");\nconst conn = mysql.createConnection({});\nexports.find = function find(req, res) { conn.query(\"SELECT * FROM users WHERE id = \" + req.query.id, () => {}); };\n",
+      "pg.js": "import { Pool } from \"pg\";\nconst pool = new Pool();\nexport async function list(req, res) { return pool.query(\"SELECT * FROM posts WHERE tag = '\" + req.query.tag + \"'\"); }\n",
+      // A parameterized query passes the input as a value, not as SQL text (NA-03e: judged on the SQL argument only).
+      "safe.js": "const mysql = require(\"mysql\");\nconst conn = mysql.createConnection({});\nexports.find = function find(req, res) { conn.query(\"SELECT * FROM users WHERE id = ?\", [req.query.id], () => {}); };\n",
     },
     expectations: [
       { id: "taint-sql:client-query", category: "taint", has: /^db\.js\|.*\|sink=#[0-9a-z]+:[^|]*query\|/ },
+      { id: "taint-sql:pg-pool-query", category: "taint", has: /^pg\.js\|.*\|sink=#[0-9a-z]+:pg\.query\|/ },
+      { id: "taint-sql:parameterized-query-is-safe", category: "taint", lacks: /^safe\.js\|/ },
     ],
   },
   {
