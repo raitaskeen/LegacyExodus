@@ -197,6 +197,7 @@ describe("CLI Error Contracts & Error-Path Behavioral Hardening", () => {
       let shutdownCalled = false;
       const mockEngine = {
         initialize: mock(async () => {}),
+        resolveProjectId: mock(async () => "00000000-0000-4000-8000-000000000000"),
         execute: mock(async () => ({ type: "OtherResult" })),
         shutdown: mock(async () => {
           shutdownCalled = true;
@@ -213,6 +214,7 @@ describe("CLI Error Contracts & Error-Path Behavioral Hardening", () => {
       let shutdownCalled = false;
       const mockEngine = {
         initialize: mock(async () => {}),
+        resolveProjectId: mock(async () => "00000000-0000-4000-8000-000000000000"),
         execute: mock(async () => {
           throw new LegacyExodusError({ code: "DISCOVERY_FAILED", message: "Scan failed" });
         }),

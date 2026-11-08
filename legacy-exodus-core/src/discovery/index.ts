@@ -25,8 +25,11 @@ export {
   createSnapshotTrust,
   defaultSnapshotKeyDirectory,
   SNAPSHOT_KEY_FILE_NAME,
+  isPhysicallyContained,
+  physicalPath,
   SnapshotKeyStore,
   type SnapshotTrust,
   type SnapshotTrustOptions,
 } from "./snapshot-trust";
 export { ProjectDetector, type ProjectDetection } from "./project-detector";
+export { resolveProjectId, WORKSPACE_CONFIG_PATH } from "./project-identity";

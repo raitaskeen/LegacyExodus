@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { link, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { link, mkdir, readFile, realpath, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { computeAnalyzerFingerprint, getAnalyzerFingerprint } from "@runtime/analyzer-fingerprint";
 import { LegacyExodusError } from "@shared/errors";
@@ -124,4 +124,26 @@ function keyError(message: string, path: string, cause?: unknown): LegacyExodusE
     metadata: { path },
     ...(cause === undefined ? {} : { cause }),
   });
+}
+
+/** Whether `candidatePath` lies strictly inside `parentPath` (both physical). */
+export function isPhysicallyContained(parentPath: string, candidatePath: string): boolean {
+  const relation = relative(parentPath, candidatePath);
+  return relation.length > 0
+    && relation !== ".."
+    && !relation.startsWith(`..${sep}`)
+    && !isAbsolute(relation);
+}
+
+/** Physical path of `path`, resolving the nearest existing ancestor when it does not exist yet. */
+export async function physicalPath(path: string): Promise<string> {
+  const absolute = resolve(path);
+  const missingSegments: string[] = [];
+  for (let current = absolute; ; current = dirname(current)) {
+    try {
+      return join(await realpath(current), ...missingSegments);
+    } catch {}
+    if (dirname(current) === current) return absolute;
+    missingSegments.unshift(basename(current));
+  }
 }

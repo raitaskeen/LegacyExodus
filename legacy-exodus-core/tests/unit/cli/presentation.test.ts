@@ -344,7 +344,7 @@ describe("CLI Presentation Subsystem", () => {
       const out = presenter.formatInit({
         workspace: "/my/app",
         metadataPath: "/my/app/.legacy-exodus/config.json",
-        metadata: { version: "0.1.0", createdAt: "2026-08-28", projectState: "initialized" },
+        metadata: { version: "0.1.0", projectId: "00000000-0000-4000-8000-000000000000", createdAt: "2026-08-28", projectState: "initialized" },
       });
       expect(out).toContain("Workspace Initialization");
       expect(out).toContain("/my/app/.legacy-exodus/config.json");
