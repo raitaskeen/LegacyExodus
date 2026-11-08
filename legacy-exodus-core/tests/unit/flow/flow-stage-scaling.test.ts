@@ -6,13 +6,14 @@ import { DeterministicDataFlowGraphBuilder } from "@flow/data-flow-builder";
 /**
  * Wave 3d scale gate (WAVE3-DFG-DESIGN.md, BA-28): the CFG and data-flow stages, timed together on
  * generated files, may grow by at most the stated factor each time the input doubles. Timings are
- * the best of three runs, so a noisy machine cannot fail the gate by one slow run.
+ * the best of five runs, so a noisy machine cannot fail the gate by a few slow runs (a CI runner read
+ * 2.51 once with three runs, while the stage measures 1.8–2.1 per doubling when idle). The limits stay.
  */
 
 async function stageMs(code: string): Promise<number> {
   const ast = (await new JavaScriptParser().parse({ file: { id: "s", path: "scale.js", language: "javascript", size: code.length }, source: code })).result;
   let best = Number.POSITIVE_INFINITY;
-  for (let run = 0; run < 3; run++) {
+  for (let run = 0; run < 5; run++) {
     const started = performance.now();
     const controlFlow = new DeterministicControlFlowGraphBuilder().buildAllWithNodes(ast);
     new DeterministicDataFlowGraphBuilder().buildContext(ast, undefined, [], controlFlow);
