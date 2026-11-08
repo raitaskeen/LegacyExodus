@@ -158,7 +158,9 @@ export function extractFacts(discoveryDirectory: string): FactSet {
     return found === undefined ? `#${id.slice(0, 8)}` : `${found.name}:${found.kind}${found.constantValue === undefined ? "" : `=${JSON.stringify(found.constantValue)}`}@${found.filePath}`;
   };
   for (const dfg of dataFlowGraphs) {
-    add("dfg", `${dfg.filePath}|definitions=${(dfg.definitions ?? []).length}|uses=${(dfg.uses ?? []).length}|interprocedural=${(dfg.interproceduralFlows ?? []).length}|bindings=${(dfg.callBindings ?? []).length}|state=${dfg.state}`);
+    // The graph's state only: its definitions, uses, transfers and bindings are exact facts of their own below, so a
+    // count here would report every added fact as one more "lost" summary line.
+    add("dfg", `${dfg.filePath}|state=${dfg.state}`);
     addCounted("dfg-uses", (dfg.uses ?? []).map((use: any) => `${dfg.filePath}|${use.name} -> ${use.definitionId === undefined ? "unbound" : definition(use.definitionId)}`));
     addCounted("dfg-interprocedural", (dfg.interproceduralFlows ?? []).map((flow: any) => `${dfg.filePath}|${flow.kind}|${definition(flow.sourceDefinitionId)} -> ${definition(flow.targetDefinitionId)}`));
     addCounted("dfg-bindings", (dfg.callBindings ?? []).map((binding: any) =>
