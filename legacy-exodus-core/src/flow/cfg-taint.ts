@@ -24,6 +24,8 @@ export interface CfgTaintHooks {
   sourceOfDestructured?(object: ASTNode, keys: readonly string[], at: ASTNode): string | undefined;
   /** Sink id of a call, if it is a sink. */
   sinkIdOf(call: ASTNode): string | undefined;
+  /** Argument positions a sink is judged on; undefined for all of them (NA-03b). */
+  sinkArgumentsOf?(call: ASTNode): readonly number[] | undefined;
   callValue(call: ASTNode, callee: Taint, args: readonly Taint[]): Taint;
 }
 
@@ -98,7 +100,11 @@ export function cfgSinkVerdicts(root: ASTNode, built: ControlFlowGraphsWithNodes
       const sinkId = hooks.sinkIdOf(call.node);
       if (sinkId === undefined) continue;
       let taint: Taint = new Map();
-      for (const argument of call.argumentTaint) for (const entry of argument) taint = combineTaint(taint, new Map([[entry.sourceId, entry.must]]));
+      const judged = hooks.sinkArgumentsOf?.(call.node);
+      for (const [index, argument] of call.argumentTaint.entries()) {
+        if (judged !== undefined && !judged.includes(index)) continue;
+        for (const entry of argument) taint = combineTaint(taint, new Map([[entry.sourceId, entry.must]]));
+      }
       const existing = verdicts.get(sinkId);
       // Each `finally` copy of a sink is another path to it.
       verdicts.set(sinkId, existing === undefined
