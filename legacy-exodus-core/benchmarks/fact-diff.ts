@@ -66,7 +66,9 @@ export function extractFacts(discoveryDirectory: string): FactSet {
   const addCounted = (category: string, keys: readonly string[]): void => {
     const counts = new Map<string, number>();
     for (const key of keys) counts.set(key, (counts.get(key) ?? 0) + 1);
-    for (const [key, count] of counts) add(category, count === 1 ? key : `${key} ×${count}`);
+    // Each occurrence is its own fact (`x`, `x #2`, …), so a count that rises is a gain and one that
+    // falls loses exactly the missing occurrences; neither shows as a lost fact plus a gained one.
+    for (const [key, count] of counts) for (let index = 1; index <= count; index++) add(category, index === 1 ? key : `${key} #${index}`);
   };
 
   const symbols: any[] = readArtifact(discoveryDirectory, "symbols.json") ?? [];
@@ -127,8 +129,13 @@ export function extractFacts(discoveryDirectory: string): FactSet {
   addCounted("routes", (semantic?.routes ?? []).map((route: any) =>
     `${route.filePath}|${route.method} ${route.path}|handler=${route.handlerName ?? "-"}|middleware=[${(route.middleware ?? []).join(",")}]|${route.state}`));
   addCounted("middlewareChains", (semantic?.middlewareChains ?? []).map((chain: any) => `${chain.filePath}|[${(chain.middleware ?? []).join(",")}]`));
+  // One fact per scope and per declared or referenced name: a name added to a scope is a gain, not a
+  // lost scope plus a gained one.
   for (const scope of semantic?.scopes ?? []) {
-    add("scopes", `${scope.filePath}|${scope.name}|declared=[${(scope.declaredSymbols ?? []).join(",")}]|referenced=[${(scope.referencedNames ?? []).join(",")}]`);
+    const owner = `${scope.filePath}|${scope.name}`;
+    add("scopes", owner);
+    addCounted("scope-declared", (scope.declaredSymbols ?? []).map((name: string) => `${owner}|${name}`));
+    addCounted("scope-referenced", (scope.referencedNames ?? []).map((name: string) => `${owner}|${name}`));
   }
 
   for (const cfg of readArtifact(discoveryDirectory, "control-flow.json")?.graphs ?? []) {

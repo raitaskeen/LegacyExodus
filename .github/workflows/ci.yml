@@ -9,6 +9,8 @@ on:
     branches:
       - main
       - core-foundation
+    # labeled/unlabeled: the `facts-lost-explained` label decides whether lost facts fail Fact Diff.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   workflow_dispatch:
 
 concurrency:
@@ -149,15 +151,29 @@ jobs:
         working-directory: base/legacy-exodus-core
         run: bun install --frozen-lockfile
 
+      - name: Fetch pinned real-world corpora
+        # Express and Fastify at their manifest commits; acquisition verifies each tree hash (BA-20).
+        working-directory: base/legacy-exodus-core
+        run: |
+          bun run benchmarks/scripts/acquire.ts --name express
+          bun run benchmarks/scripts/acquire.ts --name fastify
+
       - name: Diff analysis facts (base vs head)
         # The corpus is taken from the base checkout so both engines analyze identical input.
+        # A lost fact fails the job (NA-05) unless the owner labels the PR `facts-lost-explained`
+        # after the PR body explains every loss (a fix that replaces a wrong fact loses it on purpose).
+        # Gained facts are reported for the PR to explain.
         run: >-
           bun run benchmarks/cli.ts fact-diff
           --base ../../base/legacy-exodus-core
           --head .
           ../../base/legacy-exodus-core/benchmarks/fixtures/governance-audit
           ../../base/legacy-exodus-core/src
+          ../../base/legacy-exodus-core/benchmarks/.cache/express
+          ../../base/legacy-exodus-core/benchmarks/.cache/fastify
           --output fact-diff.md
+          ${{ contains(github.event.pull_request.labels.*.name, 'facts-lost-explained') && ' ' || '--fail-on-loss' }}
 
       - name: Publish fact diff to job summary
+        if: always()
         run: cat fact-diff.md >> "$GITHUB_STEP_SUMMARY"

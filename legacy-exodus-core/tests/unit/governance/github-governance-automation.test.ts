@@ -157,7 +157,7 @@ describe("Repository Governance & GitHub Automation Hardening", () => {
     }
   });
 
-  it("6. CI pins every action to a commit SHA and the fact-diff job stays informational, pull_request-only and least-privilege", () => {
+  it("6. CI pins every action to a commit SHA and the fact-diff job is pull_request-only, least-privilege and fails on unexplained lost facts", () => {
     interface WorkflowStep {
       readonly name?: string;
       readonly uses?: string;
@@ -213,8 +213,16 @@ describe("Repository Governance & GitHub Automation Hardening", () => {
     // The corpus comes from the base checkout so both engines analyze identical input.
     expect(diff).toContain("../../base/legacy-exodus-core/benchmarks/fixtures/governance-audit");
     expect(diff).toContain("../../base/legacy-exodus-core/src");
-    // Informational: lost facts must never fail the job.
-    expect(commands.join("\n")).not.toContain("--fail-on-loss");
-    expect(commands.some((command) => command.includes("fact-diff.md") && command.includes("$GITHUB_STEP_SUMMARY"))).toBe(true);
+    // Real-world corpora at their pinned, tree-verified commits (NA-05).
+    expect(diff).toContain("../../base/legacy-exodus-core/benchmarks/.cache/express");
+    expect(diff).toContain("../../base/legacy-exodus-core/benchmarks/.cache/fastify");
+    expect(commands.some((command) => command.includes("acquire.ts --name express") && command.includes("acquire.ts --name fastify"))).toBe(true);
+    // Lost facts fail the job (NA-05) unless the owner labels the PR `facts-lost-explained`.
+    expect(diff).toContain("contains(github.event.pull_request.labels.*.name, 'facts-lost-explained') && ' ' || '--fail-on-loss'");
+    const pullRequest = (Bun.YAML.parse(readFileSync(join(REPO_ROOT, ".github/workflows/ci.yml"), "utf-8")) as { on: { pull_request: { types?: readonly string[] } } }).on.pull_request;
+    expect(pullRequest.types).toEqual(["opened", "synchronize", "reopened", "labeled", "unlabeled"]);
+    // The summary is published even when lost facts fail the diff step.
+    const publish = steps.find((step) => step.run?.includes("fact-diff.md") && step.run.includes("$GITHUB_STEP_SUMMARY"));
+    expect((publish as { if?: string } | undefined)?.if).toBe("always()");
   });
 });
