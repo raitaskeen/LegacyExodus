@@ -1,6 +1,7 @@
 import { Database, type SQLQueryBindings } from "bun:sqlite";
 
 import {
+  StorageBusyError,
   StorageRecordNotFoundError,
   StorageSchemaVersionMismatchError,
   StorageValidationError,
@@ -22,10 +23,23 @@ import { immutable } from "@shared/immutability";
 
 export const SQLITE_SCHEMA_VERSION = 1;
 
+/** How long a connection waits for another process's lock before failing with STORAGE_BUSY (NA-08). */
+export const SQLITE_BUSY_TIMEOUT_MS = 5000;
+
 export interface SqliteStorageOptions {
   readonly databasePath?: string;
   readonly inMemory?: boolean;
   readonly readonly?: boolean;
+  /** Lock wait before STORAGE_BUSY; defaults to SQLITE_BUSY_TIMEOUT_MS. */
+  readonly busyTimeoutMs?: number;
+}
+
+/** A lock held by another connection (SQLITE_BUSY / SQLITE_LOCKED), as a classified storage error. */
+function busyError(error: unknown, databasePath: string): unknown {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" && (code.startsWith("SQLITE_BUSY") || code.startsWith("SQLITE_LOCKED"))
+    ? new StorageBusyError(databasePath, code)
+    : error;
 }
 
 interface RawSqliteRecord {
@@ -43,6 +57,7 @@ export class SqliteStorageProvider implements StorageProvider {
   public readonly isPersistent: boolean;
   public readonly schemaVersion: number = SQLITE_SCHEMA_VERSION;
   private readonly db: Database;
+  private readonly databasePath: string;
   private readonly isInMemory: boolean;
   private readonly maxSeqStmt: any;
 
@@ -50,6 +65,7 @@ export class SqliteStorageProvider implements StorageProvider {
     this.isInMemory = options.inMemory ?? (!options.databasePath || options.databasePath === ":memory:");
     this.isPersistent = !this.isInMemory;
     const dbPath = this.isInMemory ? ":memory:" : options.databasePath!;
+    this.databasePath = dbPath;
 
     this.db = new Database(dbPath, {
       readonly: options.readonly ?? false,
@@ -57,11 +73,15 @@ export class SqliteStorageProvider implements StorageProvider {
     });
 
     try {
+      // The lock wait comes first: switching a new database to WAL needs an exclusive lock, and
+      // without a timeout a second process opening it at the same moment failed at once (NA-08).
+      const busyTimeoutMs = options.busyTimeoutMs ?? SQLITE_BUSY_TIMEOUT_MS;
+      if (!Number.isInteger(busyTimeoutMs) || busyTimeoutMs < 0) throw new RangeError(`busyTimeoutMs must be a non-negative integer, got ${busyTimeoutMs}.`);
+      this.db.run(`PRAGMA busy_timeout = ${busyTimeoutMs};`);
       // Configure SQLite performance, concurrency, and integrity pragmas
       this.db.run("PRAGMA journal_mode = WAL;");
       this.db.run("PRAGMA synchronous = NORMAL;");
       this.db.run("PRAGMA foreign_keys = ON;");
-      this.db.run("PRAGMA busy_timeout = 5000;");
       this.db.run("PRAGMA temp_store = MEMORY;");
 
       this.initializeSchema();
@@ -73,7 +93,7 @@ export class SqliteStorageProvider implements StorageProvider {
       `);
     } catch (error: unknown) {
       this.db.close();
-      throw error;
+      throw busyError(error, dbPath);
     }
   }
 
@@ -143,7 +163,10 @@ export class SqliteStorageProvider implements StorageProvider {
         }
       });
 
-      insertBatch(records);
+      // IMMEDIATE takes the write lock up front, under the busy timeout, like commitBatch.
+      insertBatch.immediate(records);
+    } catch (error: unknown) {
+      throw busyError(error, this.databasePath);
     } finally {
       stmt.finalize();
     }
@@ -180,6 +203,8 @@ export class SqliteStorageProvider implements StorageProvider {
       });
 
       return executeTx.immediate(options.records, options.events ?? []);
+    } catch (error: unknown) {
+      throw busyError(error, this.databasePath);
     } finally {
       stmt.finalize();
     }

@@ -35,3 +35,16 @@ export class StorageSchemaVersionMismatchError extends StorageError {
     this.name = "StorageSchemaVersionMismatchError";
   }
 }
+
+/** Another process held the database's lock for longer than the busy timeout (NA-08). */
+export class StorageBusyError extends StorageError {
+  public constructor(databasePath: string, sqliteCode: string) {
+    super(
+      "STORAGE_BUSY",
+      "The storage database is locked by another process (for example a second analysis writing to the same file). Retry when it finishes, or give each concurrent run its own --storage-path.",
+      { databasePath, sqliteCode },
+    );
+
+    this.name = "StorageBusyError";
+  }
+}
