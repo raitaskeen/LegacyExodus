@@ -38,6 +38,10 @@ import { ErrorPresenter } from "../src/cli/presentation/errors";
 import { LayoutRenderer } from "../src/cli/presentation/layout";
 import { VerificationPresenter } from "../src/cli/presentation/verification";
 import { runScaleBenchmark, runSyntheticScale } from "./scale";
+import { evaluateCases, formatAccuracy } from "./accuracy";
+import { conformanceCases } from "../tests/conformance/cases";
+import { knownGaps } from "../tests/conformance/known-gaps";
+import { createLegacyExodusEngine } from "../src/runtime/composition/services";
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -200,6 +204,23 @@ async function main(): Promise<void> {
       break;
     }
 
+    case "accuracy": {
+      // Recall and precision on the canonical-semantics corpus, by category; fails on any regression.
+      const engine = createLegacyExodusEngine({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+      await engine.initialize();
+      try {
+        const results = await evaluateCases(engine, conformanceCases, knownGaps);
+        const markdown = formatAccuracy(results);
+        const output = getArgValue(args, "--output");
+        if (output !== undefined) await writeFile(resolve(output), markdown, "utf8");
+        console.log(markdown);
+        if (results.some((result) => !result.holds && result.gap === undefined)) process.exitCode = 1;
+      } finally {
+        await engine.shutdown();
+      }
+      break;
+    }
+
     case "fidelity": {
       const target = args[1] ?? resolve(BENCHMARKS_ROOT, ".cache/fastify");
       const resolvedTarget = resolveBenchmarkRepoPath(target);
@@ -245,6 +266,7 @@ function printUsage(): void {
     "    validate <target-path>             Validate mathematical file accounting on target",
     "    fidelity [target-path]             Validate migration discovery fidelity against ground truth",
     "    fact-diff --base D --head D C...   Diff projected facts of two engines on corpus dirs",
+    "    accuracy [--output F]              Recall and precision on the conformance corpus, by category",
     "    scale <name>                       Time and peak memory of a scale corpus against its budgets",
     "    scale synthetic <files>            The same for the synthetic corpus of <files> modules (10000)",
     "    help                               Show this help message",
