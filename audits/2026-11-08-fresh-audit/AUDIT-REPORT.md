@@ -9,6 +9,20 @@
 | Environment | Windows 11 Pro, 16-core laptop that runs hot, 16 GB RAM, Bun 1.4.4 (the repo pins 1.4.2), single machine. Linux and macOS were not tested |
 | Rules | `.agents/` kernel plus the code-audit, performance-audit and red-team-review skills. One session, no subagents (owner instruction) |
 
+## 0. Corrections found while fixing (later on 2026-11-08)
+
+- **NA-04 cause, corrected.** The 9–10 GB `scale ghost` runs were **snapshot reuses**. The Ghost gate didn't
+  remove `.discovery`, so runs 2–4 reused run 1's snapshot. Reuse peaks at 8,939 MiB, which is new finding
+  **NA-16**. The harness read-back added to the peak too.
+  - The claim that `NODE_ENV: "test"` freezes arrays in scale runs is **wrong**. `FREEZE_ARRAYS` reads the
+    process environment.
+  - Fresh engine runs, measured correctly (#265): 216 s / 1,677 MiB and 253 s / 2,213 MiB, within budget.
+- **NA-05 / GitHub, corrected.** `main` is protected by a ruleset (see NA-05). The STATUS-REPORT's first
+  version said "no branch protection".
+- **New finding NA-16 (P2): snapshot reuse loads every artifact into memory.** `command-handler.ts`
+  `JSON.parse`s all stored artifacts on reuse: Ghost peaks at 8,939 MiB on reuse against about 2 GB fresh.
+  Reuse should stream or validate artifacts without materialising them.
+
 ## 1. Verdict
 
 | Question | Answer |
