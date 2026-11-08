@@ -397,7 +397,8 @@ function runsBeforeAssignment(targetSymbolId: string | undefined, call: ASTNode,
   if (targetSymbolId === undefined || at === undefined) return false;
   const target = symbolsById(index).get(targetSymbolId);
   const starts = target?.location?.start;
-  if (target === undefined || starts === undefined || target.scopeId === undefined) return false;
+  // Methods exist as soon as their class does, so only statement-order bindings can be called too early.
+  if (target === undefined || starts === undefined || target.scopeId === undefined || !ORDERED_KINDS.has(target.kind)) return false;
   if (starts.line < at.line || (starts.line === at.line && starts.column <= at.column)) return false;
   if (hoistedDeclarationStarts(root).has(`${starts.line}:${starts.column}`)) return false;
   for (let frame: ScopeFrame | undefined = context.scope; frame !== undefined; frame = frame.parent) {
@@ -419,6 +420,7 @@ function symbolsById(index: FileSymbolIndex): ReadonlyMap<string, CodeSymbol> {
   return byId;
 }
 
+const ORDERED_KINDS: ReadonlySet<CodeSymbol["kind"]> = new Set(["variable", "class", "function"]);
 const FUNCTION_FRAME = /^scope:(?:Function|ArrowFunction|ObjectMethod|ClassMethod|ClassPrivateMethod)/;
 const hoistedStartsByRoot = new WeakMap<ASTNode, ReadonlySet<string>>();
 
