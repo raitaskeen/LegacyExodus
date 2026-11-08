@@ -42,6 +42,14 @@ export interface CommandExecution {
   readonly isReused?: boolean;
   /** Analysis run that produced the reused snapshot, when the manifest records it. */
   readonly snapshotAnalysisRunId?: string;
+  /** A stored snapshot was found but not reused, and why; absent when there was none (NA-11). */
+  readonly snapshotRejection?: SnapshotRejection;
+}
+
+export interface SnapshotRejection {
+  /** Validation status (CHECKSUM_MISMATCH, UNAUTHENTICATED, SNAPSHOT_STALE, …) or RESTORE_FAILED. */
+  readonly status: string;
+  readonly reason: string;
 }
 
 export interface AstStoreCleanupFailure {
@@ -134,6 +142,7 @@ export class AnalyzeProjectHandler {
     this.tsConfigDiagnostics = [];
     const startedAt = performance.now();
 
+    let snapshotRejection: SnapshotRejection | undefined;
     if (!command.payload.refresh) {
       // Reuse requires an authenticated snapshot of this exact location from this analyzer build.
       const validation = await this.discoveryValidator.validate({
@@ -141,6 +150,10 @@ export class AnalyzeProjectHandler {
         verifyFreshness: true,
         authorizeReuse: true,
       });
+      // No snapshot at all is the ordinary first run; any other refusal is reported, never silent.
+      if (!validation.valid && validation.status !== "MANIFEST_MISSING") {
+        snapshotRejection = immutable({ status: validation.status, reason: validation.reason ?? "" });
+      }
       if (validation.valid && validation.manifest !== undefined && validation.validatedArtifacts !== undefined) {
         try {
           const artifacts = validation.validatedArtifacts;
@@ -379,8 +392,9 @@ export class AnalyzeProjectHandler {
               ? {}
               : { snapshotAnalysisRunId: validation.manifest.analysis.analysisRunId }),
           };
-        } catch {
+        } catch (error: unknown) {
           // If reading or parsing snapshot failed unexpectedly, fall through to fresh discovery
+          snapshotRejection = immutable({ status: "RESTORE_FAILED", reason: error instanceof Error ? error.message : String(error) });
         }
       }
     }
@@ -754,6 +768,7 @@ export class AnalyzeProjectHandler {
         records: immutable(records),
         discovery,
         analysis: analysisSummary,
+        ...(snapshotRejection === undefined ? {} : { snapshotRejection }),
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);

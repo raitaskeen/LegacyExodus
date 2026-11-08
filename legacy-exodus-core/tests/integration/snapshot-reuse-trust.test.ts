@@ -205,6 +205,27 @@ describe("F-001 snapshot reuse trust boundary", () => {
     });
   });
 
+  it("reports a refused snapshot and why instead of re-analysing silently (NA-11)", async () => {
+    await withScratch(async (root) => {
+      const projectPath = await createProject(root, "project");
+      const home = join(root, "home");
+      const factory = (environment?: Environment) => createLegacyExodusEngine({ ...environment, LOG_LEVEL: "silent", LEGACY_EXODUS_HOME: home });
+
+      const first = await analyzeProject(projectPath, factory) as unknown as Record<string, unknown>;
+      expect(first.snapshotRejection).toBeUndefined(); // no snapshot yet: an ordinary first run
+
+      const semanticPath = join(projectPath, ".discovery", "semantic.json");
+      await writeFile(semanticPath, (await readFile(semanticPath, "utf8")).replace("RESOLVED", "UNRESOLVED"));
+      const second = await analyzeProject(projectPath, factory) as unknown as Record<string, unknown>;
+      expect(second.reused).toBe(false);
+      expect((second.snapshotRejection as { status: string } | undefined)?.status).toBe("CHECKSUM_MISMATCH");
+
+      const third = await analyzeProject(projectPath, factory) as unknown as Record<string, unknown>;
+      expect(third.reused).toBe(true);
+      expect(third.snapshotRejection).toBeUndefined();
+    });
+  });
+
   it("still publishes analysis when repository metadata cannot be authenticated, and never reuses it", async () => {
     await withScratch(async (root) => {
       const projectPath = await createProject(root, "project");

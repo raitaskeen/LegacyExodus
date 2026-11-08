@@ -203,6 +203,7 @@ export class LegacyExodusEngine {
             ...(execution.isReused === true && execution.snapshotAnalysisRunId !== undefined
               ? { snapshotAnalysisRunId: execution.snapshotAnalysisRunId }
               : {}),
+            ...(execution.snapshotRejection === undefined ? {} : { snapshotRejection: execution.snapshotRejection }),
           };
         }
       }
