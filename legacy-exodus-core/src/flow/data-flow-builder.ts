@@ -326,7 +326,14 @@ export class DeterministicDataFlowGraphBuilder {
     if (node.type === "ReturnStatement") { this.returnValue(node, scope, filePath, state, currentFunction); return; }
     if (node.type === "AssignmentExpression") { this.assignment(node, scope, filePath, state, currentFunction); return; }
     if (node.type === "CallExpression") { this.call(node, scope, filePath, state, receiverDefinitionId); return; }
-    if (node.type === "MemberExpression") { this.memberUse(node, scope, filePath, state); return; }
+    if (node.type === "MemberExpression") {
+      this.memberUse(node, scope, filePath, state);
+      // A chain rooted in a call (`wrap(x).inner`) still evaluates that call: its arguments reach the callee and
+      // its return reaches this read (NA-03c). A chain rooted in a name is a plain read, already recorded above.
+      const root = memberRoot(node);
+      if (root !== undefined && root.type !== "Identifier" && root.type !== "ThisExpression" && root.type !== "Super") this.visit(root, scope, filePath, state, currentFunction);
+      return;
+    }
     if (node.type === "ObjectProperty") {
       const computed = node.attributes.computed === true;
       const key = node.children.find((child) => child.role === "key");
@@ -1399,3 +1406,10 @@ const ARRAY_CALLBACK_ELEMENT_SLOT: ReadonlyMap<string, number> = new Map([
   ...["forEach", "map", "filter", "find", "findIndex", "findLast", "findLastIndex", "some", "every", "flatMap"].map((name) => [name, 0] as const),
   ["reduce", 1], ["reduceRight", 1],
 ]);
+
+/** The innermost object of a member chain (`f()` in `f().a.b`). */
+function memberRoot(node: ASTNode): ASTNode | undefined {
+  let current: ASTNode | undefined = node;
+  while (current?.type === "MemberExpression" || current?.type === "OptionalMemberExpression") current = current.children.find((child) => child.role === "object");
+  return current;
+}
