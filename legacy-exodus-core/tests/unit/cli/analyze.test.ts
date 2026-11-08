@@ -53,6 +53,7 @@ describe("analyze command output", () => {
     const capturedEnv: Record<string, string | undefined>[] = [];
     const mockEngine = {
       initialize: async () => {},
+      resolveProjectId: async () => "00000000-0000-4000-8000-000000000000",
       execute: async () => ({
         type: "AnalyzeProject",
         discovery: {

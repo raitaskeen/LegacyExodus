@@ -36,6 +36,11 @@ export class LegacyExodusEngine {
     this.state = "running";
   }
 
+  /** The stable project id for the repository at `projectPath` (ADR-010 step 2). */
+  public resolveProjectId(projectPath: string): Promise<string> {
+    return this.context.resolveProjectId(projectPath);
+  }
+
   public shutdown(): Promise<void> {
     if (this.state === "stopped") {
       return Promise.resolve();

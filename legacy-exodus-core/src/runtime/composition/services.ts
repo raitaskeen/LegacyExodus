@@ -3,7 +3,7 @@ import type { EngineContext } from "@core/engine/engine-context";
 import { EventBus } from "@core/events/event-bus";
 import { InMemoryEventStore } from "@core/events/event-store";
 import { Orchestrator } from "@core/orchestration/orchestrator";
-import { createSnapshotTrust, defaultSnapshotKeyDirectory, DiscoveryEngine, DiscoveryValidator } from "@discovery/index";
+import { createSnapshotTrust, defaultSnapshotKeyDirectory, DiscoveryEngine, DiscoveryValidator, resolveProjectId } from "@discovery/index";
 import { PluginLoader, PluginRegistry } from "@plugins/index";
 import { JavaScriptParser, ParserManager, ParserRegistry } from "@parser/index";
 import { JavaScriptSymbolExtractor } from "@symbols/index";
@@ -104,6 +104,7 @@ export function createEngineContext(
     parserRegistry,
     parserManager,
     orchestrator,
+    resolveProjectId: (projectPath) => resolveProjectId(projectPath, snapshotTrust.keyStore),
   };
 }
 
