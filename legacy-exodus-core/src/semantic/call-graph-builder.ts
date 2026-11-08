@@ -107,11 +107,12 @@ export class DeterministicCallGraphBuilder {
         const importTarget = imported === undefined ? undefined : targetByImportId.get(imported.id);
         // `f.call(…)`, `f.apply(…)` and `f.bind(…)(…)` are resolved as `f`; that holds only while those properties are the builtins.
         const invokesThroughWrittenProperty = invokerProperties(node).some((name) => propertyWriteCount(fileSymbols, name) > 0);
-        const targetSymbolId = namedCallee === undefined || invokesThroughWrittenProperty || fileSymbols.directEval || withMayBind(calleeName, nextContext, fileSymbols)
+        const resolvedTarget = namedCallee === undefined || invokesThroughWrittenProperty || fileSymbols.directEval || withMayBind(calleeName, nextContext, fileSymbols)
           ? undefined
           : imported === undefined
             ? resolveLocalCall(table, fileSymbols, calleeName, nextContext, tablesByPath, this.resolver, node)
             : isRebound(fileSymbols, MODULE_SCOPE_ID, calleeName) || isUnstableTarget(fileSymbols, importTarget) ? undefined : importTarget;
+        const targetSymbolId = imported === undefined && runsBeforeAssignment(resolvedTarget, node, nextContext, fileSymbols, ast.root) ? undefined : resolvedTarget;
         const id = hash(`${ast.metadata.sourcePath}:${nextContext.callerName}:${calleeName}:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`);
         const resolutionState = targetSymbolId === undefined ? "UNRESOLVED" as const : "RESOLVED" as const;
         const key = factKeyers.get(fileSymbols)?.key("call", calleeName, node.location?.start);
@@ -383,6 +384,61 @@ function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult, u
   const classes = collectClassFacts(ast.root, classSymbols);
   const reopened = reopenedNamespaces(namespaceBlocks);
   return immutable({ byScopeAndName, declarationsByScopeAndName, byName, firstImportByName, classByLocation, lexicalBindings, ownerSymbols, reopened, writes, unstableExportIds, classes, directEval: callsEvalDirectly(ast.root) });
+}
+
+/**
+ * `f(); var f = function () {}` (NA-12): the call runs before the function is assigned, so at that point `f` is
+ * `undefined` (or in its temporal dead zone) and nothing is proven. It holds when the target lies after the call in the
+ * source, is not a hoisted function declaration, and no function boundary lies between the call and the target's
+ * scope (a closure may run later). A call in a loop is treated the same way, which only gives up a proof.
+ */
+function runsBeforeAssignment(targetSymbolId: string | undefined, call: ASTNode, context: ResolutionContext, index: FileSymbolIndex, root: ASTNode): boolean {
+  const at = call.location?.start;
+  if (targetSymbolId === undefined || at === undefined) return false;
+  const target = symbolsById(index).get(targetSymbolId);
+  const starts = target?.location?.start;
+  // Methods exist as soon as their class does, so only statement-order bindings can be called too early.
+  if (target === undefined || starts === undefined || target.scopeId === undefined || !ORDERED_KINDS.has(target.kind)) return false;
+  if (starts.line < at.line || (starts.line === at.line && starts.column <= at.column)) return false;
+  if (hoistedDeclarationStarts(root).has(`${starts.line}:${starts.column}`)) return false;
+  for (let frame: ScopeFrame | undefined = context.scope; frame !== undefined; frame = frame.parent) {
+    if (frame.id === target.scopeId) return true;
+    if (FUNCTION_FRAME.test(frame.id)) return false;
+  }
+  return false;
+}
+
+const symbolsByIdByIndex = new WeakMap<FileSymbolIndex, ReadonlyMap<string, CodeSymbol>>();
+
+/** The file's symbols by id, built once per file. */
+function symbolsById(index: FileSymbolIndex): ReadonlyMap<string, CodeSymbol> {
+  let byId = symbolsByIdByIndex.get(index);
+  if (byId === undefined) {
+    byId = new Map([...index.byName.values()].flat().map((symbol) => [symbol.id, symbol] as const));
+    symbolsByIdByIndex.set(index, byId);
+  }
+  return byId;
+}
+
+const ORDERED_KINDS: ReadonlySet<CodeSymbol["kind"]> = new Set(["variable", "class", "function"]);
+const FUNCTION_FRAME = /^scope:(?:Function|ArrowFunction|ObjectMethod|ClassMethod|ClassPrivateMethod)/;
+const hoistedStartsByRoot = new WeakMap<ASTNode, ReadonlySet<string>>();
+
+/** Start positions of function declarations and their names, which are callable before their position (hoisted). */
+function hoistedDeclarationStarts(root: ASTNode): ReadonlySet<string> {
+  const cached = hoistedStartsByRoot.get(root);
+  if (cached !== undefined) return cached;
+  const starts = new Set<string>();
+  const pending: ASTNode[] = [root];
+  while (pending.length > 0) {
+    const node = pending.pop() as ASTNode;
+    if (node.type === "FunctionDeclaration") {
+      for (const at of [node.location?.start, node.children.find((child) => child.role === "id")?.location?.start]) if (at !== undefined) starts.add(`${at.line}:${at.column}`);
+    }
+    for (const child of node.children) pending.push(child);
+  }
+  hoistedStartsByRoot.set(root, starts);
+  return starts;
 }
 
 const directEvalByRoot = new WeakMap<ASTNode, boolean>();
