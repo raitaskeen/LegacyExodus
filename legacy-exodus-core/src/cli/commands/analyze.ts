@@ -60,7 +60,7 @@ export async function analyzeProject(
       id: randomUUID(),
       type: "AnalyzeProject",
       createdAt: new Date(),
-      payload: { projectId: randomUUID(), path, ...(options.refresh ? { refresh: true } : {}) },
+      payload: { projectId: await engine.resolveProjectId(path), path, ...(options.refresh ? { refresh: true } : {}) },
     });
 
     if (result.type !== "AnalyzeProject") {

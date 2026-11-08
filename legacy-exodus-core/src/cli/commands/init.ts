@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { lstat, mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -10,6 +11,8 @@ import { SummaryPresenter } from "../presentation/summaries";
 
 export interface InitializationMetadata {
   readonly version: string;
+  /** The stable id `analyze` uses for this repository (ADR-010). */
+  readonly projectId: string;
   readonly createdAt: string;
   readonly projectState: "initialized";
 }
@@ -36,6 +39,7 @@ export async function initializeWorkspace(path: string, version: string): Promis
 
   const metadata: InitializationMetadata = {
     version,
+    projectId: randomUUID(),
     createdAt: new Date().toISOString().slice(0, 10),
     projectState: "initialized",
   };

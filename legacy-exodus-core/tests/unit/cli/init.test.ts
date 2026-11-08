@@ -16,12 +16,14 @@ describe("init command", () => {
       const report = await initializeWorkspace(workspace, CLI_VERSION);
       const metadata = JSON.parse(await readFile(report.metadataPath, "utf8")) as {
         createdAt: string;
+        projectId: string;
         projectState: string;
         version: string;
       };
 
       expect(metadata.version).toBe(CLI_VERSION);
       expect(metadata.projectState).toBe("initialized");
+      expect(metadata.projectId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
       expect(typeof metadata.createdAt).toBe("string");
     } finally {
       await rm(workspace, { force: true, recursive: true });

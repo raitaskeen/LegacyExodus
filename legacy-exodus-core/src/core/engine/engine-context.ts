@@ -17,4 +17,6 @@ export interface EngineContext {
   readonly parserRegistry: ParserRegistry;
   readonly parserManager: ParserManager;
   readonly orchestrator: Orchestrator;
+  /** The stable project id of the repository at a path, bound to this engine's snapshot key (ADR-010). */
+  readonly resolveProjectId: (projectPath: string) => Promise<string>;
 }

@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { UNTRUSTED_GIT_ARGS } from "@shared/git";
 import { lstat, mkdir, readFile, realpath } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, join, resolve } from "node:path";
 
 import { createDiscoveryProjection, type DiscoveryProjection } from "@contracts/discovery-projection";
 import {
@@ -9,9 +9,11 @@ import {
   computeWorkspaceDigest,
   createSnapshotTrust,
   manifestKeyId,
+  isPhysicallyContained,
   manifestLocationDigest,
   MANIFEST_MAC_ALGORITHM,
   MANIFEST_SCHEMA_VERSION,
+  physicalPath,
   type DiscoveryManifest,
   type SnapshotTrust,
 } from "@discovery/index";
@@ -23,27 +25,6 @@ const defaultEngineRoot = resolve(import.meta.dir, "../../..");
 
 function isFileSystemError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
-}
-
-function isPhysicallyContained(parentPath: string, candidatePath: string): boolean {
-  const relation = relative(parentPath, candidatePath);
-  return relation.length > 0
-    && relation !== ".."
-    && !relation.startsWith(`..${sep}`)
-    && !isAbsolute(relation);
-}
-
-/** Physical path of `path`, resolving the nearest existing ancestor when it does not exist yet. */
-async function physicalPath(path: string): Promise<string> {
-  const absolute = resolve(path);
-  const missingSegments: string[] = [];
-  for (let current = absolute; ; current = dirname(current)) {
-    try {
-      return join(await realpath(current), ...missingSegments);
-    } catch {}
-    if (dirname(current) === current) return absolute;
-    missingSegments.unshift(basename(current));
-  }
 }
 
 function unsafeProjectionPath(path: string, reason: string, cause?: unknown): LegacyExodusError {
