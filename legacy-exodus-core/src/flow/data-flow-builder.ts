@@ -65,6 +65,13 @@ export class DeterministicDataFlowGraphBuilder {
   private readonly capturedEntries = new WeakMap<Scope, Map<string, VariableDefinition>>();
   private readonly transferKeys = new WeakMap<readonly TaintTransfer[], Set<string>>();
   /** The taint policy of the file being built (BA-07); builds are synchronous, one file at a time. */
+  /**
+   * The value of a proven call into another file that no variable receives (`res.send(id(x))`): a
+   * definition of its own, so the callee's return reaches it across files like a receiver (NA-03).
+   */
+  private readonly callResults = new WeakMap<ASTNode, VariableDefinition>();
+  /** Symbols of the file being built: a proven target outside them is in another file. */
+  private localSymbolIds: ReadonlySet<string> = new Set();
   private policy: FilePolicy = filePolicy({ type: "Program", children: [], attributes: {} } as unknown as ASTNode, { keyOf: new Map(), ownerOf: new Map() });
 
   /**
@@ -93,6 +100,7 @@ export class DeterministicDataFlowGraphBuilder {
    */
   public buildContext(ast: ASTResult, provenCallTargets?: readonly ProvenCallTarget[], symbols?: readonly CodeSymbol[], controlFlow?: ControlFlowGraphsWithNodes): BuildContextResult {
     const functions = collectFunctions(ast.root, symbols ?? []);
+    this.localSymbolIds = new Set((symbols ?? []).map((symbol) => symbol.id));
     const targets = provenCallTargets === undefined ? undefined : createProvenCallTargets(provenCallTargets);
     const state: FlowState = { definitions: [], uses: [], taintPaths: new Map(), transfers: [], sinks: [], functions, resolvableFunctions: new Map(), functionsBySymbolId: new Map(), provenTargets: new Map((targets ?? []).map((target) => [callLocationKey(target.sourceFilePath, target.location), target])), hasSemanticResolution: targets !== undefined, pendingCalls: [], interproceduralFlows: [], joins: new Map() };
     const namesakes = new Map<string, number>();
@@ -933,7 +941,15 @@ export class DeterministicDataFlowGraphBuilder {
     const resolved = state.hasSemanticResolution ? (proven === undefined ? undefined : state.functionsBySymbolId.get(proven.targetSymbolId)) : resolveFunction(name, state.resolvableFunctions);
     const callPosition = node.location === undefined ? `anon-${state.pendingCalls.length}` : `${node.location.start.line}:${node.location.start.column}`;
     const cut = staged && this.policy.isSanitizer(node);
-    if (resolved !== undefined || proven !== undefined) state.pendingCalls.push({ id: proven?.callId ?? this.identify(hash(`call:${filePath}:${name}:${callPosition}`), "call", name ?? "<computed>", node, "flow-call").id, ...(proven === undefined ? {} : { targetSymbolId: proven.targetSymbolId }), ...(resolved === undefined ? {} : { callee: resolved }), argumentDefinitionIds: staged ? values.map((value) => this.orderedValueIds(value, "definition")[0]) : argumentsNodes.map((argument) => this.definitionFor(argument, scope)?.id), argumentSourceIds: staged ? values.map((value) => this.orderedValueIds(value, "source")[0]) : argumentsNodes.map((argument) => this.source(argument, filePath)), ...(receiverDefinitionId === undefined || cut ? {} : { receiverDefinitionId }), ...(staged ? { argumentValues: values } : {}) });
+    // A proven target in another file returns its value only through a receiver; connectDataFlow wires it.
+    let receiver = receiverDefinitionId;
+    if (receiver === undefined && !cut && proven !== undefined && resolved === undefined && state.hasSemanticResolution
+      && !this.localSymbolIds.has(proven.targetSymbolId) && valueIsUsed(node)) {
+      const result = this.define(`<result:${name ?? "<computed>"}>`, "call-result", node, scope, filePath, state, undefined, false);
+      this.callResults.set(node, result);
+      receiver = result.id;
+    }
+    if (resolved !== undefined || proven !== undefined) state.pendingCalls.push({ id: proven?.callId ?? this.identify(hash(`call:${filePath}:${name}:${callPosition}`), "call", name ?? "<computed>", node, "flow-call").id, ...(proven === undefined ? {} : { targetSymbolId: proven.targetSymbolId }), ...(resolved === undefined ? {} : { callee: resolved }), argumentDefinitionIds: staged ? values.map((value) => this.orderedValueIds(value, "definition")[0]) : argumentsNodes.map((argument) => this.definitionFor(argument, scope)?.id), argumentSourceIds: staged ? values.map((value) => this.orderedValueIds(value, "source")[0]) : argumentsNodes.map((argument) => this.source(argument, filePath)), ...(receiver === undefined || cut ? {} : { receiverDefinitionId: receiver }), ...(staged ? { argumentValues: values } : {}) });
     if (staged && receiverDefinitionId !== undefined && !cut) {
       const calleeSource = callee === undefined ? undefined : this.source(callee, filePath);
       if (calleeSource !== undefined) this.materializeOrderedValue({ kind: "source", id: calleeSource }, receiverDefinitionId, state);
@@ -949,6 +965,9 @@ export class DeterministicDataFlowGraphBuilder {
 
   private definitionFor(node: ASTNode, scope: Scope): VariableDefinition | undefined {
     if (node.type === "ObjectExpression" || node.type === "ArrayExpression") return undefined;
+    // Only a cross-file call result has its own definition; other calls keep the name-based lookup below.
+    const callResult = node.type === "CallExpression" ? this.callResults.get(node) : undefined;
+    if (callResult !== undefined) return callResult;
     if (node.type === "ObjectProperty") {
       const value = node.children.find((child) => child.role === "value");
       return value !== undefined ? this.definitionFor(value, scope) : undefined;
@@ -1095,6 +1114,8 @@ export class DeterministicDataFlowGraphBuilder {
           for (const returned of targetRecord?.returns ?? []) {
             definitions.push(returned);
           }
+          const result = this.callResults.get(current);
+          if (result !== undefined) definitions.push(result);
           return;
         }
         if (callee?.type === "MemberExpression") {
@@ -1339,4 +1360,9 @@ function isStaticallyDefinedLiteral(node: ASTNode | undefined): boolean {
     ].includes(node.type) ||
     (literalValue(node) !== undefined && literalValue(node) !== null)
   );
+}
+
+/** The call's value is consumed: an argument, a member's object, or returned, awaited or spread (NA-03). */
+function valueIsUsed(node: ASTNode): boolean {
+  return node.role === "arguments" || node.role === "object" || node.role === "argument";
 }
