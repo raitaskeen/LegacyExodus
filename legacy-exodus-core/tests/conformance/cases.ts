@@ -516,6 +516,22 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // NA-03: a proven call into another file whose result is used directly (a sink argument, an argument of
+    // another call), with no variable receiving it, still carries the callee's return value.
+    id: "taint-cross-file-nested",
+    files: {
+      "helpers.js": "function id(v) { return v; }\nfunction constant(v) { return \"ok\"; }\nmodule.exports = { id, constant };\n",
+      "app.js": "const { id } = require(\"./helpers.js\");\nexports.a = function a(req, res) { res.send(id(req.body)); };\n",
+      "chain.js": "const { id } = require(\"./helpers.js\");\nexports.c = function c(req, res) { res.json(id(id(req.query))); };\n",
+      "safe.js": "const { constant } = require(\"./helpers.js\");\nexports.b = function b(req, res) { res.send(constant(req.body)); };\n",
+    },
+    expectations: [
+      { id: "taint-cross-file-nested:result-reaches-sink", category: "taint", has: /^app\.js\|.*\|sink=#[0-9a-z]+:res\.send\|/ },
+      { id: "taint-cross-file-nested:nested-results-reach-sink", category: "taint", has: /^chain\.js\|.*\|sink=#[0-9a-z]+:res\.json\|/ },
+      { id: "taint-cross-file-nested:constant-result-stays-clean", category: "taint", lacks: /^safe\.js\|/ },
+    ],
+  },
+  {
     // NA-01: every call site is a fact. A callee with no name (a call result, `new`, a computed key, a
     // function value, `super`) is an explicit UNRESOLVED call, never absent; a tagged template calls its tag.
     id: "call-site-completeness",
