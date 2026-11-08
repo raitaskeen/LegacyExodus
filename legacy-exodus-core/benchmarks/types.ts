@@ -234,6 +234,12 @@ export interface BenchmarkRunResult {
   readonly frameworks: readonly string[];
   readonly dependencyCount: number;
   readonly peakRssMb?: number;
+  /** The process's peak resident memory when the engine returned, before the harness re-reads output (NA-04). */
+  readonly engineMaxRssMb?: number;
+  /** Wall time of the engine's own run, without the harness's summaries (NA-04). */
+  readonly engineWallMs?: number;
+  /** The engine reused a stored snapshot instead of analysing. */
+  readonly snapshotReused?: boolean;
 }
 
 // ─── Determinism Report ───────────────────────────────────────────────────────
