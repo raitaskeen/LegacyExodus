@@ -23,6 +23,7 @@ import { DiscoveryEngine, DiscoveryValidator, type DiscoveryResult } from "@disc
 import { dependencyGraphNodes, DeterministicDependencyGraphBuilder, ModuleResolver, canonicalizePath, findPackageEntryFiles, loadTsConfigResolution, loadWorkspacePackages, validateCurrentDependencyGraph, type TsConfigDiagnostic } from "@graph/index";
 import { DeterministicControlFlowGraphBuilder, DeterministicDataFlowGraphBuilder, DeterministicFlowAnalysisEngine, createProvenCallTargets, type ConnectionContext, type ControlFlowGraph, type DataFlowGraphBody } from "@flow/index";
 import { buildKnowledgeGraphOnDisk } from "@knowledge/index";
+import { readFileSync, rmSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { ParserManager, type ASTResult } from "@parser/index";
@@ -33,6 +34,8 @@ import { RunScopedAstStore, type AnalysisAstStoreFactory } from "./run-scoped-as
 import { compareCodePoints } from "@shared/ordering";
 import { FactStore, sortedFactArray, toFactArray, type FactArray, type FactSpool } from "@shared/fact-array";
 import { immutable } from "@shared/immutability";
+import { readJsonDocument } from "@shared/json-document-reader";
+import { z } from "zod";
 
 export interface CommandExecution {
   readonly events: readonly DomainEvent[];
@@ -56,6 +59,18 @@ export interface AstStoreCleanupFailure {
   readonly projectId: string;
   readonly analysisRunId: string;
   readonly error: unknown;
+}
+
+/** Fact artifacts large enough that reuse verifies them while copying to disk instead of holding them (ADR-011). */
+const SPOOLED_ARTIFACTS: ReadonlySet<string> = new Set(["symbols.json", "dependency-graph.json", "knowledge.json", "semantic.json", "control-flow.json", "data-flow.json"]);
+
+/**
+ * Validates one item of the fact list `key` of `schema` (a `factList`: an inline array or a list on disk), so a
+ * restored list is validated as it streams and an invalid item refuses the snapshot (ADR-011).
+ */
+function listItemParser(schema: z.ZodObject, key: string): (item: unknown) => unknown {
+  const inline = (schema.shape[key] as z.ZodUnion).options[0] as z.ZodArray<z.ZodType>;
+  return (item) => inline.element.parse(item);
 }
 
 export class InitializeProjectHandler {
@@ -149,6 +164,8 @@ export class AnalyzeProjectHandler {
         projectPath: command.payload.path,
         verifyFreshness: true,
         authorizeReuse: true,
+        // The fact artifacts are verified while copied to disk and restored as disk lists (ADR-011).
+        spool: { path: () => this.factStore().scratchPath(), names: SPOOLED_ARTIFACTS },
       });
       // No snapshot at all is the ordinary first run; any other refusal is reported, never silent.
       if (!validation.valid && validation.status !== "MANIFEST_MISSING") {
@@ -157,6 +174,20 @@ export class AnalyzeProjectHandler {
       if (validation.valid && validation.manifest !== undefined && validation.validatedArtifacts !== undefined) {
         try {
           const artifacts = validation.validatedArtifacts;
+          const spooled = validation.spooledArtifacts ?? new Map<string, string>();
+          const has = (name: string): boolean => artifacts.has(name) || spooled.has(name);
+          const text = (name: string): string | undefined => {
+            const copy = spooled.get(name);
+            return copy === undefined ? artifacts.get(name) : readFileSync(copy, "utf8");
+          };
+          /** A verified fact artifact, its large lists restored on disk; never more than one list item in memory. */
+          const document = (name: string, schema: z.ZodObject, lists: readonly string[]): Record<string, unknown> => {
+            const copy = spooled.get(name);
+            if (copy !== undefined) return readJsonDocument(copy, this.factStore(), new Map(lists.map((key) => [key, listItemParser(schema, key)] as const)));
+            const raw = artifacts.get(name);
+            if (raw === undefined) throw new Error(`Missing ${name} in validated set.`);
+            return JSON.parse(raw) as Record<string, unknown>;
+          };
           const projectRaw = artifacts.get("project.json");
           const filesRaw = artifacts.get("files.json");
           const depsRaw = artifacts.get("dependencies.json");
@@ -223,7 +254,7 @@ export class AnalyzeProjectHandler {
 
           const required = new Set(validation.manifest.requiredArtifacts);
           for (const artifact of ["symbols.json", "dependency-graph.json", "knowledge.json", "semantic.json", "control-flow.json", "data-flow.json"]) {
-            if (!required.has(artifact) || !artifacts.has(artifact)) throw new Error("Missing current analysis artifact.");
+            if (!required.has(artifact) || !has(artifact)) throw new Error("Missing current analysis artifact.");
           }
           if (discovery.enumerationFailures.length > 0) throw new Error("Enumeration-degraded snapshots require fresh discovery.");
           if (snapshotSummary.fileCount !== discovery.files.length ||
@@ -231,7 +262,7 @@ export class AnalyzeProjectHandler {
             (snapshotSummary.manifestFailureCount ?? 0) !== discovery.manifestFailures.length) {
             throw new Error("Snapshot discovery counts contradict diagnostics.");
           }
-          const snapshotSymbols = validateCodeSymbols(JSON.parse(artifacts.get("symbols.json")!));
+          const snapshotSymbols = validateCodeSymbols(JSON.parse(text("symbols.json")!));
           const analysisDisposition = validateAnalysisDisposition(snapshotSummary.analysisDisposition, {
             files: discovery.files, symbols: snapshotSymbols, summary: snapshotSummary,
             enumerationFailures: discovery.enumerationFailures.length,
@@ -239,7 +270,7 @@ export class AnalyzeProjectHandler {
           });
 
           if (required.has("dependency-graph.json")) {
-            const depGraphRaw = artifacts.get("dependency-graph.json");
+            const depGraphRaw = text("dependency-graph.json");
             if (!depGraphRaw) throw new Error("Missing dependency-graph.json in validated set.");
             const depGraphJson = validateCurrentDependencyGraph(JSON.parse(depGraphRaw));
             records.push(
@@ -255,8 +286,7 @@ export class AnalyzeProjectHandler {
           }
 
           if (required.has("symbols.json")) {
-            const symbolsRaw = artifacts.get("symbols.json");
-            if (!symbolsRaw) throw new Error("Missing symbols.json in validated set.");
+            if (!has("symbols.json")) throw new Error("Missing symbols.json in validated set.");
             const symbolsJson = snapshotSymbols;
             const symbolsByFile = new Map<string, CodeSymbol[]>();
             for (const symbol of symbolsJson) {
@@ -288,11 +318,9 @@ export class AnalyzeProjectHandler {
           }
 
           if (required.has("knowledge.json")) {
-            const knowledgeRaw = artifacts.get("knowledge.json");
-            if (!knowledgeRaw) throw new Error("Missing knowledge.json in validated set.");
-            const knowledgeJson = knowledgeGraphPayloadSchema.parse({ ...JSON.parse(knowledgeRaw), projectId: discovery.projectId, analysisRunId: command.id });
+            const knowledgeJson = knowledgeGraphPayloadSchema.parse({ ...document("knowledge.json", knowledgeGraphPayloadSchema, ["nodes", "edges"]), projectId: discovery.projectId, analysisRunId: command.id });
             records.push(
-              createStorageRecord("knowledge-graph", {
+              createOwnedStorageRecord("knowledge-graph", {
                 projectId: discovery.projectId,
                 analysisRunId: command.id,
                 nodes: knowledgeJson.nodes ?? [],
@@ -302,11 +330,9 @@ export class AnalyzeProjectHandler {
           }
 
           if (required.has("semantic.json")) {
-            const semanticRaw = artifacts.get("semantic.json");
-            if (!semanticRaw) throw new Error("Missing semantic.json in validated set.");
-            const semanticJson = JSON.parse(semanticRaw);
+            const semanticJson = document("semantic.json", semanticAnalysisPayloadSchema, ["calls", "references", "scopes"]);
             records.push(
-              createStorageRecord("semantic-analysis", semanticAnalysisPayloadSchema.parse({
+              createOwnedStorageRecord("semantic-analysis", semanticAnalysisPayloadSchema.parse({
                 ...semanticJson,
                 projectId: discovery.projectId,
                 analysisRunId: command.id,
@@ -315,11 +341,9 @@ export class AnalyzeProjectHandler {
           }
 
           if (required.has("control-flow.json")) {
-            const cfgRaw = artifacts.get("control-flow.json");
-            if (!cfgRaw) throw new Error("Missing control-flow.json in validated set.");
-            const cfgJson = JSON.parse(cfgRaw);
+            const cfgJson = document("control-flow.json", controlFlowPayloadSchema, ["graphs"]);
             records.push(
-              createStorageRecord("control-flow-analysis", controlFlowPayloadSchema.parse({
+              createOwnedStorageRecord("control-flow-analysis", controlFlowPayloadSchema.parse({
                 ...cfgJson,
                 projectId: discovery.projectId,
                 analysisRunId: command.id,
@@ -328,11 +352,9 @@ export class AnalyzeProjectHandler {
           }
 
           if (required.has("data-flow.json")) {
-            const dfgRaw = artifacts.get("data-flow.json");
-            if (!dfgRaw) throw new Error("Missing data-flow.json in validated set.");
-            const dfgJson = JSON.parse(dfgRaw);
+            const dfgJson = document("data-flow.json", dataFlowPayloadSchema, ["graphs"]);
             records.push(
-              createStorageRecord("data-flow-analysis", dataFlowPayloadSchema.parse({
+              createOwnedStorageRecord("data-flow-analysis", dataFlowPayloadSchema.parse({
                 ...dfgJson,
                 projectId: discovery.projectId,
                 analysisRunId: command.id,
@@ -395,6 +417,8 @@ export class AnalyzeProjectHandler {
         } catch (error: unknown) {
           // If reading or parsing snapshot failed unexpectedly, fall through to fresh discovery
           snapshotRejection = immutable({ status: "RESTORE_FAILED", reason: error instanceof Error ? error.message : String(error) });
+        } finally {
+          for (const copy of validation.spooledArtifacts?.values() ?? []) rmSync(copy, { force: true });
         }
       }
     }

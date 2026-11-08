@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -716,6 +717,45 @@ describe("DiscoveryValidator", () => {
         .update(Buffer.from(result.validatedArtifacts!.get("project.json")!, "utf8"))
         .digest("hex");
       expect(inMemorySha).toBe(sha256);
+    } finally {
+      await rm(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it("REUSE-03 (ADR-011): a spooled artifact is consumed from its verified copy, so replacing the original afterwards changes nothing", async () => {
+    const testDir = join(tmpdir(), `test-validator-spool-${Date.now()}`);
+    const discoveryDir = join(testDir, ".discovery");
+    await mkdir(discoveryDir, { recursive: true });
+    const fileContent = JSON.stringify({ calls: [{ id: "a" }] }, null, 2);
+    await writeFile(join(discoveryDir, "semantic.json"), fileContent, "utf8");
+    const sha256 = createHash("sha256").update(fileContent).digest("hex");
+    const manifest = (digest: string) => ({
+      schemaVersion: MANIFEST_SCHEMA_VERSION,
+      repository: { name: "spool-test", path: testDir },
+      engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
+      analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
+      requiredArtifacts: ["semantic.json"],
+      artifacts: { "semantic.json": { sha256: digest, bytes: Buffer.byteLength(fileContent, "utf8") } },
+    });
+    let copies = 0;
+    const spool = { path: () => join(testDir, `copy-${copies++}.json`), names: new Set(["semantic.json"]) };
+
+    try {
+      await writeFile(join(discoveryDir, "manifest.json"), JSON.stringify(manifest(sha256)), "utf8");
+      const result = await validator.validate({ projectPath: testDir, spool });
+      expect(result.valid).toBe(true);
+      expect(result.validatedArtifacts?.has("semantic.json")).toBe(false);
+      const copy = result.spooledArtifacts?.get("semantic.json");
+      expect(copy).toBeDefined();
+      await writeFile(join(discoveryDir, "semantic.json"), JSON.stringify({ calls: [{ id: "swapped" }] }), "utf8");
+      expect(await readFile(copy!, "utf8")).toBe(fileContent);
+
+      // A refused snapshot leaves no copy behind.
+      await writeFile(join(discoveryDir, "manifest.json"), JSON.stringify(manifest("0".repeat(64))), "utf8");
+      const refused = await validator.validate({ projectPath: testDir, spool });
+      expect(refused.status).toBe("CHECKSUM_MISMATCH");
+      expect(refused.spooledArtifacts).toBeUndefined();
+      expect(existsSync(join(testDir, `copy-${copies - 1}.json`))).toBe(false);
     } finally {
       await rm(testDir, { recursive: true, force: true });
     }

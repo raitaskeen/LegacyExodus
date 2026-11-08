@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { closeSync, openSync, readSync, rmSync, writeSync } from "node:fs";
 import { lstat, readFile, realpath } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { z } from "zod";
@@ -77,6 +78,11 @@ export interface DiscoveryValidationResult {
   readonly manifest?: DiscoveryManifest;
   readonly failedArtifact?: string;
   readonly validatedArtifacts?: ReadonlyMap<string, string>;
+  /**
+   * Artifacts verified while being copied to a spool file (ADR-011): name -> path of the copy. Only the copy may be
+   * read; its bytes are the verified bytes (REUSE-03). The caller removes the copies; an invalid result has none.
+   */
+  readonly spooledArtifacts?: ReadonlyMap<string, string>;
 }
 
 export interface ValidateDiscoveryOptions {
@@ -91,6 +97,8 @@ export interface ValidateDiscoveryOptions {
    * by the local snapshot key, and names the running analyzer build.
    */
   readonly authorizeReuse?: boolean;
+  /** The named artifacts are verified while copied to `path()` instead of being held in memory (ADR-011). */
+  readonly spool?: { readonly path: () => string; readonly names: ReadonlySet<string> };
 }
 
 /**
@@ -153,6 +161,17 @@ export class DiscoveryValidator {
    * @returns Comprehensive validation outcome with status, manifest, and validated artifacts.
    */
   public async validate(options: ValidateDiscoveryOptions): Promise<DiscoveryValidationResult> {
+    const spooled = new Map<string, string>();
+    let result: DiscoveryValidationResult | undefined;
+    try {
+      result = await this.validateSpooling(options, spooled);
+      return result;
+    } finally {
+      if (result?.valid !== true) for (const copy of spooled.values()) rmSync(copy, { force: true });
+    }
+  }
+
+  private async validateSpooling(options: ValidateDiscoveryOptions, spooled: Map<string, string>): Promise<DiscoveryValidationResult> {
     const projectPath = resolve(options.projectPath);
     const discoveryDir = options.discoveryDirectory ? resolve(options.discoveryDirectory) : join(projectPath, ".discovery");
 
@@ -325,7 +344,8 @@ export class DiscoveryValidator {
         };
       }
 
-      let content: Buffer;
+      let content: Buffer | undefined;
+      let spooledDigest: string | undefined;
       try {
         const stats = await lstat(artifactPath);
         if (stats.isSymbolicLink()) {
@@ -350,7 +370,14 @@ export class DiscoveryValidator {
           };
         }
 
-        content = await readFile(canonicalArtifactPath);
+        if (options.spool?.names.has(artifactName) === true) {
+          const copy = options.spool!.path();
+          spooled.set(artifactName, copy);
+          spooledDigest = copyHashing(canonicalArtifactPath, copy);
+          content = undefined;
+        } else {
+          content = await readFile(canonicalArtifactPath);
+        }
       } catch {
         return {
           valid: false,
@@ -362,7 +389,7 @@ export class DiscoveryValidator {
       }
 
       if (verifyChecksums) {
-        const computedSha256 = createHash("sha256").update(content).digest("hex");
+        const computedSha256 = spooledDigest ?? createHash("sha256").update(content!).digest("hex");
         if (computedSha256 !== artifactMeta.sha256) {
           return {
             valid: false,
@@ -374,7 +401,7 @@ export class DiscoveryValidator {
         }
       }
 
-      validatedArtifacts.set(artifactName, content.toString("utf8"));
+      if (content !== undefined) validatedArtifacts.set(artifactName, content.toString("utf8"));
     }
 
     if (options.verifyFreshness === true) {
@@ -394,6 +421,7 @@ export class DiscoveryValidator {
       status: "VALID",
       manifest,
       validatedArtifacts: immutable(validatedArtifacts),
+      ...(spooled.size === 0 ? {} : { spooledArtifacts: immutable(new Map(spooled)) }),
     };
   }
 
@@ -568,4 +596,26 @@ async function canonicalPath(path: string): Promise<string> {
 function isWithin(parent: string, candidate: string): boolean {
   const relation = relative(parent, candidate);
   return relation === "" || (!isAbsolute(relation) && relation !== ".." && !relation.startsWith(`..${sep}`));
+}
+
+/** Copies `source` to a new file `destination`, hashing the bytes as they are written; returns their SHA-256. */
+function copyHashing(source: string, destination: string): string {
+  const hash = createHash("sha256");
+  const buffer = Buffer.allocUnsafe(1 << 20);
+  const input = openSync(source, "r");
+  try {
+    const output = openSync(destination, "wx");
+    try {
+      for (let read = readSync(input, buffer, 0, buffer.length, null); read > 0; read = readSync(input, buffer, 0, buffer.length, null)) {
+        const chunk = buffer.subarray(0, read);
+        hash.update(chunk);
+        for (let written = 0; written < read;) written += writeSync(output, chunk, written, read - written);
+      }
+    } finally {
+      closeSync(output);
+    }
+  } finally {
+    closeSync(input);
+  }
+  return hash.digest("hex");
 }

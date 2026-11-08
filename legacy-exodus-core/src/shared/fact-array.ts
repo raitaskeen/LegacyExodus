@@ -214,6 +214,12 @@ export class FactStore {
     return spool;
   }
 
+  /** A fresh path in the store's directory for a file its caller writes and removes; it goes with the store at the latest. */
+  public scratchPath(): string {
+    if (this.#disposed) throw new Error("Fact store is disposed.");
+    return join(this.directory, `${this.#next++}.scratch`);
+  }
+
   public dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
