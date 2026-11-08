@@ -806,7 +806,9 @@ describe("control and data flow analysis", () => {
   test("does not create DFG transfers for computed dynamic calls", async (): Promise<void> => {
     const { graph, semantic } = await buildResolvedDataFlow("semantic-computed", "const input = sourceValue; const method = getMethod(); const result = object[method](input);");
 
-    expect(semantic.calls.some((call) => call.calleeName.includes("object"))).toBe(false);
+    // The computed call is an explicit unknown (NA-01): recorded UNRESOLVED with no target, never absent.
+    const computed = semantic.calls.filter((call) => call.calleeName.includes("object"));
+    expect(computed.map((call) => [call.calleeName, call.resolutionState, call.targetSymbolId])).toEqual([["object[<dynamic>]", "UNRESOLVED", undefined]]);
     expect(graph.interproceduralFlows).toEqual([]);
   });
 
@@ -918,7 +920,9 @@ describe("control and data flow analysis", () => {
   test("does not create DFG transfers for computed dynamic calls", async (): Promise<void> => {
     const { graph, semantic } = await buildResolvedDataFlow("semantic-computed", "const input = sourceValue; const method = getMethod(); const result = object[method](input);");
 
-    expect(semantic.calls.some((call) => call.calleeName.includes("object"))).toBe(false);
+    // The computed call is an explicit unknown (NA-01): recorded UNRESOLVED with no target, never absent.
+    const computed = semantic.calls.filter((call) => call.calleeName.includes("object"));
+    expect(computed.map((call) => [call.calleeName, call.resolutionState, call.targetSymbolId])).toEqual([["object[<dynamic>]", "UNRESOLVED", undefined]]);
     expect(graph.interproceduralFlows).toEqual([]);
   });
 

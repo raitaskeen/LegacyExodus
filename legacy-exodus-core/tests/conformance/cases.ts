@@ -515,6 +515,85 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "taint-cross-file-direct:helpers-analyzed", category: "dispositions", has: analyzed("helpers.js") },
     ],
   },
+  {
+    // NA-01: every call site is a fact. A callee with no name (a call result, `new`, a computed key, a
+    // function value, `super`) is an explicit UNRESOLVED call, never absent; a tagged template calls its tag.
+    id: "call-site-completeness",
+    files: {
+      "calls.js": [
+        "function mk() { return { run() { return 1; } }; }",
+        "class K { m() { return 1; } }",
+        "class S extends K { constructor() { super(); } m() { return super.m(); } }",
+        "export function c1() { return mk().run(); }",
+        "export function c2() { return new K().m(); }",
+        "export function c3(p) { return p.then(mk).catch(mk); }",
+        "export function c4(o, k) { return o[k](); }",
+        "export function c5(arr) { return arr.map(mk)[0].run(); }",
+        "export function c6() { return mk`tpl`; }",
+        "export function c7() { return (() => 1)(); }",
+        "export function c8() { return new (mk())(); }",
+        "export function c9(q) { return q.a().b().c(); }",
+        "export { S };",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "call-site:call-result-member", category: "calls", has: /^calls\.js@4:\d+\|c1\|mk\(\)\.run\|UNRESOLVED\|/ },
+      { id: "call-site:call-result-inner-still-resolves", category: "calls", has: /^calls\.js@4:\d+\|c1\|mk\|RESOLVED\|/ },
+      { id: "call-site:new-result-member", category: "calls", has: /^calls\.js@5:\d+\|c2\|new K\(\)\.m\|UNRESOLVED\|/ },
+      { id: "call-site:chained-member", category: "calls", has: /^calls\.js@6:\d+\|c3\|p\.then\(\)\.catch\|UNRESOLVED\|/ },
+      { id: "call-site:computed-member", category: "calls", has: /^calls\.js@7:\d+\|c4\|o\[<dynamic>\]\|UNRESOLVED\|/ },
+      { id: "call-site:element-member", category: "calls", has: /^calls\.js@8:\d+\|c5\|arr\.map\(\)\[0\]\.run\|UNRESOLVED\|/ },
+      { id: "call-site:tagged-template-resolves", category: "calls", has: /^calls\.js@9:\d+\|c6\|mk\|RESOLVED\|/ },
+      { id: "call-site:function-value", category: "calls", has: /^calls\.js@10:\d+\|c7\|<function>\|UNRESOLVED\|/ },
+      { id: "call-site:new-of-call-result", category: "calls", has: /^calls\.js@11:\d+\|c8\|mk\(\)\|UNRESOLVED\|/ },
+      { id: "call-site:chain-first-link", category: "calls", has: /^calls\.js@12:\d+\|c9\|q\.a\(\)\.b\|UNRESOLVED\|/ },
+      { id: "call-site:chain-name-is-bounded", category: "calls", has: /^calls\.js@12:\d+\|c9\|<dynamic>\(\)\.c\|UNRESOLVED\|/ },
+      { id: "call-site:super-constructor", category: "calls", has: /^calls\.js@3:\d+\|[^|]*\|super\|UNRESOLVED\|/ },
+      { id: "call-site:super-member", category: "calls", has: /^calls\.js@3:\d+\|[^|]*\|super\.m\|UNRESOLVED\|/ },
+      { id: "call-site:no-synthetic-name-resolves", category: "calls", lacks: /^calls\.js@[^|]*\|[^|]*\|[^|]*(?:\(\)|<|\[|super)[^|]*\|RESOLVED\|/ },
+      {
+        id: "call-site:every-site-is-a-fact",
+        check: (discoveryDirectory) => {
+          const semantic = JSON.parse(readFileSync(join(discoveryDirectory, "semantic.json"), "utf8")) as { calls: { sourceFilePath: string }[] };
+          return semantic.calls.filter((call) => call.sourceFilePath === "calls.js").length === 18;
+        },
+      },
+    ],
+  },
+  {
+    // NA-02: `with` and direct `eval` make names dynamic. In a `with` body a name bound outside it may be a
+    // property of the object; a direct `eval` can declare or reassign any binding it can see, so no call
+    // in its file is proven and its exports are unstable for other files.
+    id: "dynamic-scope",
+    files: {
+      "with.cjs": [
+        "function g() { return 1; }",
+        "function w(o) { with (o) { return g(); } }",
+        "function inner(o) { with (o) { function h() { return 2; } return h(); } }",
+        "function after(o) { with (o) {} return g(); }",
+        "module.exports = { w, inner, after };",
+        "",
+      ].join("\n"),
+      "evil.cjs": [
+        "function k() { return 1; }",
+        "function ev(code) { eval(code); return k(); }",
+        "function other() { return k(); }",
+        "module.exports = { k, ev, other };",
+        "",
+      ].join("\n"),
+      "user.cjs": "const { k } = require(\"./evil.cjs\");\nk();\nfunction m() { return 1; }\nm();\n",
+    },
+    expectations: [
+      { id: "dynamic-scope:with-outer-name-unresolved", category: "calls", has: /^with\.cjs@2:\d+\|w\|g\|UNRESOLVED\|/ },
+      { id: "dynamic-scope:with-inner-binding-resolves", category: "calls", has: /^with\.cjs@3:\d+\|inner\|h\|RESOLVED\|/ },
+      { id: "dynamic-scope:after-with-resolves", category: "calls", has: /^with\.cjs@4:\d+\|after\|g\|RESOLVED\|/ },
+      { id: "dynamic-scope:eval-function-unresolved", category: "calls", has: /^evil\.cjs@2:\d+\|ev\|k\|UNRESOLVED\|/ },
+      { id: "dynamic-scope:eval-file-unresolved", category: "calls", has: /^evil\.cjs@3:\d+\|other\|k\|UNRESOLVED\|/ },
+      { id: "dynamic-scope:eval-export-unstable", category: "calls", has: /^user\.cjs@2:\d+\|module\|k\|UNRESOLVED\|/ },
+      { id: "dynamic-scope:clean-file-resolves", category: "calls", has: /^user\.cjs@4:\d+\|module\|m\|RESOLVED\|/ },
+    ],
+  },
   ...taintCases,
 ];
 
