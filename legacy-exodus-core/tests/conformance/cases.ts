@@ -529,9 +529,14 @@ export const conformanceCases: readonly ConformanceCase[] = [
     id: "taint-sql-client",
     files: {
       "db.js": "const mysql = require(\"mysql\");\nconst conn = mysql.createConnection({});\nexports.find = function find(req, res) { conn.query(\"SELECT * FROM users WHERE id = \" + req.query.id, () => {}); };\n",
+      "pg.js": "import { Pool } from \"pg\";\nconst pool = new Pool();\nexport async function list(req, res) { return pool.query(\"SELECT * FROM posts WHERE tag = '\" + req.query.tag + \"'\"); }\n",
+      // A parameterized query passes the input as a value, not as SQL text (NA-03e: judged on the SQL argument only).
+      "safe.js": "const mysql = require(\"mysql\");\nconst conn = mysql.createConnection({});\nexports.find = function find(req, res) { conn.query(\"SELECT * FROM users WHERE id = ?\", [req.query.id], () => {}); };\n",
     },
     expectations: [
       { id: "taint-sql:client-query", category: "taint", has: /^db\.js\|.*\|sink=#[0-9a-z]+:[^|]*query\|/ },
+      { id: "taint-sql:pg-pool-query", category: "taint", has: /^pg\.js\|.*\|sink=#[0-9a-z]+:pg\.query\|/ },
+      { id: "taint-sql:parameterized-query-is-safe", category: "taint", lacks: /^safe\.js\|/ },
     ],
   },
   {
