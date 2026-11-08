@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -42,6 +42,21 @@ describe("BA-15 scanner policy", () => {
       { path: "notes.tmp", kind: "file", reason: "gitignore" },
       { path: "packages/a/generated", kind: "directory", reason: "gitignore" },
     ]);
+  });
+
+  it("reports a symbolic link it does not follow, instead of leaving it out silently (NA-07)", async () => {
+    const outside = await mkdtemp(join(tmpdir(), "legacy-exodus-outside-"));
+    try {
+      await writeFile(join(outside, "secret.js"), "export const secret = 1;\n");
+      const path = await project({ "src/main.js": "export const main = 1;\n" });
+      // A junction needs no privilege on Windows; elsewhere the type is ignored and a directory link is made.
+      await symlink(outside, join(path, "src", "linked"), "junction");
+      const scan = await new FileScanner().scan(path);
+      expect(scan.files.map((file) => file.path)).toEqual(["src/main.js"]);
+      expect(scan.excludedPaths).toEqual([{ path: "src/linked", kind: "link", reason: "symbolic-link" }]);
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
   });
 
   it("keeps files git tracks, as git does: .gitignore applies to untracked files only", async () => {
