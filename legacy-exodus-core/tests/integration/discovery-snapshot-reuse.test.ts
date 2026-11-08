@@ -17,6 +17,7 @@ import type { LegacyExodusEngine } from "@core/engine";
 import { DiscoveryValidator } from "@discovery/discovery-validator";
 import { computeManifestMac, manifestKeyId, MANIFEST_MAC_ALGORITHM, SnapshotKeyStore } from "@discovery/index";
 import { FileScanner } from "@discovery/file-scanner";
+import { MANIFEST_SCHEMA_VERSION } from "@discovery/discovery-manifest";
 import { DiscoveryQueryService } from "@discovery/discovery-query-service";
 import { JavaScriptParser, ParserManager, ParserRegistry } from "@parser/index";
 import { SqliteStorageProvider } from "@storage/adapters/sqlite-storage";
@@ -747,8 +748,15 @@ describe("Phase 3A P0.4 — Discovery Snapshot Reuse & Invalidation", () => {
       if (recoveryRun.type !== "AnalyzeProject") throw new Error("Expected AnalyzeProject");
       expect(recoveryRun.isReused).toBeUndefined();
 
+      // The artifact holds facts only; run identity is in the manifest (ADR-010). Together they are a valid payload.
       const recoveredSemantic = JSON.parse(await readFile(semanticPath, "utf8"));
-      expect(semanticAnalysisPayloadSchema.safeParse(recoveredSemantic).success).toBe(true);
+      const recoveredManifest = JSON.parse(await readFile(manifestPath, "utf8"));
+      expect(recoveredSemantic.projectId).toBeUndefined();
+      expect(semanticAnalysisPayloadSchema.safeParse({
+        ...recoveredSemantic,
+        projectId: recoveredManifest.analysis.projectId,
+        analysisRunId: recoveredManifest.analysis.analysisRunId,
+      }).success).toBe(true);
     } finally {
       await engine.shutdown();
     }
@@ -785,7 +793,7 @@ describe("Phase 3A P0.4 — Discovery Snapshot Reuse & Invalidation", () => {
     await writeFile(join(discoveryDir, "summary.json"), JSON.stringify(summaryPayload), "utf8");
 
     const manifest = {
-      schemaVersion: 2,
+      schemaVersion: MANIFEST_SCHEMA_VERSION,
       repository: { name: "disc-only", path: dummyDir },
       engine: { packageVersion: "0.1.0", commitSha: "test", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: randomUUID(), generatedAt: new Date().toISOString() },
