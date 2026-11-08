@@ -516,6 +516,47 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // NA-09: a name the call graph cannot pin to one declaration is still used. Duplicate sloppy declarations
+    // and an Annex B block function called after its block are not dead code; a function nothing names is.
+    id: "dead-code-unresolved-names",
+    files: {
+      "sloppy.cjs": [
+        "function dup() { return d(); }",
+        "function d() { return \"first\"; }",
+        "function d() { return \"second\"; }",
+        "function annexB(x) { if (x) { function bf() { return 1; } } return bf(); }",
+        "function neverCalled() { return 0; }",
+        "module.exports = { dup, annexB };",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "dead-code:duplicate-declaration-is-used", category: "deadCode", lacks: /^unreferenced-local-symbol\|function:d@/ },
+      { id: "dead-code:annex-b-function-is-used", category: "deadCode", lacks: /^unreferenced-local-symbol\|function:bf@/ },
+      { id: "dead-code:unnamed-function-is-dead", category: "deadCode", has: /^unreferenced-local-symbol\|function:neverCalled@/ },
+    ],
+  },
+  {
+    // NA-03b: path-traversal and SSRF sinks, judged only on the argument that names the path or the URL.
+    id: "taint-fs-ssrf-sinks",
+    files: {
+      "read.js": "const fs = require(\"fs\");\nexports.r = function r(req, res) { fs.readFile(req.params.p, () => {}); };\n",
+      "write-path.js": "const { writeFile } = require(\"fs/promises\");\nexports.w = function w(req, res) { return writeFile(req.query.f, \"x\"); };\n",
+      "write-data.js": "const fs = require(\"node:fs\");\nexports.d = function d(req, res) { fs.writeFileSync(\"log.txt\", req.body); };\n",
+      "ssrf.js": "const https = require(\"https\");\nexports.s = function s(req, res) { https.get(req.query.url, () => {}); };\n",
+      "fetch.js": "exports.f = async function f(req, res) { return fetch(req.query.u); };\n",
+      "fetch-body.js": "exports.b = async function b(req, res) { return fetch(\"https://api.example\", { method: \"POST\", body: req.body }); };\n",
+    },
+    expectations: [
+      { id: "taint-fs:read-path", category: "taint", has: /^read\.js\|.*\|sink=#[0-9a-z]+:fs\.readFile\|/ },
+      { id: "taint-fs:write-path", category: "taint", has: /^write-path\.js\|.*\|sink=#[0-9a-z]+:fs\/promises\.writeFile\|/ },
+      { id: "taint-fs:written-data-is-not-a-path", category: "taint", lacks: /^write-data\.js\|/ },
+      { id: "taint-ssrf:https-get-url", category: "taint", has: /^ssrf\.js\|.*\|sink=#[0-9a-z]+:https\.get\|/ },
+      { id: "taint-ssrf:fetch-url", category: "taint", has: /^fetch\.js\|.*\|sink=#[0-9a-z]+:fetch\|/ },
+      { id: "taint-ssrf:fetch-body-is-not-the-url", category: "taint", lacks: /^fetch-body\.js\|/ },
+    ],
+  },
+  {
     // NA-03: a proven call into another file whose result is used directly (a sink argument, an argument of
     // another call), with no variable receiving it, still carries the callee's return value.
     id: "taint-cross-file-nested",

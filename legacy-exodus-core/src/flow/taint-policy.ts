@@ -15,17 +15,38 @@ import type { LexicalBindings } from "./lexical-bindings";
  * still match, so code that does not wire handlers visibly (a handler exported to another file) keeps
  * its flows. Unknown calls are neither sources nor sinks.
  */
-export const TAINT_POLICY_VERSION = "builtin-2";
+export const TAINT_POLICY_VERSION = "builtin-3";
 
 // Everything the client controls: the payload, and the request line (`url`, `path`, host and address).
 const REQUEST_SOURCES = new Set(["body", "params", "query", "headers", "cookies", "signedCookies", "files", "url", "originalUrl", "path", "baseUrl", "hostname", "host", "ip", "ips", "subdomains", "protocol"]);
 const REQUEST_SOURCE_METHODS = new Set(["get", "header", "param"]);
 const RESPONSE_SINKS = new Set(["send", "json", "jsonp", "write", "end", "redirect", "render", "sendFile", "download"]);
 const PROCESS_SOURCES = new Set(["env", "argv"]);
+const FS_PATH_SINKS: readonly string[] = [
+  "readFile", "readFileSync", "createReadStream", "writeFile", "writeFileSync", "appendFile", "appendFileSync",
+  "createWriteStream", "open", "openSync", "unlink", "unlinkSync", "rm", "rmSync", "readdir", "readdirSync",
+  "copyFile", "copyFileSync", "rename", "renameSync",
+];
+const FS_TWO_PATH_SINKS: ReadonlySet<string> = new Set(["copyFile", "copyFileSync", "rename", "renameSync"]);
 const MODULE_SINKS: Readonly<Record<string, ReadonlySet<string>>> = {
   child_process: new Set(["exec", "execSync", "execFile", "execFileSync", "spawn", "spawnSync", "fork"]),
   vm: new Set(["runInThisContext", "runInNewContext", "runInContext", "compileFunction"]),
+  // Path traversal (NA-03b): the path arguments only, see SINK_ARGUMENTS.
+  fs: new Set(FS_PATH_SINKS),
+  "fs/promises": new Set(FS_PATH_SINKS),
+  // Server-side request forgery (NA-03b): the URL or options argument.
+  http: new Set(["request", "get"]),
+  https: new Set(["request", "get"]),
 };
+
+/**
+ * Sinks judged on some arguments only (NA-03b): a file call on its path, a request on its URL. Data written
+ * to a fixed file or sent in a body is not path traversal or SSRF. A sink not listed is judged on every argument.
+ */
+const SINK_ARGUMENTS: Readonly<Record<string, readonly number[]>> = Object.fromEntries([
+  ...["fs", "fs/promises"].flatMap((module) => FS_PATH_SINKS.map((name) => [`${module}.${name}`, FS_TWO_PATH_SINKS.has(name) ? [0, 1] : [0]] as const)),
+  ...["http.request", "http.get", "https.request", "https.get", "fetch"].map((name) => [name, [0]] as const),
+]);
 const MODULE_SANITIZERS: Readonly<Record<string, ReadonlySet<string>>> = {
   validator: new Set(["escape"]),
   "escape-html": new Set(["default"]),
@@ -44,6 +65,8 @@ export interface FilePolicy {
   /** Canonical sink name of a call, e.g. `child_process.exec` for a local `exec`. */
   sinkName(call: ASTNode): string | undefined;
   isSanitizer(call: ASTNode): boolean;
+  /** Argument positions a sink is judged on; undefined for all of them (NA-03b). */
+  sinkArguments(call: ASTNode): readonly number[] | undefined;
 }
 
 interface ModuleBinding { readonly module: string; readonly member: string }
@@ -276,7 +299,7 @@ export function filePolicy(root: ASTNode, bindings: LexicalBindings): FilePolicy
       if (callee.type === "Identifier") {
         const name = nameOf(callee);
         const key = keyOf(callee);
-        if ((name === "eval" || name === "Function") && key === `global:${name}`) return name;
+        if ((name === "eval" || name === "Function" || name === "fetch") && key === `global:${name}`) return name;
         const binding = moduleOf(callee);
         return binding !== undefined && MODULE_SINKS[binding.module]?.has(binding.member) ? `${binding.module}.${binding.member}` : undefined;
       }
@@ -289,6 +312,10 @@ export function filePolicy(root: ASTNode, bindings: LexicalBindings): FilePolicy
       const module = binding !== undefined && (binding.member === "*" || binding.member === "default") ? binding.module
         : object.type === "Identifier" && nameOf(object) === "child_process" ? "child_process" : undefined;
       return module !== undefined && MODULE_SINKS[module]?.has(method) ? `${module}.${method}` : undefined;
+    },
+    sinkArguments(call) {
+      const name = this.sinkName(call);
+      return name === undefined ? undefined : SINK_ARGUMENTS[name];
     },
     isSanitizer(call) {
       if (call.type !== "CallExpression") return false;
