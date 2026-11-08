@@ -72,6 +72,7 @@ export class DeterministicDataFlowGraphBuilder {
   private readonly callResults = new WeakMap<ASTNode, VariableDefinition>();
   /** Symbols of the file being built: a proven target outside them is in another file. */
   private localSymbolIds: ReadonlySet<string> = new Set();
+  private readonly parameterSlots = new WeakMap<ASTNode, VariableDefinition[][]>();
   private policy: FilePolicy = filePolicy({ type: "Program", children: [], attributes: {} } as unknown as ASTNode, { keyOf: new Map(), ownerOf: new Map() });
 
   /**
@@ -325,7 +326,14 @@ export class DeterministicDataFlowGraphBuilder {
     if (node.type === "ReturnStatement") { this.returnValue(node, scope, filePath, state, currentFunction); return; }
     if (node.type === "AssignmentExpression") { this.assignment(node, scope, filePath, state, currentFunction); return; }
     if (node.type === "CallExpression") { this.call(node, scope, filePath, state, receiverDefinitionId); return; }
-    if (node.type === "MemberExpression") { this.memberUse(node, scope, filePath, state); return; }
+    if (node.type === "MemberExpression") {
+      this.memberUse(node, scope, filePath, state);
+      // A chain rooted in a call (`wrap(x).inner`) still evaluates that call: its arguments reach the callee and
+      // its return reaches this read (NA-03c). A chain rooted in a name is a plain read, already recorded above.
+      const root = memberRoot(node);
+      if (root !== undefined && root.type !== "Identifier" && root.type !== "ThisExpression" && root.type !== "Super") this.visit(root, scope, filePath, state, currentFunction);
+      return;
+    }
     if (node.type === "ObjectProperty") {
       const computed = node.attributes.computed === true;
       const key = node.children.find((child) => child.role === "key");
@@ -695,6 +703,9 @@ export class DeterministicDataFlowGraphBuilder {
     const record = state.functions.get(node);
     const functionScope = createScope(scope);
     this.functionScopes.add(functionScope);
+    // Every function's parameters by position, symbol or not (an inline callback has no symbol record).
+    const parameterSlots: VariableDefinition[][] = [];
+    this.parameterSlots.set(node, parameterSlots);
     for (const parameter of node.children.filter((child) => child.role === "params")) {
       const paramNames = extractBoundNames(parameter);
       const slotDefinitions: VariableDefinition[] = [];
@@ -703,6 +714,7 @@ export class DeterministicDataFlowGraphBuilder {
         slotDefinitions.push(definition);
       }
       record?.parameters.push(slotDefinitions);
+      parameterSlots.push(slotDefinitions);
       for (const { boundNames: defaultBoundNames, defaultNode } of extractPatternDefaults(parameter)) {
         for (const paramName of defaultBoundNames) {
           const definition = functionScope.definitions.get(paramName);
@@ -938,6 +950,7 @@ export class DeterministicDataFlowGraphBuilder {
       if (staged) values.push(this.evaluateOrderedExpression(argument, scope, filePath, state));
       else this.visit(argument, scope, filePath, state);
     }
+    this.bindArrayCallback(callee, argumentsNodes, scope, filePath, state);
     const proven = node.location === undefined ? undefined : state.provenTargets.get(callLocationKey(filePath, node.location.start));
     const resolved = state.hasSemanticResolution ? (proven === undefined ? undefined : state.functionsBySymbolId.get(proven.targetSymbolId)) : resolveFunction(name, state.resolvableFunctions);
     const callPosition = node.location === undefined ? `anon-${state.pendingCalls.length}` : `${node.location.start.line}:${node.location.start.column}`;
@@ -967,6 +980,21 @@ export class DeterministicDataFlowGraphBuilder {
     state.sinks.push({ id: sinkId, name: sinkName, argumentDefinitionIds: staged
       ? values.flatMap((value, index) => (counts(index) ? this.orderedValueIds(value, "definition") : []))
       : argumentsNodes.flatMap((argument, index) => (counts(index) ? this.collectDefinitions(argument, scope, filePath, state).map((definition) => definition.id) : [])) });
+  }
+
+  /**
+   * `xs.forEach((v) => …)` and the other Array callback methods pass the receiver's elements to an inline callback:
+   * the receiver's values flow into the element parameter (NA-03d). Only these builtin method names, and only an
+   * inline function, so no user function is assumed to behave like one.
+   */
+  private bindArrayCallback(callee: ASTNode | undefined, argumentsNodes: readonly ASTNode[], scope: Scope, filePath: string, state: FlowState): void {
+    if (callee?.type !== "MemberExpression" || callee.attributes.computed === true) return;
+    const slot = ARRAY_CALLBACK_ELEMENT_SLOT.get(identifierName(callee.children.find((child) => child.role === "property")) ?? "");
+    const receiver = callee.children.find((child) => child.role === "object");
+    const callback = argumentsNodes[0];
+    if (slot === undefined || receiver === undefined || callback === undefined) return;
+    if (callback.type !== "ArrowFunctionExpression" && callback.type !== "FunctionExpression") return;
+    for (const parameter of this.parameterSlots.get(callback)?.[slot] ?? []) this.transferTaint(receiver, parameter.id, scope, filePath, state);
   }
 
   private definitionFor(node: ASTNode, scope: Scope): VariableDefinition | undefined {
@@ -1371,4 +1399,17 @@ function isStaticallyDefinedLiteral(node: ASTNode | undefined): boolean {
 /** The call's value is consumed: an argument, a member's object, or returned, awaited or spread (NA-03). */
 function valueIsUsed(node: ASTNode): boolean {
   return node.role === "arguments" || node.role === "object" || node.role === "argument";
+}
+
+/** Array methods whose first argument is called with each element, and that element's parameter position (NA-03d). */
+const ARRAY_CALLBACK_ELEMENT_SLOT: ReadonlyMap<string, number> = new Map([
+  ...["forEach", "map", "filter", "find", "findIndex", "findLast", "findLastIndex", "some", "every", "flatMap"].map((name) => [name, 0] as const),
+  ["reduce", 1], ["reduceRight", 1],
+]);
+
+/** The innermost object of a member chain (`f()` in `f().a.b`). */
+function memberRoot(node: ASTNode): ASTNode | undefined {
+  let current: ASTNode | undefined = node;
+  while (current?.type === "MemberExpression" || current?.type === "OptionalMemberExpression") current = current.children.find((child) => child.role === "object");
+  return current;
 }
