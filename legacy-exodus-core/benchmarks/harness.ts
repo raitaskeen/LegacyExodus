@@ -33,6 +33,7 @@ export async function executeBenchmarkRun(
 
   try {
     const memBefore = memoryUsage().rss;
+    const engineStarted = performance.now();
 
     const result = await engine.execute({
       id: "00000000-0000-4000-8000-b00000000000",
@@ -44,8 +45,12 @@ export async function executeBenchmarkRun(
       },
     });
 
+    const engineWallMs = Math.round(performance.now() - engineStarted);
     const memAfter = memoryUsage().rss;
     const peakRssMb = Math.round((Math.max(memBefore, memAfter) / (1024 * 1024)) * 10) / 10;
+    // The process's peak so far is the engine's: the summaries below re-read the projected JSON
+    // (about 930 MB on Ghost), which a later reading would count as the engine's memory (NA-04).
+    const engineMaxRssMb = Math.round((process.resourceUsage().maxRSS / 1024) * 10) / 10;
 
     if (result.type !== "AnalyzeProject") {
       throw new Error(`Unexpected engine result type: ${result.type}`);
@@ -86,6 +91,9 @@ export async function executeBenchmarkRun(
       frameworks: result.discovery.frameworks.map((f) => f.name),
       dependencyCount: result.discovery.dependencies.length,
       peakRssMb,
+      engineMaxRssMb,
+      engineWallMs,
+      snapshotReused: result.isReused === true,
     };
   } finally {
     await engine.shutdown();

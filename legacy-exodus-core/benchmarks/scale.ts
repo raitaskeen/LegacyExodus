@@ -1,6 +1,8 @@
 /**
- * Scale benchmark (Wave 3d, BA-28 / BA-17): one full analysis of a `scale` tier corpus, with its wall
- * time and the process's peak resident memory checked against the manifest's budgets. Run on request:
+ * Scale benchmark (Wave 3d, BA-28 / BA-17): one fresh analysis of a `scale` tier corpus, with the engine's
+ * wall time and the process's peak resident memory when the engine returned checked against the manifest's
+ * budgets. Any earlier `.discovery` is removed first, so a stored snapshot is never measured instead of an
+ * analysis, and the harness's re-reading of the output afterwards is not counted (NA-04). Run on request:
  *
  *   bun run benchmarks/cli.ts scale <name>
  *
@@ -26,9 +28,15 @@ export interface ScaleResult {
   readonly withinBudget: boolean;
 }
 
-/** Peak resident memory of this process so far, in MiB (`maxRSS` is in KiB). */
-function peakRssMb(): number {
-  return Math.round((process.resourceUsage().maxRSS / 1024) * 10) / 10;
+/** One fresh analysis of `corpus`: the engine's own wall time and peak memory (NA-04). */
+async function measure(corpus: string): Promise<{ readonly wallMs: number; readonly peakRssMb: number; readonly filesDiscovered: number; readonly filesAnalyzed: number }> {
+  // A snapshot from an earlier run would be reused instead of analysed.
+  await rm(join(corpus, ".discovery"), { recursive: true, force: true });
+  const run = await executeBenchmarkRun(corpus, 0);
+  if (run.snapshotReused === true || run.engineWallMs === undefined || run.engineMaxRssMb === undefined) {
+    throw new Error(`Scale run of ${corpus} did not measure a fresh analysis.`);
+  }
+  return { wallMs: run.engineWallMs, peakRssMb: run.engineMaxRssMb, filesDiscovered: run.disposition.filesDiscovered, filesAnalyzed: run.disposition.filesAnalyzed };
 }
 
 export async function runScaleBenchmark(name: string): Promise<ScaleResult> {
@@ -39,20 +47,13 @@ export async function runScaleBenchmark(name: string): Promise<ScaleResult> {
   const checkout = join(CACHE_DIR, manifest.name);
   await ensureCorpusCheckout(checkout);
 
-  const started = performance.now();
-  const run = await executeBenchmarkRun(checkout, 0);
-  const wallMs = Math.round(performance.now() - started);
-  const peak = Math.max(peakRssMb(), run.peakRssMb);
-
+  const run = await measure(checkout);
   const result: ScaleResult = {
     name: manifest.name,
     commit: manifest.commit,
-    wallMs,
-    peakRssMb: peak,
-    filesDiscovered: run.disposition.filesDiscovered,
-    filesAnalyzed: run.disposition.filesAnalyzed,
+    ...run,
     budgets: manifest.budgets,
-    withinBudget: wallMs <= manifest.budgets.maxWallMs && peak <= manifest.budgets.maxPeakRssMb,
+    withinBudget: run.wallMs <= manifest.budgets.maxWallMs && run.peakRssMb <= manifest.budgets.maxPeakRssMb,
   };
   await mkdir(RESULTS_DIR, { recursive: true });
   await writeFile(join(RESULTS_DIR, `scale-${manifest.name}.json`), `${JSON.stringify(result, null, 2)}\n`);
@@ -74,22 +75,13 @@ export async function runSyntheticScale(files: number): Promise<ScaleResult> {
   const budgets = SYNTHETIC_BUDGETS[files];
   if (budgets === undefined) throw new Error(`No synthetic budget for ${files} files (have: ${Object.keys(SYNTHETIC_BUDGETS).join(", ")}).`);
   const corpus = await ensureSyntheticCorpus(CACHE_DIR, files);
-  // A snapshot from an earlier run would be reused instead of analysed.
-  await rm(join(corpus, ".discovery"), { recursive: true, force: true });
-
-  const started = performance.now();
-  const run = await executeBenchmarkRun(corpus, 0);
-  const wallMs = Math.round(performance.now() - started);
-  const peak = Math.max(peakRssMb(), run.peakRssMb);
+  const run = await measure(corpus);
   const result: ScaleResult = {
     name: `synthetic-${files}`,
     commit: undefined,
-    wallMs,
-    peakRssMb: peak,
-    filesDiscovered: run.disposition.filesDiscovered,
-    filesAnalyzed: run.disposition.filesAnalyzed,
+    ...run,
     budgets,
-    withinBudget: wallMs <= budgets.maxWallMs && peak <= budgets.maxPeakRssMb && run.disposition.filesAnalyzed === files,
+    withinBudget: run.wallMs <= budgets.maxWallMs && run.peakRssMb <= budgets.maxPeakRssMb && run.filesAnalyzed === files,
   };
   await mkdir(RESULTS_DIR, { recursive: true });
   await writeFile(join(RESULTS_DIR, `scale-${result.name}.json`), `${JSON.stringify(result, null, 2)}\n`);
