@@ -95,31 +95,31 @@ export class DeterministicCallGraphBuilder {
         (nextContext.constantBindings as Map<string, string | null>).set(bindingKey(context.scope, declName), null);
       }
     }
-    if (node.type === "CallExpression" || node.type === "OptionalCallExpression" || node.type === "NewExpression") {
+    if (node.type === "CallExpression" || node.type === "OptionalCallExpression" || node.type === "NewExpression" || node.type === "TaggedTemplateExpression") {
       if (!boundCallees.has(node)) {
-        const calleeName = callName(node, nextContext, boundCallees);
-        if (calleeName !== undefined) {
-          const isShadowed = isLexicallyShadowed(calleeName, nextContext, fileSymbols);
-          const imported = isShadowed
-            ? undefined
-            : visibleImport(fileSymbols, calleeName, nextContext.scope);
-          const importTarget = imported === undefined ? undefined : targetByImportId.get(imported.id);
-          // `f.call(…)`, `f.apply(…)` and `f.bind(…)(…)` are resolved as `f`; that holds only while those properties are the builtins.
-          const invokesThroughWrittenProperty = invokerProperties(node).some((name) => propertyWriteCount(fileSymbols, name) > 0);
-          const targetSymbolId = invokesThroughWrittenProperty
-            ? undefined
-            : imported === undefined
-              ? resolveLocalCall(table, fileSymbols, calleeName, nextContext, tablesByPath, this.resolver, node)
-              : isRebound(fileSymbols, MODULE_SCOPE_ID, calleeName) || isUnstableTarget(fileSymbols, importTarget) ? undefined : importTarget;
-          const id = hash(`${ast.metadata.sourcePath}:${nextContext.callerName}:${calleeName}:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`);
-          const resolutionState = targetSymbolId === undefined ? "UNRESOLVED" as const : "RESOLVED" as const;
-          const key = factKeyers.get(fileSymbols)?.key("call", calleeName, node.location?.start);
-          const keyed = key === undefined ? {} : { key };
-          const callId = key === undefined ? id : stableId("call", key);
-          const reference: SymbolReference = { id: key === undefined ? hash(`reference:${id}`) : stableId("call-reference", key), ...keyed, filePath: ast.metadata.sourcePath, name: calleeName, kind: "call", resolutionState, ...(targetSymbolId === undefined ? {} : { resolvedSymbolId: targetSymbolId }) };
-          references.push(reference);
-          calls.push({ id: callId, ...keyed, sourceFilePath: ast.metadata.sourcePath, callerName: nextContext.callerName, calleeName, resolutionState, ...(targetSymbolId === undefined ? {} : { targetSymbolId }), ...(node.location === undefined ? {} : { location: node.location.start }) });
-        }
+        const namedCallee = callName(node, nextContext, boundCallees);
+        // A callee no name denotes is still a call site: an explicit UNRESOLVED fact, never left out (NA-01).
+        const calleeName = namedCallee ?? unnamedCalleeName(node, nextContext);
+        const isShadowed = namedCallee === undefined || isLexicallyShadowed(calleeName, nextContext, fileSymbols);
+        const imported = isShadowed
+          ? undefined
+          : visibleImport(fileSymbols, calleeName, nextContext.scope);
+        const importTarget = imported === undefined ? undefined : targetByImportId.get(imported.id);
+        // `f.call(…)`, `f.apply(…)` and `f.bind(…)(…)` are resolved as `f`; that holds only while those properties are the builtins.
+        const invokesThroughWrittenProperty = invokerProperties(node).some((name) => propertyWriteCount(fileSymbols, name) > 0);
+        const targetSymbolId = namedCallee === undefined || invokesThroughWrittenProperty
+          ? undefined
+          : imported === undefined
+            ? resolveLocalCall(table, fileSymbols, calleeName, nextContext, tablesByPath, this.resolver, node)
+            : isRebound(fileSymbols, MODULE_SCOPE_ID, calleeName) || isUnstableTarget(fileSymbols, importTarget) ? undefined : importTarget;
+        const id = hash(`${ast.metadata.sourcePath}:${nextContext.callerName}:${calleeName}:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`);
+        const resolutionState = targetSymbolId === undefined ? "UNRESOLVED" as const : "RESOLVED" as const;
+        const key = factKeyers.get(fileSymbols)?.key("call", calleeName, node.location?.start);
+        const keyed = key === undefined ? {} : { key };
+        const callId = key === undefined ? id : stableId("call", key);
+        const reference: SymbolReference = { id: key === undefined ? hash(`reference:${id}`) : stableId("call-reference", key), ...keyed, filePath: ast.metadata.sourcePath, name: calleeName, kind: "call", resolutionState, ...(targetSymbolId === undefined ? {} : { resolvedSymbolId: targetSymbolId }) };
+        references.push(reference);
+        calls.push({ id: callId, ...keyed, sourceFilePath: ast.metadata.sourcePath, callerName: nextContext.callerName, calleeName, resolutionState, ...(targetSymbolId === undefined ? {} : { targetSymbolId }), ...(node.location === undefined ? {} : { location: node.location.start }) });
       }
     }
 
@@ -1416,7 +1416,7 @@ function collectBoundCalleeChain(calleeNode: ASTNode, context?: ResolutionContex
 /** `call`, `apply` and `bind` properties that callName looks through on the way to the callee. */
 function invokerProperties(call: ASTNode): string[] {
   const names: string[] = [];
-  for (let current = call.children.find((child) => child.role === "callee"); current !== undefined;) {
+  for (let current = calleeOf(call); current !== undefined;) {
     if (current.type === "CallExpression" || current.type === "OptionalCallExpression") {
       current = current.children.find((child) => child.role === "callee");
     } else if (current.type === "MemberExpression" || current.type === "OptionalMemberExpression") {
@@ -1430,14 +1430,61 @@ function invokerProperties(call: ASTNode): string[] {
   return names;
 }
 
-function callName(node: ASTNode, context: ResolutionContext, boundCallees?: Set<ASTNode>): string | undefined {
-  const callee = node.children.find((child) => child.role === "callee");
-  if (callee === undefined) return undefined;
+/** The function a call, `new` or tagged template invokes (a tagged template calls its tag). */
+function calleeOf(node: ASTNode): ASTNode | undefined {
+  const role = node.type === "TaggedTemplateExpression" ? "tag" : "callee";
+  const callee = node.children.find((child) => child.role === role);
   // `(0, lib_1.f)()`, tsc's call form for imports, calls the sequence's last value (BA-12).
-  const sequenceValue = callee.type === "SequenceExpression" ? callee.children.filter((child) => child.role === "expressions").at(-1) : callee;
-  if (sequenceValue === undefined) return undefined;
-  const effectiveCallee = collectBoundCalleeChain(sequenceValue, context, boundCallees);
+  return callee?.type === "SequenceExpression" ? callee.children.filter((child) => child.role === "expressions").at(-1) : callee;
+}
+
+function callName(node: ASTNode, context: ResolutionContext, boundCallees?: Set<ASTNode>): string | undefined {
+  const callee = calleeOf(node);
+  if (callee === undefined) return undefined;
+  const effectiveCallee = collectBoundCalleeChain(callee, context, boundCallees);
   return memberName(effectiveCallee, context, boundCallees);
+}
+
+/**
+ * A readable, deterministic name for a callee that no name denotes (NA-01): `mk().run`, `new K().m`,
+ * `o[<dynamic>]`, `super.m`, `<function>`. Such a call is never resolved; the name only keeps the
+ * call site visible as an explicit UNRESOLVED fact instead of leaving it out.
+ */
+function unnamedCalleeName(node: ASTNode, context: ResolutionContext): string {
+  const callee = calleeOf(node);
+  return callee === undefined ? "<dynamic>" : describeCallee(callee, context);
+}
+
+function describeCallee(node: ASTNode, context: ResolutionContext): string {
+  switch (node.type) {
+    case "Super":
+      return "super";
+    case "FunctionExpression":
+    case "ArrowFunctionExpression":
+    case "ClassExpression":
+      return "<function>";
+    // One level only: a call result is named by its own callee or `<dynamic>`, so a long builder chain
+    // (`q.a().b().c()…`) gives names of bounded length, not ones that repeat the whole prefix per link.
+    case "CallExpression":
+    case "OptionalCallExpression":
+    case "TaggedTemplateExpression":
+      return `${callName(node, context) ?? "<dynamic>"}()`;
+    case "NewExpression":
+      return `new ${callName(node, context) ?? "<dynamic>"}()`;
+    case "MemberExpression":
+    case "OptionalMemberExpression": {
+      const object = node.children.find((child) => child.role === "object");
+      const property = node.children.find((child) => child.role === "property");
+      const objectName = object === undefined ? "<dynamic>" : describeCallee(object, context);
+      if (node.attributes.computed === true) {
+        const key = resolvePropertyKey(property, context) ?? (property?.type === "NumericLiteral" ? String(property.attributes.value) : undefined);
+        return `${objectName}[${key ?? "<dynamic>"}]`;
+      }
+      return `${objectName}.${(property === undefined ? undefined : memberName(property, context)) ?? "<dynamic>"}`;
+    }
+    default:
+      return memberName(node, context) ?? "<dynamic>";
+  }
 }
 
 function memberName(node: ASTNode, context?: ResolutionContext, boundCallees?: Set<ASTNode>): string | undefined {

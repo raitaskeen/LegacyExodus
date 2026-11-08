@@ -515,6 +515,52 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "taint-cross-file-direct:helpers-analyzed", category: "dispositions", has: analyzed("helpers.js") },
     ],
   },
+  {
+    // NA-01: every call site is a fact. A callee with no name (a call result, `new`, a computed key, a
+    // function value, `super`) is an explicit UNRESOLVED call, never absent; a tagged template calls its tag.
+    id: "call-site-completeness",
+    files: {
+      "calls.js": [
+        "function mk() { return { run() { return 1; } }; }",
+        "class K { m() { return 1; } }",
+        "class S extends K { constructor() { super(); } m() { return super.m(); } }",
+        "export function c1() { return mk().run(); }",
+        "export function c2() { return new K().m(); }",
+        "export function c3(p) { return p.then(mk).catch(mk); }",
+        "export function c4(o, k) { return o[k](); }",
+        "export function c5(arr) { return arr.map(mk)[0].run(); }",
+        "export function c6() { return mk`tpl`; }",
+        "export function c7() { return (() => 1)(); }",
+        "export function c8() { return new (mk())(); }",
+        "export function c9(q) { return q.a().b().c(); }",
+        "export { S };",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "call-site:call-result-member", category: "calls", has: /^calls\.js@4:\d+\|c1\|mk\(\)\.run\|UNRESOLVED\|/ },
+      { id: "call-site:call-result-inner-still-resolves", category: "calls", has: /^calls\.js@4:\d+\|c1\|mk\|RESOLVED\|/ },
+      { id: "call-site:new-result-member", category: "calls", has: /^calls\.js@5:\d+\|c2\|new K\(\)\.m\|UNRESOLVED\|/ },
+      { id: "call-site:chained-member", category: "calls", has: /^calls\.js@6:\d+\|c3\|p\.then\(\)\.catch\|UNRESOLVED\|/ },
+      { id: "call-site:computed-member", category: "calls", has: /^calls\.js@7:\d+\|c4\|o\[<dynamic>\]\|UNRESOLVED\|/ },
+      { id: "call-site:element-member", category: "calls", has: /^calls\.js@8:\d+\|c5\|arr\.map\(\)\[0\]\.run\|UNRESOLVED\|/ },
+      { id: "call-site:tagged-template-resolves", category: "calls", has: /^calls\.js@9:\d+\|c6\|mk\|RESOLVED\|/ },
+      { id: "call-site:function-value", category: "calls", has: /^calls\.js@10:\d+\|c7\|<function>\|UNRESOLVED\|/ },
+      { id: "call-site:new-of-call-result", category: "calls", has: /^calls\.js@11:\d+\|c8\|mk\(\)\|UNRESOLVED\|/ },
+      { id: "call-site:chain-first-link", category: "calls", has: /^calls\.js@12:\d+\|c9\|q\.a\(\)\.b\|UNRESOLVED\|/ },
+      { id: "call-site:chain-name-is-bounded", category: "calls", has: /^calls\.js@12:\d+\|c9\|<dynamic>\(\)\.c\|UNRESOLVED\|/ },
+      { id: "call-site:super-constructor", category: "calls", has: /^calls\.js@3:\d+\|[^|]*\|super\|UNRESOLVED\|/ },
+      { id: "call-site:super-member", category: "calls", has: /^calls\.js@3:\d+\|[^|]*\|super\.m\|UNRESOLVED\|/ },
+      { id: "call-site:no-synthetic-name-resolves", category: "calls", lacks: /^calls\.js@[^|]*\|[^|]*\|[^|]*(?:\(\)|<|\[|super)[^|]*\|RESOLVED\|/ },
+      {
+        id: "call-site:every-site-is-a-fact",
+        check: (discoveryDirectory) => {
+          const semantic = JSON.parse(readFileSync(join(discoveryDirectory, "semantic.json"), "utf8")) as { calls: { sourceFilePath: string }[] };
+          return semantic.calls.filter((call) => call.sourceFilePath === "calls.js").length === 18;
+        },
+      },
+    ],
+  },
   ...taintCases,
 ];
 
