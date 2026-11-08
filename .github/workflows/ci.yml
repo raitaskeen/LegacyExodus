@@ -92,6 +92,10 @@ jobs:
       - name: Synthetic corpus within its memory ceiling
         run: bun run benchmarks/cli.ts scale synthetic 10000
 
+      # ADR-011: reusing that snapshot, in a new process, costs no more memory than analysing.
+      - name: Snapshot reuse within its memory ceiling
+        run: bun run benchmarks/cli.ts scale synthetic 10000 --reuse
+
   windows-smoke:
     name: Windows Path Smoke
     runs-on: windows-latest

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { FactArray, FactStore } from "@shared/fact-array";
-import { readJsonDocument } from "@shared/json-document-reader";
+import { readJsonDocument, readJsonList } from "@shared/json-document-reader";
 
 const cleanup: (() => void)[] = [];
 afterEach(() => {
@@ -68,6 +68,20 @@ describe("readJsonDocument", () => {
   it("refuses what is not one well-formed JSON object", () => {
     for (const text of ["[1, 2]", "{\"calls\": [1, 2}", "{\"calls\": [1,, 2]}", "{\"a\": 1} {}", "{\"a\": \"open}", "", "{\"a\": 1,}", "{\"calls\": [1,]}"]) {
       expect(() => readJsonDocument(file(text), store(), lists(["calls"]))).toThrow();
+    }
+  });
+});
+
+describe("readJsonList", () => {
+  it("streams a top-level array, each item validated, and refuses anything else", () => {
+    const symbols = [{ id: "s1", name: "a, [b]" }, { id: "s2", nested: { list: [1, { x: "}" }] } }];
+    for (const text of [JSON.stringify(symbols, null, 2), JSON.stringify(symbols), "[]"]) {
+      const list = readJsonList(file(text), store(), (item) => item);
+      expect([...list]).toEqual(text === "[]" ? [] : symbols);
+    }
+    expect(() => readJsonList(file(JSON.stringify(symbols)), store(), (item) => { if ((item as { id: string }).id === "s2") throw new Error("invalid"); return item; })).toThrow("invalid");
+    for (const text of ["{\"a\": []}", "[1, 2", "[1,]", "[1] [2]", "[,1]"]) {
+      expect(() => readJsonList(file(text), store(), (item) => item)).toThrow();
     }
   });
 });

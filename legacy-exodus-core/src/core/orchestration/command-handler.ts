@@ -20,21 +20,21 @@ import type {
 import { createDomainEvent, type DomainEvent } from "@core/events/domain-event";
 import { validateProjectDiscovery, type FileArtifact } from "@contracts/discovery";
 import { DiscoveryEngine, DiscoveryValidator, type DiscoveryResult } from "@discovery/index";
-import { dependencyGraphNodes, DeterministicDependencyGraphBuilder, ModuleResolver, canonicalizePath, findPackageEntryFiles, loadTsConfigResolution, loadWorkspacePackages, validateCurrentDependencyGraph, type TsConfigDiagnostic } from "@graph/index";
+import { dependencyGraphNodes, DeterministicDependencyGraphBuilder, ModuleResolver, canonicalizePath, dependencyGraphNodeSchema, findPackageEntryFiles, loadTsConfigResolution, loadWorkspacePackages, validateCurrentDependencyGraph, type TsConfigDiagnostic } from "@graph/index";
 import { DeterministicControlFlowGraphBuilder, DeterministicDataFlowGraphBuilder, DeterministicFlowAnalysisEngine, createProvenCallTargets, type ConnectionContext, type ControlFlowGraph, type DataFlowGraphBody } from "@flow/index";
 import { buildKnowledgeGraphOnDisk } from "@knowledge/index";
-import { readFileSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { ParserManager, type ASTResult } from "@parser/index";
 import { callSchema, collectUnstableExportIds, DeterministicCallGraphBuilder, DeterministicSemanticAnalysisEngine, FactUsage, findHttpCalls, referenceSchema, SortedFactList, type ExpressRoute, type MiddlewareChain, type SemanticAnalysis, type SemanticCall, type SymbolReference } from "@semantic/index";
 import { createOwnedStorageRecord, createStorageRecord, type StorageRecord } from "@storage/index";
-import { JavaScriptSymbolExtractor, validateCodeSymbols, type CodeSymbol, type SymbolTable } from "@symbols/index";
+import { codeSymbolSchema, JavaScriptSymbolExtractor, type CodeSymbol, type SymbolTable } from "@symbols/index";
 import { RunScopedAstStore, type AnalysisAstStoreFactory } from "./run-scoped-ast-store";
 import { compareCodePoints } from "@shared/ordering";
 import { FactStore, sortedFactArray, toFactArray, type FactArray, type FactSpool } from "@shared/fact-array";
 import { immutable } from "@shared/immutability";
-import { readJsonDocument } from "@shared/json-document-reader";
+import { readJsonDocument, readJsonList } from "@shared/json-document-reader";
 import { z } from "zod";
 
 export interface CommandExecution {
@@ -65,12 +65,14 @@ export interface AstStoreCleanupFailure {
 const SPOOLED_ARTIFACTS: ReadonlySet<string> = new Set(["symbols.json", "dependency-graph.json", "knowledge.json", "semantic.json", "control-flow.json", "data-flow.json"]);
 
 /**
- * Validates one item of the fact list `key` of `schema` (a `factList`: an inline array or a list on disk), so a
+ * Validators for one item of each fact list in `keys` of `schema` (a `factList`: an inline array or a list on disk), so a
  * restored list is validated as it streams and an invalid item refuses the snapshot (ADR-011).
  */
-function listItemParser(schema: z.ZodObject, key: string): (item: unknown) => unknown {
-  const inline = (schema.shape[key] as z.ZodUnion).options[0] as z.ZodArray<z.ZodType>;
-  return (item) => inline.element.parse(item);
+function listItemParsers(schema: z.ZodObject, keys: readonly string[]): ReadonlyMap<string, (item: unknown) => unknown> {
+  return new Map(keys.map((key) => {
+    const inline = (schema.shape[key] as z.ZodUnion).options[0] as z.ZodArray<z.ZodType>;
+    return [key, (item: unknown) => inline.element.parse(item)] as const;
+  }));
 }
 
 export class InitializeProjectHandler {
@@ -176,17 +178,11 @@ export class AnalyzeProjectHandler {
           const artifacts = validation.validatedArtifacts;
           const spooled = validation.spooledArtifacts ?? new Map<string, string>();
           const has = (name: string): boolean => artifacts.has(name) || spooled.has(name);
-          const text = (name: string): string | undefined => {
-            const copy = spooled.get(name);
-            return copy === undefined ? artifacts.get(name) : readFileSync(copy, "utf8");
-          };
           /** A verified fact artifact, its large lists restored on disk; never more than one list item in memory. */
-          const document = (name: string, schema: z.ZodObject, lists: readonly string[]): Record<string, unknown> => {
+          const document = (name: string, lists: ReadonlyMap<string, (item: unknown) => unknown>): Record<string, unknown> => {
             const copy = spooled.get(name);
-            if (copy !== undefined) return readJsonDocument(copy, this.factStore(), new Map(lists.map((key) => [key, listItemParser(schema, key)] as const)));
-            const raw = artifacts.get(name);
-            if (raw === undefined) throw new Error(`Missing ${name} in validated set.`);
-            return JSON.parse(raw) as Record<string, unknown>;
+            if (copy === undefined) throw new Error(`Missing ${name} in validated set.`);
+            return readJsonDocument(copy, this.factStore(), lists);
           };
           const projectRaw = artifacts.get("project.json");
           const filesRaw = artifacts.get("files.json");
@@ -262,7 +258,9 @@ export class AnalyzeProjectHandler {
             (snapshotSummary.manifestFailureCount ?? 0) !== discovery.manifestFailures.length) {
             throw new Error("Snapshot discovery counts contradict diagnostics.");
           }
-          const snapshotSymbols = validateCodeSymbols(JSON.parse(text("symbols.json")!));
+          const symbolsCopy = spooled.get("symbols.json");
+          if (symbolsCopy === undefined) throw new Error("Missing symbols.json in validated set.");
+          const snapshotSymbols = readJsonList(symbolsCopy, this.factStore(), (item) => codeSymbolSchema.parse(item));
           const analysisDisposition = validateAnalysisDisposition(snapshotSummary.analysisDisposition, {
             files: discovery.files, symbols: snapshotSymbols, summary: snapshotSummary,
             enumerationFailures: discovery.enumerationFailures.length,
@@ -270,55 +268,70 @@ export class AnalyzeProjectHandler {
           });
 
           if (required.has("dependency-graph.json")) {
-            const depGraphRaw = text("dependency-graph.json");
-            if (!depGraphRaw) throw new Error("Missing dependency-graph.json in validated set.");
-            const depGraphJson = validateCurrentDependencyGraph(JSON.parse(depGraphRaw));
+            const { nodes, ...graph } = document("dependency-graph.json", new Map([["nodes", (node: unknown) => dependencyGraphNodeSchema.parse(node)]]));
+            // Edges, cycles and the module layer are checked by the graph contract; the nodes were checked as they streamed.
+            const depGraphJson = validateCurrentDependencyGraph({ ...graph, nodes: [] });
             records.push(
-              createStorageRecord("dependency-graph", {
+              createOwnedStorageRecord("dependency-graph", {
                 projectId: discovery.projectId,
                 analysisRunId: command.id,
-                nodes: depGraphJson.nodes ?? [],
-                edges: depGraphJson.edges ?? [],
-                cycles: depGraphJson.cycles ?? [],
+                nodes: nodes as FactArray<unknown>,
+                edges: depGraphJson.edges,
+                cycles: depGraphJson.cycles,
                 moduleGraph: depGraphJson.moduleGraph,
               }),
             );
           }
 
           if (required.has("symbols.json")) {
-            if (!has("symbols.json")) throw new Error("Missing symbols.json in validated set.");
-            const symbolsJson = snapshotSymbols;
-            const symbolsByFile = new Map<string, CodeSymbol[]>();
-            for (const symbol of symbolsJson) {
-              let list = symbolsByFile.get(symbol.filePath);
-              if (!list) {
-                list = [];
-                symbolsByFile.set(symbol.filePath, list);
+            // One list per file, cut from the symbols ordered by file (a stable order, so each file keeps its own), as the fresh path stores them.
+            const tables = new Map<string, { readonly symbols: FactArray<CodeSymbol>; readonly classes: number; readonly functions: number; readonly imports: number; readonly exports: number }>();
+            const spool = this.factStore().spool();
+            let open: { readonly path: string; readonly writer: ReturnType<FactSpool["writer"]>; classes: number; functions: number; imports: number; exports: number } | undefined;
+            const close = (): void => {
+              if (open === undefined) return;
+              const { path, writer, ...counts } = open;
+              tables.set(path, { symbols: writer.seal() as FactArray<CodeSymbol>, ...counts });
+              open = undefined;
+            };
+            try {
+              for (const symbol of sortedFactArray(this.factStore(), snapshotSymbols, (item) => item.filePath)) {
+                if (open?.path !== symbol.filePath) {
+                  close();
+                  open = { path: symbol.filePath, writer: spool.writer<CodeSymbol>(), classes: 0, functions: 0, imports: 0, exports: 0 };
+                }
+                open.writer.append(symbol);
+                if (symbol.kind === "class") open.classes++;
+                if (symbol.kind === "function") open.functions++;
+                if (symbol.kind === "import") open.imports++;
+                if (symbol.exported === true) open.exports++;
               }
-              list.push(symbol);
+              close();
+            } finally {
+              spool.close();
             }
 
             for (const file of analysisDisposition.files.filter((file) => file.kind === "analyzed")) {
-              const fileSymbols = symbolsByFile.get(file.path) ?? [];
+              const table = tables.get(file.path);
               records.push(
-                createStorageRecord("symbol-table", {
+                createOwnedStorageRecord("symbol-table", {
                   fileId: file.fileId,
                   path: file.path,
                   projectId: discovery.projectId,
                   analysisRunId: command.id,
-                  symbolCount: fileSymbols.length,
-                  classes: fileSymbols.filter((s) => s.kind === "class").length,
-                  functions: fileSymbols.filter((s) => s.kind === "function").length,
-                  imports: fileSymbols.filter((s) => s.kind === "import").length,
-                  exports: fileSymbols.filter((s) => s.exported === true).length,
-                  symbols: fileSymbols,
+                  symbolCount: table?.symbols.length ?? 0,
+                  classes: table?.classes ?? 0,
+                  functions: table?.functions ?? 0,
+                  imports: table?.imports ?? 0,
+                  exports: table?.exports ?? 0,
+                  symbols: table?.symbols ?? [],
                 }),
               );
             }
           }
 
           if (required.has("knowledge.json")) {
-            const knowledgeJson = knowledgeGraphPayloadSchema.parse({ ...document("knowledge.json", knowledgeGraphPayloadSchema, ["nodes", "edges"]), projectId: discovery.projectId, analysisRunId: command.id });
+            const knowledgeJson = knowledgeGraphPayloadSchema.parse({ ...document("knowledge.json", listItemParsers(knowledgeGraphPayloadSchema, ["nodes", "edges"])), projectId: discovery.projectId, analysisRunId: command.id });
             records.push(
               createOwnedStorageRecord("knowledge-graph", {
                 projectId: discovery.projectId,
@@ -330,7 +343,7 @@ export class AnalyzeProjectHandler {
           }
 
           if (required.has("semantic.json")) {
-            const semanticJson = document("semantic.json", semanticAnalysisPayloadSchema, ["calls", "references", "scopes"]);
+            const semanticJson = document("semantic.json", listItemParsers(semanticAnalysisPayloadSchema, ["calls", "references", "scopes"]));
             records.push(
               createOwnedStorageRecord("semantic-analysis", semanticAnalysisPayloadSchema.parse({
                 ...semanticJson,
@@ -341,7 +354,7 @@ export class AnalyzeProjectHandler {
           }
 
           if (required.has("control-flow.json")) {
-            const cfgJson = document("control-flow.json", controlFlowPayloadSchema, ["graphs"]);
+            const cfgJson = document("control-flow.json", listItemParsers(controlFlowPayloadSchema, ["graphs"]));
             records.push(
               createOwnedStorageRecord("control-flow-analysis", controlFlowPayloadSchema.parse({
                 ...cfgJson,
@@ -352,7 +365,7 @@ export class AnalyzeProjectHandler {
           }
 
           if (required.has("data-flow.json")) {
-            const dfgJson = document("data-flow.json", dataFlowPayloadSchema, ["graphs"]);
+            const dfgJson = document("data-flow.json", listItemParsers(dataFlowPayloadSchema, ["graphs"]));
             records.push(
               createOwnedStorageRecord("data-flow-analysis", dataFlowPayloadSchema.parse({
                 ...dfgJson,

@@ -18,6 +18,17 @@ const CLOSE_BRACKET = 0x5d;
  * which throws on an invalid item). Every other member is parsed as usual. Malformed JSON throws.
  */
 export function readJsonDocument(path: string, store: FactStore, lists: ReadonlyMap<string, (item: unknown) => unknown>): Record<string, unknown> {
+  return scan(path, store, lists, undefined);
+}
+
+/** Reads the JSON array in the file at `path` into a `FactArray` in `store`, item by item, each through `validate`. */
+export function readJsonList<T>(path: string, store: FactStore, validate: (item: unknown) => T): FactArray<T> {
+  return scan(path, store, new Map(), validate)[ROOT] as FactArray<T>;
+}
+
+const ROOT = "";
+
+function scan(path: string, store: FactStore, lists: ReadonlyMap<string, (item: unknown) => unknown>, root: ((item: unknown) => unknown) | undefined): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   const descriptor = openSync(path, "r");
   const bytes = Buffer.allocUnsafe(CHUNK_BYTES);
@@ -31,7 +42,7 @@ export function readJsonDocument(path: string, store: FactStore, lists: Readonly
   let closed = false;
   /** Start of the current member (depth 1) or list item (depth 2, in a list member), in `text`. */
   let start = 0;
-  let list: { readonly key: string; readonly writer: ReturnType<FactStore["writer"]>; readonly validate: (item: unknown) => unknown; items: number } | undefined;
+  let list: { readonly key: string; readonly writer: ReturnType<FactStore["writer"]>; readonly validate: (item: unknown) => unknown; readonly itemDepth: number; items: number } | undefined;
   let listDone = false;
   /** A member must follow: the last one ended with a comma. */
   let memberDue = false;
@@ -75,14 +86,15 @@ export function readJsonDocument(path: string, store: FactStore, lists: Readonly
           inString = true;
         } else if (code === OPEN_BRACE || code === OPEN_BRACKET) {
           if (depth === 0) {
-            if (code !== OPEN_BRACE) throw new SyntaxError("The document is not a JSON object.");
+            if (code !== (root === undefined ? OPEN_BRACE : OPEN_BRACKET)) throw new SyntaxError(root === undefined ? "The document is not a JSON object." : "The document is not a JSON array.");
             opened = true;
             start = index + 1;
-          } else if (depth === 1 && code === OPEN_BRACKET) {
+            if (root !== undefined) list = { key: ROOT, writer: store.writer(), validate: root, itemDepth: 1, items: 0 };
+          } else if (root === undefined && depth === 1 && code === OPEN_BRACKET) {
             const key = memberKey(text.slice(start, index));
             const validate = key === undefined ? undefined : lists.get(key);
             if (key !== undefined && validate !== undefined) {
-              list = { key, writer: store.writer(), validate, items: 0 };
+              list = { key, writer: store.writer(), validate, itemDepth: 2, items: 0 };
               start = index + 1;
             }
           }
@@ -90,13 +102,14 @@ export function readJsonDocument(path: string, store: FactStore, lists: Readonly
         } else if (code === CLOSE_BRACE || code === CLOSE_BRACKET) {
           depth--;
           if (depth < 0) throw new SyntaxError("Unbalanced JSON document.");
-          if (list !== undefined && depth === 1) {
+          if (list !== undefined && depth === list.itemDepth - 1) {
             if (code !== CLOSE_BRACKET) throw new SyntaxError("Unbalanced list member.");
             item(text.slice(start, index), true);
             result[list.key] = list.writer.seal() as FactArray<unknown>;
             list = undefined;
-            listDone = true;
             start = index + 1;
+            if (root === undefined) listDone = true;
+            else closed = true;
           } else if (depth === 0) {
             if (code !== CLOSE_BRACE) throw new SyntaxError("Unbalanced JSON document.");
             const raw = text.slice(start, index);
@@ -105,7 +118,7 @@ export function readJsonDocument(path: string, store: FactStore, lists: Readonly
             closed = true;
           }
         } else if (code === COMMA) {
-          if (list !== undefined && depth === 2) {
+          if (list !== undefined && depth === list.itemDepth) {
             item(text.slice(start, index), false);
             start = index + 1;
           } else if (list === undefined && depth === 1) {
@@ -114,7 +127,7 @@ export function readJsonDocument(path: string, store: FactStore, lists: Readonly
             start = index + 1;
           }
         } else if (depth === 0 && !isWhitespace(code)) {
-          throw new SyntaxError("The document is not a JSON object.");
+          throw new SyntaxError("The document is not a JSON value of the expected kind.");
         }
       }
       // Keep only what an open member or item still needs.
