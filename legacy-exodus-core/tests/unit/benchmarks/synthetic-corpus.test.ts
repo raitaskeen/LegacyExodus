@@ -21,7 +21,8 @@ describe("ADR-009 step 5: synthetic scale corpus", () => {
       const a = await ensureSyntheticCorpus(first, 120);
       const b = await ensureSyntheticCorpus(second, 120);
       expect(contents(a)).toEqual(contents(b));
-      expect(readdirSync(join(a, "src"))).toEqual(["d0000", "d0001"]);
+      // readdir order is the file system's; the claim is which directories exist.
+      expect(readdirSync(join(a, "src")).sort()).toEqual(["d0000", "d0001"]);
       const crossing = readFileSync(join(a, "src/d0001/m100.js"), "utf8");
       expect(crossing).toContain(`from "../d0000/m99.js"`);
       expect(crossing).toContain("req.query.name");
