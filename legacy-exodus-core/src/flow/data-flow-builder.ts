@@ -175,6 +175,7 @@ export class DeterministicDataFlowGraphBuilder {
         if (path === undefined) return undefined;
         return this.identify(hash(`source:${filePath}:${path}:${at.location === undefined ? "anon" : `${at.location.start.line}:${at.location.start.column}`}`), "source", path, at, "source").id;
       },
+      sinkArgumentsOf: (call) => this.policy.sinkArguments(call),
       sinkIdOf: (call) => {
         const name = this.policy.sinkName(call);
         if (name === undefined) return undefined;
@@ -960,7 +961,12 @@ export class DeterministicDataFlowGraphBuilder {
     if (sinkName === undefined) return;
     const sinkPosition = node.location === undefined ? `anon-${state.sinks.length}` : `${node.location.start.line}:${node.location.start.column}`;
     const sinkId = this.identify(hash(`sink:${filePath}:${sinkName}:${sinkPosition}`), "sink", sinkName, node, "sink").id;
-    state.sinks.push({ id: sinkId, name: sinkName, argumentDefinitionIds: staged ? values.flatMap((value) => this.orderedValueIds(value, "definition")) : argumentsNodes.flatMap((argument) => this.collectDefinitions(argument, scope, filePath, state).map((definition) => definition.id)) });
+    // A sink judged on some arguments only (a file call on its path, a request on its URL) ignores the rest (NA-03b).
+    const judged = this.policy.sinkArguments(node);
+    const counts = (index: number): boolean => judged === undefined || judged.includes(index);
+    state.sinks.push({ id: sinkId, name: sinkName, argumentDefinitionIds: staged
+      ? values.flatMap((value, index) => (counts(index) ? this.orderedValueIds(value, "definition") : []))
+      : argumentsNodes.flatMap((argument, index) => (counts(index) ? this.collectDefinitions(argument, scope, filePath, state).map((definition) => definition.id) : [])) });
   }
 
   private definitionFor(node: ASTNode, scope: Scope): VariableDefinition | undefined {
