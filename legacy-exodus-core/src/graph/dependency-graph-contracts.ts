@@ -55,7 +55,8 @@ export interface DependencyGraphService {
   build(symbolTables: readonly SymbolTable[]): DependencyGraph;
 }
 
-const nodeSchema = z.object({
+/** One symbol node of a dependency graph. */
+export const dependencyGraphNodeSchema = z.object({
   id: z.string().min(1),
   filePath: z.string().min(1),
   symbolId: z.string().min(1),
@@ -84,7 +85,7 @@ export const moduleDependencyLayerSchema = z.object({
   unresolvedReferences: z.array(unresolvedModuleReferenceSchema.extend({ sourceFilePath: z.string().min(1) })).min(1).optional(),
 }).strict();
 
-const graphSchema = z.object({ nodes: z.array(nodeSchema), edges: z.array(edgeSchema), cycles: z.array(z.array(z.string().min(1)).min(2)), moduleGraph: moduleDependencyLayerSchema.optional() })
+const graphSchema = z.object({ nodes: z.array(dependencyGraphNodeSchema), edges: z.array(edgeSchema), cycles: z.array(z.array(z.string().min(1)).min(2)), moduleGraph: moduleDependencyLayerSchema.optional() })
   .refine((graph) => !Object.hasOwn(graph, "moduleGraph") || graph.moduleGraph !== undefined, "Present moduleGraph must satisfy the current contract.");
 
 export function validateDependencyGraph(graph: unknown): DependencyGraph {

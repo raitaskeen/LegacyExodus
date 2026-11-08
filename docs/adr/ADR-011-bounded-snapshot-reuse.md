@@ -1,7 +1,12 @@
 # ADR-011: Bounded-Memory Snapshot Reuse
 
 ## Status
-**ACCEPTED** (2026-11-08, owner). Finding NA-16, found while fixing NA-04. Implemented in its own PRs; the reuse budget joins the scale gate.
+**ACCEPTED** (2026-11-08, owner). Finding NA-16, found while fixing NA-04. **Implemented** (2026-11-09): decisions 1–3 for the semantic, CFG, DFG and knowledge artifacts in #285, then symbols, the dependency graph and the reuse gate (decision 4).
+
+| Ghost, one process per run | Before | After |
+|---|---|---|
+| Snapshot reuse | 79 s, 11,610 MiB | 25 s, 936–1,006 MiB |
+| Fresh analysis (unchanged) | 179 s, 2,400 MiB | 183 s, 2,417 MiB |
 
 ## Context
 Reusing a validated `.discovery` snapshot costs far more memory than analysing from scratch. On Ghost (7,172 analysed files), measured with the benchmark harness, which now reports `snapshotReused`:

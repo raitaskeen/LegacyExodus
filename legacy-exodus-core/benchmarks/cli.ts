@@ -167,10 +167,10 @@ async function main(): Promise<void> {
     case "scale": {
       const name = args[1];
       if (!name) {
-        console.error("Usage: bun run benchmarks/cli.ts scale <name>");
+        console.error("Usage: bun run benchmarks/cli.ts scale <name> | scale synthetic <files> [--reuse]");
         process.exit(1);
       }
-      const result = name === "synthetic" ? await runSyntheticScale(Number(args[2] ?? "10000")) : await runScaleBenchmark(name);
+      const result = name === "synthetic" ? await runSyntheticScale(Number(args[2] ?? "10000"), args.includes("--reuse") ? "reuse" : "fresh") : await runScaleBenchmark(name);
       console.log(`${result.name} @ ${result.commit ?? "?"}: ${result.filesAnalyzed}/${result.filesDiscovered} files, ${(result.wallMs / 1000).toFixed(1)} s (budget ${(result.budgets.maxWallMs / 1000).toFixed(0)} s), peak ${result.peakRssMb} MiB (budget ${result.budgets.maxPeakRssMb} MiB)`);
       if (!result.withinBudget) {
         console.error("Scale budget exceeded.");
