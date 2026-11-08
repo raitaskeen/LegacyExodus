@@ -107,7 +107,7 @@ export class DeterministicCallGraphBuilder {
         const importTarget = imported === undefined ? undefined : targetByImportId.get(imported.id);
         // `f.call(…)`, `f.apply(…)` and `f.bind(…)(…)` are resolved as `f`; that holds only while those properties are the builtins.
         const invokesThroughWrittenProperty = invokerProperties(node).some((name) => propertyWriteCount(fileSymbols, name) > 0);
-        const targetSymbolId = namedCallee === undefined || invokesThroughWrittenProperty
+        const targetSymbolId = namedCallee === undefined || invokesThroughWrittenProperty || fileSymbols.directEval || withMayBind(calleeName, nextContext, fileSymbols)
           ? undefined
           : imported === undefined
             ? resolveLocalCall(table, fileSymbols, calleeName, nextContext, tablesByPath, this.resolver, node)
@@ -167,11 +167,12 @@ export class DeterministicCallGraphBuilder {
       }
     }
 
+    const withBodyContext = node.type === "WithStatement" ? { ...nextContext, withOuter: nextContext.scope } : undefined;
     for (const child of node.children) {
       this.visit(
         child,
         ast,
-        nextContext,
+        withBodyContext !== undefined && child.role === "body" ? withBodyContext : nextContext,
         tablesByPath,
         importsByFile,
         targetByImportId,
@@ -206,6 +207,8 @@ interface FileSymbolIndex {
   /** Export symbols (of any module) whose value can change after definition. */
   readonly unstableExportIds: ReadonlySet<string>;
   readonly classes: ClassFacts;
+  /** The file calls `eval(…)` directly, which can declare or reassign any binding it sees: no call here is proven (NA-02). */
+  readonly directEval: boolean;
 }
 
 /** Class structure read from the AST; the symbol table also files nested object literal methods under a class. */
@@ -302,6 +305,8 @@ interface ResolutionContext {
   readonly containerName?: string;
   readonly receiverTypes: ReadonlyMap<string, string | null>;
   readonly constantBindings: ReadonlyMap<string, string | null>;
+  /** Inside a `with` body: the frame around the `with` statement (NA-02). */
+  readonly withOuter?: ScopeFrame;
 }
 
 function createScope(id: string, parent?: ScopeFrame, selfName?: string): ScopeFrame {
@@ -377,7 +382,27 @@ function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult, u
   const writes = collectBindingWrites(ast.root, declarationsByScopeAndName);
   const classes = collectClassFacts(ast.root, classSymbols);
   const reopened = reopenedNamespaces(namespaceBlocks);
-  return immutable({ byScopeAndName, declarationsByScopeAndName, byName, firstImportByName, classByLocation, lexicalBindings, ownerSymbols, reopened, writes, unstableExportIds, classes });
+  return immutable({ byScopeAndName, declarationsByScopeAndName, byName, firstImportByName, classByLocation, lexicalBindings, ownerSymbols, reopened, writes, unstableExportIds, classes, directEval: callsEvalDirectly(ast.root) });
+}
+
+const directEvalByRoot = new WeakMap<ASTNode, boolean>();
+
+/** Whether the file has a direct `eval(…)` call; computed once per AST (NA-02). */
+function callsEvalDirectly(root: ASTNode): boolean {
+  const cached = directEvalByRoot.get(root);
+  if (cached !== undefined) return cached;
+  let found = false;
+  const pending: ASTNode[] = [root];
+  while (!found && pending.length > 0) {
+    const node = pending.pop() as ASTNode;
+    if (node.type === "CallExpression" || node.type === "OptionalCallExpression") {
+      const callee = node.children.find((child) => child.role === "callee");
+      found = callee?.type === "Identifier" && callee.attributes.name === "eval";
+    }
+    for (const child of node.children) pending.push(child);
+  }
+  directEvalByRoot.set(root, found);
+  return found;
 }
 
 /** Fact keys (ADR-008 step 2) per file, keyed by the file's symbol index for the duration of its visit. */
@@ -562,6 +587,12 @@ function bindingDeclarations(byScopeAndName: ReadonlyMap<string, readonly CodeSy
  */
 export function collectUnstableExportIds(ast: ASTResult, table: SymbolTable | undefined): readonly string[] {
   if (table === undefined) return [];
+  // A direct `eval` can reassign any binding of its module, so none of its exports is stable (NA-02).
+  if (callsEvalDirectly(ast.root)) {
+    return table.symbols
+      .filter((symbol) => (symbol.kind === "export" && symbol.moduleSpecifier === undefined) || (symbol.exported && symbol.scopeId === MODULE_SCOPE_ID))
+      .map((symbol) => symbol.id);
+  }
   const byScopeAndName = new Map<string, CodeSymbol[]>();
   // An export slot is the module value itself (`module.exports =`, `export default`) or one named
   // property of it; `module.exports.default = f` names a property and does not replace the module value.
@@ -1366,7 +1397,25 @@ function childContext(node: ASTNode, context: ResolutionContext, index: FileSymb
     ...(containerName === undefined ? {} : { containerName }),
     receiverTypes: context.receiverTypes,
     constantBindings: context.constantBindings,
+    ...(context.withOuter === undefined ? {} : { withOuter: context.withOuter }),
   };
+}
+
+/**
+ * Inside a `with (o)` body a free name may be a property of `o` (NA-02): a call is unproven unless its
+ * root name binds in a frame the body itself created. `this` and `super` are never looked up in `o`.
+ */
+function withMayBind(calleeName: string, context: ResolutionContext, index: FileSymbolIndex): boolean {
+  const outer = context.withOuter;
+  if (outer === undefined) return false;
+  const root = calleeName.split(".")[0] ?? calleeName;
+  if (root === "this" || root === "super") return false;
+  for (let frame: ScopeFrame | undefined = context.scope; frame !== undefined && frame.id !== outer.id; frame = frame.parent) {
+    if (frame.selfName === root) return false;
+    const binding = index.lexicalBindings.get(lexicalBindingKey(frame.id, root));
+    if (binding !== undefined && binding.state !== "NO_BINDING") return false;
+  }
+  return true;
 }
 
 // The class's own symbol, found by location. Never by name: a class expression may share its
