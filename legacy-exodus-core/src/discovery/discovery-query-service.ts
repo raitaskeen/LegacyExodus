@@ -18,6 +18,7 @@ import {
   type AnalysisRunPayload,
 } from "@contracts/discovery-storage";
 import { LegacyExodusError } from "@shared/errors";
+import { FactArray } from "@shared/fact-array";
 import type { StorageManager } from "@storage/storage-manager";
 import type { StorageRecord } from "@storage/storage-record";
 
@@ -36,43 +37,117 @@ export class DiscoveryQueryService {
   public constructor(private readonly storage: StorageManager) {}
 
   public async getLatestCompletedRunId(projectId: string): Promise<string | null> {
-    const runRecords = await this.storage.findScoped({
+    let hasRuns = false;
+    let latestCompleted: {
+      readonly payload: AnalysisRunPayload;
+      readonly updatedAt: number;
+      readonly index: number;
+    } | null = null;
+    let runIndex = 0;
+
+    for await (const record of this.storage.iterateScoped({
       type: "analysis-run",
       projectId,
-    });
-
-    if (runRecords.length > 0) {
-      const completed = runRecords
-        .map((r) => {
-          const parsed = analysisRunPayloadSchema.safeParse(r.payload);
-          return parsed.success && parsed.data.status === "completed" && parsed.data.projectId === projectId
-            ? { payload: parsed.data, updatedAt: r.updatedAt.getTime() }
-            : null;
-        })
-        .filter((item): item is NonNullable<typeof item> => item !== null)
-        .sort((a, b) => a.updatedAt - b.updatedAt);
-
-      return completed.at(-1)?.payload.analysisRunId ?? null;
+    })) {
+      hasRuns = true;
+      const parsed = analysisRunPayloadSchema.safeParse(record.payload);
+      if (parsed.success && parsed.data.status === "completed" && parsed.data.projectId === projectId) {
+        const updatedAt = record.updatedAt.getTime();
+        if (
+          latestCompleted === null ||
+          updatedAt > latestCompleted.updatedAt ||
+          (updatedAt === latestCompleted.updatedAt && runIndex > latestCompleted.index)
+        ) {
+          latestCompleted = { payload: parsed.data, updatedAt, index: runIndex };
+        }
+      }
+      runIndex++;
     }
 
-    const discoveryRecords = await this.storage.findScoped({
+    if (latestCompleted !== null) {
+      return latestCompleted.payload.analysisRunId;
+    }
+
+    if (hasRuns) {
+      return null;
+    }
+
+    let latestDiscovery: {
+      readonly payload: ProjectDiscoveryPayload;
+      readonly updatedAt: number;
+      readonly index: number;
+    } | null = null;
+    let discoveryIndex = 0;
+
+    for await (const record of this.storage.iterateScoped({
       type: "project-discovery",
       projectId,
-    });
-    const latest = this.findLatestRecord(discoveryRecords, discoveryPayloadSchema, projectId, undefined);
-    return latest?.analysisRunId ?? null;
+    })) {
+      const parsed = discoveryPayloadSchema.safeParse(record.payload);
+      if (!parsed.success) {
+        throw new LegacyExodusError({
+          code: "DISCOVERY_RECORD_INVALID",
+          message: `Stored ${record.type} record is invalid.`,
+          metadata: { recordId: record.id, issues: parsed.error.issues },
+        });
+      }
+      if (parsed.data.projectId === projectId) {
+        const updatedAt = record.updatedAt.getTime();
+        if (
+          latestDiscovery === null ||
+          updatedAt > latestDiscovery.updatedAt ||
+          (updatedAt === latestDiscovery.updatedAt && discoveryIndex > latestDiscovery.index)
+        ) {
+          latestDiscovery = { payload: parsed.data, updatedAt, index: discoveryIndex };
+        }
+      }
+      discoveryIndex++;
+    }
+
+    return latestDiscovery?.payload.analysisRunId ?? null;
   }
 
   public async getAnalysisRun(
     projectId: string,
     analysisRunId?: string,
   ): Promise<AnalysisRunPayload | null> {
-    const records = await this.storage.findScoped({
+    let candidate: {
+      readonly payload: AnalysisRunPayload;
+      readonly updatedAt: number;
+      readonly index: number;
+    } | null = null;
+    let index = 0;
+
+    for await (const record of this.storage.iterateScoped({
       type: "analysis-run",
       projectId,
       ...(analysisRunId !== undefined ? { analysisRunId } : {}),
-    });
-    return this.findLatestRecord(records, analysisRunPayloadSchema, projectId, analysisRunId);
+    })) {
+      const parsed = analysisRunPayloadSchema.safeParse(record.payload);
+      if (!parsed.success) {
+        throw new LegacyExodusError({
+          code: "DISCOVERY_RECORD_INVALID",
+          message: `Stored ${record.type} record is invalid.`,
+          metadata: { recordId: record.id, issues: parsed.error.issues },
+        });
+      }
+      if (
+        parsed.data.projectId === projectId &&
+        (analysisRunId === undefined || parsed.data.analysisRunId === analysisRunId)
+      ) {
+        const updatedAt = record.updatedAt.getTime();
+        if (
+          candidate === null ||
+          updatedAt > candidate.updatedAt ||
+          (updatedAt === candidate.updatedAt && index > candidate.index)
+        ) {
+          candidate = { payload: parsed.data, updatedAt, index };
+        }
+      }
+      index++;
+    }
+
+    return candidate?.payload ?? null;
   }
 
   public async listAnalysisRuns(projectId: string): Promise<readonly AnalysisRunPayload[]> {
@@ -126,7 +201,7 @@ export class DiscoveryQueryService {
     projectId: string,
     filePath: string,
     analysisRunId?: string,
-  ): Promise<SymbolTablePayload["symbols"]> {
+  ): Promise<SymbolTablePayload["symbols"] extends Iterable<infer Symbol> ? Symbol[] : never> {
     const targetRunId = analysisRunId ?? (await this.getLatestCompletedRunId(projectId));
     if (targetRunId === null) {
       return [];
@@ -154,7 +229,7 @@ export class DiscoveryQueryService {
         parsed.data.analysisRunId === targetRunId &&
         parsed.data.path === filePath
       ) {
-        return parsed.data.symbols;
+        return [...parsed.data.symbols];
       }
       return [];
     });
@@ -165,7 +240,7 @@ export class DiscoveryQueryService {
   public async getDependencyGraph(
     projectId: string,
     analysisRunId?: string,
-  ): Promise<DependencyGraphPayload | null> {
+  ): Promise<Materialized<DependencyGraphPayload> | null> {
     const targetRunId = analysisRunId ?? (await this.getLatestCompletedRunId(projectId));
     if (targetRunId === null) {
       return null;
@@ -181,7 +256,7 @@ export class DiscoveryQueryService {
   public async getKnowledgeGraph(
     projectId: string,
     analysisRunId?: string,
-  ): Promise<KnowledgeGraphPayload | null> {
+  ): Promise<Materialized<KnowledgeGraphPayload> | null> {
     const targetRunId = analysisRunId ?? (await this.getLatestCompletedRunId(projectId));
     if (targetRunId === null) {
       return null;
@@ -247,7 +322,7 @@ export class DiscoveryQueryService {
     schema: z.ZodType<T>,
     projectId: string,
     analysisRunId: string | undefined,
-  ): T | null {
+  ): Materialized<T> | null {
     if (records.length === 0) {
       return null;
     }
@@ -272,6 +347,15 @@ export class DiscoveryQueryService {
     }
 
     candidates.sort((left, right) => left.updatedAt - right.updatedAt || left.index - right.index);
-    return candidates.at(-1)?.payload ?? null;
+    const latest = candidates.at(-1)?.payload;
+    return latest === undefined ? null : materialized(latest);
   }
+}
+
+/** A payload whose fact lists are plain arrays. */
+export type Materialized<T> = { [Key in keyof T]: T[Key] extends FactArray<infer Item> | readonly (infer Item)[] ? Item[] : T[Key] };
+
+/** A query answers with plain data: fact lists kept on disk (ADR-009) are read in full here. */
+function materialized<T extends object>(payload: T): Materialized<T> {
+  return Object.fromEntries(Object.entries(payload).map(([key, value]) => [key, value instanceof FactArray ? [...value] : value])) as Materialized<T>;
 }

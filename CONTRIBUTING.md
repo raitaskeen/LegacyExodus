@@ -6,11 +6,7 @@ Thank you for contributing to LegacyExodus! To ensure deterministic reliability,
 
 ## 1. Branch Taxonomy & Responsibility
 
-LegacyExodus strictly partitions repository responsibilities across distinct branches:
-
-* **`core-foundation`**: All core source code, parser adapters, semantic engines, storage layers, CLI commands, unit tests, benchmarks, and runtime code.
-* **`docs-foundation`**: All architectural specifications, ADRs, user guides, benchmark records, and documentation changes.
-* **`main`**: Integration and release branch. PRs from `core-foundation` and `docs-foundation` are merged into `main`. Do **not** commit directly to `main`.
+`main` is the single implementation, documentation and release truth. `core-foundation` and `docs-foundation` are retired as integration branches (2026-10-28). Every change reaches `main` through a pull request; do **not** commit directly to `main`.
 
 Work on a temporary task branch such as `fix/<finding>`, `docs/<topic>`, or `chore/<topic>`. Do not create additional permanent branches, force-push shared branches, or mix documentation reconciliation with core implementation changes.
 
@@ -48,7 +44,7 @@ All contributions must pass the complete core verification suite before opening 
 bun install --frozen-lockfile
 bun run typecheck        # Zero TypeScript compilation errors
 bun test                 # Full test suite execution
-bun run benchmark audit  # 10-point governance benchmark audit
+bun run benchmark audit  # governance self-audit; non-zero exit unless every check passes
 bun run src/cli/index.ts --help
 git diff --check         # Zero whitespace or merge conflict artifacts
 ```

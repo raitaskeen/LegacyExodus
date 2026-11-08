@@ -45,7 +45,8 @@ describe("Phase 2.9 controlled golden fixture", () => {
       };
 
       expect(dependencyGraph.cycles).toHaveLength(1);
-      expect(semantic.calls.find((call) => call.calleeName === "this.handle")?.resolutionState).toBe("RESOLVED");
+      // F-002: Service is exported, so any importer may subclass it and override handle().
+      expect(semantic.calls.find((call) => call.calleeName === "this.handle")?.resolutionState).toBe("UNRESOLVED");
       expect(semantic.calls.find((call) => call.calleeName === "service.run")?.resolutionState).toBe("UNRESOLVED");
       const consumerFlow = dataFlow.graphs.find((graph) => graph.filePath === "src/consumer.js");
       expect(consumerFlow?.taintFlows.map((flow) => flow.path.at(-1))).toEqual(["child_process.exec"]);

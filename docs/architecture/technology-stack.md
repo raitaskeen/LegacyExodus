@@ -22,7 +22,7 @@ This document separates the stack that exists in the verified core from technolo
 
 ## Current core stack
 
-The authoritative versions live in `legacy-exodus-core/package.json` and `bun.lock` on `core-foundation`. At the synchronized checkpoint:
+The authoritative versions live in `legacy-exodus-core/package.json` and `bun.lock` on `main`. At the synchronized checkpoint:
 
 - Bun: `1.4.2` package manager, with the declared engine range in package metadata.
 - TypeScript: `7.0.2`.

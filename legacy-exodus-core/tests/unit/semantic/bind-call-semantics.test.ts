@@ -40,9 +40,18 @@ describe("F-001: Semantic Call Semantics — .bind() vs .call() / .apply()", () 
     const targetCalls = analysis.calls.filter((c) => c.targetSymbolId === targetSymbol?.id);
     expect(targetCalls).toHaveLength(0);
 
-    // Must NOT have any resolved references to calculateTotal
-    const resolvedRefs = analysis.references.filter((r) => r.resolvedSymbolId === targetSymbol?.id);
-    expect(resolvedRefs).toHaveLength(0);
+    // .bind accesses the function value without invoking it.
+    const resolvedRefs = analysis.references.filter((r) => r.kind === "identifier" && r.resolvedSymbolId === targetSymbol?.id);
+    expect(resolvedRefs).toHaveLength(1);
+    expect(resolvedRefs[0]).toMatchObject({
+      filePath: "src/example.js",
+      name: "calculateTotal",
+      kind: "identifier",
+      resolutionState: "RESOLVED",
+      resolvedSymbolId: targetSymbol!.id,
+    });
+    expect(analysis.references.filter((r) => r.kind === "call" && r.resolvedSymbolId === targetSymbol?.id)).toHaveLength(0);
+    expect(analysis.references.filter((r) => r.kind === "identifier" && r.name === "bind")).toHaveLength(0);
   });
 
   // ─── Case B: Immediate invocation of bound result ────────────────────────

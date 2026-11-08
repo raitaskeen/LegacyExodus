@@ -152,7 +152,8 @@ describe("control and data flow analysis", () => {
     `;
     const ast = (await new JavaScriptParser().parse({ file: { id: "labels", path: "src/labels.js", language: "javascript", size: source.length }, source })).result;
     const graph = new DeterministicControlFlowGraphBuilder().build(ast);
-    const outerHeader = graph.blocks.find((block) => block.statements.some((statement) => statement.type === "LabeledStatement"));
+    // F-003: the label is evaluated once before the loop; the outer header holds only the outer loop test.
+    const outerHeader = loopHeaders(graph)[0];
     const outerAfter = graph.edges.find((edge) => edge.fromBlockId === outerHeader?.id && edge.kind === "false")?.toBlockId;
     const breakBlock = graph.blocks.find((block) => block.terminator === "BreakStatement");
     const continueBlock = graph.blocks.find((block) => block.terminator === "ContinueStatement");
@@ -753,7 +754,8 @@ describe("control and data flow analysis", () => {
 
   test("remains conservative for branch-local and dynamic call results", async (): Promise<void> => {
     const branch = await buildDataFlowGraph("taint-branch", `const input = req.body.name; let value; if (condition) { value = input; } child_process.exec(value);`);
-    expect(branch.taintFlows).toEqual([]);
+    expect(branch.taintFlows).toHaveLength(1);
+    expect(branch.taintFlows[0]?.state).toBe("INFERRED");
 
     const dynamic = await buildDataFlowGraph("taint-dynamic", `const input = req.body.name; const result = object[userControlledName](input); child_process.exec(result);`);
     expect(dynamic.taintFlows).toHaveLength(1);
@@ -804,7 +806,9 @@ describe("control and data flow analysis", () => {
   test("does not create DFG transfers for computed dynamic calls", async (): Promise<void> => {
     const { graph, semantic } = await buildResolvedDataFlow("semantic-computed", "const input = sourceValue; const method = getMethod(); const result = object[method](input);");
 
-    expect(semantic.calls.some((call) => call.calleeName.includes("object"))).toBe(false);
+    // The computed call is an explicit unknown (NA-01): recorded UNRESOLVED with no target, never absent.
+    const computed = semantic.calls.filter((call) => call.calleeName.includes("object"));
+    expect(computed.map((call) => [call.calleeName, call.resolutionState, call.targetSymbolId])).toEqual([["object[<dynamic>]", "UNRESOLVED", undefined]]);
     expect(graph.interproceduralFlows).toEqual([]);
   });
 
@@ -916,7 +920,9 @@ describe("control and data flow analysis", () => {
   test("does not create DFG transfers for computed dynamic calls", async (): Promise<void> => {
     const { graph, semantic } = await buildResolvedDataFlow("semantic-computed", "const input = sourceValue; const method = getMethod(); const result = object[method](input);");
 
-    expect(semantic.calls.some((call) => call.calleeName.includes("object"))).toBe(false);
+    // The computed call is an explicit unknown (NA-01): recorded UNRESOLVED with no target, never absent.
+    const computed = semantic.calls.filter((call) => call.calleeName.includes("object"));
+    expect(computed.map((call) => [call.calleeName, call.resolutionState, call.targetSymbolId])).toEqual([["object[<dynamic>]", "UNRESOLVED", undefined]]);
     expect(graph.interproceduralFlows).toEqual([]);
   });
 

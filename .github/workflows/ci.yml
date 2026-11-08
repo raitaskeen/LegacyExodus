@@ -9,6 +9,8 @@ on:
     branches:
       - main
       - core-foundation
+    # labeled/unlabeled: the `facts-lost-explained` label decides whether lost facts fail Fact Diff.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   workflow_dispatch:
 
 concurrency:
@@ -57,6 +59,33 @@ jobs:
       - name: Git diff check
         run: git diff --check
 
+  scale-gate:
+    name: Scale Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: legacy-exodus-core
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # ADR-009: peak memory must stay bounded as the repository grows.
+      - name: Synthetic corpus within its memory ceiling
+        run: bun run benchmarks/cli.ts scale synthetic 10000
+
   windows-smoke:
     name: Windows Path Smoke
     runs-on: windows-latest
@@ -82,3 +111,69 @@ jobs:
 
       - name: Run focused Windows path tests
         run: bun test tests/unit/graph/windows-drive-canonicalization.test.ts tests/unit/module-resolver.test.ts tests/unit/orchestration/lookup-map-canonicalization.test.ts
+
+  # Informational: reports which analysis facts a pull request loses and gains
+  # compared with its base. It never fails on lost facts (no --fail-on-loss);
+  # it fails only if the comparison tool itself errors.
+  fact-diff:
+    name: Fact Diff
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: head/legacy-exodus-core
+
+    steps:
+      - name: Checkout head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: head
+          persist-credentials: false
+
+      - name: Checkout base
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+
+      - name: Install head dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install base dependencies
+        working-directory: base/legacy-exodus-core
+        run: bun install --frozen-lockfile
+
+      - name: Fetch pinned real-world corpora
+        # Express and Fastify at their manifest commits; acquisition verifies each tree hash (BA-20).
+        working-directory: base/legacy-exodus-core
+        run: |
+          bun run benchmarks/scripts/acquire.ts --name express
+          bun run benchmarks/scripts/acquire.ts --name fastify
+
+      - name: Diff analysis facts (base vs head)
+        # The corpus is taken from the base checkout so both engines analyze identical input.
+        # A lost fact fails the job (NA-05) unless the owner labels the PR `facts-lost-explained`
+        # after the PR body explains every loss (a fix that replaces a wrong fact loses it on purpose).
+        # Gained facts are reported for the PR to explain.
+        run: >-
+          bun run benchmarks/cli.ts fact-diff
+          --base ../../base/legacy-exodus-core
+          --head .
+          ../../base/legacy-exodus-core/benchmarks/fixtures/governance-audit
+          ../../base/legacy-exodus-core/src
+          ../../base/legacy-exodus-core/benchmarks/.cache/express
+          ../../base/legacy-exodus-core/benchmarks/.cache/fastify
+          --output fact-diff.md
+          ${{ contains(github.event.pull_request.labels.*.name, 'facts-lost-explained') && ' ' || '--fail-on-loss' }}
+
+      - name: Publish fact diff to job summary
+        if: always()
+        run: cat fact-diff.md >> "$GITHUB_STEP_SUMMARY"

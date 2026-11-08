@@ -9,6 +9,13 @@ and this project adheres to deterministic semantic contracts and verifiable engi
 
 ## [Unreleased]
 
+- **Benchmark Governance Gate Can Fail (F-010):**
+  - `bun run benchmark audit` now runs 8 governed checks, each on real inputs. A check whose inputs are missing, empty or unreadable is a CRITICAL failure instead of a pass. Removed the two constant-pass checks ("Stale Artifact Isolation", "Benchmark Overhead"); "Health Score Aggregator Invariants" now exercises the aggregator on 5 synthetic cases.
+  - Accounting, determinism and sampling checks analyze the checked-in `benchmarks/fixtures/governance-audit` fixture, pinned by SHA-256 in `governance-audit.pin.json`, in a temporary copy across 3 runs. The audit no longer needs network access or a downloaded corpus.
+  - The audit CLI exits non-zero unless every check passed (previously only on `NO_GO`) and gains `--json` and `--root`.
+  - `legacy-exodus verify` reads the audit's JSON result, cross-checks its counts and reports the real passed/total (8/8) instead of a hard-coded "10/10"; unreadable or inconsistent output fails the gate.
+  - Added `benchmark-self-audit.test.ts` and `verify-benchmark-gate.test.ts` (12 tests).
+
 - **Nested Function Assigned-Context Isolation (CodeRabbit #3941957300):**
   - Reset `enclosingAssignedName` and `enclosingAssignedId` to `undefined` when recursing into child function scopes (`FunctionDeclaration`, `FunctionExpression`, `ArrowFunctionExpression`) in `JavaScriptSymbolExtractor`.
   - Prevented assigned class property identities (e.g. `handler = () => ...`) from leaking into nested anonymous callbacks (e.g. `items.map((item) => item)`), ensuring nested callback parameters are not falsely attributed to the outer assigned method.

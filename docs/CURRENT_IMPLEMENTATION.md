@@ -1,25 +1,22 @@
 # Current Implementation
 
-**Documentation state:** `VERIFIED`
+**Documentation state:** `PARTIAL`. Re-labelled on 2026-10-28 from the [blind audit](https://github.com/raitaskeen/LegacyExodus/pull/203); finding ids (BA-xx) refer to it.
 
-**Synchronized against core integration truth:** `origin/core-foundation` at `ce36ea8f7bf551ca3a6a8ad8fb848af3ca378325`
-
-**Main promotion boundary:** `origin/main` at `05a83e0629899cb614790eee725336df295a01e3`
-
-The core branch contains three verified remediations that are not yet main-promoted: IA-HIGH-007 corrects conservative catch reachability for potentially throwing invocations, nested protected blocks, and thrown-finalizer edge classification; IA-HIGH-008 forwards documented CLI storage options into runtime configuration; and IA-CRIT-001 removes raw host infrastructure from the plugin initialization context. All three are `VERIFIED` and core-integrated, but **not main-promoted**.
+**Implementation truth:** `main`. `core-foundation` and `docs-foundation` are retired as integration branches (2026-10-28). No SHA is pinned here; verify the exact revision you review.
 
 This page is the concise status boundary for LegacyExodus. Implementation source, executable tests, and verified runtime behavior remain authoritative if this page drifts.
 
-## Verified current core
+## Current core (implemented; limits below)
 
 - Bun runtime and strict TypeScript contracts.
 - Engine facade, runtime lifecycle, command/orchestrator boundary, event bus/store, and durable event journal. Durable command commit defines success; post-commit synchronous notification failures are separately recorded and logged without implying rollback.
 - Repository discovery with deterministic inventory, source/non-source classification, package/framework signals, and isolated enumeration failures.
-- Babel-based JavaScript/TypeScript/JSX/TSX parsing into normalized immutable AST contracts.
-- Lexical symbol extraction, selected ESM/CommonJS modeling, module resolution, dependency cycles, and deterministic knowledge graphs.
-- Conservative semantic call/reference analysis, Express route and middleware facts for supported patterns.
-- Function/control-flow and data-flow models, interprocedural transfer for proven targets, and conservative taint facts.
-- In-memory and SQLite storage providers, run-scoped queries, analysis-run atomicity, validated snapshot reuse, and deep persisted-contract validation.
+- Babel-based JavaScript/TypeScript/JSX/TSX parsing, including standard decorator syntax, into normalized immutable AST contracts. Decorator semantics are not interpreted. The Babel dialect is chosen per file extension: `.d.ts` uses declaration mode, `.ts` has no JSX, `.tsx` has JSX, and JavaScript gets JSX plus pragma-only Flow; the source type is fixed per extension (BA-01).
+- Lexical symbol extraction, selected ESM/CommonJS modeling, module resolution, dependency cycles, and a knowledge graph of file and symbol nodes with contains/imports edges (BA-19). TypeScript enums, namespaces (with their own scope), interfaces, type aliases, `declare function`, `import x = require()` and `export =` are modelled (BA-02). Module resolution covers JSONC tsconfig/jsconfig with `extends` (extends outside the project is refused), `./x.js` to `x.ts` from TS importers with TS extension priority for extensionless specifiers, `.mts`, `.cts` and `.d.ts` candidates, `paths` precedence (exact first, then longest prefix) and baseUrl-only imports (BA-03). Still open: class-expression members lose their class (BA-13), namespace imports bind to an arbitrary export (BA-09), dynamic `import()` is not modelled (BA-10), compiled CommonJS calls do not resolve (BA-12), and package/workspace resolution and `node_modules` stay unresolved (#117).
+- Semantic call/reference analysis that resolves a call only when its target is proven. Express route and middleware facts are `INFERRED`: per-router middleware, handlers and mount paths are not yet modelled (BA-08).
+- Function/control-flow and data-flow models, interprocedural transfer for proven targets, taint facts from a built-in policy, and deterministic bounded work-queue propagation for the implemented repository-wide flow connections. The CFG has no loops from unreachable code, gives each copied `finally` block a unique id, and adds clause exception edges for labelled loops (BA-14). Data flow misses loops, `switch`, `try`, short-circuit expressions and direct source arguments, and can over-label conditional values (BA-04 to BA-07).
+- Locale-independent ordering (by UTF-16 code unit) of every projected artifact.
+- In-memory and SQLite storage providers, streamed run-scoped queries, analysis-run atomicity, validated snapshot reuse, deep persisted-contract validation, and caller-controlled transient session reset.
 - Contained `.discovery` projections with atomic per-file replacement and integrity manifests. Durable analysis records are canonical; `.discovery` is a derived command deliverable. If fresh-run projection fails after commit, the engine rejects with `DISCOVERY_PROJECTION_FAILED_AFTER_COMMIT` and explicitly reports that the selected storage provider already committed the analysis.
 - CLI commands: `status`, `init`, `analyze`, `test`, `verify`, and `plugins list`.
 - Plugin contracts, registry, loader, and lifecycle hooks. The current in-process `PluginContext` is intentionally capability-empty and frozen; it exposes no raw Logger, EventBus, or StorageManager.
@@ -31,9 +28,15 @@ This page is the concise status boundary for LegacyExodus. Implementation source
 - Taint analysis is a deterministic foundation, not complete vulnerability detection.
 - Knowledge, semantic, and flow artifacts are static evidence, not business-rule or behavioral-equivalence certification.
 - Fidelity evidence is sample-based and does not establish whole-repository migration safety.
-- Whole-repository bounded-memory scaling has not been universally established.
+- Indexed semantic lookup, streamed scoped reads, compact connection state, and bounded flow-propagation work queues address specific measured scaling paths. Whole-repository bounded-memory scaling has not been universally established.
 - Multi-artifact `.discovery` publication is not one filesystem transaction. A failed projection can leave a partial or previously valid directory; manifest and workspace validation determine whether it is reusable. No public projection-only retry command is implemented.
 - Plugins are in-process instances with ambient Bun/Node authority. Marketplace loading, permission manifests, process isolation, and filesystem/network sandboxing are not implemented. Future host interaction requires separately designed narrow capability facades.
+
+## Known deferred capabilities
+
+- **#111 / IA-HIGH-002 — framework semantics:** current analysis is generic deterministic JavaScript/TypeScript analysis plus narrow Express route and middleware recognition for proven patterns. Comprehensive React, NestJS, Angular, Vue, Fastify, or other framework runtime semantics are not implemented.
+- **#112 / IA-HIGH-003 — taint policy boundary:** current deterministic propagation uses built-in source, sink, and sanitizer rules. A typed, versioned, project-configurable, or plugin-extensible taint-policy architecture is not implemented.
+- **#117 / IA-MED-004 — package/workspace resolution:** current resolution covers repository-local relative modules and proven `tsconfig` path aliases. Full Node resolution, `node_modules`, package `exports`/`imports`, and npm/pnpm/Yarn workspace resolution are not implemented.
 
 ## Not implemented
 
@@ -61,19 +64,11 @@ Record live results rather than copying historical totals into evergreen documen
 
 ## Verification snapshot
 
-The synchronized core checkpoint reported:
-
-- 1,053 tests passed, 1 skipped, 0 failed; 9,561 assertions.
-- Typecheck passed.
-- Benchmark governance passed 10/10.
-- Composite verification passed.
-- Three governed Express analyses produced identical results: 234 discovered, 152 analyzed, 0 failures.
-
-These values identify evidence for the SHA above. They must not be reused as current results after the core revision changes.
+Verification totals are intentionally not copied into this evergreen page; run the canonical commands and record their live output for the exact revision under review.
 
 ## CI and security boundary
 
-Current main/core workflow truth includes immutable action SHA pins, least-privilege permissions, disabled checkout credential persistence, Bun 1.4.2, frozen installs, job timeouts, superseded-run cancellation, `CI / Verify Core`, and `Windows Path Smoke`.
+Current `main` workflow truth includes immutable action SHA pins, least-privilege permissions, disabled checkout credential persistence, Bun 1.4.2, frozen installs, job timeouts, superseded-run cancellation, `CI / Verify Core`, and `Windows Path Smoke`.
 
 CodeQL and Dependency Review are unavailable under the current private-repository/account configuration. The unusable historical CodeQL workflow was intentionally removed; its absence is not evidence that application security is complete.
 

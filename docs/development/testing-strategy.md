@@ -25,7 +25,7 @@ flowchart TD
 | **Domain Explorer** | `tests/` | Dynamic domain runner (`parser`, `symbols`, `semantic`, `flow`, etc.) | `legacy-exodus test <domain>` |
 | **Integration Tests** | `tests/integration/` | End-to-end multi-stage pipeline and orchestration tests | `bun test tests/integration/` |
 | **Fidelity Validation** | `src/governance/fidelity/` | Ground-truth recall and Three-Universe metric computation | `bun test tests/unit/governance/` |
-| **Benchmark Determinism** | `benchmarks/` | 3-run bit-for-bit determinism sweeps across Tier 1, 2, and 3 repos | `bun run benchmark audit` |
+| **Benchmark Determinism** | `benchmarks/` | Self-audit: 3-run bit-for-bit determinism on the pinned `governance-audit` fixture; tiered corpus runs use `bun run benchmark run` | `bun run benchmark audit` |
 | **Multi-Gate Dashboard** | Repository | 4-gate automated quality assurance | `bun run verify` |
 
 ---
@@ -44,8 +44,8 @@ Before changing any production static analysis logic:
 
 Verification totals are intentionally not hard-coded in this evergreen guide. Record the live file, test, assertion, skip, and failure counts from each canonical run.
 * **Typecheck Errors:** `0`
-* **Benchmark Governance:** `10 / 10 PASS`
-* **Verification Dashboard:** `4 / 4 PASS`
+* **Benchmark Governance:** all benchmark self-audit checks PASS
+* **Verification Dashboard:** all composite verification gates PASS
 
 ---
 

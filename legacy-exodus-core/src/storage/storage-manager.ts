@@ -67,6 +67,12 @@ export class StorageManager {
     return this.provider.findScoped(criteria);
   }
 
+  public iterateScoped<Payload extends SerializedPayload>(
+    criteria: StorageQueryCriteria,
+  ): AsyncIterable<StorageRecord<Payload>> {
+    return this.provider.iterateScoped<Payload>(criteria);
+  }
+
   public delete(id: string): Promise<void> {
     return this.provider.delete(id);
   }
@@ -77,6 +83,10 @@ export class StorageManager {
 
   public clear(): Promise<void> {
     return this.provider.clear();
+  }
+
+  public clearTransient(): Promise<void> {
+    return this.isPersistent() ? Promise.resolve() : this.clear();
   }
 
   public async close(): Promise<void> {

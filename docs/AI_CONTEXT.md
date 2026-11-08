@@ -6,13 +6,13 @@ This file gives development assistants a compact product context. On the impleme
 
 LegacyExodus is currently a deterministic local JavaScript/TypeScript repository-intelligence and static-analysis engine intended to evolve into a governed modernization platform.
 
-Before making capability claims, read [Current Implementation](CURRENT_IMPLEMENTATION.md) and verify against current `core-foundation` source and tests. Documentation and old prompts do not override executable reality.
+Before making capability claims, read [Current Implementation](CURRENT_IMPLEMENTATION.md) and verify against current `main` source and tests. Documentation and old prompts do not override executable reality.
 
-On documentation branches, the local `legacy-exodus-core/` tree may be a stale snapshot. Query implementation truth without merging branches:
+When a checkout may be behind, query implementation truth directly:
 
 ```bash
-git show origin/core-foundation:legacy-exodus-core/src/<path>
-git show origin/core-foundation:legacy-exodus-core/tests/<path>
+git show origin/main:legacy-exodus-core/src/<path>
+git show origin/main:legacy-exodus-core/tests/<path>
 ```
 
 Use this authority order: production code, automated tests, CI gates, concrete architecture, accepted ADRs, current documentation, then historical material. Root [`AGENTS.md`](../AGENTS.md) and [`.agents/`](../.agents/) govern agent behavior; they are development controls, not runtime product features.

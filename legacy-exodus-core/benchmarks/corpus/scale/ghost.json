@@ -1,0 +1,28 @@
+{
+  "name": "ghost",
+  "repository": "https://github.com/TryGhost/Ghost.git",
+  "revision": "v6.73.0",
+  "commit": "5794cfd8daca61fd60cd8659acd6591ece3b7956",
+  "tree": "291f039a01db3f75b08196d75bb31a4d37e8cff1",
+  "tier": "scale",
+  "languageProfile": [
+    "javascript",
+    "typescript"
+  ],
+  "frameworkProfile": [
+    "express",
+    "react"
+  ],
+  "sizeClass": "large",
+  "license": "MIT",
+  "reason": "Large mixed JavaScript and TypeScript monorepo (about 9k files). Scale benchmark for BA-28/BA-17: wall time and peak memory of a full analysis. Budgets are the measured run plus 10% (S1 no-regression rule). Measured 2026-11-03 after the BA-17 memory pass (16-core Windows 11, Bun 1.4.4): 7,174 of 9,171 files analyzed, 328 s wall time, 6,166 MiB peak RSS, 1.6 GB output. Earlier: 768 s and 11,431 MiB after Wave 3; about 26 min in the audit-era run (2026-10-29). ADR-009 (2026-11-04, #253-#257): 1,847 MiB peak in a same-session A/B (main before: 2,613 MiB; 9,878 MiB before ADR-009). The memory budget is that peak plus about 40% for GC variance; wall time stays at 360 s until it is re-measured on a cool machine. NA-04 (2026-11-08): the gate now measures a fresh analysis only (an earlier .discovery is removed, a snapshot reuse is refused) and the engine alone (time and peak memory when the engine returns, before the harness re-reads ~930 MB of output). Two idle runs on b29d8ac+NA-01/02: 216 s / 1,677 MiB and 253 s / 2,213 MiB. A snapshot reuse of Ghost peaks at 8,939 MiB (NA-16), which is why earlier same-cache runs read 9-10 GB.",
+  "budgets": {
+    "maxWallMs": 360000,
+    "maxPeakRssMb": 2560
+  },
+  "knownHotspots": [
+    "ghost/core — Express server, services, data model",
+    "apps/* — React admin and portal apps (TSX)",
+    "@tryghost/* — workspace packages imported by name"
+  ]
+}

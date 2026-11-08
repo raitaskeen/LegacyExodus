@@ -79,7 +79,7 @@ describe("CLI Help & Command Discovery Subsystem", () => {
     expect(output).toContain("--theme");
     expect(output).toContain("EXAMPLES");
     expect(output).toContain("legacy-exodus analyze ./apps/web");
-    expect(output).toContain("[read-only]");
+    expect(output).toContain("[writes .discovery/]"); // NA-13: analyze writes output into the target
   });
 
   it("renders command-specific help for test with all 12 domains documented", () => {
@@ -133,6 +133,11 @@ describe("CLI Help & Command Discovery Subsystem", () => {
     expect(initOut).toContain("init");
     expect(initOut).toContain("<path>");
     expect(initOut).toContain("[mutates workspace]");
+
+    // analyze never changes source but writes .discovery/ into the target, so it is not "read-only" (NA-13).
+    const analyzeOut = presenter.renderCommandHelp(new Command("analyze"));
+    expect(analyzeOut).toContain("[writes .discovery/]");
+    expect(analyzeOut).not.toContain("[read-only]");
 
     const pluginsParent = new Command("plugins");
     const pluginsList = new Command("list");

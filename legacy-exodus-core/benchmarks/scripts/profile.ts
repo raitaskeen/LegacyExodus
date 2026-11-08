@@ -278,6 +278,7 @@ export async function profilePipeline(targetPath: string): Promise<ProfileReport
     nodes: dependencyGraph.nodes.map((n) => ({ ...n })),
     edges: dependencyGraph.edges.map((e) => ({ ...e })),
     cycles: dependencyGraph.cycles.map((c) => [...c]),
+    moduleGraph: dependencyGraph.moduleGraph,
   });
 
   timedRecord("semantic-analysis", {

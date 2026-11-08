@@ -1,10 +1,16 @@
 import { createHash } from "node:crypto";
 import { lstat, readFile, realpath } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 
 import type { FileArtifact } from "@contracts/discovery";
+import { discoveryManifestSchema, MANIFEST_SCHEMA_VERSION, manifestKeyId, manifestLocationDigest, verifyManifestMac, type DiscoveryManifest } from "./discovery-manifest";
 import { FileScanner } from "./file-scanner";
+import { createSnapshotTrust, type SnapshotTrust } from "./snapshot-trust";
+import { compareCodePoints } from "@shared/ordering";
+import { immutable } from "@shared/immutability";
+
+export type { DiscoveryManifest };
 
 export function isPathWithinDirectory(parentDir: string, candidatePath: string): boolean {
   if (typeof candidatePath !== "string" || candidatePath.trim().length === 0) {
@@ -47,36 +53,10 @@ export function isPathWithinDirectory(parentDir: string, candidatePath: string):
   return true;
 }
 
-const manifestSchema = z.object({
-  schemaVersion: z.number().int().positive(),
-  repository: z.object({
-    name: z.string().min(1),
-    path: z.string().min(1),
-    packageVersion: z.string().optional(),
-    commitSha: z.string().optional(),
-    sourceDigest: z.string().optional(),
-  }),
-  engine: z.object({
-    packageVersion: z.string(),
-    commitSha: z.string(),
-    bunVersion: z.string(),
-  }),
-  analysis: z.object({
-    projectId: z.string(),
-    analysisRunId: z.string().optional(),
-    generatedAt: z.string(),
-  }),
-  requiredArtifacts: z.array(z.string()),
-  artifacts: z.record(
-    z.string(),
-    z.object({
-      sha256: z.string().regex(/^[a-f0-9]{64}$/),
-      bytes: z.number().nonnegative(),
-    }),
-  ),
-});
-
-export type DiscoveryManifest = z.infer<typeof manifestSchema>;
+const freshnessFilesSchema = z.array(z.object({
+  path: z.string().min(1),
+  size: z.number().nonnegative(),
+}));
 
 export type DiscoveryValidationStatus =
   | "VALID"
@@ -86,7 +66,9 @@ export type DiscoveryValidationStatus =
   | "SCHEMA_MISMATCH"
   | "ARTIFACT_MISSING"
   | "CHECKSUM_MISMATCH"
-  | "SNAPSHOT_STALE";
+  | "SNAPSHOT_STALE"
+  | "UNAUTHENTICATED"
+  | "ANALYZER_MISMATCH";
 
 export interface DiscoveryValidationResult {
   readonly valid: boolean;
@@ -103,6 +85,12 @@ export interface ValidateDiscoveryOptions {
   readonly expectedSchemaVersion?: number;
   readonly verifyChecksums?: boolean;
   readonly verifyFreshness?: boolean;
+  /**
+   * Additionally require that the snapshot may be reused as current analysis:
+   * its manifest is bound to this canonical project location, is authenticated
+   * by the local snapshot key, and names the running analyzer build.
+   */
+  readonly authorizeReuse?: boolean;
 }
 
 /**
@@ -131,7 +119,7 @@ export async function computeWorkspaceDigest(
     }
   }
 
-  const sortedFiles = [...fileList].sort((a, b) => a.path.localeCompare(b.path));
+  const sortedFiles = [...fileList].sort((a, b) => compareCodePoints(a.path, b.path));
   const hasher = createHash("sha256");
 
   for (const file of sortedFiles) {
@@ -149,6 +137,8 @@ export async function computeWorkspaceDigest(
 }
 
 export class DiscoveryValidator {
+  public constructor(private readonly trust: SnapshotTrust = createSnapshotTrust()) {}
+
   /**
    * Validates a `.discovery` snapshot directory and its associated manifest.
    *
@@ -267,7 +257,7 @@ export class DiscoveryValidator {
       };
     }
 
-    const parseResult = manifestSchema.safeParse(parsedJson);
+    const parseResult = discoveryManifestSchema.safeParse(parsedJson);
     if (!parseResult.success) {
       return {
         valid: false,
@@ -278,7 +268,7 @@ export class DiscoveryValidator {
 
     const manifest = parseResult.data;
 
-    const expectedSchema = options.expectedSchemaVersion ?? 1;
+    const expectedSchema = options.expectedSchemaVersion ?? MANIFEST_SCHEMA_VERSION;
     if (manifest.schemaVersion !== expectedSchema) {
       return {
         valid: false,
@@ -288,13 +278,23 @@ export class DiscoveryValidator {
       };
     }
 
-    if (resolve(manifest.repository.path) !== projectPath) {
+    const canonicalProjectPath = await canonicalPath(projectPath);
+    // Only the local key can confirm the location; without it (or without a digest) the snapshot
+    // still validates as a snapshot, but it can never be authorized for reuse.
+    if (await this.locationDiffers(manifest, canonicalProjectPath)) {
       return {
         valid: false,
         status: "PATH_MISMATCH",
-        reason: `Manifest repository path '${manifest.repository.path}' does not match target path '${projectPath}'.`,
+        reason: `The manifest was written for a different project location than '${projectPath}'.`,
         manifest,
       };
+    }
+
+    if (options.authorizeReuse === true) {
+      const denial = await this.authorizeReuse(manifest, canonicalProjectPath);
+      if (denial !== undefined) {
+        return { valid: false, ...denial, manifest };
+      }
     }
 
     const verifyChecksums = options.verifyChecksums ?? true;
@@ -378,7 +378,7 @@ export class DiscoveryValidator {
     }
 
     if (options.verifyFreshness === true) {
-      const freshness = await this.verifyWorkspaceFreshness(projectPath, discoveryDir, manifest);
+      const freshness = await this.verifyWorkspaceFreshness(projectPath, manifest, validatedArtifacts);
       if (!freshness.fresh) {
         return {
           valid: false,
@@ -393,8 +393,64 @@ export class DiscoveryValidator {
       valid: true,
       status: "VALID",
       manifest,
-      validatedArtifacts: Object.freeze(validatedArtifacts),
+      validatedArtifacts: immutable(validatedArtifacts),
     };
+  }
+
+  /**
+   * Decides whether an integrity-valid manifest may stand in for fresh analysis.
+   * Order: the local key, the exact canonical location, local-key authenticity, then analyzer
+   * identity, so no unauthenticated field is trusted to explain a rejection.
+   */
+  private async authorizeReuse(
+    manifest: DiscoveryManifest,
+    canonicalProjectPath: string,
+  ): Promise<{ readonly status: DiscoveryValidationStatus; readonly reason: string } | undefined> {
+    const keyStore = this.trust.keyStore;
+    if (isWithin(canonicalProjectPath, await canonicalPath(keyStore.directory))) {
+      return { status: "UNAUTHENTICATED", reason: "The snapshot key must not be stored inside the analyzed project." };
+    }
+
+    let key: Buffer | undefined;
+    try {
+      key = await keyStore.readKey();
+    } catch {
+      return { status: "UNAUTHENTICATED", reason: "The local snapshot key is unreadable or invalid." };
+    }
+    if (key === undefined) {
+      return { status: "UNAUTHENTICATED", reason: "No local snapshot key exists to authenticate this snapshot." };
+    }
+    if (manifest.repository.locationDigest !== manifestLocationDigest(canonicalProjectPath, key)) {
+      return { status: "PATH_MISMATCH", reason: `Reusable snapshots must be bound to the canonical project location '${canonicalProjectPath}'.` };
+    }
+    if (!verifyManifestMac(manifest, key)) {
+      return { status: "UNAUTHENTICATED", reason: "The snapshot manifest is not authenticated by the local snapshot key." };
+    }
+
+    const fingerprint = await this.trust.analyzerFingerprint();
+    if (fingerprint === undefined) {
+      return { status: "ANALYZER_MISMATCH", reason: "The running analyzer identity is unavailable, so snapshots cannot be reused." };
+    }
+    if (manifest.analyzer?.fingerprint !== fingerprint) {
+      return { status: "ANALYZER_MISMATCH", reason: "The snapshot was produced by a different analyzer build." };
+    }
+
+    return undefined;
+  }
+
+  /** True only when the local key proves the manifest's location digest names another location. */
+  private async locationDiffers(manifest: DiscoveryManifest, canonicalProjectPath: string): Promise<boolean> {
+    const digest = manifest.repository.locationDigest;
+    const keyStore = this.trust.keyStore;
+    // A key inside the project proves nothing; reuse authorization refuses it on its own terms.
+    if (digest === undefined || isWithin(canonicalProjectPath, await canonicalPath(keyStore.directory))) return false;
+    let key: Buffer | undefined;
+    try {
+      key = await keyStore.readKey();
+    } catch {
+      return false;
+    }
+    return key !== undefined && manifest.integrity?.keyId === manifestKeyId(key) && digest !== manifestLocationDigest(canonicalProjectPath, key);
   }
 
   /**
@@ -417,9 +473,35 @@ export class DiscoveryValidator {
    */
   private async verifyWorkspaceFreshness(
     projectPath: string,
-    discoveryDir: string,
     manifest: DiscoveryManifest,
+    validatedArtifacts: ReadonlyMap<string, string>,
   ): Promise<{ readonly fresh: boolean; readonly reason?: string }> {
+    if (manifest.repository.sourceDigest === undefined) {
+      return {
+        fresh: false,
+        reason: "Snapshot manifest is missing sourceDigest required for freshness verification.",
+      };
+    }
+
+    const filesRaw = validatedArtifacts.get("files.json");
+    if (filesRaw === undefined) {
+      return {
+        fresh: false,
+        reason: "Validated snapshot files.json is missing for freshness verification.",
+      };
+    }
+
+    let snapshotFiles: readonly { readonly path: string; readonly size: number }[];
+    try {
+      const parsedFiles: unknown = JSON.parse(filesRaw);
+      snapshotFiles = freshnessFilesSchema.parse(parsedFiles);
+    } catch {
+      return {
+        fresh: false,
+        reason: "Snapshot files.json is invalid for freshness verification.",
+      };
+    }
+
     let currentFiles: readonly FileArtifact[];
     try {
       const scanner = new FileScanner();
@@ -430,18 +512,6 @@ export class DiscoveryValidator {
       return {
         fresh: false,
         reason: `Failed to scan current workspace for freshness check: ${message}`,
-      };
-    }
-
-    let snapshotFiles: readonly { readonly path: string; readonly size: number }[];
-    try {
-      const filesArtifactPath = resolve(discoveryDir, "files.json");
-      const filesRaw = await readFile(filesArtifactPath, "utf8");
-      snapshotFiles = JSON.parse(filesRaw);
-    } catch {
-      return {
-        fresh: false,
-        reason: "Failed to read snapshot files.json for freshness check.",
       };
     }
 
@@ -473,16 +543,29 @@ export class DiscoveryValidator {
       }
     }
 
-    if (manifest.repository.sourceDigest !== undefined) {
-      const currentDigest = await computeWorkspaceDigest(projectPath, currentFiles);
-      if (currentDigest !== manifest.repository.sourceDigest) {
-        return {
-          fresh: false,
-          reason: `Workspace source content digest mismatch (current: ${currentDigest}, snapshot: ${manifest.repository.sourceDigest}).`,
-        };
-      }
+    const currentDigest = await computeWorkspaceDigest(projectPath, currentFiles);
+    if (currentDigest !== manifest.repository.sourceDigest) {
+      return {
+        fresh: false,
+        reason: `Workspace source content digest mismatch (current: ${currentDigest}, snapshot: ${manifest.repository.sourceDigest}).`,
+      };
     }
 
     return { fresh: true };
   }
+}
+
+/** Physical absolute path when it exists, otherwise the lexical absolute path. */
+async function canonicalPath(path: string): Promise<string> {
+  const absolute = resolve(path);
+  try {
+    return await realpath(absolute);
+  } catch {
+    return absolute;
+  }
+}
+
+function isWithin(parent: string, candidate: string): boolean {
+  const relation = relative(parent, candidate);
+  return relation === "" || (!isAbsolute(relation) && relation !== ".." && !relation.startsWith(`..${sep}`));
 }

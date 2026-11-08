@@ -38,7 +38,7 @@ Key security requirements:
 ## Verification / Evidence
 * **Source Implementation:** [`src/discovery/file-scanner.ts`](../../legacy-exodus-core/src/discovery/file-scanner.ts), [`src/discovery/discovery-validator.ts`](../../legacy-exodus-core/src/discovery/discovery-validator.ts), [`src/storage/projections/file-discovery-projection.ts`](../../legacy-exodus-core/src/storage/projections/file-discovery-projection.ts).
 * **Test Suite:** `file-scanner.test.ts`, `discovery-validator.test.ts`, `file-discovery-projection.test.ts` (100% passing tests).
-* **Governance Evidence:** `bun run benchmark audit` Check 8 passes with zero symlink traversal regressions.
+* **Governance Evidence:** Symlink handling is covered by the test suites above (`file-scanner.test.ts`, `discovery-validator.test.ts`). The benchmark self-audit has no symlink check.
 
 ## Related Documentation
 * **[docs/architecture/security-architecture.md](../architecture/security-architecture.md):** Detailed security architecture.

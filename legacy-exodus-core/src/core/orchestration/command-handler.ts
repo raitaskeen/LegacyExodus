@@ -1,3 +1,4 @@
+import { createAnalysisDisposition, deriveR01Accounting, isR01DispatchedFile, validateAnalysisDisposition, type AnalysisFileDisposition } from "@contracts/discovery-projection";
 import type {
   AnalyzeProjectCommand,
   DiscoverProjectCommand,
@@ -5,6 +6,7 @@ import type {
   UpdateKnowledgeCommand,
 } from "@contracts/commands";
 import {
+  knowledgeGraphPayloadSchema,
   controlFlowPayloadSchema,
   dataFlowPayloadSchema,
   semanticAnalysisPayloadSchema,
@@ -18,15 +20,19 @@ import type {
 import { createDomainEvent, type DomainEvent } from "@core/events/domain-event";
 import { validateProjectDiscovery, type FileArtifact } from "@contracts/discovery";
 import { DiscoveryEngine, DiscoveryValidator, type DiscoveryResult } from "@discovery/index";
-import { DeterministicDependencyGraphBuilder, ModuleResolver, canonicalizePath, type ModuleResolutionOptions } from "@graph/index";
-import { DeterministicControlFlowGraphBuilder, DeterministicDataFlowGraphBuilder, DeterministicFlowAnalysisEngine, createProvenCallTargets, type ControlFlowGraph, type BuildContextResult } from "@flow/index";
-import { DeterministicKnowledgeGraphBuilder } from "@knowledge/index";
+import { dependencyGraphNodes, DeterministicDependencyGraphBuilder, ModuleResolver, canonicalizePath, findPackageEntryFiles, loadTsConfigResolution, loadWorkspacePackages, validateCurrentDependencyGraph, type TsConfigDiagnostic } from "@graph/index";
+import { DeterministicControlFlowGraphBuilder, DeterministicDataFlowGraphBuilder, DeterministicFlowAnalysisEngine, createProvenCallTargets, type ConnectionContext, type ControlFlowGraph, type DataFlowGraphBody } from "@flow/index";
+import { buildKnowledgeGraphOnDisk } from "@knowledge/index";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { ParserManager, type ASTResult } from "@parser/index";
-import { DeterministicCallGraphBuilder, DeterministicSemanticAnalysisEngine, findHttpCalls, type ExpressRoute, type MiddlewareChain, type SemanticCall, type SymbolReference } from "@semantic/index";
-import { createStorageRecord, type StorageRecord } from "@storage/index";
+import { callSchema, collectUnstableExportIds, DeterministicCallGraphBuilder, DeterministicSemanticAnalysisEngine, FactUsage, findHttpCalls, referenceSchema, SortedFactList, type ExpressRoute, type MiddlewareChain, type SemanticAnalysis, type SemanticCall, type SymbolReference } from "@semantic/index";
+import { createOwnedStorageRecord, createStorageRecord, type StorageRecord } from "@storage/index";
 import { JavaScriptSymbolExtractor, validateCodeSymbols, type CodeSymbol, type SymbolTable } from "@symbols/index";
+import { RunScopedAstStore, type AnalysisAstStoreFactory } from "./run-scoped-ast-store";
+import { compareCodePoints } from "@shared/ordering";
+import { FactStore, sortedFactArray, toFactArray, type FactArray, type FactSpool } from "@shared/fact-array";
+import { immutable } from "@shared/immutability";
 
 export interface CommandExecution {
   readonly events: readonly DomainEvent[];
@@ -34,6 +40,22 @@ export interface CommandExecution {
   readonly discovery?: DiscoveryResult;
   readonly analysis?: AnalysisSummary;
   readonly isReused?: boolean;
+  /** Analysis run that produced the reused snapshot, when the manifest records it. */
+  readonly snapshotAnalysisRunId?: string;
+  /** A stored snapshot was found but not reused, and why; absent when there was none (NA-11). */
+  readonly snapshotRejection?: SnapshotRejection;
+}
+
+export interface SnapshotRejection {
+  /** Validation status (CHECKSUM_MISMATCH, UNAUTHENTICATED, SNAPSHOT_STALE, …) or RESTORE_FAILED. */
+  readonly status: string;
+  readonly reason: string;
+}
+
+export interface AstStoreCleanupFailure {
+  readonly projectId: string;
+  readonly analysisRunId: string;
+  readonly error: unknown;
 }
 
 export class InitializeProjectHandler {
@@ -47,7 +69,7 @@ export class InitializeProjectHandler {
       },
     });
 
-    return { events: Object.freeze([event]), records: Object.freeze([]) };
+    return { events: immutable([event]), records: immutable([]) };
   }
 }
 
@@ -63,7 +85,7 @@ export class DiscoverProjectHandler {
       },
     });
 
-    return { events: Object.freeze([event]), records: Object.freeze([]) };
+    return { events: immutable([event]), records: immutable([]) };
   }
 }
 
@@ -77,26 +99,61 @@ export class UpdateKnowledgeHandler {
       },
     });
 
-    return { events: Object.freeze([event]), records: Object.freeze([]) };
+    return { events: immutable([event]), records: immutable([]) };
   }
 }
 
 export class AnalyzeProjectHandler {
+  private astStoreCleanupFailures: AstStoreCleanupFailure[] = [];
+  private tsConfigDiagnostics: readonly TsConfigDiagnostic[] = [];
+  /** Holds the fact lists of every run's records; it lives until `disposeFacts` (engine shutdown). */
+  private facts: FactStore | undefined;
+
   public constructor(
     private readonly discoveryEngine: DiscoveryEngine,
     private readonly parserManager: ParserManager,
     private readonly symbolExtractor: JavaScriptSymbolExtractor,
     private readonly discoveryValidator: DiscoveryValidator = new DiscoveryValidator(),
+    private readonly astStoreFactory: AnalysisAstStoreFactory = () => RunScopedAstStore.create(),
   ) {}
 
+  /** Removes the fact lists of all runs; records made by this handler cannot be read after it. */
+  public disposeFacts(): void {
+    this.facts?.dispose();
+    this.facts = undefined;
+  }
+
+  private factStore(): FactStore {
+    this.facts ??= FactStore.create();
+    return this.facts;
+  }
+
+  public getAstStoreCleanupFailures(): readonly AstStoreCleanupFailure[] {
+    return immutable([...this.astStoreCleanupFailures]);
+  }
+
+  /** What the last run could not use of the project's tsconfig.json / jsconfig.json; empty when it was read in full. */
+  public getTsConfigDiagnostics(): readonly TsConfigDiagnostic[] {
+    return this.tsConfigDiagnostics;
+  }
+
   public async handle(command: AnalyzeProjectCommand): Promise<CommandExecution> {
+    this.astStoreCleanupFailures = [];
+    this.tsConfigDiagnostics = [];
     const startedAt = performance.now();
 
+    let snapshotRejection: SnapshotRejection | undefined;
     if (!command.payload.refresh) {
+      // Reuse requires an authenticated snapshot of this exact location from this analyzer build.
       const validation = await this.discoveryValidator.validate({
         projectPath: command.payload.path,
         verifyFreshness: true,
+        authorizeReuse: true,
       });
+      // No snapshot at all is the ordinary first run; any other refusal is reported, never silent.
+      if (!validation.valid && validation.status !== "MANIFEST_MISSING") {
+        snapshotRejection = immutable({ status: validation.status, reason: validation.reason ?? "" });
+      }
       if (validation.valid && validation.manifest !== undefined && validation.validatedArtifacts !== undefined) {
         try {
           const artifacts = validation.validatedArtifacts;
@@ -113,6 +170,11 @@ export class AnalyzeProjectHandler {
           const filesJson = JSON.parse(filesRaw) as readonly any[];
           const depsJson = JSON.parse(depsRaw) as readonly any[];
           const frameworksJson = JSON.parse(frameworksRaw) as readonly any[];
+          const summaryRaw = artifacts.get("summary.json");
+          if (summaryRaw === undefined) throw new Error("Missing R01 summary.");
+          const snapshotSummary = JSON.parse(summaryRaw);
+          const enumerationRaw = artifacts.get("enumeration-failures.json");
+          const snapshotEnumeration = enumerationRaw === undefined ? [] : JSON.parse(enumerationRaw);
 
           const discovery = validateProjectDiscovery({
             projectId: command.payload.projectId,
@@ -129,13 +191,16 @@ export class AnalyzeProjectHandler {
               name: d.name,
               version: d.version,
               kind: d.kind,
+              ...(d.manifest !== undefined ? { manifest: d.manifest } : {}),
             })),
             frameworks: frameworksJson.map((f) => ({
               name: f.name,
               evidence: f.evidence,
             })),
             languages: projectJson.languages ?? [],
-            enumerationFailures: [],
+            enumerationFailures: snapshotEnumeration,
+            manifestFailures: projectJson.manifestFailures ?? [],
+            excludedPaths: projectJson.excludedPaths ?? [],
             discoveredAt: new Date(validation.manifest.analysis.generatedAt),
           });
 
@@ -147,7 +212,9 @@ export class AnalyzeProjectHandler {
             dependencies: discovery.dependencies.map((dependency) => ({ ...dependency })),
             frameworks: discovery.frameworks.map((framework) => ({ ...framework })),
             languages: [...discovery.languages],
-            enumerationFailures: [],
+            enumerationFailures: discovery.enumerationFailures,
+            manifestFailures: discovery.manifestFailures.map((failure) => ({ ...failure })),
+            ...(discovery.excludedPaths.length === 0 ? {} : { excludedPaths: discovery.excludedPaths.map((excluded) => ({ ...excluded })) }),
             discoveredAt: discovery.discoveredAt.toISOString(),
             analysisRunId: command.id,
           });
@@ -155,21 +222,26 @@ export class AnalyzeProjectHandler {
           const records: StorageRecord[] = [record];
 
           const required = new Set(validation.manifest.requiredArtifacts);
-          const analyzableFiles = discovery.files.filter(
-            (file) =>
-              (file.language === "javascript" || file.language === "typescript") &&
-              (file.fileKind === "source" || file.fileKind === undefined),
-          );
-
-          // If project has analyzable source files, the snapshot must contain analysis artifacts
-          if (analyzableFiles.length > 0 && (!required.has("dependency-graph.json") || !required.has("symbols.json"))) {
-            throw new Error("Snapshot contains discovery only; falling through to full analysis.");
+          for (const artifact of ["symbols.json", "dependency-graph.json", "knowledge.json", "semantic.json", "control-flow.json", "data-flow.json"]) {
+            if (!required.has(artifact) || !artifacts.has(artifact)) throw new Error("Missing current analysis artifact.");
           }
+          if (discovery.enumerationFailures.length > 0) throw new Error("Enumeration-degraded snapshots require fresh discovery.");
+          if (snapshotSummary.fileCount !== discovery.files.length ||
+            snapshotSummary.enumerationFailureCount !== discovery.enumerationFailures.length ||
+            (snapshotSummary.manifestFailureCount ?? 0) !== discovery.manifestFailures.length) {
+            throw new Error("Snapshot discovery counts contradict diagnostics.");
+          }
+          const snapshotSymbols = validateCodeSymbols(JSON.parse(artifacts.get("symbols.json")!));
+          const analysisDisposition = validateAnalysisDisposition(snapshotSummary.analysisDisposition, {
+            files: discovery.files, symbols: snapshotSymbols, summary: snapshotSummary,
+            enumerationFailures: discovery.enumerationFailures.length,
+            manifestFailures: discovery.manifestFailures.length, projected: true,
+          });
 
           if (required.has("dependency-graph.json")) {
             const depGraphRaw = artifacts.get("dependency-graph.json");
             if (!depGraphRaw) throw new Error("Missing dependency-graph.json in validated set.");
-            const depGraphJson = JSON.parse(depGraphRaw);
+            const depGraphJson = validateCurrentDependencyGraph(JSON.parse(depGraphRaw));
             records.push(
               createStorageRecord("dependency-graph", {
                 projectId: discovery.projectId,
@@ -177,6 +249,7 @@ export class AnalyzeProjectHandler {
                 nodes: depGraphJson.nodes ?? [],
                 edges: depGraphJson.edges ?? [],
                 cycles: depGraphJson.cycles ?? [],
+                moduleGraph: depGraphJson.moduleGraph,
               }),
             );
           }
@@ -184,7 +257,7 @@ export class AnalyzeProjectHandler {
           if (required.has("symbols.json")) {
             const symbolsRaw = artifacts.get("symbols.json");
             if (!symbolsRaw) throw new Error("Missing symbols.json in validated set.");
-            const symbolsJson = validateCodeSymbols(JSON.parse(symbolsRaw));
+            const symbolsJson = snapshotSymbols;
             const symbolsByFile = new Map<string, CodeSymbol[]>();
             for (const symbol of symbolsJson) {
               let list = symbolsByFile.get(symbol.filePath);
@@ -195,11 +268,11 @@ export class AnalyzeProjectHandler {
               list.push(symbol);
             }
 
-            for (const file of analyzableFiles) {
+            for (const file of analysisDisposition.files.filter((file) => file.kind === "analyzed")) {
               const fileSymbols = symbolsByFile.get(file.path) ?? [];
               records.push(
                 createStorageRecord("symbol-table", {
-                  fileId: file.id,
+                  fileId: file.fileId,
                   path: file.path,
                   projectId: discovery.projectId,
                   analysisRunId: command.id,
@@ -217,7 +290,7 @@ export class AnalyzeProjectHandler {
           if (required.has("knowledge.json")) {
             const knowledgeRaw = artifacts.get("knowledge.json");
             if (!knowledgeRaw) throw new Error("Missing knowledge.json in validated set.");
-            const knowledgeJson = JSON.parse(knowledgeRaw);
+            const knowledgeJson = knowledgeGraphPayloadSchema.parse({ ...JSON.parse(knowledgeRaw), projectId: discovery.projectId, analysisRunId: command.id });
             records.push(
               createStorageRecord("knowledge-graph", {
                 projectId: discovery.projectId,
@@ -268,24 +341,8 @@ export class AnalyzeProjectHandler {
           }
 
           const durationMs = performance.now() - startedAt;
-          const analyzedCount = analyzableFiles.length;
-
           const analysisSummary = createAnalysisSummary({
-            filesDiscovered: discovery.files.length,
-            filesAnalyzed: analyzedCount,
-            parserFailures: 0,
-            symbolExtractionFailures: 0,
-            unsupportedFiles: discovery.files.filter(
-              (file) => file.fileKind === "source" && file.language !== "javascript" && file.language !== "typescript",
-            ).length,
-            nonSourceArtifacts: discovery.files.filter(
-              (file) => file.fileKind !== "source" && file.fileKind !== "unknown" && file.fileKind !== undefined,
-            ).length,
-            unclassifiedArtifacts: discovery.files.filter(
-              (file) => file.fileKind === "unknown" || file.fileKind === undefined,
-            ).length,
-            enumerationFailures: 0,
-            discoveryComplete: true,
+            ...deriveR01Accounting(analysisDisposition, discovery.files, discovery.enumerationFailures.length, discovery.manifestFailures.length),
             durationMs,
           });
 
@@ -293,6 +350,7 @@ export class AnalyzeProjectHandler {
             projectId: discovery.projectId,
             analysisRunId: command.id,
             status: "completed",
+            analysisDisposition,
             startedAt: discovery.discoveredAt.toISOString(),
             completedAt: new Date().toISOString(),
             summary: {
@@ -305,6 +363,7 @@ export class AnalyzeProjectHandler {
               unclassifiedArtifacts: analysisSummary.unclassifiedArtifacts,
               enumerationFailures: analysisSummary.enumerationFailures,
               discoveryComplete: analysisSummary.discoveryComplete,
+              secondPassFailures: analysisSummary.secondPassFailures,
               durationMs: analysisSummary.durationMs,
             },
           });
@@ -324,14 +383,18 @@ export class AnalyzeProjectHandler {
           ];
 
           return {
-            events: Object.freeze(events),
-            records: Object.freeze(records),
+            events: immutable(events),
+            records: immutable(records),
             discovery,
             analysis: analysisSummary,
             isReused: true,
+            ...(validation.manifest.analysis.analysisRunId === undefined
+              ? {}
+              : { snapshotAnalysisRunId: validation.manifest.analysis.analysisRunId }),
           };
-        } catch {
+        } catch (error: unknown) {
           // If reading or parsing snapshot failed unexpectedly, fall through to fresh discovery
+          snapshotRejection = immutable({ status: "RESTORE_FAILED", reason: error instanceof Error ? error.message : String(error) });
         }
       }
     }
@@ -350,114 +413,143 @@ export class AnalyzeProjectHandler {
       frameworks: discovery.frameworks.map((framework) => ({ ...framework })),
       languages: [...discovery.languages],
       enumerationFailures: enumerationFailures.map((failure) => ({ ...failure })),
+      manifestFailures: discovery.manifestFailures.map((failure) => ({ ...failure })),
+      ...(discovery.excludedPaths.length === 0 ? {} : { excludedPaths: discovery.excludedPaths.map((excluded) => ({ ...excluded })) }),
       discoveredAt: discovery.discoveredAt.toISOString(),
       analysisRunId: command.id,
     });
 
     const events: DomainEvent[] = [...this.discoveryEngine.createEvents(discovery)];
     const records: StorageRecord[] = [record];
+    /** Each table's cross-file summary (ADR-009 step 2); the full tables wait on disk, in `fullSymbols`. */
     const symbolTables: SymbolTable[] = [];
+    const fullSymbols = new Map<SymbolTable, FactArray<CodeSymbol>>();
+    const fullTable = (summary: SymbolTable): SymbolTable => ({ ...summary, symbols: [...fullSymbols.get(summary)!] });
+    // Every full table, one at a time, in pass-1 order.
+    const fullTables = function* (): Generator<SymbolTable> { for (const summary of symbolTables) yield fullTable(summary); };
+    // Exports reassigned by their own module; the call graph must know them before any importer is built.
+    const unstableExportIds = new Set<string>();
+    const dispositions = new Map<string, AnalysisFileDisposition>();
     const successfullyParsedFiles: FileArtifact[] = [];
+    const astStore = await this.astStoreFactory();
+    // Full symbol tables, one list per file, in one file (ADR-009 step 2).
+    let symbolSpool: FactSpool | undefined;
 
-    for (const file of discovery.files) {
-      if (file.language !== "javascript" && file.language !== "typescript") {
-        continue;
-      }
+    try {
+      for (const file of discovery.files) {
+        if (!isR01DispatchedFile(file)) {
+          continue;
+        }
 
-      let ast: ASTResult;
-      try {
-        ast = await this.parserManager.parse({
-          file,
-          source: await readFile(resolve(discovery.projectPath, file.path), "utf8"),
-        });
-      } catch (error: unknown) {
-        events.push(createDomainEvent({
-          type: "ParserFailure",
-          aggregateId: discovery.projectId,
-          payload: { fileId: file.id, path: file.path, code: getErrorCode(error, "PARSER_FAILURE") },
-        }));
-        continue;
-      }
-      if (ast.errors.length > 0) {
-        events.push(createDomainEvent({
-          type: "ParserFailure",
-          aggregateId: discovery.projectId,
-          payload: { fileId: file.id, path: file.path, code: ast.errors[0]?.code ?? "PARSER_FAILURE" },
-        }));
-        continue;
-      }
-      records.push(
-        createStorageRecord("ast-result", {
-          fileId: file.id,
-          path: file.path,
-          projectId: discovery.projectId,
-          analysisRunId: command.id,
-          parserId: ast.metadata.parserId,
-          nodeCount: ast.statistics.nodeCount,
-          errorCount: ast.errors.length,
-        }),
-      );
-      events.push(
-        createDomainEvent({
-          type: "FileParsed",
-          aggregateId: discovery.projectId,
-          payload: {
+        let ast: ASTResult;
+        try {
+          ast = await this.parserManager.parse({
+            file,
+            source: await readFile(resolve(discovery.projectPath, file.path), "utf8"),
+          });
+        } catch (error: unknown) {
+          dispositions.set(file.id, { fileId: file.id, path: file.path, kind: "initial-parser-failure", code: getErrorCode(error, "PARSER_FAILURE") });
+          events.push(createDomainEvent({
+            type: "ParserFailure",
+            aggregateId: discovery.projectId,
+            payload: { fileId: file.id, path: file.path, code: getErrorCode(error, "PARSER_FAILURE") },
+          }));
+          continue;
+        }
+        if (ast.errors.length > 0) {
+          dispositions.set(file.id, { fileId: file.id, path: file.path, kind: "initial-parser-failure", code: ast.errors[0]?.code ?? "PARSER_FAILURE" });
+          events.push(createDomainEvent({
+            type: "ParserFailure",
+            aggregateId: discovery.projectId,
+            payload: { fileId: file.id, path: file.path, code: ast.errors[0]?.code ?? "PARSER_FAILURE" },
+          }));
+          continue;
+        }
+        records.push(
+          createStorageRecord("ast-result", {
             fileId: file.id,
             path: file.path,
+            projectId: discovery.projectId,
+            analysisRunId: command.id,
             parserId: ast.metadata.parserId,
             nodeCount: ast.statistics.nodeCount,
             errorCount: ast.errors.length,
-          },
-        }),
-      );
+          }),
+        );
+        events.push(
+          createDomainEvent({
+            type: "FileParsed",
+            aggregateId: discovery.projectId,
+            payload: {
+              fileId: file.id,
+              path: file.path,
+              parserId: ast.metadata.parserId,
+              nodeCount: ast.statistics.nodeCount,
+              errorCount: ast.errors.length,
+            },
+          }),
+        );
 
-      let table: SymbolTable;
-      try {
-        table = this.symbolExtractor.extract(ast);
-      } catch (error: unknown) {
-        events.push(createDomainEvent({
-          type: "SymbolsExtractionFailure",
-          aggregateId: discovery.projectId,
-          payload: { fileId: file.id, path: file.path, code: getErrorCode(error, "SYMBOL_EXTRACTION_FAILED") },
-        }));
-        continue;
+        let table: SymbolTable;
+        try {
+          table = this.symbolExtractor.extract(ast);
+        } catch (error: unknown) {
+          dispositions.set(file.id, { fileId: file.id, path: file.path, kind: "symbol-extraction-failure", code: getErrorCode(error, "SYMBOL_EXTRACTION_FAILED") });
+          events.push(createDomainEvent({
+            type: "SymbolsExtractionFailure",
+            aggregateId: discovery.projectId,
+            payload: { fileId: file.id, path: file.path, code: getErrorCode(error, "SYMBOL_EXTRACTION_FAILED") },
+          }));
+          continue;
+        }
+        for (const id of collectUnstableExportIds(ast, table)) unstableExportIds.add(id);
+        await astStore.write(ast);
+        successfullyParsedFiles.push(file);
+        symbolSpool ??= this.factStore().spool();
+        const symbols = toFactArray(symbolSpool, table.symbols);
+        const summary = summarizeTable(table);
+        symbolTables.push(summary);
+        fullSymbols.set(summary, symbols);
+        dispositions.set(file.id, { fileId: file.id, path: file.path, kind: "analyzed", symbolCount: table.symbols.length });
+        records.push(
+          createOwnedStorageRecord("symbol-table", {
+            fileId: file.id,
+            path: file.path,
+            projectId: discovery.projectId,
+            analysisRunId: command.id,
+            symbolCount: table.symbols.length,
+            classes: table.summary.classes,
+            functions: table.summary.functions,
+            imports: table.summary.imports,
+            exports: table.summary.exports,
+            symbols,
+          }),
+        );
+        events.push(
+          createDomainEvent({
+            type: "SymbolsExtracted",
+            aggregateId: discovery.projectId,
+            payload: { fileId: file.id, path: file.path, symbolCount: table.symbols.length },
+          }),
+        );
       }
-      successfullyParsedFiles.push(file);
-      symbolTables.push(table);
-      records.push(
-        createStorageRecord("symbol-table", {
-          fileId: file.id,
-          path: file.path,
-          projectId: discovery.projectId,
-          analysisRunId: command.id,
-          symbolCount: table.symbols.length,
-          classes: table.summary.classes,
-          functions: table.summary.functions,
-          imports: table.summary.imports,
-          exports: table.summary.exports,
-          symbols: table.symbols,
-        }),
-      );
-      events.push(
-        createDomainEvent({
-          type: "SymbolsExtracted",
-          aggregateId: discovery.projectId,
-          payload: { fileId: file.id, path: file.path, symbolCount: table.symbols.length },
-        }),
-      );
-    }
 
-    try {
-      const dependencyGraph = new DeterministicDependencyGraphBuilder(
-        new ModuleResolver(await readPathAliases(discovery.projectPath)),
-      ).build(symbolTables, discovery.files);
+      symbolSpool?.close();
+      const tsConfig = await loadTsConfigResolution(discovery.projectPath);
+      this.tsConfigDiagnostics = tsConfig.diagnostics;
+      // One resolver for the run: tsconfig aliases and workspace packages (S3) mean the same everywhere.
+      const resolver = new ModuleResolver({ ...tsConfig.options, packages: await loadWorkspacePackages(discovery.projectPath, discovery.files) });
+      // Symbol nodes, one per symbol, are sorted on disk (ADR-009 step 5); the graph in memory keeps the import edges.
+      const dependencyGraph = new DeterministicDependencyGraphBuilder(resolver).build(symbolTables, discovery.files, []);
+      const dependencyNodes = sortedFactArray(this.factStore(), dependencyGraphNodes(fullTables()), (node) => node.id);
       records.push(
-        createStorageRecord("dependency-graph", {
+        createOwnedStorageRecord("dependency-graph", {
           projectId: discovery.projectId,
           analysisRunId: command.id,
-          nodes: dependencyGraph.nodes,
+          nodes: dependencyNodes,
           edges: dependencyGraph.edges,
           cycles: dependencyGraph.cycles,
+          moduleGraph: dependencyGraph.moduleGraph,
         }),
       );
       const tablesByPath = new Map(symbolTables.map((table) => [canonicalizePath(table.filePath), table]));
@@ -465,26 +557,31 @@ export class AnalyzeProjectHandler {
       const importsByFile = new Map(symbolTables.map((table) => [canonicalizePath(table.filePath), table.symbols.filter((symbol) => symbol.kind === "import")]));
       const targetByImportId = new Map(dependencyGraph.edges.map((edge) => [edge.importSymbolId, edge.targetExportSymbolId]));
 
-      const callGraphBuilder = new DeterministicCallGraphBuilder();
+      const callGraphBuilder = new DeterministicCallGraphBuilder(resolver);
       const controlFlowBuilder = new DeterministicControlFlowGraphBuilder();
       const dataFlowBuilder = new DeterministicDataFlowGraphBuilder();
 
-      let allCalls: SemanticCall[] | undefined = [];
-      let allReferences: SymbolReference[] | undefined = [];
       let allHttpCalls: { readonly routes: readonly ExpressRoute[]; readonly middlewareChains: readonly MiddlewareChain[] }[] | undefined = [];
-      const allControlFlowGraphs: ControlFlowGraph[] = [];
-      let allContexts: BuildContextResult[] | undefined = [];
+      // Whole-run fact lists are written to disk as they are made (ADR-009); records hold only their handles.
+      const facts = this.factStore();
+      const controlFlowGraphs = facts.writer<ControlFlowGraph>();
+      // Calls and references go to disk file by file, in their final order; synthesis needs only their usage.
+      const calls = new SortedFactList(facts, callSchema);
+      const references = new SortedFactList(facts, referenceSchema);
+      const usage = new FactUsage();
+      // Each file's data-flow graph waits on disk; only what connecting needs stays (ADR-009 step 4a).
+      const builtDataFlowGraphs = facts.writer<DataFlowGraphBody>();
+      let allContexts: ConnectionContext[] | undefined = [];
 
-      const sortedFiles = [...successfullyParsedFiles].sort((left, right) => left.path.localeCompare(right.path));
+      const sortedFiles = [...successfullyParsedFiles].sort((left, right) => compareCodePoints(left.path, right.path));
       const completedFiles: FileArtifact[] = [];
 
       for (const file of sortedFiles) {
-        let source: string;
         let ast: ASTResult | undefined;
         try {
-          source = await readFile(resolve(discovery.projectPath, file.path), "utf8");
-          ast = await this.parserManager.parse({ file, source });
+          ast = await astStore.read(file.path);
         } catch (error: unknown) {
+          recordSecondPassFailure(dispositions, file.id, getErrorCode(error, "PARSER_FAILURE"));
           events.push(createDomainEvent({
             type: "ParserFailure",
             aggregateId: discovery.projectId,
@@ -494,6 +591,7 @@ export class AnalyzeProjectHandler {
         }
 
         if (ast.errors.length > 0) {
+          recordSecondPassFailure(dispositions, file.id, ast.errors[0]?.code ?? "PARSER_FAILURE");
           events.push(createDomainEvent({
             type: "ParserFailure",
             aggregateId: discovery.projectId,
@@ -503,12 +601,21 @@ export class AnalyzeProjectHandler {
         }
 
         completedFiles.push(file);
+        // This file's own table in full, for this file only; other files keep their summaries.
+        const ownPath = canonicalizePath(file.path);
+        const ownSummary = tablesByPath.get(ownPath);
+        if (ownSummary !== undefined) {
+          const own = fullTable(ownSummary);
+          tablesByPath.set(ownPath, own);
+          symbolsByPath.set(ownPath, own.symbols);
+        }
 
         const fileCalls: SemanticCall[] = [];
         const fileReferences: SymbolReference[] = [];
-        callGraphBuilder.buildForFile(ast, tablesByPath, importsByFile, targetByImportId, fileCalls, fileReferences);
-        allCalls.push(...fileCalls);
-        allReferences.push(...fileReferences);
+        callGraphBuilder.buildForFile(ast, tablesByPath, importsByFile, targetByImportId, unstableExportIds, fileCalls, fileReferences);
+        usage.add(fileCalls, fileReferences);
+        calls.appendFile(fileCalls);
+        references.appendFile(fileReferences);
 
         const httpCalls = findHttpCalls(
           ast.root,
@@ -517,8 +624,9 @@ export class AnalyzeProjectHandler {
         );
         allHttpCalls.push(httpCalls);
 
-        const cfgs = controlFlowBuilder.buildAll(ast);
-        allControlFlowGraphs.push(...cfgs);
+        const owners = (tablesByPath.get(canonicalizePath(file.path))?.symbols ?? []).filter((symbol) => symbol.kind === "function" || symbol.kind === "method" || symbol.kind === "class");
+        const controlFlow = controlFlowBuilder.buildAllWithNodes(ast, owners);
+        for (const graph of controlFlow.graphs) controlFlowGraphs.append(graph);
 
         const provenTargets = createProvenCallTargets(
           fileCalls.flatMap((call) =>
@@ -531,32 +639,39 @@ export class AnalyzeProjectHandler {
           ast,
           provenTargets,
           symbolsByPath.get(canonicalizePath(file.path)) ?? [],
+          controlFlow,
         );
-        allContexts.push(contextResult);
+        const { functionSummaries, callBindings, interproceduralFlows, ...body } = contextResult.graph;
+        builtDataFlowGraphs.append(body);
+        const { filePath } = body;
+        allContexts.push({ graph: { filePath, functionSummaries, callBindings, interproceduralFlows }, state: contextResult.state });
 
+        if (ownSummary !== undefined) {
+          tablesByPath.set(ownPath, ownSummary);
+          symbolsByPath.set(ownPath, ownSummary.symbols);
+        }
         ast = undefined;
       }
 
       const semanticEngine = new DeterministicSemanticAnalysisEngine(callGraphBuilder);
-      const semantic = semanticEngine.synthesize({
-        calls: allCalls,
-        references: allReferences,
+      let semantic: Omit<SemanticAnalysis, "calls" | "references"> | undefined = semanticEngine.synthesizeFromUsage({
+        usage,
         symbolTables,
+        fullTables,
         dependencyGraph,
         filePaths: completedFiles.map((file) => file.path),
         httpCalls: allHttpCalls,
+        publicModules: await findPackageEntryFiles(discovery.projectPath, discovery.files),
       });
-      allCalls = undefined;
-      allReferences = undefined;
       allHttpCalls = undefined;
 
       records.push(
-        createStorageRecord("semantic-analysis", {
+        createOwnedStorageRecord("semantic-analysis", {
           projectId: discovery.projectId,
           analysisRunId: command.id,
-          calls: semantic.calls,
-          references: semantic.references,
-          scopes: semantic.scopes,
+          calls: calls.seal(),
+          references: references.seal(),
+          scopes: toFactArray(facts, semantic.scopes),
           deadCode: semantic.deadCode,
           unusedImports: semantic.unusedImports,
           unusedExports: semantic.unusedExports,
@@ -565,36 +680,39 @@ export class AnalyzeProjectHandler {
           middlewareChains: semantic.middlewareChains,
         }),
       );
+      semantic = undefined;
 
       const flowEngine = new DeterministicFlowAnalysisEngine(controlFlowBuilder, dataFlowBuilder);
-      const flow = flowEngine.connect(allControlFlowGraphs, allContexts, symbolTables);
+      const dataFlowGraphs = facts.writer<unknown>();
+      flowEngine.connectDataFlow(allContexts, builtDataFlowGraphs.seal(), fullTables(), (graph) => dataFlowGraphs.append({
+        ...graph,
+        callBindings: graph.callBindings.map((binding) => ({
+          callId: binding.callId,
+          targetSymbolId: binding.targetSymbolId,
+          argumentDefinitionIds: binding.argumentDefinitionIds.map((definitionId) => definitionId ?? null),
+          ...(binding.receiverDefinitionId === undefined ? {} : { receiverDefinitionId: binding.receiverDefinitionId }),
+          ...(binding.argumentSourceIds === undefined ? {} : { argumentSourceIds: binding.argumentSourceIds.map((sourceId) => sourceId ?? null) }),
+        })),
+      }));
       allContexts = undefined;
 
       records.push(
-        createStorageRecord("control-flow-analysis", {
+        createOwnedStorageRecord("control-flow-analysis", {
           projectId: discovery.projectId,
           analysisRunId: command.id,
-          graphs: flow.controlFlowGraphs,
+          graphs: controlFlowGraphs.seal(),
         }),
       );
       records.push(
-        createStorageRecord("data-flow-analysis", {
+        createOwnedStorageRecord("data-flow-analysis", {
           projectId: discovery.projectId,
           analysisRunId: command.id,
-          graphs: flow.dataFlowGraphs.map((graph) => ({
-            ...graph,
-            callBindings: graph.callBindings.map((binding) => ({
-              callId: binding.callId,
-              targetSymbolId: binding.targetSymbolId,
-              argumentDefinitionIds: binding.argumentDefinitionIds.map((definitionId) => definitionId ?? null),
-              ...(binding.receiverDefinitionId === undefined ? {} : { receiverDefinitionId: binding.receiverDefinitionId }),
-            })),
-          })),
+          graphs: dataFlowGraphs.seal(),
         }),
       );
-      const knowledgeGraph = new DeterministicKnowledgeGraphBuilder().build(symbolTables, dependencyGraph);
+      const knowledgeGraph = buildKnowledgeGraphOnDisk(facts, fullTables(), dependencyGraph);
       records.push(
-        createStorageRecord("knowledge-graph", {
+        createOwnedStorageRecord("knowledge-graph", {
           projectId: discovery.projectId,
           analysisRunId: command.id,
           nodes: knowledgeGraph.nodes,
@@ -603,16 +721,9 @@ export class AnalyzeProjectHandler {
       );
 
       const durationMs = performance.now() - startedAt;
+      const analysisDisposition = createAnalysisDisposition([...dispositions.values()]);
       const analysisSummary = createAnalysisSummary({
-        filesDiscovered: discovery.files.length,
-        filesAnalyzed: symbolTables.length,
-        parserFailures: events.filter((event) => event.type === "ParserFailure").length,
-        symbolExtractionFailures: events.filter((event) => event.type === "SymbolsExtractionFailure").length,
-        unsupportedFiles: discovery.files.filter((file) => file.fileKind === "source" && file.language !== "javascript" && file.language !== "typescript").length,
-        nonSourceArtifacts: discovery.files.filter((file) => file.fileKind !== "source" && file.fileKind !== "unknown" && file.fileKind !== undefined).length,
-        unclassifiedArtifacts: discovery.files.filter((file) => file.fileKind === "unknown" || file.fileKind === undefined).length,
-        enumerationFailures: enumerationFailures.length,
-        discoveryComplete: enumerationFailures.length === 0,
+        ...deriveR01Accounting(analysisDisposition, discovery.files, enumerationFailures.length, discovery.manifestFailures.length),
         durationMs,
       });
 
@@ -621,6 +732,7 @@ export class AnalyzeProjectHandler {
           projectId: discovery.projectId,
           analysisRunId: command.id,
           status: "completed",
+          analysisDisposition,
           startedAt: discovery.discoveredAt.toISOString(),
           completedAt: new Date().toISOString(),
           summary: {
@@ -633,6 +745,7 @@ export class AnalyzeProjectHandler {
             unclassifiedArtifacts: analysisSummary.unclassifiedArtifacts,
             enumerationFailures: analysisSummary.enumerationFailures,
             discoveryComplete: analysisSummary.discoveryComplete,
+            secondPassFailures: analysisSummary.secondPassFailures,
             durationMs: analysisSummary.durationMs,
           },
         }),
@@ -651,10 +764,11 @@ export class AnalyzeProjectHandler {
       );
 
       return {
-        events: Object.freeze(events),
-        records: Object.freeze(records),
+        events: immutable(events),
+        records: immutable(records),
         discovery,
         analysis: analysisSummary,
+        ...(snapshotRejection === undefined ? {} : { snapshotRejection }),
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -684,26 +798,30 @@ export class AnalyzeProjectHandler {
       ];
 
       return {
-        events: Object.freeze(failedEvents),
-        records: Object.freeze(failedRecords),
+        events: immutable(failedEvents),
+        records: immutable(failedRecords),
         discovery,
       };
+    } finally {
+      try {
+        await astStore.dispose();
+      } catch (error: unknown) {
+        this.astStoreCleanupFailures.push(immutable({
+          projectId: discovery.projectId,
+          analysisRunId: command.id,
+          error,
+        }));
+      }
     }
   }
 }
 
-async function readPathAliases(projectPath: string): Promise<ModuleResolutionOptions> {
-  try {
-    const parsed: unknown = JSON.parse(await readFile(resolve(projectPath, "tsconfig.json"), "utf8"));
-    if (typeof parsed !== "object" || parsed === null || !("compilerOptions" in parsed)) return {};
-    const compilerOptions = (parsed as { readonly compilerOptions: unknown }).compilerOptions;
-    if (typeof compilerOptions !== "object" || compilerOptions === null) return {};
-    const options = compilerOptions as { readonly baseUrl?: unknown; readonly paths?: unknown };
-    const paths = typeof options.paths === "object" && options.paths !== null
-      ? Object.fromEntries(Object.entries(options.paths).flatMap(([key, targets]) => Array.isArray(targets) && targets.every((target) => typeof target === "string") ? [[key, Object.freeze([...targets].sort())]] : []))
-      : undefined;
-    return { ...(typeof options.baseUrl === "string" ? { baseUrl: options.baseUrl } : {}), ...(paths === undefined ? {} : { paths }) };
-  } catch { return {}; }
+/**
+ * What other files read of a table (ADR-009 step 2): its imports, exports and exported declarations, with all of
+ * its module references. Import resolution, namespace calls, re-export chains and export findings read no more.
+ */
+function summarizeTable(table: SymbolTable): SymbolTable {
+  return { ...table, symbols: table.symbols.filter((symbol) => symbol.kind === "import" || symbol.kind === "export" || symbol.exported) };
 }
 
 function getErrorCode(error: unknown, fallback = "UNKNOWN_ERROR"): string {
@@ -718,4 +836,10 @@ function getErrorCode(error: unknown, fallback = "UNKNOWN_ERROR"): string {
   }
 
   return fallback;
+}
+
+function recordSecondPassFailure(dispositions: Map<string, AnalysisFileDisposition>, fileId: string, code: string): void {
+  const disposition = dispositions.get(fileId);
+  if (disposition?.kind !== "analyzed") throw new Error("Second-pass failure requires a successful table.");
+  dispositions.set(fileId, { ...disposition, secondPassFailure: { code } });
 }

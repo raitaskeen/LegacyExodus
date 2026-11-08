@@ -1,7 +1,8 @@
 import { z } from "zod";
 
-import { createDiscoveryProjection, type DiscoveryProjection } from "@contracts/discovery-projection";
+import { createDiscoveryProjection, deferredArtifact, validateAnalysisDisposition, type DiscoveryProjection } from "@contracts/discovery-projection";
 import {
+  analysisRunPayloadSchema,
   discoveryPayloadSchema as discoveryStoragePayloadSchema,
   dependencyGraphPayloadSchema as dependencyGraphStoragePayloadSchema,
   symbolTablePayloadSchema as symbolTableStoragePayloadSchema,
@@ -16,6 +17,8 @@ import type { StorageRecord } from "@storage/storage-record";
 import type { StorageManager } from "@storage/storage-manager";
 
 import { FileDiscoveryProjectionAdapter } from "./file-discovery-projection";
+import { compareCodePoints } from "@shared/ordering";
+import { FactArray } from "@shared/fact-array";
 
 type RunScopedPayload = { readonly projectId: string; readonly analysisRunId?: string };
 
@@ -53,20 +56,22 @@ export class DiscoveryProjectionService implements RuntimeService {
       projectId: payload.projectId,
       ...(payload.analysisRunId !== undefined ? { analysisRunId: payload.analysisRunId } : {}),
     };
-    const [graphRecords, symbolRecords, knowledgeRecords, semanticRecords, controlFlowRecords, dataFlowRecords] = await Promise.all([
+    const [graphRecords, symbolRecords, knowledgeRecords, semanticRecords, controlFlowRecords, dataFlowRecords, runRecords] = await Promise.all([
       this.storage.findScoped({ type: "dependency-graph", ...runCriteria }),
       this.storage.findScoped({ type: "symbol-table", ...runCriteria }),
       this.storage.findScoped({ type: "knowledge-graph", ...runCriteria }),
       this.storage.findScoped({ type: "semantic-analysis", ...runCriteria }),
       this.storage.findScoped({ type: "control-flow-analysis", ...runCriteria }),
       this.storage.findScoped({ type: "data-flow-analysis", ...runCriteria }),
+      this.storage.findScoped({ type: "analysis-run", ...runCriteria }),
     ]);
-    const graph = latestPayload(graphRecords, dependencyGraphStoragePayloadSchema, payload.projectId, payload.analysisRunId);
-    const knowledge = latestPayload(knowledgeRecords, knowledgeGraphStoragePayloadSchema, payload.projectId, payload.analysisRunId);
-    const semantic = latestPayload(semanticRecords, semanticAnalysisStoragePayloadSchema, payload.projectId, payload.analysisRunId);
-    const controlFlow = latestPayload(controlFlowRecords, controlFlowStoragePayloadSchema, payload.projectId, payload.analysisRunId);
-    const dataFlow = latestPayload(dataFlowRecords, dataFlowStoragePayloadSchema, payload.projectId, payload.analysisRunId);
-    const symbols = symbolRecords
+    // Large payloads are validated here one at a time, then produced again as each is written (BA-17).
+    const graph = latestPayloadLoader(graphRecords, dependencyGraphStoragePayloadSchema, payload.projectId, payload.analysisRunId);
+    const knowledge = latestPayloadLoader(knowledgeRecords, knowledgeGraphStoragePayloadSchema, payload.projectId, payload.analysisRunId);
+    const semantic = latestPayloadLoader(semanticRecords, semanticAnalysisStoragePayloadSchema, payload.projectId, payload.analysisRunId);
+    const controlFlow = latestPayloadLoader(controlFlowRecords, controlFlowStoragePayloadSchema, payload.projectId, payload.analysisRunId);
+    const dataFlow = latestPayloadLoader(dataFlowRecords, dataFlowStoragePayloadSchema, payload.projectId, payload.analysisRunId);
+    const tables = symbolRecords
       .map((candidate) => {
         const parsed = symbolTableStoragePayloadSchema.safeParse(candidate.payload);
         if (!parsed.success) {
@@ -79,26 +84,69 @@ export class DiscoveryProjectionService implements RuntimeService {
         return matchesRun(parsed.data, payload.projectId, payload.analysisRunId) ? parsed.data : undefined;
       })
       .filter((candidate): candidate is z.infer<typeof symbolTableStoragePayloadSchema> => candidate !== undefined)
-      .sort((left, right) => left.path.localeCompare(right.path))
-      .flatMap((candidate) => candidate.symbols);
+      .sort((left, right) => compareCodePoints(left.path, right.path));
+    // Tables whose symbols wait on disk (ADR-009 step 2) are read one after another, never gathered.
+    const symbols = tables.every((candidate) => candidate.symbols instanceof FactArray)
+      ? FactArray.concat(tables.map((candidate) => candidate.symbols as FactArray<(typeof tables)[number]["symbols"] extends Iterable<infer Item> ? Item : never>))
+      : tables.flatMap((candidate) => [...candidate.symbols]);
+    // Historical discovery/analysis projections remain readable. Only an exact,
+    // unambiguous current completed run can authorize the R01 capability.
+    const matchingRuns = runRecords.filter((record) => {
+      const identity = z.object({ projectId: z.string(), analysisRunId: z.string() }).parse(record.payload);
+      return payload.analysisRunId !== undefined && matchesRun(identity, payload.projectId, payload.analysisRunId);
+    });
+    if (matchingRuns.length > 1) {
+      throw new LegacyExodusError({ code: "R01_DISPOSITION_INVALID", message: "Ambiguous matching analysis run." });
+    }
+    const run = matchingRuns.length === 0 ? undefined : analysisRunPayloadSchema.parse(matchingRuns[0]!.payload);
+    if (run?.analysisDisposition !== undefined && run.status !== "completed") {
+      throw new LegacyExodusError({ code: "R01_DISPOSITION_INVALID", message: "Current disposition requires a completed run." });
+    }
+    const analysisDisposition = run?.analysisDisposition === undefined ? undefined : validateAnalysisDisposition(run.analysisDisposition, {
+      files: payload.files,
+      symbols,
+      tables,
+      summary: run.summary,
+      enumerationFailures: (payload.enumerationFailures ?? []).length,
+      manifestFailures: (payload.manifestFailures ?? []).length,
+    });
+
 
     const projection = createDiscoveryProjection({
       projectPath: payload.projectPath,
       artifacts: [
-        { name: "project.json", payload: { name: payload.projectName, path: payload.projectPath, languages: payload.languages } },
+        {
+          name: "project.json",
+          payload: {
+            name: payload.projectName,
+            languages: payload.languages,
+            ...(payload.manifestFailures && payload.manifestFailures.length > 0
+              ? { manifestFailures: payload.manifestFailures }
+              : {}),
+            ...(payload.excludedPaths && payload.excludedPaths.length > 0
+              ? { excludedPaths: payload.excludedPaths }
+              : {}),
+          },
+        },
         { name: "files.json", payload: payload.files },
         { name: "dependencies.json", payload: payload.dependencies },
         { name: "frameworks.json", payload: payload.frameworks },
         {
           name: "summary.json",
           payload: {
+            ...(analysisDisposition === undefined ? {} : { analysisDisposition }),
             projectName: payload.projectName,
             fileCount: payload.files.length,
             dependencyCount: payload.dependencies.length,
             frameworkCount: payload.frameworks.length,
             languages: payload.languages,
             enumerationFailureCount: (payload.enumerationFailures ?? []).length,
-            discoveryComplete: (payload.enumerationFailures ?? []).length === 0,
+            ...(payload.manifestFailures && payload.manifestFailures.length > 0
+              ? { manifestFailureCount: payload.manifestFailures.length }
+              : {}),
+            discoveryComplete:
+              (payload.enumerationFailures ?? []).length === 0 &&
+              (payload.manifestFailures ?? []).length === 0,
           },
         },
         ...(payload.enumerationFailures && payload.enumerationFailures.length > 0
@@ -107,13 +155,13 @@ export class DiscoveryProjectionService implements RuntimeService {
         ...(graph === undefined
           ? []
           : [
-              { name: "dependency-graph.json" as const, payload: graph },
+              deferredArtifact("dependency-graph.json", graph),
               { name: "modules.json" as const, payload: payload.files.map((file) => ({ path: file.path, language: file.language, ...(file.fileKind === undefined ? {} : { fileKind: file.fileKind }) })) },
-              { name: "symbols.json" as const, payload: symbols },
-              ...(knowledge === undefined ? [] : [{ name: "knowledge.json" as const, payload: knowledge }]),
-              ...(semantic === undefined ? [] : [{ name: "semantic.json" as const, payload: semantic }]),
-              ...(controlFlow === undefined ? [] : [{ name: "control-flow.json" as const, payload: controlFlow }]),
-              ...(dataFlow === undefined ? [] : [{ name: "data-flow.json" as const, payload: dataFlow }]),
+              deferredArtifact("symbols.json", () => symbols),
+              ...(knowledge === undefined ? [] : [deferredArtifact("knowledge.json", knowledge)]),
+              ...(semantic === undefined ? [] : [deferredArtifact("semantic.json", semantic)]),
+              ...(controlFlow === undefined ? [] : [deferredArtifact("control-flow.json", controlFlow)]),
+              ...(dataFlow === undefined ? [] : [deferredArtifact("data-flow.json", dataFlow)]),
             ]),
       ],
       metadata: {
@@ -148,17 +196,17 @@ function matchesRun(payload: RunScopedPayload, projectId: string, analysisRunId:
   return payload.projectId === projectId && (analysisRunId === undefined || payload.analysisRunId === analysisRunId);
 }
 
-function latestPayload<Payload extends RunScopedPayload>(
+/**
+ * Validates every record and returns a loader of the latest matching payload. Each parse is dropped
+ * before the next, so at most one large payload is alive while records are checked.
+ */
+function latestPayloadLoader<Payload extends RunScopedPayload>(
   records: readonly StorageRecord[],
   schema: z.ZodType<Payload>,
   projectId: string,
   analysisRunId: string | undefined,
-): Payload | undefined {
-  if (records.length === 0) {
-    return undefined;
-  }
-
-  const candidates: { payload: Payload; updatedAt: number; index: number }[] = [];
+): (() => Payload) | undefined {
+  let latest: { readonly record: StorageRecord; readonly updatedAt: number; readonly index: number } | undefined;
   for (let index = 0; index < records.length; index++) {
     const record = records[index]!;
     const parsed = schema.safeParse(record.payload);
@@ -169,11 +217,10 @@ function latestPayload<Payload extends RunScopedPayload>(
         metadata: { issues: parsed.error.issues, recordId: record.id },
       });
     }
-    if (matchesRun(parsed.data, projectId, analysisRunId)) {
-      candidates.push({ payload: parsed.data, updatedAt: record.updatedAt.getTime(), index });
-    }
+    if (!matchesRun(parsed.data, projectId, analysisRunId)) continue;
+    const updatedAt = record.updatedAt.getTime();
+    if (latest === undefined || updatedAt >= latest.updatedAt) latest = { record, updatedAt, index };
   }
-
-  candidates.sort((left, right) => left.updatedAt - right.updatedAt || left.index - right.index);
-  return candidates.at(-1)?.payload;
+  const chosen = latest?.record;
+  return chosen === undefined ? undefined : () => schema.parse(chosen.payload);
 }

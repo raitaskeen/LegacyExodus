@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import type { FileArtifact } from "@contracts/discovery";
 import { LegacyExodusError } from "@shared/errors";
+import { immutable } from "@shared/immutability";
 
 export interface ParseRequest {
   readonly file: FileArtifact;
@@ -29,8 +30,8 @@ export function validateParseRequest(request: unknown): ParseRequest {
     });
   }
 
-  return Object.freeze({
-    file: Object.freeze({ ...parsedRequest.data.file }),
+  return immutable({
+    file: immutable({ ...parsedRequest.data.file }),
     source: parsedRequest.data.source,
   });
 }

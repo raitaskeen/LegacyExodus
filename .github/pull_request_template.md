@@ -21,7 +21,7 @@
 
 ## Benchmark & Performance Impact
 
-<!-- Note benchmark audit results (10/10 checks) or memory measurements. -->
+<!-- Note benchmark audit results (passed/total checks and verdict) or memory measurements. -->
 
 ## Security Impact
 
@@ -29,7 +29,7 @@
 
 ## Documentation Impact
 
-- [ ] Documentation updated on `docs-foundation`
+- [ ] Documentation updated in the same PR when behavior changes
 - [ ] No documentation changes required
 
 <!-- REQUIRED: identify affected README/docs and the core SHA used as evidence, or explain why product truth is unchanged. -->
@@ -38,7 +38,7 @@
 
 **Evidence / reason:**
 
-**Docs synchronized against core-foundation:** `<SHA or N/A>`
+**Docs synchronized against main:** `<SHA or N/A>`
 
 ## Breaking Changes
 
@@ -56,5 +56,5 @@
 - [ ] Benchmark audit passes (`bun run benchmark audit`)
 - [ ] Whitespace / Git diff check clean (`git diff --check`)
 - [ ] Required co-authors included in commit message
-- [ ] Targeted branch aligns with responsibility (`core-foundation` for code, `docs-foundation` for docs)
+- [ ] Targets `main` from a temporary task branch
 - [ ] Current, partial, planned, and target-architecture claims are explicitly distinguished

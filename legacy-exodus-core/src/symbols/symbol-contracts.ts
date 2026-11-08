@@ -1,11 +1,32 @@
 import { z } from "zod";
 
 import { LegacyExodusError } from "@shared/errors";
+import {
+  moduleReferenceSchema, freezeModuleReference, unresolvedModuleReferenceSchema, freezeUnresolvedModuleReference,
+  type ModuleReference, type UnresolvedModuleReference,
+} from "./module-reference-contracts";
+import { immutable } from "@shared/immutability";
 
-export type SymbolKind = "class" | "export" | "function" | "import" | "method" | "variable";
+/**
+ * `enum` and `namespace` declare runtime bindings; `interface` and `type-alias` are type-only and declare
+ * none. Members of enums, interfaces and type aliases are not symbols.
+ */
+export type SymbolKind =
+  | "class"
+  | "enum"
+  | "export"
+  | "function"
+  | "import"
+  | "interface"
+  | "method"
+  | "namespace"
+  | "type-alias"
+  | "variable";
 
 export interface CodeSymbol {
   readonly id: string;
+  /** Edit-stable structural key: owners, name and kind, never a position (ADR-008). */
+  readonly key?: string;
   readonly kind: SymbolKind;
   readonly name: string;
   readonly filePath: string;
@@ -18,6 +39,13 @@ export interface CodeSymbol {
   readonly visibility: "public";
   readonly parameters: readonly string[];
   readonly declarationKind?: "const" | "let" | "var" | "param";
+  /** True for a construct created as a value (a class expression, a function assigned to an existing binding): it is never dead code. */
+  readonly expression?: true;
+  /**
+   * True for a property, not a lexical binding: an object-literal key, a class member, or a member
+   * assigned as `x.y = …`. It is read through its object, never by its bare name.
+   */
+  readonly member?: true;
   readonly value?: string | number | boolean | null;
   readonly moduleSpecifier?: string;
   /** Original exported name when this symbol is a named re-export. */
@@ -47,13 +75,18 @@ export interface SymbolTable {
   readonly language: string;
   readonly symbols: readonly CodeSymbol[];
   readonly summary: SymbolSummary;
+  readonly moduleReferences?: readonly ModuleReference[];
+  readonly unresolvedModuleReferences?: readonly UnresolvedModuleReference[];
 }
 
-const symbolKindSchema = z.enum(["class", "export", "function", "import", "method", "variable"]);
+const symbolKindSchema = z.enum([
+  "class", "enum", "export", "function", "import", "interface", "method", "namespace", "type-alias", "variable",
+]);
 const positionSchema = z.object({ line: z.number().int().positive(), column: z.number().int().nonnegative() });
 
 export const codeSymbolSchema = z.object({
   id: z.string().min(1),
+  key: z.string().min(1).optional(),
   kind: symbolKindSchema,
   name: z.string().min(1),
   filePath: z.string().min(1),
@@ -65,6 +98,8 @@ export const codeSymbolSchema = z.object({
   visibility: z.literal("public"),
   parameters: z.array(z.string().min(1)),
   declarationKind: z.enum(["const", "let", "var", "param"]).optional(),
+  expression: z.literal(true).optional(),
+  member: z.literal(true).optional(),
   value: z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
   moduleSpecifier: z.string().min(1).optional(),
   sourceSymbolName: z.string().min(1).optional(),
@@ -78,6 +113,8 @@ const symbolTableSchema = z.object({
   filePath: z.string().min(1),
   language: z.string().min(1),
   symbols: z.array(codeSymbolSchema),
+  moduleReferences: z.array(moduleReferenceSchema).optional(),
+  unresolvedModuleReferences: z.array(unresolvedModuleReferenceSchema).optional(),
   summary: z.object({
     classes: z.number().int().nonnegative(),
     exports: z.number().int().nonnegative(),
@@ -86,6 +123,22 @@ const symbolTableSchema = z.object({
     methods: z.number().int().nonnegative(),
     variables: z.number().int().nonnegative(),
   }),
+}).superRefine((table, context) => {
+  if (table.moduleReferences === undefined) return;
+  const symbols = new Map(table.symbols.map((symbol) => [symbol.id, symbol]));
+  const associated = new Set<string>();
+  for (const reference of table.moduleReferences) {
+    for (const id of new Set(reference.importSymbolIds)) {
+      const symbol = symbols.get(id);
+      if (associated.has(id) || symbol?.kind !== "import" || symbol.moduleSpecifier !== reference.moduleSpecifier) {
+        context.addIssue({ code: "custom", message: "Invalid module reference symbol association." });
+      }
+      associated.add(id);
+    }
+  }
+  if (table.symbols.some((symbol) => symbol.kind === "import" && !associated.has(symbol.id))) {
+    context.addIssue({ code: "custom", message: "Module references must cover extracted imports." });
+  }
 });
 
 export function validateSymbolTable(table: unknown): SymbolTable {
@@ -99,11 +152,13 @@ export function validateSymbolTable(table: unknown): SymbolTable {
     });
   }
 
-  return Object.freeze({
+  return immutable({
     filePath: parsedTable.data.filePath,
     language: parsedTable.data.language,
-    symbols: Object.freeze(parsedTable.data.symbols.map(freezeCodeSymbol)),
-    summary: Object.freeze({ ...parsedTable.data.summary }),
+    symbols: immutable(parsedTable.data.symbols.map(freezeCodeSymbol)),
+    summary: immutable({ ...parsedTable.data.summary }),
+    ...(parsedTable.data.moduleReferences === undefined ? {} : { moduleReferences: immutable(parsedTable.data.moduleReferences.map(freezeModuleReference)) }),
+    ...(parsedTable.data.unresolvedModuleReferences === undefined ? {} : { unresolvedModuleReferences: immutable(parsedTable.data.unresolvedModuleReferences.map(freezeUnresolvedModuleReference)) }),
   });
 }
 
@@ -118,7 +173,7 @@ export function validateCodeSymbols(symbols: unknown): readonly CodeSymbol[] {
     });
   }
 
-  return Object.freeze(parsedSymbols.data.map(freezeCodeSymbol));
+  return immutable(parsedSymbols.data.map(freezeCodeSymbol));
 }
 
 export function createLexicalScopeId(
@@ -129,16 +184,27 @@ export function createLexicalScopeId(
   return `scope:${type}:${location.start.line}:${location.start.column}`;
 }
 
+/**
+ * Scope in which a named function or class expression binds its own name, visible only inside it.
+ * It sits between the enclosing scope and the expression's own scope.
+ */
+export function createSelfScopeId(
+  type: string,
+  location: CodeSymbol["location"] | undefined,
+): string {
+  return `self:${type}:${location?.start.line ?? 0}:${location?.start.column ?? 0}`;
+}
+
 function freezeCodeSymbol(symbol: CodeSymbol): CodeSymbol {
-  return Object.freeze({
+  return immutable({
     ...symbol,
-    parameters: Object.freeze([...symbol.parameters]),
+    parameters: immutable([...symbol.parameters]),
     location:
       symbol.location === undefined
         ? undefined
-        : Object.freeze({
-            start: Object.freeze({ ...symbol.location.start }),
-            end: Object.freeze({ ...symbol.location.end }),
+        : immutable({
+            start: immutable({ ...symbol.location.start }),
+            end: immutable({ ...symbol.location.end }),
           }),
   });
 }

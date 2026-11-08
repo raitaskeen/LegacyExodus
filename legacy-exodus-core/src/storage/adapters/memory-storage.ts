@@ -51,14 +51,15 @@ export class MemoryStorageProvider implements StorageProvider {
       nextSeqByAgg.set(eventItem.aggregateId, seq + 1);
     }
 
-    for (const record of options.records) {
-      const validated = validateStorageRecord(record);
-      this.records.set(validated.id, validated);
+    const validatedRecords = options.records.map((record) => validateStorageRecord(record));
+    const validatedDurableRecords = durableRecords.map((record) => validateStorageRecord(record));
+
+    for (const record of validatedRecords) {
+      this.records.set(record.id, record);
     }
 
-    for (const record of durableRecords) {
-      const validated = validateStorageRecord(record);
-      this.records.set(validated.id, validated);
+    for (const record of validatedDurableRecords) {
+      this.records.set(record.id, record);
     }
 
     return durableRecords;
@@ -83,6 +84,16 @@ export class MemoryStorageProvider implements StorageProvider {
   ): Promise<StorageRecord<Payload>[]> {
     const results: StorageRecord<Payload>[] = [];
 
+    for await (const record of this.iterateScoped<Payload>(criteria)) {
+      results.push(record);
+    }
+
+    return results;
+  }
+
+  public async *iterateScoped<Payload extends SerializedPayload>(
+    criteria: StorageQueryCriteria,
+  ): AsyncIterable<StorageRecord<Payload>> {
     for (const record of this.records.values()) {
       if (record.type !== criteria.type) {
         continue;
@@ -102,10 +113,8 @@ export class MemoryStorageProvider implements StorageProvider {
         continue;
       }
 
-      results.push(record as StorageRecord<Payload>);
+      yield record as StorageRecord<Payload>;
     }
-
-    return results;
   }
 
   public async delete(id: string): Promise<void> {
@@ -118,7 +127,7 @@ export class MemoryStorageProvider implements StorageProvider {
     this.records.clear();
   }
 
-  public close(): void {
-    // In-memory storage has no external file descriptors or persistent handles to release
+  public close(): Promise<void> {
+    return this.clear();
   }
 }

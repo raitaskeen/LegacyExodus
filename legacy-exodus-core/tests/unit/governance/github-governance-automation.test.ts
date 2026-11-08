@@ -156,4 +156,73 @@ describe("Repository Governance & GitHub Automation Hardening", () => {
       expect(content.trim().length).toBeGreaterThan(50);
     }
   });
+
+  it("6. CI pins every action to a commit SHA and the fact-diff job is pull_request-only, least-privilege and fails on unexplained lost facts", () => {
+    interface WorkflowStep {
+      readonly name?: string;
+      readonly uses?: string;
+      readonly run?: string;
+      readonly with?: Readonly<Record<string, unknown>>;
+    }
+    interface WorkflowJob {
+      readonly name?: string;
+      readonly if?: string;
+      readonly "runs-on"?: string;
+      readonly "timeout-minutes"?: number;
+      readonly permissions?: unknown;
+      readonly steps?: readonly WorkflowStep[];
+    }
+    const workflow = Bun.YAML.parse(readFileSync(join(REPO_ROOT, ".github/workflows/ci.yml"), "utf-8")) as {
+      readonly permissions?: Readonly<Record<string, string>>;
+      readonly jobs: Readonly<Record<string, WorkflowJob>>;
+    };
+
+    expect(workflow.permissions).toEqual({ contents: "read" });
+
+    // Every third-party action in every CI job is pinned to a full commit SHA, and checkouts keep no credentials.
+    for (const [jobId, job] of Object.entries(workflow.jobs)) {
+      expect(typeof job["timeout-minutes"], `${jobId} must set timeout-minutes`).toBe("number");
+      expect(job.permissions, `${jobId} must not widen the top-level permissions`).toBeUndefined();
+      for (const step of job.steps ?? []) {
+        if (step.uses === undefined) continue;
+        expect(step.uses, `${jobId}: ${step.uses} must be pinned to a commit SHA`).toMatch(/^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/);
+        if (step.uses.startsWith("actions/checkout@")) {
+          expect(step.with?.["persist-credentials"], `${jobId}: checkout must set persist-credentials: false`).toBe(false);
+        }
+      }
+    }
+
+    const factDiff = workflow.jobs["fact-diff"];
+    expect(factDiff).toBeDefined();
+    expect(factDiff?.name).toBe("Fact Diff");
+    expect(factDiff?.["runs-on"]).toBe("ubuntu-latest");
+    expect(factDiff?.if).toContain("github.event_name == 'pull_request'");
+
+    const steps = factDiff?.steps ?? [];
+    const checkouts = steps.filter((step) => step.uses?.startsWith("actions/checkout@"));
+    expect(checkouts.map((step) => step.with?.["path"])).toEqual(["head", "base"]);
+    expect(checkouts[1]?.with?.["ref"]).toBe("${{ github.event.pull_request.base.sha }}");
+
+    const commands = steps.map((step) => step.run ?? "");
+    expect(commands.filter((command) => command.includes("bun install --frozen-lockfile")).length).toBe(2);
+    const diff = commands.find((command) => command.includes("benchmarks/cli.ts fact-diff"));
+    expect(diff).toBeDefined();
+    expect(diff).toContain("--base ../../base/legacy-exodus-core");
+    expect(diff).toContain("--head .");
+    expect(diff).toContain("--output fact-diff.md");
+    // The corpus comes from the base checkout so both engines analyze identical input.
+    expect(diff).toContain("../../base/legacy-exodus-core/benchmarks/fixtures/governance-audit");
+    expect(diff).toContain("../../base/legacy-exodus-core/src");
+    // Real-world corpora at their pinned, tree-verified commits (NA-05).
+    expect(diff).toContain("../../base/legacy-exodus-core/benchmarks/.cache/express");
+    expect(diff).toContain("../../base/legacy-exodus-core/benchmarks/.cache/fastify");
+    expect(commands.some((command) => command.includes("acquire.ts --name express") && command.includes("acquire.ts --name fastify"))).toBe(true);
+    // Lost facts fail the job (NA-05) unless the owner labels the PR `facts-lost-explained`.
+    expect(diff).toContain("contains(github.event.pull_request.labels.*.name, 'facts-lost-explained') && ' ' || '--fail-on-loss'");
+    const pullRequest = (Bun.YAML.parse(readFileSync(join(REPO_ROOT, ".github/workflows/ci.yml"), "utf-8")) as { on: { pull_request: { types?: readonly string[] } } }).on.pull_request;
+    expect(pullRequest.types).toEqual(["opened", "synchronize", "reopened", "labeled", "unlabeled"]);
+    // The summary is published even when lost facts fail the diff step.
+    const publish = steps.find((step) => step.run?.includes("fact-diff.md") && step.run.includes("$GITHUB_STEP_SUMMARY"));
+    expect((publish as { if?: string } | undefined)?.if).toBe("always()");
+  });
 });

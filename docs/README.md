@@ -1,6 +1,6 @@
 # LegacyExodus Documentation
 
-Documentation follows current implementation truth. Start with [Current Implementation](CURRENT_IMPLEMENTATION.md), which records the `core-foundation` revision used for this synchronization.
+Documentation follows current implementation truth. Start with [Current Implementation](CURRENT_IMPLEMENTATION.md), which describes `main`.
 
 ## Read by purpose
 
@@ -40,4 +40,4 @@ current core source
   -> roadmap and target architecture
 ```
 
-The stale `legacy-exodus-core/` snapshot on the documentation branch must not be used as implementation evidence. Documentation work queries `core-foundation` directly.
+The stale `legacy-exodus-core/` snapshot on the retired `docs-foundation` branch must not be used as implementation evidence. Documentation work reads `main`.

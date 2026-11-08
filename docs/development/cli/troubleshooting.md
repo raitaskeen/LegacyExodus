@@ -13,7 +13,7 @@ The engine logs `Parser error encountered in <file>`, but analysis continues.
 The Babel parser operates in `unambiguous` mode with error recovery enabled. Non-standard syntax in legacy templates (e.g. embedded EJS or ERB tags) may cause parse errors.
 
 **Action:**
-LegacyExodus records parsing failures in the discovery ledger without halting the pipeline. If files are non-JavaScript templates, verify they are categorized under `TEMPLATE` or `DATA`.
+LegacyExodus records parsing failures as isolated non-fatal faults in the discovery ledger without halting the pipeline. The CLI summary truthfully surfaces `"Analysis completed with isolated non-fatal faults"` rather than clean success, with exact failure counts visible in the Quality & Performance card and plain text summary. If files are non-JavaScript templates, verify they are categorized under `TEMPLATE` or `DATA`.
 
 ---
 
@@ -41,7 +41,7 @@ Node or Bun experiences memory pressure when projecting results for multi-megaby
 LegacyExodus uses `StreamingJsonWriter` with bounded 64KB buffers to stream analysis records directly to disk.
 
 **Action:**
-Ensure output is directed to a file path using `--output <dir>` rather than capturing giant JSON payloads in terminal buffers.
+Redirect the JSON stream directly to a file using shell redirection (e.g. `legacy-exodus analyze ./repo --json > report.json`) or inspect the streaming filesystem projections written to `.discovery/` rather than capturing giant JSON payloads in terminal buffers.
 
 ---
 

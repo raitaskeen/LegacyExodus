@@ -41,7 +41,7 @@ The LegacyExodus documentation system is designed as a layered knowledge archite
 
 #### 1. Root Governance & Context Documents (Canonical & Populated)
 * **[README.md](../README.md):** Concise current product boundary, setup, verification, limitations, and target direction.
-* **[docs/CURRENT_IMPLEMENTATION.md](CURRENT_IMPLEMENTATION.md):** Canonical documentation status boundary synchronized to an explicit `core-foundation` SHA.
+* **[docs/CURRENT_IMPLEMENTATION.md](CURRENT_IMPLEMENTATION.md):** Canonical documentation status boundary for `main`.
 * **[GOVERNANCE.md](../GOVERNANCE.md):** Repository boundaries, execution invariants, Three-Universe evidence model, provenance freshness locks, and conservative semantic rules.
 * **[SUPPORT.md](../SUPPORT.md):** Support policy, bug reporting guidelines, reproduction standards, and maintainers.
 * **[LICENSE](../LICENSE):** Canonical MIT open-source license.

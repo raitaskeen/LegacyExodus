@@ -1,5 +1,12 @@
+import { RunScopedAstStore } from "@core/orchestration/run-scoped-ast-store";
+import { LegacyExodusError } from "@shared/errors";
+import { analysisRunPayloadSchema, controlFlowPayloadSchema, dataFlowPayloadSchema } from "@contracts/discovery-storage";
+import { computeFileAccounting, detectContamination, verifyCompleteness } from "../../benchmarks/governance";
+import { AnalyzeProjectHandler } from "@core/orchestration/command-handler";
+import { DiscoveryEngine } from "@discovery/index";
+import { createEngineContext } from "@runtime/composition/services";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash, randomUUID } from "node:crypto";
@@ -8,6 +15,8 @@ import { semanticAnalysisPayloadSchema } from "@contracts/discovery-storage";
 import { createLegacyExodusEngine } from "@runtime/composition/services";
 import type { LegacyExodusEngine } from "@core/engine";
 import { DiscoveryValidator } from "@discovery/discovery-validator";
+import { computeManifestMac, manifestKeyId, MANIFEST_MAC_ALGORITHM, SnapshotKeyStore } from "@discovery/index";
+import { FileScanner } from "@discovery/file-scanner";
 import { DiscoveryQueryService } from "@discovery/discovery-query-service";
 import { JavaScriptParser, ParserManager, ParserRegistry } from "@parser/index";
 import { SqliteStorageProvider } from "@storage/adapters/sqlite-storage";
@@ -719,10 +728,14 @@ describe("Phase 3A P0.4 — Discovery Snapshot Reuse & Invalidation", () => {
         sha256: createHash("sha256").update(malformedSemantic).digest("hex"),
         bytes: Buffer.byteLength(malformedSemantic, "utf8"),
       };
+      // F-001: re-authenticate as this machine's analyzer would, so rejection below comes from deep schema validation.
+      const key = await new SnapshotKeyStore().readKey();
+      if (key === undefined) throw new Error("Expected the fresh run to create a local snapshot key.");
+      manifest.integrity = { algorithm: MANIFEST_MAC_ALGORITHM, keyId: manifestKeyId(key), mac: computeManifestMac(manifest, key) };
       await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 
       const validator = new DiscoveryValidator();
-      expect((await validator.validate({ projectPath: testRepoDir })).status).toBe("VALID");
+      expect((await validator.validate({ projectPath: testRepoDir, authorizeReuse: true })).status).toBe("VALID");
 
       const recoveryRun = await engine.execute({
         id: randomUUID(),
@@ -772,7 +785,7 @@ describe("Phase 3A P0.4 — Discovery Snapshot Reuse & Invalidation", () => {
     await writeFile(join(discoveryDir, "summary.json"), JSON.stringify(summaryPayload), "utf8");
 
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "disc-only", path: dummyDir },
       engine: { packageVersion: "0.1.0", commitSha: "test", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: randomUUID(), generatedAt: new Date().toISOString() },
@@ -870,6 +883,402 @@ describe("Phase 3A P0.4 — Discovery Snapshot Reuse & Invalidation", () => {
       expect(run3.analysis.filesAnalyzed).toBe(run1.analysis.filesAnalyzed);
     } finally {
       await engine.shutdown();
+    }
+  });
+});
+
+
+describe("R01 frozen snapshot disposition", () => {
+  async function fixture(source: string) {
+    const path = join(tmpdir(), `r01-disposition-${randomUUID()}`);
+    await mkdir(path);
+    await writeFile(join(path, "package.json"), '{"name":"r01"}');
+    await writeFile(join(path, "ok.js"), "export function ok() { return 1; }");
+    await writeFile(join(path, "bad.js"), source);
+    const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+    const handler = new AnalyzeProjectHandler(new DiscoveryEngine(), context.parserManager, new JavaScriptSymbolExtractor());
+    const projectId = randomUUID();
+    const run = () => handler.handle({
+      id: randomUUID(), type: "AnalyzeProject", createdAt: new Date(), payload: { projectId, path },
+    });
+    const cold = await run();
+    await context.storage.saveBatch(cold.records);
+    const discovery = cold.records.find((record) => record.type === "project-discovery");
+    if (!discovery) throw new Error("Missing discovery");
+    await context.discoveryProjection.project(discovery.id);
+    return { path, cold, run, context };
+  }
+
+  it("R1 parser-failure warm accounting preserves the cold outcome", async () => {
+    const f = await fixture("export function broken( {");
+    try {
+      expect(f.cold.analysis).toMatchObject({ filesDiscovered: 3, filesAnalyzed: 1, parserFailures: 1 });
+      const warm = await f.run();
+      expect(warm.isReused).toBe(true);
+      expect(warm.analysis).toMatchObject({ filesDiscovered: 3, filesAnalyzed: 1, parserFailures: 1 });
+    } finally { await f.context.discoveryProjection.stop(); await f.context.storage.close(); await rm(f.path, { recursive: true, force: true }); }
+  });
+
+  it("R2 failed path never receives a synthetic empty table on reuse", async () => {
+    const f = await fixture("export function broken( {");
+    try {
+      expect(f.cold.records.filter((r) => r.type === "symbol-table").map((r) => (r.payload as { path: string }).path)).toEqual(["ok.js"]);
+      const warm = await f.run();
+      expect(warm.isReused).toBe(true);
+      expect(warm.records.filter((r) => r.type === "symbol-table").map((r) => (r.payload as { path: string }).path)).toEqual(["ok.js"]);
+    } finally { await f.context.discoveryProjection.stop(); await f.context.storage.close(); await rm(f.path, { recursive: true, force: true }); }
+  });
+
+  it("R3 historical missing capability is readable but falls back fresh", async () => {
+    const f = await fixture("export const good = 2;");
+    try {
+      await rewriteR01Artifact(f.path, "summary.json", (summary) => { delete summary.analysisDisposition; return summary; });
+      expect((await new DiscoveryValidator().validateFreshness(f.path)).status).toBe("VALID");
+      expect((await f.run()).isReused).toBeUndefined();
+    } finally { await f.context.discoveryProjection.stop(); await f.context.storage.close(); await rm(f.path, { recursive: true, force: true }); }
+  });
+
+  it("R5 unknown capability is checksum-valid but cannot be reused", async () => {
+    const f = await fixture("export const good = 2;");
+    try {
+      await rewriteR01Artifact(f.path, "summary.json", (summary) => ({ ...summary, analysisDisposition: { contract: "unknown-r01", files: [] } }));
+      expect((await new DiscoveryValidator().validateFreshness(f.path)).status).toBe("VALID");
+      expect((await f.run()).isReused).toBeUndefined();
+    } finally { await f.context.discoveryProjection.stop(); await f.context.storage.close(); await rm(f.path, { recursive: true, force: true }); }
+  });
+});
+
+async function rewriteR01Artifact(path: string, name: string, rewrite: (value: Record<string, unknown>) => unknown): Promise<void> {
+  const directory = join(path, ".discovery");
+  const bytes = `${JSON.stringify(rewrite(JSON.parse(await readFile(join(directory, name), "utf8"))), null, 2)}\n`;
+  await writeFile(join(directory, name), bytes);
+  const manifest = JSON.parse(await readFile(join(directory, "manifest.json"), "utf8"));
+  manifest.artifacts[name] = { sha256: createHash("sha256").update(bytes).digest("hex"), bytes: Buffer.byteLength(bytes) };
+  await writeFile(join(directory, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
+
+describe("R01 complete accounting and capability oracles", () => {
+  const sources = { "package.json": '{"name":"r01"}', "ok.js": "export function ok() { return 1; }", "bad.js": "export const good = 2;" };
+  const secondSources = { "a.js": "export function alpha() { return 1; }", "b.js": 'import { alpha } from "./a.js"; export function beta() { return alpha(); }' };
+
+  async function prepare(files: Readonly<Record<string, string>>, fault?: "extraction" | "restore" | "restore-errors" | "parse-errors") {
+    const path = join(tmpdir(), `r01-oracle-${randomUUID()}`);
+    await mkdir(path);
+    for (const [name, source] of Object.entries(files)) await writeFile(join(path, name), source);
+    const context = createEngineContext({ LOG_LEVEL: "silent", NODE_ENV: "test" });
+    const counts = { parser: 0, extractor: 0, reads: 0 };
+    let activeFault = fault;
+    const originalParse = context.parserManager.parse.bind(context.parserManager);
+    context.parserManager.parse = async (request) => {
+      counts.parser++;
+      const ast = await originalParse(request);
+      return activeFault === "parse-errors" && request.file.path === "bad.js"
+        ? { ...ast, errors: [{ code: "R01_INITIAL_AST_ERROR", message: "Injected initial error" }] } : ast;
+    };
+    const extractor = new JavaScriptSymbolExtractor();
+    const originalExtract = extractor.extract.bind(extractor);
+    extractor.extract = (ast) => {
+      counts.extractor++;
+      if (activeFault === "extraction" && ast.metadata.sourcePath === "bad.js") {
+        throw new LegacyExodusError({ code: "R01_EXTRACTION_INJECTED", message: "Injected extraction failure" });
+      }
+      return originalExtract(ast);
+    };
+    const handler = new AnalyzeProjectHandler(new DiscoveryEngine(), context.parserManager, extractor, undefined, async () => {
+      const store = await RunScopedAstStore.create();
+      return {
+        write: (ast) => store.write(ast),
+        read: async (file) => {
+          counts.reads++;
+          if (activeFault === "restore" && file === "a.js") {
+            throw new LegacyExodusError({ code: "AST_RESTORE_INJECTED", message: "Injected AST restore failure" });
+          }
+          const ast = await store.read(file);
+          return activeFault === "restore-errors" && file === "a.js"
+            ? { ...ast, errors: [{ code: "R01_RESTORED_AST_ERROR", message: "Injected restored error" }] } : ast;
+        },
+        dispose: () => store.dispose(),
+      };
+    });
+    const projectId = randomUUID();
+    const run = (refresh?: boolean) => handler.handle({ id: randomUUID(), type: "AnalyzeProject", createdAt: new Date(), payload: { projectId, path, ...(refresh === undefined ? {} : { refresh }) } });
+    const cold = await run();
+    await context.storage.saveBatch(cold.records);
+    const discovery = cold.records.find((record) => record.type === "project-discovery");
+    if (!discovery) throw new Error("Missing discovery");
+    await context.discoveryProjection.project(discovery.id);
+    return {
+      path, cold, context, counts, run, recovery: () => { activeFault = undefined; },
+      close: async () => { await context.discoveryProjection.stop(); await context.storage.close(); await rm(path, { recursive: true, force: true }); },
+    };
+  }
+
+  const vector = (execution: Awaited<ReturnType<AnalyzeProjectHandler["handle"]>>) => {
+    const a = execution.analysis;
+    if (!a) throw new Error("Missing completed analysis");
+    return [a.filesDiscovered, a.filesAnalyzed, a.parserFailures, a.symbolExtractionFailures, a.unsupportedFiles,
+      a.nonSourceArtifacts, a.unclassifiedArtifacts, a.enumerationFailures, a.secondPassFailures, a.discoveryComplete];
+  };
+  const disposition = (execution: Awaited<ReturnType<AnalyzeProjectHandler["handle"]>>) => {
+    const run = execution.records.find((record) => record.type === "analysis-run");
+    const parsed = analysisRunPayloadSchema.parse(run?.payload);
+    if (!parsed.analysisDisposition) throw new Error("Missing disposition");
+    expect(Object.hasOwn(run!.payload as object, "isReused")).toBe(false);
+    return parsed.analysisDisposition;
+  };
+  const assertAccounting = (execution: Awaited<ReturnType<AnalyzeProjectHandler["handle"]>>, review: "PASS" | "NEEDS_REVIEW") => {
+    if (!execution.analysis) throw new Error("Missing analysis");
+    const accounting = computeFileAccounting(execution.analysis);
+    expect(accounting).toMatchObject({ reconciles: true, discrepancy: 0, computedTotal: execution.analysis.filesDiscovered });
+    expect(verifyCompleteness(execution.analysis, accounting, detectContamination([])).status).toBe(review);
+    expect(execution.analysis.secondPassFailures!).toBeLessThanOrEqual(execution.analysis.filesAnalyzed);
+  };
+
+  for (const mode of ["clean", "parser", "extraction", "empty", "restore", "restore-errors", "parse-errors"] as const) {
+    it(`R01 exact cold/warm ${mode} accounting, membership, work and payload equivalence`, async () => {
+      const f = await prepare(mode === "empty" ? { "package.json": '{"name":"r01"}', "empty.js": "" }
+        : mode === "restore" || mode === "restore-errors" ? secondSources
+        : { ...sources, ...(mode === "parser" ? { "bad.js": "export function broken( {" } : {}) },
+        mode === "extraction" || mode === "restore" || mode === "restore-errors" || mode === "parse-errors" ? mode : undefined);
+      try {
+        const expected = mode === "empty" ? [2,1,0,0,0,1,0,0,0,true]
+          : mode === "restore" || mode === "restore-errors" ? [2,2,0,0,0,0,0,0,1,true]
+          : mode === "parser" || mode === "parse-errors" ? [3,1,1,0,0,1,0,0,0,true]
+          : mode === "extraction" ? [3,1,0,1,0,1,0,0,0,true] : [3,2,0,0,0,1,0,0,0,true];
+        expect(vector(f.cold)).toEqual(expected);
+        expect(f.cold.isReused).toBeUndefined();
+        const before = { ...f.counts };
+        const warm = await f.run();
+        expect(warm.isReused).toBe(true);
+        expect(vector(warm)).toEqual(expected);
+        expect(f.counts).toEqual(before);
+        expect(disposition(warm)).toEqual(disposition(f.cold));
+        const logical = (execution: typeof warm) => execution.records.filter((r) =>
+          ["dependency-graph", "semantic-analysis", "control-flow-analysis", "data-flow-analysis", "knowledge-graph"].includes(r.type))
+          .map((r) => {
+            const { projectId: _p, analysisRunId: _r, ...payload } = r.payload as Record<string, unknown>;
+            return { type: r.type, payload: JSON.parse(JSON.stringify(payload)) };
+          }).sort((a, b) => JSON.stringify(a) < JSON.stringify(b) ? -1 : JSON.stringify(a) > JSON.stringify(b) ? 1 : 0);
+        expect(logical(warm)).toEqual(logical(f.cold));
+        // Frozen §59 equality covers persisted graph/semantic/flow/knowledge state.
+        // Symbol-table membership/counts and serialized symbols are checked separately;
+        // pre-existing convenience summary metadata is outside this R01 contract.
+        const tableSymbols = (execution: typeof warm) => execution.records.filter((r) => r.type === "symbol-table")
+          .map((r) => ({ path: (r.payload as { path: string }).path, symbols: [...(r.payload as { symbols: Iterable<unknown> }).symbols] }))
+          .sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+        expect(JSON.stringify(tableSymbols(warm))).toBe(JSON.stringify(tableSymbols(f.cold)));
+        expect(warm.events.filter((event) => event.type === "ParserFailure")).toEqual([]);
+        assertAccounting(f.cold, mode === "clean" || mode === "empty" ? "PASS" : "NEEDS_REVIEW");
+        assertAccounting(warm, mode === "clean" || mode === "empty" ? "PASS" : "NEEDS_REVIEW");
+        const d = disposition(warm);
+        expect(warm.records.filter((r) => r.type === "symbol-table")).toHaveLength(expected[1] as number);
+        if (mode === "empty") expect(d.files).toEqual([{ fileId: warm.discovery!.files.find((file) => file.path === "empty.js")!.id, path: "empty.js", kind: "analyzed", symbolCount: 0 }]);
+        if (mode === "parser" || mode === "parse-errors" || mode === "extraction") {
+          expect(warm.records.some((r) => r.type === "symbol-table" && (r.payload as { path: string }).path === "bad.js")).toBe(false);
+          expect(d.files.find((file) => file.path === "bad.js")?.kind).toBe(mode === "extraction" ? "symbol-extraction-failure" : "initial-parser-failure");
+          if (mode === "extraction") expect(d.files.find((file) => file.path === "bad.js")).toMatchObject({ code: "R01_EXTRACTION_INJECTED" });
+        }
+        if (mode === "restore" || mode === "restore-errors") {
+          expect(f.cold.events.filter((event) => event.type === "ParserFailure").map((event) => event.payload)).toEqual([
+            { fileId: f.cold.discovery!.files.find((file) => file.path === "a.js")!.id, path: "a.js", code: mode === "restore" ? "AST_RESTORE_INJECTED" : "R01_RESTORED_AST_ERROR" },
+          ]);
+          expect(f.cold.events.some((event) => event.type === "AnalysisRunFailed")).toBe(false);
+          expect(before).toEqual({ parser: 2, extractor: 2, reads: 2 });
+          expect(d.files.find((file) => file.path === "a.js")).toMatchObject({ kind: "analyzed", secondPassFailure: { code: mode === "restore" ? "AST_RESTORE_INJECTED" : "R01_RESTORED_AST_ERROR" } });
+          const cfg = controlFlowPayloadSchema.parse(f.cold.records.find((r) => r.type === "control-flow-analysis")!.payload);
+          const dfg = dataFlowPayloadSchema.parse(f.cold.records.find((r) => r.type === "data-flow-analysis")!.payload);
+          expect([...cfg.graphs].filter((graph) => graph.filePath === "a.js")).toHaveLength(0);
+          expect([...dfg.graphs].filter((graph) => graph.filePath === "a.js")).toHaveLength(0);
+          expect([...cfg.graphs].filter((graph) => graph.filePath === "b.js")).toHaveLength(2);
+          expect([...dfg.graphs].filter((graph) => graph.filePath === "b.js")).toHaveLength(1);
+          const semantic = semanticAnalysisPayloadSchema.parse(f.cold.records.find((r) => r.type === "semantic-analysis")!.payload);
+          const calls = [...semantic.calls];
+          expect(calls).toHaveLength(1);
+          expect(calls[0]).toMatchObject({ sourceFilePath: "b.js", resolutionState: "RESOLVED" });
+          const target = validateCodeSymbols(f.cold.records.filter((r) => r.type === "symbol-table")
+            .flatMap((r) => [...(r.payload as { symbols: Iterable<unknown> }).symbols])).find((symbol) => symbol.id === calls[0]!.targetSymbolId);
+          expect(target).toMatchObject({ filePath: "a.js", name: "alpha" });
+          f.recovery();
+          const recovered = await f.run(true);
+          expect(recovered.isReused).toBeUndefined();
+          expect(vector(recovered)).toEqual([2,2,0,0,0,0,0,0,0,true]);
+        }
+      } finally { await f.close(); }
+    });
+  }
+
+  for (const mode of ["null", "unknown-kind", "unknown-field", "duplicate-path", "duplicate-id", "identity", "missing-entry", "non-dispatched",
+    "contradiction", "failed-second-pass", "negative-count", "fractional-count", "count-mismatch", "failed-symbols", "invalid-code", "null-second-pass"] as const) {
+    it(`R01 checksum-valid ${mode} capability fresh fallback`, async () => {
+      const f = await prepare(sources);
+      try {
+        await rewriteR01Artifact(f.path, "summary.json", (summary) => {
+          const capability = summary.analysisDisposition as { files: Record<string, unknown>[] };
+          const first = capability.files[0]!;
+          const next = capability.files[1]!;
+          switch (mode) {
+            case "null": summary.analysisDisposition = null; break;
+            case "unknown-kind": first.kind = "unrecognized"; break;
+            case "unknown-field": first.invented = true; break;
+            case "duplicate-path": next.path = first.path; break;
+            case "duplicate-id": next.fileId = first.fileId; break;
+            case "identity": first.path = next.path; next.path = "bad.js"; break;
+            case "missing-entry": capability.files.pop(); break;
+            case "non-dispatched": capability.files.push({ fileId: f.cold.discovery!.files.find((file) => file.path === "package.json")!.id, path: "package.json", kind: "analyzed", symbolCount: 0 }); break;
+            case "contradiction": first.code = "FAILURE_ON_SUCCESS"; break;
+            case "failed-second-pass": capability.files[0] = { fileId: first.fileId, path: first.path, kind: "initial-parser-failure", code: "FAIL", secondPassFailure: { code: "RESTORE" } }; break;
+            case "negative-count": first.symbolCount = -1; break;
+            case "fractional-count": first.symbolCount = 0.5; break;
+            case "count-mismatch": first.symbolCount = 999; break;
+            case "failed-symbols": capability.files[0] = { fileId: first.fileId, path: first.path, kind: "initial-parser-failure", code: "FAIL" }; break;
+            case "invalid-code": capability.files[0] = { fileId: first.fileId, path: first.path, kind: "initial-parser-failure", code: "" }; break;
+            case "null-second-pass": first.secondPassFailure = null; break;
+            // Run-summary contradictions are rejected before projection by the storage oracle.
+          }
+          return summary;
+        });
+        expect((await new DiscoveryValidator().validateFreshness(f.path)).status).toBe("VALID");
+        const before = f.counts.parser;
+        const fresh = await f.run();
+        expect(fresh.isReused).toBeUndefined();
+        expect(f.counts.parser).toBe(before + 2);
+        expect(vector(fresh)).toEqual([3,2,0,0,0,1,0,0,0,true]);
+      } finally { await f.close(); }
+    });
+  }
+
+  for (const artifact of ["knowledge.json", "semantic.json", "control-flow.json", "data-flow.json", "symbols.json", "dependency-graph.json"] as const) {
+    it(`R01 rejects missing required current ${artifact} despite a valid reduced manifest`, async () => {
+      const f = await prepare(sources);
+      try {
+        const manifestPath = join(f.path, ".discovery", "manifest.json");
+        const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+        manifest.requiredArtifacts = manifest.requiredArtifacts.filter((name: string) => name !== artifact);
+        delete manifest.artifacts[artifact];
+        await writeFile(manifestPath, JSON.stringify(manifest));
+        expect((await new DiscoveryValidator().validateFreshness(f.path)).status).toBe("VALID");
+        expect((await f.run()).isReused).toBeUndefined();
+      } finally { await f.close(); }
+    });
+  }
+
+  for (const mode of ["discovery-duplicate-id", "symbols-undiscovered", "symbols-failed", "diagnostics-mismatch", "manifest-count-mismatch", "malformed-knowledge"] as const) {
+    it(`R01 checksum-valid ${mode} evidence rejects reuse`, async () => {
+      const f = await prepare(mode === "symbols-failed" ? { ...sources, "bad.js": "function broken( {" } : sources);
+      try {
+        if (mode === "discovery-duplicate-id") {
+          const path = join(f.path, ".discovery", "files.json");
+          const files = JSON.parse(await readFile(path, "utf8")) as { id: string }[];
+          files[1]!.id = files[0]!.id;
+          await rewriteR01Artifact(f.path, "files.json", () => files);
+        } else if (mode === "symbols-undiscovered" || mode === "symbols-failed") {
+          const symbols = JSON.parse(await readFile(join(f.path, ".discovery", "symbols.json"), "utf8")) as { filePath: string }[];
+          symbols[0]!.filePath = mode === "symbols-failed" ? "bad.js" : "absent.js";
+          await rewriteR01Artifact(f.path, "symbols.json", () => symbols);
+        } else if (mode === "malformed-knowledge") {
+          await rewriteR01Artifact(f.path, "knowledge.json", () => ({ nodes: [{ id: "invalid" }], edges: [] }));
+        } else {
+          await rewriteR01Artifact(f.path, "summary.json", (summary) => ({ ...summary, ...(mode === "diagnostics-mismatch" ? { discoveryComplete: false } : { manifestFailureCount: 1 }) }));
+        }
+        expect((await new DiscoveryValidator().validateFreshness(f.path)).status).toBe("VALID");
+        expect((await f.run()).isReused).toBeUndefined();
+      } finally { await f.close(); }
+    });
+  }
+
+  for (const changed of [false, true]) {
+    it(`R02 missing digest forces fresh analysis of ${changed ? "same-size changed" : "unchanged"} source`, async () => {
+      const original = "export const alpha = 1;\n";
+      const replacement = "export const bravo = 1;\n";
+      const f = await prepare({ "package.json": '{"name":"r02"}', "index.js": original });
+      try {
+        const validator = new DiscoveryValidator();
+        const before = { ...f.counts };
+        const warm = await f.run();
+        expect(warm.isReused).toBe(true);
+        expect(f.counts).toEqual(before);
+        expect(disposition(warm)).toEqual(disposition(f.cold));
+        const manifest = (await validator.validate({ projectPath: f.path })).manifest;
+        if (!manifest) throw new Error("Missing fixture manifest");
+        delete manifest.repository.sourceDigest;
+        await writeFile(join(f.path, ".discovery", "manifest.json"), JSON.stringify(manifest));
+        const sourcePath = join(f.path, "index.js");
+        const timestamp = new Date(1700000000000);
+        await utimes(sourcePath, timestamp, timestamp);
+        const initialStat = await stat(sourcePath);
+        if (changed) {
+          expect(Buffer.byteLength(replacement)).toBe(Buffer.byteLength(original));
+          expect(createHash("sha256").update(replacement).digest("hex"))
+            .not.toBe(createHash("sha256").update(original).digest("hex"));
+          await writeFile(sourcePath, replacement);
+          await utimes(sourcePath, timestamp, timestamp);
+        }
+        const currentStat = await stat(sourcePath);
+        expect(currentStat.size).toBe(initialStat.size);
+        expect(currentStat.mtimeMs).toBe(initialStat.mtimeMs);
+        expect((await validator.validate({ projectPath: f.path })).status).toBe("VALID");
+        const result = await f.run();
+        expect(result.isReused).toBeUndefined();
+        expect(f.counts.parser).toBe(before.parser + 1);
+        expect(f.counts.extractor).toBe(before.extractor + 1);
+        expect(vector(result)).toEqual([2,1,0,0,0,1,0,0,0,true]);
+        assertAccounting(result, "PASS");
+        const symbols = validateCodeSymbols(result.records.filter((record) => record.type === "symbol-table")
+          .flatMap((record) => [...(record.payload as { symbols: Iterable<unknown> }).symbols]));
+        expect(symbols.map((symbol) => symbol.name)).toEqual(changed ? ["bravo", "bravo"] : ["alpha", "alpha"]);
+        expect(disposition(result).files).toHaveLength(1);
+      } finally { await f.close(); }
+    });
+  }
+
+  it("R02 checksum-valid null inventory safely falls back and preserves R01 accounting", async () => {
+    const f = await prepare(sources);
+    try {
+      await rewriteR01Artifact(f.path, "files.json", () => null);
+      const before = { ...f.counts };
+      const result = await f.run();
+      expect(result.isReused).toBeUndefined();
+      expect(f.counts.parser).toBe(before.parser + 2);
+      expect(f.counts.extractor).toBe(before.extractor + 2);
+      expect(vector(result)).toEqual(vector(f.cold));
+      expect(disposition(result)).toEqual(disposition(f.cold));
+      assertAccounting(result, "PASS");
+    } finally { await f.close(); }
+  });
+
+  it("R02 repaired on-disk inventory cannot rescue stale checksum-validated bytes during reuse", async () => {
+    const f = await prepare(sources);
+    const originalScan = FileScanner.prototype.scan;
+    try {
+      const inventoryPath = join(f.path, ".discovery", "files.json");
+      const validRaw = await readFile(inventoryPath, "utf8");
+      const inventory = JSON.parse(validRaw) as { path: string; size: number }[];
+      const file = inventory.find((entry) => entry.path === "ok.js");
+      if (!file) throw new Error("Missing fixture source");
+      file.size++;
+      await rewriteR01Artifact(f.path, "files.json", () => inventory);
+      const before = { ...f.counts };
+      let replacements = 0;
+      FileScanner.prototype.scan = async function (projectPath) {
+        if (projectPath === f.path && replacements === 0) {
+          replacements++;
+          await writeFile(inventoryPath, validRaw);
+        }
+        return originalScan.call(this, projectPath);
+      };
+      const result = await f.run();
+      expect(replacements).toBe(1);
+      expect(result.isReused).toBeUndefined();
+      expect(f.counts.parser).toBe(before.parser + 2);
+      expect(f.counts.extractor).toBe(before.extractor + 2);
+      expect(vector(result)).toEqual(vector(f.cold));
+      expect(disposition(result)).toEqual(disposition(f.cold));
+      expect(result.discovery?.files.find((entry) => entry.path === "ok.js")?.size)
+        .toBe(Buffer.byteLength(sources["ok.js"]));
+    } finally {
+      FileScanner.prototype.scan = originalScan;
+      await f.close();
     }
   });
 });

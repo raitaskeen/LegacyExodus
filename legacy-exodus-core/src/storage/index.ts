@@ -20,6 +20,7 @@ export {
 } from "./projections/file-discovery-projection";
 export {
   cloneStorageRecord,
+  createOwnedStorageRecord,
   createStorageRecord,
   deepFreeze,
   extractRecordMetadata,

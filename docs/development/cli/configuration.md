@@ -39,6 +39,12 @@ The CLI automatically detects terminal capabilities and selects the appropriate 
 | **CI / Non-TTY** | `stdout.isTTY = false` or `CI=true` or `NO_COLOR` is present | Deterministic plain-text summaries without ANSI escape codes or cursor movement |
 | **JSON Mode** | `--json` flag passed | Pure machine-readable JSON emitted directly to `stdout` (zero decorative text) |
 
+### Semantic Consistency Across Modes
+
+Regardless of presentation mode (Interactive, CI / Non-TTY, or JSON), the CLI applies identical underlying classification:
+* **Clean Analysis:** Rendered with success banners (`✓ Analysis and graph persistence completed successfully.` in interactive, `"Discovery completed"` in plain) only when discovery completes with zero parser, symbol extraction, or enumeration failures.
+* **Degraded Analysis:** When non-fatal faults occur (such as parser failures, symbol extraction failures, enumeration failures, or manifest degradation), both interactive and plain modes prominently surface `"Analysis completed with isolated non-fatal faults."`, aligning directly with the typed failure counters in the machine-readable JSON output.
+
 ### Color Suppression
 
 LegacyExodus strictly complies with the **[NO_COLOR](https://no-color.org/)** standard:

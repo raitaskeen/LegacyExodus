@@ -1,6 +1,6 @@
 # Plugin Architecture
 
-> **Status:** `PARTIAL`. At verified core checkpoint `ce36ea8`, the core implements plugin manifests, contracts, registry, loader, lifecycle hooks, and a frozen, capability-empty in-process `PluginContext`. IA-CRIT-001 is `VERIFIED` and core-integrated but **not main-promoted**. Dynamic package discovery, narrow host capability facades, permission manifests, marketplace distribution, process isolation, filesystem/network sandboxing, provider plugins, migration plugins, and validator plugins are `TARGET ARCHITECTURE` and are not implemented.
+> **Status:** `PARTIAL`. At synchronized core checkpoint `204f123`, the core implements plugin manifests, contracts, registry, loader, lifecycle hooks, and a frozen, capability-empty in-process `PluginContext`. IA-CRIT-001 is `VERIFIED` and core-integrated but **not main-promoted**. Dynamic package discovery, narrow host capability facades, permission manifests, marketplace distribution, process isolation, filesystem/network sandboxing, provider plugins, migration plugins, and validator plugins are `TARGET ARCHITECTURE` and are not implemented.
 
 ## Overview
 
@@ -11,14 +11,15 @@ The core problem this architecture solves is:
 
 > **How can we add new capabilities without breaking the platform?**
 
-The answer is a **stable-core, contract-first extension model**:
+The current foundation and target model use a **stable-core, contract-first approach**:
 
 - The core pipeline remains minimal, deterministic, and governed.
-- New capabilities are introduced through plugins that implement explicit contracts.
+- The current plugin runtime manages the lifecycle of explicitly supplied plugin instances that implement the base manifest and lifecycle contract; manifest categories do not create executable engine extension points by themselves.
+- Target capability-specific integrations are intended to introduce new behavior through explicitly designed plugin contracts.
 - Future third-party plugins are intended to be isolated, permissioned, and audited; the current loader initializes supplied in-process plugin instances.
 - The current initialization context is frozen and exposes no raw Logger, EventBus, StorageManager, service container, or other host capability. This containment is not a process or ambient-runtime sandbox.
 
-LegacyExodus plugin architecture is aligned to the pipeline:
+The target plugin architecture is intended to align with the broader pipeline:
 
 1. **VyrixScout** (discovery)
 2. **NolaraStruct** (understanding)
@@ -65,11 +66,11 @@ Plugin    Plugin   Plugin
 
 ---
 
-## 2) Plugin Types
+## 2) Target Plugin Types
 
-LegacyExodus supports official plugin categories. Each type extends capability while preserving core invariants.
+The current `PluginManifest.type` taxonomy recognizes `parser`, `storage`, `ai-provider`, `migration`, and `validator`. These labels classify supplied plugin instances; they do not currently connect those instances to parser selection, storage composition, migration, AI, validation, framework, or transformation execution paths. The category-specific ecosystems below are `TARGET ARCHITECTURE`.
 
-### 2.1 Parser Plugins
+### 2.1 Target Parser Plugins
 
 **Purpose:** Support additional legacy languages and source formats.
 
@@ -87,7 +88,7 @@ LegacyExodus supports official plugin categories. Each type extends capability w
 
 ---
 
-### 2.2 Migration Strategy Plugins
+### 2.2 Target Migration Strategy Plugins
 
 **Purpose:** Provide alternative modernization strategies for different legacy architectures.
 
@@ -104,7 +105,7 @@ LegacyExodus supports official plugin categories. Each type extends capability w
 
 ---
 
-### 2.3 AI Provider Plugins
+### 2.3 Target AI Provider Plugins
 
 **Purpose:** Connect approved model providers through a governed AI gateway.
 
@@ -121,7 +122,7 @@ LegacyExodus supports official plugin categories. Each type extends capability w
 
 ---
 
-### 2.4 Storage Plugins
+### 2.4 Target Storage Plugins
 
 **Purpose:** Support extensible persistence backends for artifacts, metadata, and graph/state outputs.
 
@@ -138,7 +139,7 @@ LegacyExodus supports official plugin categories. Each type extends capability w
 
 ---
 
-### 2.5 Validation Plugins
+### 2.5 Target Validation Plugins
 
 **Purpose:** Add enterprise-specific checks before acceptance or promotion.
 

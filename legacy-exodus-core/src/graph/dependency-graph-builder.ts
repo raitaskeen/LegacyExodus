@@ -2,57 +2,103 @@ import { createHash } from "node:crypto";
 
 import type { CodeSymbol, SymbolTable } from "@symbols/index";
 
-import { validateDependencyGraph, type DependencyGraph } from "./dependency-graph-contracts";
+import { validateCurrentDependencyGraph, type CurrentDependencyGraph, type DependencyGraphEdge, type ModuleDependencyEdge } from "./dependency-graph-contracts";
 import { canonicalizePath, type KnownPathLookup, ModuleResolver } from "./module-resolver";
+import { compareCodePoints } from "@shared/ordering";
+import { immutable } from "@shared/immutability";
 
 export class DeterministicDependencyGraphBuilder {
   public constructor(private readonly resolver: ModuleResolver = new ModuleResolver()) {}
 
-  public build(symbolTables: readonly SymbolTable[], files: KnownPathLookup): DependencyGraph {
+  /**
+   * @param symbolTables - tables with at least each file's imports and exports: that is all import resolution reads.
+   * @param fullTables - every table in full, read once, for the graph's symbol nodes (ADR-009 step 2); by default
+   *   `symbolTables` themselves.
+   */
+  public build(symbolTables: readonly SymbolTable[], files: KnownPathLookup, fullTables: Iterable<SymbolTable> = symbolTables): CurrentDependencyGraph {
     const orderedTables = [...symbolTables].sort((left, right) =>
-      canonicalizePath(left.filePath).localeCompare(canonicalizePath(right.filePath)),
+      compareCodePoints(canonicalizePath(left.filePath), canonicalizePath(right.filePath)),
     );
     const tablesByPath = new Map(orderedTables.map((table) => [canonicalizePath(table.filePath), table]));
-    const nodes = orderedTables.flatMap((table) =>
-      table.symbols.map((symbol) => ({
-        id: `symbol:${symbol.id}`,
-        filePath: canonicalizePath(table.filePath),
-        symbolId: symbol.id,
-      })),
-    );
-    const edges = orderedTables.flatMap((table) =>
-      table.symbols
-        .filter((symbol) => symbol.kind === "import" && symbol.moduleSpecifier !== undefined)
-        .flatMap((symbol) => {
-          const canonicalTablePath = canonicalizePath(table.filePath);
-          const resolved = this.resolver.resolve(canonicalTablePath, symbol.moduleSpecifier ?? "", files);
-          const target = resolved.resolvedPath === null ? undefined : tablesByPath.get(resolved.resolvedPath);
-          const exported = target === undefined
-            ? undefined
-            : this.resolveExport(target, symbol.defaultExport ? "default" : (symbol.sourceSymbolName ?? symbol.name), files, tablesByPath, new Set());
-
-          if (exported === undefined) {
-            return [];
+    // Sorted by id below, so the order tables are read in does not matter.
+    const nodes = [...dependencyGraphNodes(fullTables)];
+    const edges: DependencyGraphEdge[] = [];
+    const moduleEdges: ModuleDependencyEdge[] = [];
+    for (const table of orderedTables) {
+      const sourceFilePath = canonicalizePath(table.filePath);
+      if (table.moduleReferences === undefined && table.symbols.some((symbol) => symbol.kind === "import")) {
+        throw new Error(`Current import relationships require module reference evidence: ${sourceFilePath}`);
+      }
+      const symbolsById = new Map(table.symbols.map((symbol) => [symbol.id, symbol]));
+      const associatedIds = new Set<string>();
+      for (const reference of table.moduleReferences ?? []) {
+        for (const id of new Set(reference.importSymbolIds)) {
+          const symbol = symbolsById.get(id);
+          if (associatedIds.has(id) || symbol?.kind !== "import" || symbol.moduleSpecifier !== reference.moduleSpecifier) {
+            throw new Error(`Invalid module reference binding: ${id}`);
           }
-
-          return [{
+          associatedIds.add(id);
+        }
+      }
+      if (table.symbols.some((symbol) => symbol.kind === "import" && !associatedIds.has(symbol.id))) {
+        throw new Error(`Current import relationships require complete module reference evidence: ${sourceFilePath}`);
+      }
+      for (const reference of table.moduleReferences ?? []) {
+        const resolved = this.resolver.resolve(sourceFilePath, reference.moduleSpecifier, files);
+        if (resolved.resolvedPath === null) continue;
+        if (reference.sourceAnchor === undefined) {
+          throw new Error(`Resolved import lacks source anchor: ${sourceFilePath} -> ${reference.moduleSpecifier}`);
+        }
+        const targetFilePath = canonicalizePath(resolved.resolvedPath);
+        const anchor = reference.sourceAnchor;
+        const taggedAnchor = anchor.kind === "offset" ? ["offset", anchor.start, anchor.end]
+          : ["location", anchor.start.line, anchor.start.column, anchor.end.line, anchor.end.column];
+        moduleEdges.push({
+          id: createHash("sha256").update(JSON.stringify([
+            "f07-module-edge-v1", sourceFilePath, reference.form, taggedAnchor, reference.moduleSpecifier, targetFilePath,
+          ])).digest("hex"),
+          sourceFilePath, targetFilePath, moduleSpecifier: reference.moduleSpecifier,
+          sourceAnchor: anchor, form: reference.form,
+          ...(reference.sourcePhase === undefined ? {} : { sourcePhase: reference.sourcePhase }),
+        });
+        if (reference.form === "esm-side-effect") continue;
+        const target = tablesByPath.get(targetFilePath);
+        for (const importSymbolId of reference.importSymbolIds) {
+          const symbol = symbolsById.get(importSymbolId);
+          if (symbol === undefined || symbol.kind !== "import" || symbol.moduleSpecifier !== reference.moduleSpecifier) {
+            throw new Error(`Invalid module reference binding: ${importSymbolId}`);
+          }
+          // A namespace import binds the module namespace object, not any one export (BA-09).
+          const namespaceImport = !symbol.defaultExport && symbol.sourceSymbolName === "*";
+          const exported = target === undefined || namespaceImport ? undefined
+            : this.resolveExport(target, symbol.defaultExport ? "default" : (symbol.sourceSymbolName ?? symbol.name), files, tablesByPath, new Set());
+          if (exported === undefined) continue;
+          edges.push({
             id: createHash("sha256").update(`${symbol.id}:${exported.id}`).digest("hex"),
-            sourceFilePath: canonicalTablePath,
-            targetFilePath: canonicalizePath(exported.filePath),
-            importSymbolId: symbol.id,
-            targetExportSymbolId: exported.id,
+            sourceFilePath, targetFilePath: canonicalizePath(exported.filePath),
+            importSymbolId: symbol.id, targetExportSymbolId: exported.id,
             moduleSpecifier: symbol.moduleSpecifier ?? "",
-          }];
-        }),
-    );
+          });
+        }
+      }
+    }
 
-    return validateDependencyGraph({
-      nodes: [...nodes].sort((left, right) => left.id.localeCompare(right.id)),
-      edges: [...edges].sort((left, right) => left.id.localeCompare(right.id)),
-      cycles: findCycles(edges),
+    // Computed `import(name)` / `require(name)`: the target is unknown, so it is kept, not dropped (BA-10).
+    const unresolvedReferences = orderedTables.flatMap((table) => (table.unresolvedModuleReferences ?? []).map((reference) => ({
+      sourceFilePath: canonicalizePath(table.filePath), ...reference,
+    })));
+    return validateCurrentDependencyGraph({
+      nodes: [...nodes].sort((left, right) => compareCodePoints(left.id, right.id)),
+      edges: [...edges].sort((left, right) => compareCodePoints(left.id, right.id)),
+      // A dynamic import loads lazily, so it cannot form an evaluation-order cycle.
+      cycles: findCycles(moduleEdges.filter((edge) => edge.form !== "dynamic-import")),
+      moduleGraph: {
+        contract: "f07-import-relations-v1",
+        edges: moduleEdges.sort((left, right) => compareCodePoints(left.id, right.id)),
+        ...(unresolvedReferences.length === 0 ? {} : { unresolvedReferences }),
+      },
     });
   }
-
   private resolveExport(
     table: SymbolTable,
     name: string,
@@ -78,7 +124,9 @@ export class DeterministicDependencyGraphBuilder {
       const resolved = this.resolver.resolve(tableCanonicalPath, direct.moduleSpecifier, files).resolvedPath;
       const target = resolved === null ? undefined : tables.get(resolved);
       const forwardedName = direct.sourceSymbolName ?? name;
-      return target === undefined ? direct : this.resolveExport(target, forwardedName, files, tables, nextVisited);
+      // `export * as ns from` re-exports a namespace object: the re-export itself is the binding.
+      if (forwardedName === "*") return target === undefined ? undefined : direct;
+      return target === undefined ? undefined : this.resolveExport(target, forwardedName, files, tables, nextVisited);
     }
 
     if (name === "default" || name === "*") {
@@ -87,7 +135,7 @@ export class DeterministicDependencyGraphBuilder {
 
     const wildcardExports = table.symbols
       .filter((symbol) => symbol.kind === "export" && symbol.name === "*" && symbol.moduleSpecifier !== undefined)
-      .sort((left, right) => (left.moduleSpecifier ?? "").localeCompare(right.moduleSpecifier ?? "") || left.id.localeCompare(right.id));
+      .sort((left, right) => compareCodePoints(left.moduleSpecifier ?? "", right.moduleSpecifier ?? "") || compareCodePoints(left.id, right.id));
 
     const matches: CodeSymbol[] = [];
     for (const wildcard of wildcardExports) {
@@ -113,15 +161,15 @@ export class DeterministicDependencyGraphBuilder {
   private findDirectExport(table: SymbolTable, name: string): CodeSymbol | undefined {
     const exports = table.symbols.filter((symbol) => symbol.kind === "export");
     const exact = exports.find((symbol) => (name === "default" ? symbol.defaultExport : symbol.name === name));
-    if (exact !== undefined) {
-      return exact;
-    }
+    return exact;
+  }
+}
 
-    if (name === "*") {
-      return exports.find((symbol) => symbol.moduleSpecifier === undefined);
-    }
-
-    return undefined;
+/** The graph's symbol nodes, one per symbol, unsorted: a caller may sort them on disk (ADR-009 step 5). */
+export function* dependencyGraphNodes(fullTables: Iterable<SymbolTable>): Generator<{ readonly id: string; readonly filePath: string; readonly symbolId: string }> {
+  for (const table of fullTables) {
+    const filePath = canonicalizePath(table.filePath);
+    for (const symbol of table.symbols) yield { id: `symbol:${symbol.id}`, filePath, symbolId: symbol.id };
   }
 }
 
@@ -183,14 +231,14 @@ function findCycles(edges: readonly { readonly sourceFilePath: string; readonly 
   return components
     .filter((component) => component.length > 1 || (adjacency.get(component[0] ?? "") ?? []).includes(component[0] ?? ""))
     .map((component) => findCycleInComponent(component, adjacency))
-    .sort((left, right) => left.join("\u0000").localeCompare(right.join("\u0000")));
+    .sort((left, right) => compareCodePoints(left.join("\u0000"), right.join("\u0000")));
 }
 
 function findCycleInComponent(component: readonly string[], adjacency: ReadonlyMap<string, readonly string[]>): readonly string[] {
   const members = new Set(component);
   const start = component[0];
   if (start === undefined) {
-    return Object.freeze([]);
+    return immutable([]);
   }
 
   const path: string[] = [];
@@ -218,12 +266,12 @@ function findCycleInComponent(component: readonly string[], adjacency: ReadonlyM
     return undefined;
   };
 
-  return visit(start) ?? Object.freeze([start, start]);
+  return visit(start) ?? immutable([start, start]);
 }
 
 function canonicalizeCycle(cycle: readonly string[]): readonly string[] {
   const body = cycle.slice(0, -1);
   const rotations = body.map((_, index) => [...body.slice(index), ...body.slice(0, index)]);
-  const canonical = rotations.sort((left, right) => left.join("\u0000").localeCompare(right.join("\u0000")))[0] ?? [];
-  return Object.freeze([...canonical, canonical[0] ?? ""]);
+  const canonical = rotations.sort((left, right) => compareCodePoints(left.join("\u0000"), right.join("\u0000")))[0] ?? [];
+  return immutable([...canonical, canonical[0] ?? ""]);
 }
