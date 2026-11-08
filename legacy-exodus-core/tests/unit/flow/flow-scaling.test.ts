@@ -260,6 +260,7 @@ function createContext(
     hasSemanticResolution: false,
     pendingCalls: [],
     interproceduralFlows: [],
+    joins: new Map(),
   };
   const graph = createDataFlowGraph({
     id: `dfg:${filePath}`,
@@ -274,7 +275,7 @@ function createContext(
     functionSummaries: [],
     callBindings: [],
   });
-  return { graph, state };
+  return { graph, state: { ...state, localDefinitionIds: new Set() } };
 }
 
 function observeTransferEvaluations(source: readonly TaintTransfer[]): {

@@ -41,7 +41,7 @@ then focused/subsystem/full tests and remaining gates.
 | L02 Subsystem | Affected callers and siblings |
 | L03 Full | Live files/pass/fail/skip/assertion totals; zero unexpected failures |
 | L04 Static | Compiler exit 0, zero errors |
-| L05 Benchmark governance | All governed checks pass (current contract: 10/10) |
+| L05 Benchmark governance | All governed checks pass (current contract: 8/8 since F-010) |
 | L06 Determinism | At least three identical-input runs, output digests and scope |
 | L07 Composite | Actual verify command and constituent outcomes |
 | L08 CLI smoke | Exit 0 and expected help behavior |

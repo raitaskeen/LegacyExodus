@@ -125,6 +125,24 @@ export class SummaryPresenter {
         badge: discoveryComplete ? "COMPLETED" : "NEEDS_REVIEW",
         badgeType: discoveryComplete ? "success" : "warning",
       },
+      ...(report.reused === true
+        ? [{
+          label: "Snapshot",
+          value: report.snapshotAnalysisRunId === undefined
+            ? "reused (--refresh for fresh analysis)"
+            : `reused from run ${report.snapshotAnalysisRunId}`,
+          badge: "REUSED",
+          badgeType: "warning" as const,
+        }]
+        : []),
+      ...(report.snapshotRejection !== undefined
+        ? [{
+          label: "Snapshot",
+          value: `not reused: ${report.snapshotRejection.status}`,
+          badge: "REFUSED",
+          badgeType: "warning" as const,
+        }]
+        : []),
     ]);
 
     const artifactsTree = [

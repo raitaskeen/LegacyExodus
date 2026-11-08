@@ -6,6 +6,7 @@ import {
   ParserNotFoundError,
   ParserRegistrationError,
 } from "./parser-registry-errors";
+import { immutable } from "@shared/immutability";
 
 export class ParserRegistry {
   private readonly parsers = new Map<string, Parser>();
@@ -41,7 +42,7 @@ export class ParserRegistry {
   }
 
   public list(): readonly Parser[] {
-    return Object.freeze([...this.parsers.values()]);
+    return immutable([...this.parsers.values()]);
   }
 
   public findByLanguage(language: string): Parser | null {
@@ -57,7 +58,7 @@ export class ParserRegistry {
   }
 
   public findByCapability(capability: ParserCapability): readonly Parser[] {
-    return Object.freeze(
+    return immutable(
       [...this.parsers.values()].filter((parser) => parser.capabilities.includes(capability)),
     );
   }

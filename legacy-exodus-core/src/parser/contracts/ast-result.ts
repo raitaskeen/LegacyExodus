@@ -5,6 +5,7 @@ import { LegacyExodusError } from "@shared/errors";
 import { astNodeSchema, validateASTNode, type ASTNode } from "./ast-node";
 import type { ParserError, ParserWarning } from "./parser-errors";
 import { validateParserStatistics, type ParserStatistics } from "@parser/models/parser-statistics";
+import { immutable, isImmutable } from "@shared/immutability";
 
 export interface ASTMetadata {
   readonly parserId: string;
@@ -68,24 +69,24 @@ export function validateASTResult(result: unknown): ASTResult {
     });
   }
 
-  const frozenResult: ASTResult = Object.freeze({
-    metadata: Object.freeze({ ...parsedResult.data.metadata }),
+  const frozenResult: ASTResult = immutable({
+    metadata: immutable({ ...parsedResult.data.metadata }),
     root: validateASTNode(parsedResult.data.root),
     statistics: validateParserStatistics(parsedResult.data.statistics),
-    warnings: Object.freeze(
+    warnings: immutable(
       parsedResult.data.warnings.map((warning) =>
-        Object.freeze({
+        immutable({
           ...warning,
           location:
-            warning.location === undefined ? undefined : Object.freeze({ ...warning.location }),
+            warning.location === undefined ? undefined : immutable({ ...warning.location }),
         }),
       ),
     ),
-    errors: Object.freeze(
+    errors: immutable(
       parsedResult.data.errors.map((error) =>
-        Object.freeze({
+        immutable({
           ...error,
-          location: error.location === undefined ? undefined : Object.freeze({ ...error.location }),
+          location: error.location === undefined ? undefined : immutable({ ...error.location }),
         }),
       ),
     ),
@@ -99,16 +100,16 @@ function isDeeplyFrozenASTResult(value: unknown): value is ASTResult {
   return (
     typeof value === "object" &&
     value !== null &&
-    Object.isFrozen(value) &&
+    isImmutable(value) &&
     "metadata" in value &&
-    Object.isFrozen((value as ASTResult).metadata) &&
+    isImmutable((value as ASTResult).metadata) &&
     "root" in value &&
-    Object.isFrozen((value as ASTResult).root) &&
+    isImmutable((value as ASTResult).root) &&
     "statistics" in value &&
-    Object.isFrozen((value as ASTResult).statistics) &&
+    isImmutable((value as ASTResult).statistics) &&
     "warnings" in value &&
-    Object.isFrozen((value as ASTResult).warnings) &&
+    isImmutable((value as ASTResult).warnings) &&
     "errors" in value &&
-    Object.isFrozen((value as ASTResult).errors)
+    isImmutable((value as ASTResult).errors)
   );
 }

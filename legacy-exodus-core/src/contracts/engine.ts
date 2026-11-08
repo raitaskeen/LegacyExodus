@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { EngineStatus } from "@core/engine/engine-status";
 import type { ProjectDiscovery } from "@contracts/discovery";
 import type { AnalyzeProjectCommand } from "./commands";
+import { immutable } from "@shared/immutability";
 
 export interface SystemStatusCommand {
   readonly id: string;
@@ -22,10 +23,15 @@ export interface AnalyzeProjectResult {
   readonly discovery: ProjectDiscovery;
   readonly analysis: AnalysisSummary;
   readonly isReused?: boolean;
+  /** Analysis run that produced the reused snapshot; present only with `isReused`. */
+  readonly snapshotAnalysisRunId?: string;
+  /** A stored snapshot that was found but not reused, and why (NA-11). */
+  readonly snapshotRejection?: { readonly status: string; readonly reason: string };
 }
 
 export interface AnalysisSummary {
   readonly filesDiscovered: number;
+  /** Distinct discovered files with a successfully produced symbol table, including empty tables. */
   readonly filesAnalyzed: number;
   readonly parserFailures: number;
   readonly symbolExtractionFailures: number;
@@ -37,7 +43,9 @@ export interface AnalysisSummary {
   readonly unclassifiedArtifacts: number;
   /** Number of filesystem enumeration failures encountered during discovery traversal. */
   readonly enumerationFailures?: number;
-  /** True if discovery traversed the repository without enumeration failures. */
+  /** Distinct analyzed files whose second-pass AST restoration failed; outside primary accounting. */
+  readonly secondPassFailures?: number;
+  /** True when discovery has neither enumeration nor manifest failures. */
   readonly discoveryComplete?: boolean;
   /** Monotonic wall-clock observation; never persisted in deterministic analysis artifacts. */
   readonly durationMs: number;
@@ -53,15 +61,16 @@ const analysisSummarySchema = z.object({
   unclassifiedArtifacts: z.number().int().nonnegative(),
   enumerationFailures: z.number().int().nonnegative().optional(),
   discoveryComplete: z.boolean().optional(),
+  secondPassFailures: z.number().int().nonnegative().optional(),
   durationMs: z.number().nonnegative(),
-}).strict();
+}).strict().refine((summary) => (summary.secondPassFailures ?? 0) <= summary.filesAnalyzed, "Second-pass failures cannot exceed analyzed files.");
 
 /** Creates the concise, machine-readable disposition summary for one analysis run. */
 export function createAnalysisSummary(summary: AnalysisSummary): AnalysisSummary {
   const parsed = analysisSummarySchema.parse(summary);
   const enumerationFailures = parsed.enumerationFailures ?? 0;
   const discoveryComplete = parsed.discoveryComplete ?? (enumerationFailures === 0);
-  return Object.freeze({
+  return immutable({
     ...parsed,
     enumerationFailures,
     discoveryComplete,

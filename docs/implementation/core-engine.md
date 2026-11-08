@@ -32,6 +32,6 @@ Current engine execution supports system status and project analysis. Analysis i
 - Core source: `legacy-exodus-core/src/core/engine/`
 - Composition: `legacy-exodus-core/src/runtime/composition/services.ts`
 - Lifecycle: `legacy-exodus-core/src/runtime/application.ts`
-- Tests: current engine, runtime, orchestration, integration, and snapshot-reuse suites on `core-foundation`
+- Tests: current engine, runtime, orchestration, integration, and snapshot-reuse suites on `main`
 
 See [Current Implementation](../CURRENT_IMPLEMENTATION.md) for the synchronized core SHA and limitations.

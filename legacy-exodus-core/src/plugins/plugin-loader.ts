@@ -3,8 +3,9 @@ import type { LegacyExodusPlugin } from "./plugin";
 import type { PluginContext } from "./plugin-context";
 import { validatePluginManifest } from "./plugin-manifest";
 import type { PluginRegistry } from "./plugin-registry";
+import { immutable } from "@shared/immutability";
 
-const pluginContext: PluginContext = Object.freeze({});
+const pluginContext: PluginContext = immutable({});
 
 export class PluginLoader {
   public constructor(private readonly registry: PluginRegistry) {}

@@ -1,10 +1,12 @@
 import { describe, expect, it } from "bun:test";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { DiscoveryValidator, computeWorkspaceDigest } from "@discovery/discovery-validator";
+import type { DiscoveryManifest } from "@discovery/discovery-validator";
+import { FileScanner } from "@discovery/file-scanner";
 
 describe("DiscoveryValidator", () => {
   const validator = new DiscoveryValidator();
@@ -53,7 +55,7 @@ describe("DiscoveryValidator", () => {
 
     try {
       await writeFile(join(discoveryDir, "manifest.json"), JSON.stringify(manifest), "utf8");
-      const result = await validator.validate({ projectPath: testDir, expectedSchemaVersion: 1 });
+      const result = await validator.validate({ projectPath: testDir, expectedSchemaVersion: 2 });
       expect(result.valid).toBe(false);
       expect(result.status).toBe("SCHEMA_MISMATCH");
     } finally {
@@ -61,14 +63,14 @@ describe("DiscoveryValidator", () => {
     }
   });
 
-  it("returns PATH_MISMATCH when repository path in manifest differs from target path", async () => {
+  it("refreshes a schema-1 snapshot that recorded a plaintext project path (BA-26)", async () => {
     const testDir = join(tmpdir(), `test-validator-path-${Date.now()}`);
     const discoveryDir = join(testDir, ".discovery");
     await mkdir(discoveryDir, { recursive: true });
 
     const manifest = {
       schemaVersion: 1,
-      repository: { name: "test", path: "/some/different/path" },
+      repository: { name: "test", path: testDir },
       engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
       requiredArtifacts: [],
@@ -79,7 +81,7 @@ describe("DiscoveryValidator", () => {
       await writeFile(join(discoveryDir, "manifest.json"), JSON.stringify(manifest), "utf8");
       const result = await validator.validate({ projectPath: testDir });
       expect(result.valid).toBe(false);
-      expect(result.status).toBe("PATH_MISMATCH");
+      expect(result.status).toBe("SCHEMA_MISMATCH");
     } finally {
       await rm(testDir, { recursive: true, force: true });
     }
@@ -95,7 +97,7 @@ describe("DiscoveryValidator", () => {
     await writeFile(join(discoveryDir, "files.json"), filesContent, "utf8");
 
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "test", path: testDir },
       engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
@@ -125,7 +127,7 @@ describe("DiscoveryValidator", () => {
     await writeFile(join(discoveryDir, "files.json"), filesContent, "utf8");
 
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "test", path: testDir },
       engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
@@ -158,7 +160,7 @@ describe("DiscoveryValidator", () => {
     await writeFile(join(discoveryDir, "files.json"), content, "utf8");
 
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "test", path: testDir },
       engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
@@ -187,7 +189,7 @@ describe("DiscoveryValidator", () => {
     await writeFile(join(nestedDir, "state.json"), content, "utf8");
 
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "test", path: testDir },
       engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
@@ -215,7 +217,7 @@ describe("DiscoveryValidator", () => {
     await writeFile(outsideFile, '{"secret": 123}', "utf8");
 
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "test", path: testDir },
       engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
@@ -243,7 +245,7 @@ describe("DiscoveryValidator", () => {
     await mkdir(discoveryDir, { recursive: true });
 
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "test", path: testDir },
       engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
@@ -270,7 +272,7 @@ describe("DiscoveryValidator", () => {
     await mkdir(discoveryDir, { recursive: true });
 
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "test", path: testDir },
       engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
@@ -297,7 +299,7 @@ describe("DiscoveryValidator", () => {
     await mkdir(discoveryDir, { recursive: true });
 
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "test", path: testDir },
       engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
@@ -327,7 +329,7 @@ describe("DiscoveryValidator", () => {
     const absolutePath = process.platform === "win32" ? "C:\\Windows\\system.ini" : "/etc/passwd";
 
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "test", path: testDir },
       engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
@@ -354,7 +356,7 @@ describe("DiscoveryValidator", () => {
     await mkdir(discoveryDir, { recursive: true });
 
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "test", path: testDir },
       engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
@@ -380,7 +382,7 @@ describe("DiscoveryValidator", () => {
     await mkdir(discoveryDir, { recursive: true });
 
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "test", path: testDir },
       engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
@@ -412,7 +414,7 @@ describe("DiscoveryValidator", () => {
     await writeFile(evilFile, '{"evil": true}', "utf8");
 
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "test", path: projectDir },
       engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
@@ -451,7 +453,7 @@ describe("DiscoveryValidator", () => {
     }
 
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "test", path: testDir },
       engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
@@ -492,7 +494,7 @@ describe("DiscoveryValidator", () => {
     }
 
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "test", path: testDir },
       engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
@@ -562,7 +564,7 @@ describe("DiscoveryValidator", () => {
     const filesSha = createHash("sha256").update(filesJson).digest("hex");
 
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "test-fresh", path: testDir, sourceDigest },
       engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
@@ -607,7 +609,7 @@ describe("DiscoveryValidator", () => {
     const filesSha = createHash("sha256").update(filesJson).digest("hex");
 
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "test-stale", path: testDir, sourceDigest },
       engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
@@ -656,7 +658,7 @@ describe("DiscoveryValidator", () => {
     const filesSha = createHash("sha256").update(filesJson).digest("hex");
 
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "test-stale", path: testDir, sourceDigest },
       engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
@@ -690,7 +692,7 @@ describe("DiscoveryValidator", () => {
 
     const sha256 = createHash("sha256").update(Buffer.from(fileContent, "utf8")).digest("hex");
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "reuse03-test", path: testDir },
       engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
@@ -738,7 +740,7 @@ describe("DiscoveryValidator", () => {
     }
 
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "test", path: projectDir },
       engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
@@ -777,7 +779,7 @@ describe("DiscoveryValidator", () => {
     }
 
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "test", path: projectDir },
       engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
@@ -825,7 +827,7 @@ describe("DiscoveryValidator", () => {
 
     const outsideManifest = join(baseDir, "outside-manifest.json");
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       repository: { name: "test", path: projectDir },
       engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "bun-v1.3.0" },
       analysis: { projectId: "00000000-0000-4000-8000-000000000001", generatedAt: new Date().toISOString() },
@@ -852,4 +854,128 @@ describe("DiscoveryValidator", () => {
       await rm(baseDir, { recursive: true, force: true });
     }
   });
+});
+
+describe("R02 freshness evidence", () => {
+  async function fixture() {
+    const path = join(tmpdir(), `r02-validator-${randomUUID()}`);
+    const directory = join(path, ".discovery");
+    await mkdir(directory, { recursive: true });
+    const source = "export const alpha = 1;\n";
+    await writeFile(join(path, "index.js"), source);
+    const filesRaw = JSON.stringify([{ path: "index.js", size: Buffer.byteLength(source) }]);
+    const manifest: DiscoveryManifest = {
+      schemaVersion: 2,
+      repository: { name: "r02", sourceDigest: await computeWorkspaceDigest(path) },
+      engine: { packageVersion: "0.1.0", commitSha: "abc", bunVersion: "1.4.2" },
+      analysis: { projectId: randomUUID(), generatedAt: new Date().toISOString() },
+      requiredArtifacts: ["files.json"],
+      artifacts: {},
+    };
+    const saveManifest = () => writeFile(join(directory, "manifest.json"), JSON.stringify(manifest));
+    const saveInventory = async (raw: string) => {
+      await writeFile(join(directory, "files.json"), raw);
+      manifest.artifacts["files.json"] = {
+        sha256: createHash("sha256").update(raw).digest("hex"), bytes: Buffer.byteLength(raw),
+      };
+      await saveManifest();
+    };
+    await saveInventory(filesRaw);
+    return { path, directory, source, filesRaw, manifest, saveManifest, saveInventory };
+  }
+
+  for (const changed of [false, true]) {
+    it(`R02 rejects missing digest with ${changed ? "same-size changed" : "unchanged"} source but preserves inspection`, async () => {
+      const f = await fixture();
+      try {
+        delete f.manifest.repository.sourceDigest;
+        await f.saveManifest();
+        if (changed) {
+          const source = "export const bravo = 1;\n";
+          expect(Buffer.byteLength(source)).toBe(Buffer.byteLength(f.source));
+          expect(source).not.toBe(f.source);
+          await writeFile(join(f.path, "index.js"), source);
+        }
+        const validator = new DiscoveryValidator();
+        const inspection = await validator.validate({ projectPath: f.path });
+        expect(inspection.valid).toBe(true);
+        expect(inspection.status).toBe("VALID");
+        expect(inspection.manifest?.repository.sourceDigest).toBeUndefined();
+        for (const result of [
+          await validator.validateFreshness(f.path),
+          await validator.validate({ projectPath: f.path, verifyFreshness: true }),
+        ]) {
+          expect(result.valid).toBe(false);
+          expect(result.status).toBe("SNAPSHOT_STALE");
+          expect(result.reason).toContain("missing sourceDigest");
+          expect(result.validatedArtifacts).toBeUndefined();
+        }
+      } finally { await rm(f.path, { recursive: true, force: true }); }
+    });
+  }
+
+  for (const raw of ["{", "null", "{}", "[null]", '[{"path":"index.js","size":"24"}]',
+    '[{"path":"index.js","size":-1}]', '[{"path":"","size":24}]', '[{"path":"index.js"}]']) {
+    it(`R02 rejects checksum-valid malformed inventory ${raw} without throwing`, async () => {
+      const f = await fixture();
+      try {
+        await f.saveInventory(raw);
+        expect((await new DiscoveryValidator().validate({ projectPath: f.path })).status).toBe("VALID");
+        const result = await new DiscoveryValidator().validateFreshness(f.path);
+        expect(result.valid).toBe(false);
+        expect(result.status).toBe("SNAPSHOT_STALE");
+        expect(result.reason).toContain("files.json");
+        expect(result.validatedArtifacts).toBeUndefined();
+      } finally { await rm(f.path, { recursive: true, force: true }); }
+    });
+  }
+
+  it("R02 cannot assert freshness using an inventory omitted from the validated artifact set", async () => {
+    const f = await fixture();
+    try {
+      f.manifest.requiredArtifacts = [];
+      delete f.manifest.artifacts["files.json"];
+      await f.saveManifest();
+      const result = await new DiscoveryValidator().validateFreshness(f.path);
+      expect(result.valid).toBe(false);
+      expect(result.status).toBe("SNAPSHOT_STALE");
+      expect(result.reason).toContain("files.json");
+      expect(result.validatedArtifacts).toBeUndefined();
+    } finally { await rm(f.path, { recursive: true, force: true }); }
+  });
+
+  for (const validatedSizeIsWrong of [false, true]) {
+    it(`R02 freshness consumes validated inventory despite later ${validatedSizeIsWrong ? "repair" : "corruption"} on disk`, async () => {
+      const f = await fixture();
+      const originalScan = FileScanner.prototype.scan;
+      try {
+        const checkedRaw = validatedSizeIsWrong
+          ? JSON.stringify([{ path: "index.js", size: Buffer.byteLength(f.source) + 1 }]) : f.filesRaw;
+        await f.saveInventory(checkedRaw);
+        let replacements = 0;
+        FileScanner.prototype.scan = async function (projectPath) {
+          if (projectPath === f.path) {
+            replacements++;
+            await writeFile(join(f.directory, "files.json"), validatedSizeIsWrong ? f.filesRaw : "null");
+          }
+          return originalScan.call(this, projectPath);
+        };
+        const result = await new DiscoveryValidator().validateFreshness(f.path);
+        expect(replacements).toBe(1);
+        expect(result.valid).toBe(!validatedSizeIsWrong);
+        expect(result.status).toBe(validatedSizeIsWrong ? "SNAPSHOT_STALE" : "VALID");
+        if (validatedSizeIsWrong) {
+          expect(result.reason).toContain("file size changed");
+          expect(result.validatedArtifacts).toBeUndefined();
+        } else {
+          expect(result.validatedArtifacts?.get("files.json")).toBe(checkedRaw);
+          expect(createHash("sha256").update(result.validatedArtifacts!.get("files.json")!).digest("hex"))
+            .toBe(f.manifest.artifacts["files.json"]!.sha256);
+        }
+      } finally {
+        FileScanner.prototype.scan = originalScan;
+        await rm(f.path, { recursive: true, force: true });
+      }
+    });
+  }
 });

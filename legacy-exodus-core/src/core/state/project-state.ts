@@ -1,4 +1,5 @@
 import type { Artifact } from "./entities";
+import { immutable } from "@shared/immutability";
 
 export enum ProjectStatus {
   INITIALIZED = "INITIALIZED",
@@ -27,12 +28,12 @@ export interface ProjectState {
 
 export function freezeProjectState(state: ProjectState): ProjectState {
   const artifacts = Object.fromEntries(
-    Object.entries(state.artifacts).map(([id, artifact]) => [id, Object.freeze({ ...artifact })]),
+    Object.entries(state.artifacts).map(([id, artifact]) => [id, immutable({ ...artifact })]),
   );
 
-  return Object.freeze({
+  return immutable({
     ...state,
-    artifacts: Object.freeze(artifacts),
-    metadata: Object.freeze({ ...state.metadata }),
+    artifacts: immutable(artifacts),
+    metadata: immutable({ ...state.metadata }),
   });
 }

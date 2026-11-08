@@ -3,6 +3,7 @@ import { z } from "zod";
 import { LegacyExodusError } from "@shared/errors";
 
 import { validateASTResult, type ASTResult } from "@parser/contracts/ast-result";
+import { immutable, isImmutable } from "@shared/immutability";
 
 export interface ParseResponse {
   readonly result: ASTResult;
@@ -15,12 +16,12 @@ export function validateParseResponse(response: unknown): ParseResponse {
   if (
     typeof response === "object" &&
     response !== null &&
-    Object.isFrozen(response) &&
+    isImmutable(response) &&
     validatedParseResponses.has(response) &&
     "result" in response &&
     typeof (response as ParseResponse).result === "object" &&
     (response as ParseResponse).result !== null &&
-    Object.isFrozen((response as ParseResponse).result)
+    isImmutable((response as ParseResponse).result)
   ) {
     return response as ParseResponse;
   }
@@ -35,7 +36,7 @@ export function validateParseResponse(response: unknown): ParseResponse {
     });
   }
 
-  const frozenResponse: ParseResponse = Object.freeze({
+  const frozenResponse: ParseResponse = immutable({
     result: validateASTResult(parsedResponse.data.result),
   });
 

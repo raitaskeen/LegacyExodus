@@ -1,9 +1,20 @@
 import { spawnSync } from "node:child_process";
+import { UNTRUSTED_GIT_ARGS } from "@shared/git";
 import { lstat, mkdir, readFile, realpath } from "node:fs/promises";
-import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { createDiscoveryProjection, type DiscoveryProjection } from "@contracts/discovery-projection";
-import { computeWorkspaceDigest } from "@discovery/index";
+import {
+  computeManifestMac,
+  computeWorkspaceDigest,
+  createSnapshotTrust,
+  manifestKeyId,
+  manifestLocationDigest,
+  MANIFEST_MAC_ALGORITHM,
+  MANIFEST_SCHEMA_VERSION,
+  type DiscoveryManifest,
+  type SnapshotTrust,
+} from "@discovery/index";
 import { LegacyExodusError } from "@shared/errors";
 import { StreamingJsonWriter } from "./streaming-json-writer";
 
@@ -20,6 +31,19 @@ function isPhysicallyContained(parentPath: string, candidatePath: string): boole
     && relation !== ".."
     && !relation.startsWith(`..${sep}`)
     && !isAbsolute(relation);
+}
+
+/** Physical path of `path`, resolving the nearest existing ancestor when it does not exist yet. */
+async function physicalPath(path: string): Promise<string> {
+  const absolute = resolve(path);
+  const missingSegments: string[] = [];
+  for (let current = absolute; ; current = dirname(current)) {
+    try {
+      return join(await realpath(current), ...missingSegments);
+    } catch {}
+    if (dirname(current) === current) return absolute;
+    missingSegments.unshift(basename(current));
+  }
 }
 
 function unsafeProjectionPath(path: string, reason: string, cause?: unknown): LegacyExodusError {
@@ -42,7 +66,8 @@ function unsafeProjectionPath(path: string, reason: string, cause?: unknown): Le
  */
 export function resolveGitCommitSha(cwd: string): string | undefined {
   try {
-    const result = spawnSync("git", ["rev-parse", "HEAD"], {
+    // `cwd` may be the analyzed (untrusted) repository: its program-running config is disabled.
+    const result = spawnSync("git", [...UNTRUSTED_GIT_ARGS, "rev-parse", "HEAD"], {
       cwd,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
@@ -62,7 +87,10 @@ export class FileDiscoveryProjectionAdapter {
   private readonly writer = new StreamingJsonWriter();
   private readonly directoryQueues = new Map<string, Promise<void>>();
 
-  public constructor(private readonly engineRoot: string = defaultEngineRoot) {}
+  public constructor(
+    private readonly engineRoot: string = defaultEngineRoot,
+    private readonly trust: SnapshotTrust = createSnapshotTrust(),
+  ) {}
 
   /**
    * Serializes a discovery projection into atomic JSON artifacts on disk.
@@ -153,12 +181,19 @@ export class FileDiscoveryProjectionAdapter {
       ? (filesArtifact?.payload as readonly { readonly path: string }[])
       : undefined;
     const sourceDigest = await computeWorkspaceDigest(projection.projectPath, files);
+    // Reuse is bound to the physical location, never to a cwd-relative spelling.
+    const canonicalProjectPath = await realpath(resolve(projection.projectPath));
+    // The output belongs to the analyzer this process loaded. If its source has changed since,
+    // the identity of the code that ran can no longer be stated, so none is recorded.
+    const loadedFingerprint = await this.trust.analyzerFingerprint();
+    const analyzerFingerprint = loadedFingerprint !== undefined && loadedFingerprint === await this.trust.currentAnalyzerFingerprint()
+      ? loadedFingerprint
+      : undefined;
 
-    const manifest = {
-      schemaVersion: 1,
+    const unsignedManifest: DiscoveryManifest = {
+      schemaVersion: MANIFEST_SCHEMA_VERSION,
       repository: {
         name: projection.metadata?.projectName ?? pkgName ?? basename(projection.projectPath),
-        path: projection.projectPath,
         ...(pkgVersion ? { packageVersion: pkgVersion } : {}),
         ...(repoCommitSha ? { commitSha: repoCommitSha } : {}),
         sourceDigest,
@@ -175,12 +210,43 @@ export class FileDiscoveryProjectionAdapter {
       },
       requiredArtifacts: Object.keys(artifactHashes).sort(),
       artifacts: artifactHashes,
+      ...(analyzerFingerprint === undefined ? {} : { analyzer: { fingerprint: analyzerFingerprint } }),
     };
+    const manifest = await this.authenticate(unsignedManifest, canonicalProjectPath);
 
     const manifestPath = join(discoveryDirectory, "manifest.json");
     await this.ensureSafeArtifactDestination(projection.projectPath, discoveryDirectory, manifestPath);
     await this.writer.writeAtomic(manifestPath, manifest);
     await this.ensureSafeArtifactDestination(projection.projectPath, discoveryDirectory, manifestPath);
+  }
+
+  /**
+   * Signs the manifest with the local snapshot key. Without a usable key outside the
+   * project the manifest stays unsigned: analysis output is still published, but the
+   * snapshot can never be authorized for reuse.
+   */
+  private async authenticate(manifest: DiscoveryManifest, canonicalProjectPath: string): Promise<DiscoveryManifest> {
+    const keyStore = this.trust.keyStore;
+    const keyDirectory = await physicalPath(keyStore.directory);
+    if (keyDirectory === canonicalProjectPath || isPhysicallyContained(canonicalProjectPath, keyDirectory)) {
+      return manifest;
+    }
+
+    try {
+      const key = await keyStore.getOrCreateKey();
+      const located: DiscoveryManifest = {
+        ...manifest,
+        repository: { ...manifest.repository, locationDigest: manifestLocationDigest(canonicalProjectPath, key) },
+      };
+      // Signing also fails for manifests outside the contract (e.g. a non-string repository
+      // version); such snapshots stay unsigned and unreusable, as they were never reusable before.
+      return {
+        ...located,
+        integrity: { algorithm: MANIFEST_MAC_ALGORITHM, keyId: manifestKeyId(key), mac: computeManifestMac(located, key) },
+      };
+    } catch {
+      return manifest;
+    }
   }
 
   private async ensureSafeDiscoveryDirectory(projectPath: string, discoveryDirectory: string): Promise<string> {

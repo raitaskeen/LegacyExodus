@@ -7,6 +7,7 @@ import type { ASTAttribute, ASTNode, SourceLocation } from "@parser/contracts/as
 import type { ASTResult } from "@parser/contracts/ast-result";
 import type { ParserError, ParserWarning } from "@parser/contracts/parser-errors";
 import { LegacyExodusError } from "@shared/errors";
+import { immutable } from "@shared/immutability";
 
 const STORE_PREFIX = "legacy-exodus-ast-";
 
@@ -143,19 +144,19 @@ function restoreResult(value: unknown, expectedSourcePath: string): ASTResult {
     invalidSpill(expectedSourcePath);
   }
 
-  return Object.freeze({
-    metadata: Object.freeze({
+  return immutable({
+    metadata: immutable({
       parserId: metadata[0] as string,
       language: metadata[1] as string,
       sourcePath: metadata[2] as string,
     }),
     root: restoreNode(value.root, expectedSourcePath),
-    statistics: Object.freeze({
+    statistics: immutable({
       durationMs: statistics[0] as number,
       nodeCount: statistics[1] as number,
     }),
-    warnings: Object.freeze(warnings.map((diagnostic) => restoreDiagnostic(diagnostic, expectedSourcePath))),
-    errors: Object.freeze(errors.map((diagnostic) => restoreDiagnostic(diagnostic, expectedSourcePath))),
+    warnings: immutable(warnings.map((diagnostic) => restoreDiagnostic(diagnostic, expectedSourcePath))),
+    errors: immutable(errors.map((diagnostic) => restoreDiagnostic(diagnostic, expectedSourcePath))),
   });
 }
 
@@ -172,12 +173,12 @@ function restoreNode(value: unknown, sourcePath: string): ASTNode {
     invalidSpill(sourcePath);
   }
 
-  return Object.freeze({
+  return immutable({
     type: type as string,
     ...(role === null ? {} : { role: role as string }),
     ...(location === null ? {} : { location: restoreLocation(location as PackedLocation) }),
-    attributes: Object.freeze({ ...(attributes as Readonly<Record<string, ASTAttribute>>) }),
-    children: Object.freeze(children.map((child) => restoreNode(child, sourcePath))),
+    attributes: immutable({ ...(attributes as Readonly<Record<string, ASTAttribute>>) }),
+    children: immutable(children.map((child) => restoreNode(child, sourcePath))),
   });
 }
 
@@ -187,19 +188,19 @@ function restoreDiagnostic(value: unknown, sourcePath: string): ParserWarning {
   if (!isNonEmptyString(code) || !isNonEmptyString(message) || !isPackedLocation(location)) {
     invalidSpill(sourcePath);
   }
-  return Object.freeze({
+  return immutable({
     code: code as string,
     message: message as string,
     ...(location === null
       ? {}
-      : { location: Object.freeze({ line: (location as PackedLocation)[0], column: (location as PackedLocation)[1] }) }),
+      : { location: immutable({ line: (location as PackedLocation)[0], column: (location as PackedLocation)[1] }) }),
   });
 }
 
 function restoreLocation(location: PackedLocation): SourceLocation {
-  return Object.freeze({
-    start: Object.freeze({ line: location[0], column: location[1] }),
-    end: Object.freeze({ line: location[2], column: location[3] }),
+  return immutable({
+    start: immutable({ line: location[0], column: location[1] }),
+    end: immutable({ line: location[2], column: location[3] }),
   });
 }
 

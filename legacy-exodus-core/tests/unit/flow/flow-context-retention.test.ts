@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { DeterministicDataFlowGraphBuilder } from "@flow/data-flow-builder";
 import { JavaScriptParser } from "@parser/index";
 
-const approvedStateKeys = Object.freeze(["sinks", "taintPaths", "transfers"]);
+// `joins` moved here from module state (BA-27); `localDefinitionIds` (ids only) lets the CFG taint
+// verdict tell a path within one function from one through a call or another file (Wave 3b).
+// `factKeys` (id → key of this file's sources and sinks) keys the flows connected across files (ADR-008).
+const approvedStateKeys = Object.freeze(["factKeys", "joins", "localDefinitionIds", "sinks", "taintPaths", "transfers"]);
 const forbiddenStateKeys = Object.freeze([
   "definitions",
   "uses",

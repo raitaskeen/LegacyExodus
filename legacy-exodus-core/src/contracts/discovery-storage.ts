@@ -1,7 +1,12 @@
+import { excludedPathSchema } from "./discovery";
+import { analysisDispositionV1Schema } from "./discovery-projection";
 import { z } from "zod";
+import { moduleDependencyLayerSchema } from "@graph/dependency-graph-contracts";
 
 import { callFlowBindingSchema, controlFlowGraphSchema, dataFlowGraphSchema } from "@flow/flow-contracts";
-import { semanticAnalysisSchema } from "@semantic/semantic-contracts";
+import { callSchema, referenceSchema, scopeSchema, semanticAnalysisSchema } from "@semantic/semantic-contracts";
+import { LegacyExodusError } from "@shared/errors";
+import { FactArray } from "@shared/fact-array";
 import { codeSymbolSchema } from "@symbols/symbol-contracts";
 
 export const discoveryPayloadSchema = z.object({
@@ -23,6 +28,7 @@ export const discoveryPayloadSchema = z.object({
       name: z.string().min(1),
       version: z.string().min(1),
       kind: z.enum(["production", "development"]),
+      manifest: z.string().min(1).optional(),
     }),
   ),
   frameworks: z.array(z.object({ name: z.string().min(1), evidence: z.string().min(1) })),
@@ -45,20 +51,22 @@ export const discoveryPayloadSchema = z.object({
       }),
     )
     .optional(),
+  excludedPaths: z.array(excludedPathSchema).optional(),
   discoveredAt: z.string().datetime(),
 });
 
 export const symbolTablePayloadSchema = z.object({
+  fileId: z.string().min(1).optional(),
   projectId: z.string().uuid(),
   analysisRunId: z.string().uuid().optional(),
   path: z.string(),
-  symbols: z.array(codeSymbolSchema),
+  symbols: factList(codeSymbolSchema),
 });
 
 export const dependencyGraphPayloadSchema = z.object({
   projectId: z.string().uuid(),
   analysisRunId: z.string().uuid().optional(),
-  nodes: z.array(z.object({ id: z.string(), filePath: z.string(), symbolId: z.string() })),
+  nodes: factList(z.object({ id: z.string(), filePath: z.string(), symbolId: z.string() })),
   edges: z.array(
     z.object({
       id: z.string(),
@@ -70,16 +78,37 @@ export const dependencyGraphPayloadSchema = z.object({
     }),
   ),
   cycles: z.array(z.array(z.string())),
-});
+  moduleGraph: moduleDependencyLayerSchema.optional(),
+}).refine((graph) => !Object.hasOwn(graph, "moduleGraph") || graph.moduleGraph !== undefined, "Present moduleGraph must satisfy the current contract.");
 
 export const knowledgeGraphPayloadSchema = z.object({
   projectId: z.string().uuid(),
   analysisRunId: z.string().uuid().optional(),
-  nodes: z.array(z.object({ id: z.string(), kind: z.string(), name: z.string(), filePath: z.string() })),
-  edges: z.array(z.object({ id: z.string(), from: z.string(), to: z.string(), relationship: z.string() })),
+  nodes: factList(z.object({ id: z.string(), kind: z.string(), name: z.string(), filePath: z.string() })),
+  edges: factList(z.object({ id: z.string(), from: z.string(), to: z.string(), relationship: z.string() })),
 });
 
+/**
+ * A fact list held inline or on disk (ADR-009 step 1). A list on disk is not read here: each item is validated
+ * as it is read, so a projection holds one item at a time.
+ */
+function factList<Item extends z.ZodTypeAny>(item: Item) {
+  return z.union([
+    z.array(item),
+    z.custom<FactArray<unknown>>((value) => value instanceof FactArray).transform((list) => list.map((value): z.output<Item> => {
+      const parsed = item.safeParse(value);
+      if (!parsed.success) {
+        throw new LegacyExodusError({ code: "DISCOVERY_RECORD_INVALID", message: "Stored fact is invalid.", metadata: { issues: parsed.error.issues } });
+      }
+      return parsed.data;
+    })),
+  ]);
+}
+
 export const semanticAnalysisPayloadSchema = semanticAnalysisSchema.extend({
+  calls: factList(callSchema),
+  references: factList(referenceSchema),
+  scopes: factList(scopeSchema),
   projectId: z.string().uuid(),
   analysisRunId: z.string().uuid().optional(),
 });
@@ -87,11 +116,12 @@ export const semanticAnalysisPayloadSchema = semanticAnalysisSchema.extend({
 export const controlFlowPayloadSchema = z.object({
   projectId: z.string().uuid(),
   analysisRunId: z.string().uuid().optional(),
-  graphs: z.array(controlFlowGraphSchema),
+  graphs: factList(controlFlowGraphSchema),
 });
 
 const persistedCallFlowBindingSchema = callFlowBindingSchema.extend({
   argumentDefinitionIds: z.array(z.string().min(1).nullable()),
+  argumentSourceIds: z.array(z.string().min(1).nullable()).optional(),
 });
 const persistedDataFlowGraphSchema = dataFlowGraphSchema.extend({
   callBindings: z.array(persistedCallFlowBindingSchema),
@@ -100,7 +130,7 @@ const persistedDataFlowGraphSchema = dataFlowGraphSchema.extend({
 export const dataFlowPayloadSchema = z.object({
   projectId: z.string().uuid(),
   analysisRunId: z.string().uuid().optional(),
-  graphs: z.array(persistedDataFlowGraphSchema),
+  graphs: factList(persistedDataFlowGraphSchema),
 });
 
 export const analysisRunStatusSchema = z.enum(["created", "running", "completed", "failed"]);
@@ -112,6 +142,7 @@ export const analysisRunPayloadSchema = z.object({
   startedAt: z.string().datetime(),
   completedAt: z.string().datetime().optional(),
   error: z.string().optional(),
+  analysisDisposition: analysisDispositionV1Schema.optional(),
   summary: z
     .object({
       filesDiscovered: z.number().int().nonnegative(),
@@ -123,9 +154,26 @@ export const analysisRunPayloadSchema = z.object({
       unclassifiedArtifacts: z.number().int().nonnegative(),
       enumerationFailures: z.number().int().nonnegative().optional(),
       discoveryComplete: z.boolean().optional(),
+      secondPassFailures: z.number().int().nonnegative().optional(),
       durationMs: z.number().nonnegative(),
     })
     .optional(),
+}).superRefine((run, context) => {
+  if (run.analysisDisposition === undefined) return; // Historical record, no optimistic upgrade.
+  const files = run.analysisDisposition.files;
+  const summary = run.summary;
+  const analyzed = files.filter((file) => file.kind === "analyzed");
+  if (run.status !== "completed" || summary === undefined ||
+    new Set(files.map((file) => file.fileId)).size !== files.length ||
+    new Set(files.map((file) => file.path)).size !== files.length ||
+    summary.filesAnalyzed !== analyzed.length ||
+    summary.parserFailures !== files.filter((file) => file.kind === "initial-parser-failure").length ||
+    summary.symbolExtractionFailures !== files.filter((file) => file.kind === "symbol-extraction-failure").length ||
+    summary.secondPassFailures !== analyzed.filter((file) => file.secondPassFailure !== undefined).length ||
+    summary.filesDiscovered !== summary.filesAnalyzed + summary.parserFailures + summary.symbolExtractionFailures +
+      summary.unsupportedFiles + summary.nonSourceArtifacts + summary.unclassifiedArtifacts) {
+    context.addIssue({ code: "custom", message: "Current R01 run disposition and summary must reconcile." });
+  }
 });
 
 export const astResultPayloadSchema = z.object({

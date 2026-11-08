@@ -63,6 +63,15 @@ describe("analyze project integration", () => {
 
       expect(JSON.parse(await readFile(join(projectPath, ".discovery", "summary.json"), "utf8"))).toEqual({
         projectName: "library-management-system",
+        analysisDisposition: {
+          contract: "r01-analysis-disposition-v1",
+          files: [{
+            fileId: "756b30cb00cba7bec249750cb9bd67135c856080e537fff78515c7928d0110b4",
+            path: "src/components/Books.jsx",
+            kind: "analyzed",
+            symbolCount: 2,
+          }],
+        },
         fileCount: 5,
         dependencyCount: 3,
         frameworkCount: 3,

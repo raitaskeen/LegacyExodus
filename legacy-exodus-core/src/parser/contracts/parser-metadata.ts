@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ParserRegistrationError } from "@parser/registry/parser-registry-errors";
 
 import type { ParserCapability } from "./parser-capability";
+import { immutable } from "@shared/immutability";
 
 export interface ParserMetadata {
   readonly id: string;
@@ -45,9 +46,9 @@ export function validateParserMetadata(metadata: unknown): ParserMetadata {
     );
   }
 
-  return Object.freeze({
+  return immutable({
     ...parsedMetadata.data,
-    supportedLanguages: Object.freeze([...parsedMetadata.data.supportedLanguages]),
-    capabilities: Object.freeze([...parsedMetadata.data.capabilities]),
+    supportedLanguages: immutable([...parsedMetadata.data.supportedLanguages]),
+    capabilities: immutable([...parsedMetadata.data.capabilities]),
   });
 }

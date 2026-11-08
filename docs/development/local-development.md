@@ -74,7 +74,7 @@ sequenceDiagram
     Dev->>Test: 3. Re-run focused test (Pass)
     Dev->>Test: 4. Run the full current test suite (zero failures)
     Dev->>Gov: 5. Run benchmark audit & typecheck
-    Gov-->>Dev: 10/10 PASS & 0 typecheck errors
+    Gov-->>Dev: All audit checks PASS & 0 typecheck errors
 ```
 
 ---

@@ -249,7 +249,7 @@ describe("P1 Core Hardening: Natural-Loop Body Completeness & CFG Semantics", ()
     expect(loop.blockIds).toContain(header);
   });
 
-  it("Test I: for loop with continue routes edge to loop header and preserves natural loop", async () => {
+  it("Test I: for loop with continue routes edge through the update to the loop header and preserves natural loop", async () => {
     const code = `
       function testForContinue() {
         for (let i = 0; i < 10; i++) {
@@ -269,7 +269,12 @@ describe("P1 Core Hardening: Natural-Loop Body Completeness & CFG Semantics", ()
     const loop = cfg!.loops[0]!;
     const continueEdge = cfg!.edges.find((e) => e.kind === "continue");
     expect(continueEdge).toBeDefined();
-    expect(continueEdge!.toBlockId).toBe(loop.headerBlockId);
+    // F-003: continue runs the update (ECMA-262 ForBodyEvaluation) before the header re-tests.
+    const updateBlock = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "UpdateExpression"));
+    expect(updateBlock).toBeDefined();
+    expect(continueEdge!.toBlockId).toBe(updateBlock!.id);
+    expect(cfg!.edges.filter((e) => e.fromBlockId === updateBlock!.id).map((e) => [e.toBlockId, e.kind])).toEqual([[loop.headerBlockId, "loop-back"]]);
+    expect(loop.blockIds).toContain(updateBlock!.id);
     expect(loop.blockIds).toContain(continueEdge!.fromBlockId);
   });
 
@@ -336,7 +341,7 @@ describe("P1 Core Hardening: Natural-Loop Body Completeness & CFG Semantics", ()
     expect(targetedHeaders).toEqual(loopHeaderBlockIds);
   });
 
-  it("Test L: nested loops with inner continue isolates inner loop header", async () => {
+  it("Test L: nested loops with inner continue isolates inner loop header and update", async () => {
     const code = `
       function testNestedContinue() {
         for (let i = 0; i < 5; i++) {
@@ -359,12 +364,17 @@ describe("P1 Core Hardening: Natural-Loop Body Completeness & CFG Semantics", ()
 
     const continueEdge = cfg!.edges.find((e) => e.kind === "continue");
     expect(continueEdge).toBeDefined();
-    expect(continueEdge!.toBlockId).toBe(inner.headerBlockId);
+    // F-003: the inner continue runs the inner update (j++), which then loops back to the inner header.
+    const innerUpdate = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "UpdateExpression" && s.location?.line === 4));
+    expect(innerUpdate).toBeDefined();
+    expect(continueEdge!.toBlockId).toBe(innerUpdate!.id);
+    expect(cfg!.edges.filter((e) => e.fromBlockId === innerUpdate!.id).map((e) => [e.toBlockId, e.kind])).toEqual([[inner.headerBlockId, "loop-back"]]);
+    expect(inner.blockIds).toContain(innerUpdate!.id);
     expect(inner.blockIds).toContain(continueEdge!.fromBlockId);
     expect(outer.blockIds).toContain(continueEdge!.fromBlockId);
   });
 
-  it("Test M: labeled continue across nested loops routes to outer loop header", async () => {
+  it("Test M: labeled continue across nested loops routes through the outer update to the outer loop header", async () => {
     const code = `
       function testLabeledContinue() {
         outer: for (let i = 0; i < 5; i++) {
@@ -386,10 +396,15 @@ describe("P1 Core Hardening: Natural-Loop Body Completeness & CFG Semantics", ()
 
     const continueEdge = cfg!.edges.find((e) => e.kind === "continue");
     expect(continueEdge).toBeDefined();
-    expect(continueEdge!.toBlockId).toBe(outer.headerBlockId);
+    // F-003: `continue outer` runs the outer update (i++), which then loops back to the outer header.
+    const outerUpdate = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "UpdateExpression" && s.location?.line === 3));
+    expect(outerUpdate).toBeDefined();
+    expect(continueEdge!.toBlockId).toBe(outerUpdate!.id);
+    expect(cfg!.edges.filter((e) => e.fromBlockId === outerUpdate!.id).map((e) => [e.toBlockId, e.kind])).toEqual([[outer.headerBlockId, "loop-back"]]);
+    expect(outer.blockIds).toContain(outerUpdate!.id);
   });
 
-  it("Test N: continue inside try-finally executes finalizer before loop header", async () => {
+  it("Test N: continue inside try-finally executes finalizer and update before loop header", async () => {
     const code = `
       function testTryFinallyContinue() {
         for (let i = 0; i < 5; i++) {
@@ -425,15 +440,22 @@ describe("P1 Core Hardening: Natural-Loop Body Completeness & CFG Semantics", ()
     const finalizerBlock = cfg!.blocks.find((b) => b.id === continueToFinallyEdge!.toBlockId);
     expect(finalizerBlock).toBeDefined();
 
-    // 4. The finalizer block routes out to the loop header with kind: "continue"
-    const finalizerToHeaderEdge = cfg!.edges.find(
-      (e) => e.fromBlockId === finalizerBlock!.id && e.toBlockId === loop.headerBlockId && e.kind === "continue",
+    // 4. The finalizer block routes out to the for update with kind: "continue" (F-003)
+    const updateBlock = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "UpdateExpression"));
+    expect(updateBlock).toBeDefined();
+    const finalizerToUpdateEdge = cfg!.edges.find(
+      (e) => e.fromBlockId === finalizerBlock!.id && e.toBlockId === updateBlock!.id && e.kind === "continue",
     );
-    expect(finalizerToHeaderEdge).toBeDefined();
+    expect(finalizerToUpdateEdge).toBeDefined();
+    expect(cfg!.edges.filter((e) => e.fromBlockId === finalizerBlock!.id && e.toBlockId === loop.headerBlockId)).toEqual([]);
 
-    // 5. Verify the entire routing path belongs to the natural loop
+    // 5. The update loops back to the loop header
+    expect(cfg!.edges.filter((e) => e.fromBlockId === updateBlock!.id).map((e) => [e.toBlockId, e.kind])).toEqual([[loop.headerBlockId, "loop-back"]]);
+
+    // 6. Verify the entire routing path belongs to the natural loop
     expect(loop.blockIds).toContain(continueBlock!.id);
     expect(loop.blockIds).toContain(finalizerBlock!.id);
+    expect(loop.blockIds).toContain(updateBlock!.id);
     expect(loop.blockIds).toContain(loop.headerBlockId);
 
     for (const bId of loop.blockIds) {
@@ -679,7 +701,7 @@ describe("P1 Core Hardening: Natural-Loop Body Completeness & CFG Semantics", ()
     expect(falseEdge).toBeDefined();
   });
 
-  it("CFG-01 Test 3: for loop body routes only via loop-back without illegal fall-through to post-loop statement", async () => {
+  it("CFG-01 Test 3: for loop body routes only via the update's loop-back without illegal fall-through to post-loop statement", async () => {
     const code = `
       function testForLoopFallThrough() {
         for (let i = 0; i < 10; i++) {
@@ -710,13 +732,16 @@ describe("P1 Core Hardening: Natural-Loop Body Completeness & CFG Semantics", ()
     const doneBlock = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "ExpressionStatement" && s.location?.line === 6));
     expect(doneBlock).toBeDefined();
 
-    // Body routes to header via loop-back
-    const loopBackEdge = cfg!.edges.find((e) => e.fromBlockId === bodyBlock!.id && e.kind === "loop-back");
+    // F-003: body completes into the update block, which routes to header via loop-back
+    const updateBlock = cfg!.blocks.find((b) => b.statements.some((s) => s.type === "UpdateExpression" && s.location?.line === 3));
+    expect(updateBlock).toBeDefined();
+    expect(cfg!.edges.filter((e) => e.fromBlockId === bodyBlock!.id).map((e) => [e.toBlockId, e.kind])).toEqual([[updateBlock!.id, "next"]]);
+    const loopBackEdge = cfg!.edges.find((e) => e.fromBlockId === updateBlock!.id && e.kind === "loop-back");
     expect(loopBackEdge).toBeDefined();
     expect(loopBackEdge!.toBlockId).toBe(forHeaderBlock!.id);
 
-    // Body does NOT have a 'next' fall-through edge to doneBlock
-    const illegalFallThrough = cfg!.edges.find((e) => e.fromBlockId === bodyBlock!.id && e.toBlockId === doneBlock!.id && e.kind === "next");
+    // Neither body nor update has a 'next' fall-through edge to doneBlock
+    const illegalFallThrough = cfg!.edges.find((e) => (e.fromBlockId === bodyBlock!.id || e.fromBlockId === updateBlock!.id) && e.toBlockId === doneBlock!.id && e.kind === "next");
     expect(illegalFallThrough).toBeUndefined();
   });
 

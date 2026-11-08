@@ -8,6 +8,7 @@ import type { DiscoveryContext } from "./discovery-context";
 import type { DiscoveryResult } from "./discovery-result";
 import { FileScanner } from "./file-scanner";
 import { ProjectDetector } from "./project-detector";
+import { immutable } from "@shared/immutability";
 
 export class DiscoveryEngine {
   public constructor(
@@ -16,7 +17,7 @@ export class DiscoveryEngine {
   ) {}
 
   public async discover(context: DiscoveryContext): Promise<DiscoveryResult> {
-    const { files, enumerationFailures } = await this.fileScanner.scan(context.projectPath);
+    const { files, enumerationFailures, excludedPaths = [] } = await this.fileScanner.scan(context.projectPath);
     const detection = await this.projectDetector.detect(context.projectPath, files);
 
     return validateProjectDiscovery({
@@ -29,6 +30,7 @@ export class DiscoveryEngine {
       languages: detection.languages,
       enumerationFailures,
       manifestFailures: detection.manifestFailures,
+      excludedPaths,
       discoveredAt: new Date(),
     });
   }
@@ -74,6 +76,6 @@ export class DiscoveryEngine {
       },
     });
 
-    return Object.freeze([...fileEvents, ...dependencyEvents, ...frameworkEvents, ...failureEvents, completionEvent]);
+    return immutable([...fileEvents, ...dependencyEvents, ...frameworkEvents, ...failureEvents, completionEvent]);
   }
 }

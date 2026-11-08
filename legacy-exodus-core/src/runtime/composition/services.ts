@@ -3,7 +3,7 @@ import type { EngineContext } from "@core/engine/engine-context";
 import { EventBus } from "@core/events/event-bus";
 import { InMemoryEventStore } from "@core/events/event-store";
 import { Orchestrator } from "@core/orchestration/orchestrator";
-import { DiscoveryEngine } from "@discovery/index";
+import { createSnapshotTrust, defaultSnapshotKeyDirectory, DiscoveryEngine, DiscoveryValidator } from "@discovery/index";
 import { PluginLoader, PluginRegistry } from "@plugins/index";
 import { JavaScriptParser, ParserManager, ParserRegistry } from "@parser/index";
 import { JavaScriptSymbolExtractor } from "@symbols/index";
@@ -19,8 +19,14 @@ import {
   type StorageProvider,
 } from "@storage/index";
 
+export interface EngineCompositionOptions {
+  /** Overrides the running analyzer identity used to authorize snapshot reuse. */
+  readonly analyzerFingerprint?: () => Promise<string | undefined>;
+}
+
 export function createEngineContext(
   environment: EnvironmentVariables = process.env,
+  options: EngineCompositionOptions = {},
 ): EngineContext {
   const config = loadRuntimeConfig(environment);
   const logger = createLogger(config, "runtime");
@@ -29,9 +35,15 @@ export function createEngineContext(
       ? new SqliteStorageProvider({ databasePath: config.storageDatabasePath })
       : new MemoryStorageProvider();
   const storage = new StorageManager(provider);
+  // One trust boundary signs projected snapshots and authorizes their reuse. The key
+  // location is process-level user configuration unless this environment overrides it.
+  const snapshotTrust = createSnapshotTrust({
+    keyDirectory: defaultSnapshotKeyDirectory({ ...process.env, ...environment }),
+    ...(options.analyzerFingerprint === undefined ? {} : { analyzerFingerprint: options.analyzerFingerprint }),
+  });
   const discoveryProjection = new DiscoveryProjectionService(
     storage,
-    new FileDiscoveryProjectionAdapter(),
+    new FileDiscoveryProjectionAdapter(undefined, snapshotTrust),
   );
   const eventBus = new EventBus();
   const eventStore = new InMemoryEventStore();
@@ -78,6 +90,7 @@ export function createEngineContext(
         "Run-scoped AST cleanup failed",
       );
     },
+    new DiscoveryValidator(snapshotTrust),
   );
   runtime.registerService(orchestrator);
 
@@ -96,6 +109,7 @@ export function createEngineContext(
 
 export function createLegacyExodusEngine(
   environment: EnvironmentVariables = process.env,
+  options: EngineCompositionOptions = {},
 ): LegacyExodusEngine {
-  return new LegacyExodusEngine(createEngineContext(environment));
+  return new LegacyExodusEngine(createEngineContext(environment, options));
 }

@@ -8,7 +8,7 @@ import { EventBus } from "@core/events/event-bus";
 import { createDurableEventRecord, loadDurableEvents } from "@core/events/durable-event-journal";
 import { reduceProjectState } from "@core/events/event-reducer";
 import { InMemoryEventStore } from "@core/events/event-store";
-import { DiscoveryEngine } from "@discovery/index";
+import { DiscoveryEngine, type DiscoveryValidator } from "@discovery/index";
 import { JavaScriptParser, ParserManager, ParserRegistry } from "@parser/index";
 import { LegacyExodusError } from "@shared/errors";
 import type { StorageManager } from "@storage/index";
@@ -25,6 +25,7 @@ import {
   UpdateKnowledgeHandler,
 } from "./command-handler";
 import type { AnalysisAstStoreFactory } from "./run-scoped-ast-store";
+import { immutable } from "@shared/immutability";
 
 export type OrchestratorStatus = "idle" | "executing" | "stopped";
 
@@ -71,13 +72,14 @@ export class Orchestrator implements RuntimeService {
     private readonly reportPostCommitEventDeliveryFailure?: PostCommitEventDeliveryFailureReporter,
     astStoreFactory?: AnalysisAstStoreFactory,
     private readonly reportAstStoreCleanupFailure?: AstStoreCleanupFailureReporter,
+    discoveryValidator?: DiscoveryValidator,
   ) {
     this.initialState = initialState ?? createProjectState("Uninitialized Project");
     this.analyzeProjectHandler = new AnalyzeProjectHandler(
       discoveryEngine,
       parserManager,
       symbolExtractor,
-      undefined,
+      discoveryValidator,
       astStoreFactory,
     );
   }
@@ -100,12 +102,12 @@ export class Orchestrator implements RuntimeService {
 
       if (validatedCommand.type === "AnalyzeProject") {
         for (const cleanupFailure of this.analyzeProjectHandler.getAstStoreCleanupFailures()) {
-          const diagnostic = Object.freeze({ ...cleanupFailure, stage: "cleanup" as const });
+          const diagnostic = immutable({ ...cleanupFailure, stage: "cleanup" as const });
           this.astStoreCleanupFailures.push(diagnostic);
           try {
             this.reportAstStoreCleanupFailure?.(diagnostic);
           } catch (reportingError: unknown) {
-            this.astStoreCleanupFailures.push(Object.freeze({
+            this.astStoreCleanupFailures.push(immutable({
               ...cleanupFailure,
               stage: "reporting" as const,
               error: reportingError,
@@ -131,7 +133,7 @@ export class Orchestrator implements RuntimeService {
         try {
           this.eventBus.publish(event);
         } catch (error: unknown) {
-          const failure = Object.freeze({
+          const failure = immutable({
             stage: "delivery" as const,
             eventId: event.id,
             eventType: event.type,
@@ -143,7 +145,7 @@ export class Orchestrator implements RuntimeService {
           try {
             this.reportPostCommitEventDeliveryFailure?.(failure);
           } catch (reportingError: unknown) {
-            this.postCommitEventDeliveryFailures.push(Object.freeze({
+            this.postCommitEventDeliveryFailures.push(immutable({
               stage: "reporting" as const,
               eventId: event.id,
               eventType: event.type,
@@ -171,11 +173,18 @@ export class Orchestrator implements RuntimeService {
     }
   }
 
+  /** Removes the fact lists of past runs (ADR-009); only when no record references them any more. */
+  public releaseFacts(): void {
+    this.analyzeProjectHandler.disposeFacts();
+  }
+
   public async stop(): Promise<void> {
     if (this.activeExecution !== null) {
       await this.activeExecution.catch(() => {});
     }
     this.status = "stopped";
+    // The engine stops services only after its executions (projections included) have settled.
+    this.analyzeProjectHandler.disposeFacts();
   }
 
   public replay(): ProjectState {
@@ -192,11 +201,11 @@ export class Orchestrator implements RuntimeService {
   }
 
   public getPostCommitEventDeliveryFailures(): readonly PostCommitEventDeliveryFailure[] {
-    return Object.freeze([...this.postCommitEventDeliveryFailures]);
+    return immutable([...this.postCommitEventDeliveryFailures]);
   }
 
   public getAstStoreCleanupFailures(): readonly AstStoreCleanupDiagnostic[] {
-    return Object.freeze([...this.astStoreCleanupFailures]);
+    return immutable([...this.astStoreCleanupFailures]);
   }
 
   private async executeValidatedCommand(command: LegacyExodusCommand): Promise<CommandExecution> {

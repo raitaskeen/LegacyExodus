@@ -8,6 +8,9 @@ import type {
   FileArtifact,
   FrameworkArtifact,
 } from "@contracts/discovery";
+import { findWorkspaceRoots } from "@graph/workspace-loader";
+import { compareCodePoints } from "@shared/ordering";
+import { immutable } from "@shared/immutability";
 
 interface ProjectManifest {
   readonly name?: string;
@@ -22,7 +25,7 @@ const projectManifestSchema = z.object({
 }).passthrough();
 
 // UPGRADE: Expanded enterprise framework signatures
-const frameworkSignatures = Object.freeze([
+const frameworkSignatures = immutable([
   { framework: "express", dependencies: ["express"] },
   { framework: "mongodb", dependencies: ["mongodb", "mongoose"] },
   { framework: "react", dependencies: ["react", "react-dom"] },
@@ -62,20 +65,24 @@ export class ProjectDetector {
   ): Promise<ProjectDetection> {
     const result = await this.readManifest(projectPath, files);
     const manifest = result.status === "valid" ? result.manifest : null;
-    const dependencies = this.detectDependencies(manifest);
-    const frameworks = this.detectFrameworks(dependencies, files);
+    const workspaces = await this.readWorkspaceManifests(projectPath, files);
+    const dependencies = [
+      ...this.detectDependencies(manifest, undefined),
+      ...workspaces.flatMap((workspace) => this.detectDependencies(workspace.manifest, workspace.path)),
+    ].sort((left, right) => compareCodePoints(left.name, right.name) || compareCodePoints(left.manifest ?? "", right.manifest ?? ""));
+    const frameworks = this.detectFrameworks(dependencies);
     const languages = [...new Set(files.map((file) => file.language).filter((language) => language !== "unknown"))]
       .sort();
     const manifestFailures = result.status === "failure"
-      ? [Object.freeze(result.failure)]
+      ? [immutable(result.failure)]
       : [];
 
-    return Object.freeze({
+    return immutable({
       projectName: manifest?.name?.trim() || basename(projectPath),
-      dependencies: Object.freeze(dependencies),
-      frameworks: Object.freeze(frameworks),
-      languages: Object.freeze(languages),
-      manifestFailures: Object.freeze(manifestFailures),
+      dependencies: immutable(dependencies),
+      frameworks: immutable(frameworks),
+      languages: immutable(languages),
+      manifestFailures: immutable(manifestFailures),
     });
   }
 
@@ -87,7 +94,7 @@ export class ProjectDetector {
     const hasPackageJson = files.some((file) => file.path === "package.json");
 
     if (!hasPackageJson) {
-      return Object.freeze({ status: "absent" });
+      return immutable({ status: "absent" });
     }
 
     let fileContent: string;
@@ -96,7 +103,7 @@ export class ProjectDetector {
     } catch (error: unknown) {
       const code = getErrorCode(error);
       return code === "ENOENT"
-        ? Object.freeze({ status: "absent" })
+        ? immutable({ status: "absent" })
         : createManifestFailure("manifest-read", code);
     }
 
@@ -112,61 +119,64 @@ export class ProjectDetector {
 
     const parsedManifest = projectManifestSchema.safeParse(parsedJson);
     return parsedManifest.success
-      ? Object.freeze({ status: "valid", manifest: Object.freeze(parsedManifest.data) })
+      ? immutable({ status: "valid", manifest: immutable(parsedManifest.data) })
       : createManifestFailure("manifest-validation", "SCHEMA_INVALID");
   }
 
-  private detectDependencies(manifest: ProjectManifest | null): DependencyArtifact[] {
+  /**
+   * Manifests of the workspace packages (S3's workspace rules), so a monorepo's dependencies and
+   * frameworks are its packages' too. An unreadable or invalid one is skipped.
+   */
+  private async readWorkspaceManifests(projectPath: string, files: readonly FileArtifact[]): Promise<readonly { readonly path: string; readonly manifest: ProjectManifest }[]> {
+    const manifests: { path: string; manifest: ProjectManifest }[] = [];
+    for (const root of await findWorkspaceRoots(projectPath, files)) {
+      const path = `${root}/package.json`;
+      try {
+        const parsed = projectManifestSchema.safeParse(JSON.parse(await this.readFileFn(join(projectPath, path), "utf8")));
+        if (parsed.success) manifests.push({ path, manifest: parsed.data });
+      } catch {
+        // Not readable or not JSON: it contributes nothing.
+      }
+    }
+    return manifests;
+  }
+
+  private detectDependencies(manifest: ProjectManifest | null, path: string | undefined): DependencyArtifact[] {
+    const source = path === undefined ? {} : { manifest: path };
     const dependencies = Object.entries(manifest?.dependencies ?? {}).map(([name, version]) => ({
       name,
       version,
       kind: "production" as const,
+      ...source,
     }));
     const developmentDependencies = Object.entries(manifest?.devDependencies ?? {}).map(([name, version]) => ({
       name,
       version,
       kind: "development" as const,
+      ...source,
     }));
 
     return [...dependencies, ...developmentDependencies]
-      .sort((left, right) => left.name.localeCompare(right.name))
-      .map((dependency) => Object.freeze(dependency));
+      .sort((left, right) => compareCodePoints(left.name, right.name))
+      .map((dependency) => immutable(dependency));
   }
 
-  private detectFrameworks(
-    dependencies: readonly DependencyArtifact[],
-    files: readonly FileArtifact[],
-  ): FrameworkArtifact[] {
-    const dependencyNames = new Set(dependencies.map((dependency) => dependency.name));
+  /**
+   * Frameworks a manifest declares (BA-15). Directory names (`controllers`, `components`) are not
+   * evidence: a Rails app has controllers and a Vue app has components.
+   */
+  private detectFrameworks(dependencies: readonly DependencyArtifact[]): FrameworkArtifact[] {
+    const rootNames = new Set(dependencies.filter((dependency) => dependency.manifest === undefined).map((dependency) => dependency.name));
+    const workspaceNames = new Set(dependencies.filter((dependency) => dependency.manifest !== undefined).map((dependency) => dependency.name));
     const frameworks: FrameworkArtifact[] = [];
 
     for (const signature of frameworkSignatures) {
-      this.addFramework(
-        frameworks,
-        signature.framework,
-        signature.dependencies.some((dependency) => dependencyNames.has(dependency)),
-        "package.json dependency",
-      );
+      const inRoot = signature.dependencies.some((dependency) => rootNames.has(dependency));
+      const inWorkspace = signature.dependencies.some((dependency) => workspaceNames.has(dependency));
+      this.addFramework(frameworks, signature.framework, inRoot || inWorkspace, inRoot ? "package.json dependency" : "workspace package.json dependency");
     }
-    
-    const hasDirectory = (directory: string): boolean => files.some((file) =>
-      file.path.split(/[\\/]/).some((segment) => segment === directory),
-    );
 
-    this.addFramework(
-      frameworks,
-      "express",
-      hasDirectory("controllers") || hasDirectory("routes"),
-      "controller or route directory pattern",
-    );
-    this.addFramework(
-      frameworks,
-      "react",
-      hasDirectory("components"),
-      "component directory pattern",
-    );
-
-    return frameworks.sort((left, right) => left.name.localeCompare(right.name));
+    return frameworks.sort((left, right) => compareCodePoints(left.name, right.name));
   }
 
   private addFramework(
@@ -176,7 +186,7 @@ export class ProjectDetector {
     evidence: string,
   ): void {
     if (detected && !frameworks.some((framework) => framework.name === name)) {
-      frameworks.push(Object.freeze({ name, evidence }));
+      frameworks.push(immutable({ name, evidence }));
     }
   }
 }
@@ -185,9 +195,9 @@ function createManifestFailure(
   kind: DiscoveryManifestFailure["kind"],
   code: string,
 ): ManifestResult {
-  return Object.freeze({
+  return immutable({
     status: "failure",
-    failure: Object.freeze({ path: "package.json", kind, code }),
+    failure: immutable({ path: "package.json", kind, code }),
   });
 }
 

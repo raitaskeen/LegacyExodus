@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { LegacyExodusError } from "@shared/errors";
+import { immutable } from "@shared/immutability";
 
 export interface FileArtifact {
   readonly id: string;
@@ -31,6 +32,8 @@ export interface DependencyArtifact {
   readonly name: string;
   readonly version: string;
   readonly kind: "production" | "development";
+  /** The workspace package.json that declares it; absent for the root manifest. */
+  readonly manifest?: string;
 }
 
 export interface FrameworkArtifact {
@@ -50,9 +53,20 @@ export interface DiscoveryManifestFailure {
   readonly code: string;
 }
 
+/**
+ * A path left out on purpose: an ignore rule says it is not the project's source (BA-15), or it is a
+ * symbolic link, which discovery never follows (its target may lie outside the project) (NA-07).
+ */
+export interface ExcludedPath {
+  readonly path: string;
+  readonly kind: "directory" | "file" | "link";
+  readonly reason: "gitignore" | "legacyexodusignore" | "symbolic-link";
+}
+
 export interface FileScanResult {
   readonly files: readonly FileArtifact[];
   readonly enumerationFailures: readonly DiscoveryEnumerationFailure[];
+  readonly excludedPaths?: readonly ExcludedPath[];
 }
 
 export interface ProjectDiscovery {
@@ -65,6 +79,8 @@ export interface ProjectDiscovery {
   readonly languages: readonly string[];
   readonly enumerationFailures: readonly DiscoveryEnumerationFailure[];
   readonly manifestFailures: readonly DiscoveryManifestFailure[];
+  /** Paths ignore rules leave out of analysis; listed so nothing disappears silently. */
+  readonly excludedPaths: readonly ExcludedPath[];
   readonly discoveredAt: Date;
 }
 
@@ -88,10 +104,17 @@ const discoveryManifestFailureSchema = z.object({
   code: z.string().min(1),
 });
 
+export const excludedPathSchema = z.object({
+  path: z.string().min(1),
+  kind: z.enum(["directory", "file", "link"]),
+  reason: z.enum(["gitignore", "legacyexodusignore", "symbolic-link"]),
+}).strict();
+
 const dependencyArtifactSchema = z.object({
   name: z.string().min(1),
   version: z.string().min(1),
   kind: z.enum(["production", "development"]),
+  manifest: z.string().min(1).optional(),
 });
 
 const frameworkArtifactSchema = z.object({
@@ -109,6 +132,7 @@ const projectDiscoverySchema = z.object({
   languages: z.array(z.string().min(1)),
   enumerationFailures: z.array(discoveryEnumerationFailureSchema).optional(),
   manifestFailures: z.array(discoveryManifestFailureSchema).optional(),
+  excludedPaths: z.array(excludedPathSchema).optional(),
   discoveredAt: z.date(),
 });
 
@@ -123,21 +147,24 @@ export function validateProjectDiscovery(discovery: unknown): ProjectDiscovery {
     });
   }
 
-  return Object.freeze({
+  return immutable({
     ...parsedDiscovery.data,
-    files: Object.freeze(parsedDiscovery.data.files.map((file) => Object.freeze({ ...file }))),
-    dependencies: Object.freeze(
-      parsedDiscovery.data.dependencies.map((dependency) => Object.freeze({ ...dependency })),
+    files: immutable(parsedDiscovery.data.files.map((file) => immutable({ ...file }))),
+    dependencies: immutable(
+      parsedDiscovery.data.dependencies.map((dependency) => immutable({ ...dependency })),
     ),
-    frameworks: Object.freeze(
-      parsedDiscovery.data.frameworks.map((framework) => Object.freeze({ ...framework })),
+    frameworks: immutable(
+      parsedDiscovery.data.frameworks.map((framework) => immutable({ ...framework })),
     ),
-    languages: Object.freeze([...parsedDiscovery.data.languages]),
-    enumerationFailures: Object.freeze(
-      (parsedDiscovery.data.enumerationFailures ?? []).map((failure) => Object.freeze({ ...failure })),
+    languages: immutable([...parsedDiscovery.data.languages]),
+    enumerationFailures: immutable(
+      (parsedDiscovery.data.enumerationFailures ?? []).map((failure) => immutable({ ...failure })),
     ),
-    manifestFailures: Object.freeze(
-      (parsedDiscovery.data.manifestFailures ?? []).map((failure) => Object.freeze({ ...failure })),
+    manifestFailures: immutable(
+      (parsedDiscovery.data.manifestFailures ?? []).map((failure) => immutable({ ...failure })),
+    ),
+    excludedPaths: immutable(
+      (parsedDiscovery.data.excludedPaths ?? []).map((excluded) => immutable({ ...excluded })),
     ),
   });
 }

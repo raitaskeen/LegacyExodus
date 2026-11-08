@@ -7,7 +7,8 @@ import type { ParseRequest } from "@parser/models/parse-request";
 import type { ParseResponse } from "@parser/models/parse-response";
 
 import { mapJavaScriptNode } from "./javascript-node-mapper";
-import { javascriptParserOptions } from "./javascript-parser-options";
+import { javascriptParserOptionsFor } from "./javascript-parser-options";
+import { immutable } from "@shared/immutability";
 
 interface BabelParseError {
   readonly code?: string;
@@ -23,8 +24,8 @@ export class JavaScriptParser implements Parser {
   public readonly id = "javascript-parser";
   public readonly name = "JavaScript Parser";
   public readonly version = "1.0.0";
-  public readonly supportedLanguages = Object.freeze(["javascript", "typescript"]);
-  public readonly capabilities = Object.freeze(["ast", "comments", "exports", "imports", "locations"] as const);
+  public readonly supportedLanguages = immutable(["javascript", "typescript"]);
+  public readonly capabilities = immutable(["ast", "comments", "exports", "imports", "locations"] as const);
 
   public canHandle(request: ParseRequest): boolean {
     return ["javascript", "typescript"].includes(request.file.language.toLowerCase());
@@ -34,7 +35,7 @@ export class JavaScriptParser implements Parser {
     const startedAt = performance.now();
     try {
       const parsedFile = parse(request.source, {
-        ...javascriptParserOptions,
+        ...javascriptParserOptionsFor(request.file.path),
         sourceFilename: request.file.path,
       });
       const mapping = mapJavaScriptNode(parsedFile.program);
@@ -52,7 +53,7 @@ export class JavaScriptParser implements Parser {
             nodeCount: mapping.nodeCount,
           },
           warnings: [],
-          errors: Object.freeze(parsedFile.errors.map(mapSyntaxError)),
+          errors: immutable(parsedFile.errors.map(mapSyntaxError)),
         },
       };
     } catch (error: unknown) {
@@ -69,7 +70,7 @@ export class JavaScriptParser implements Parser {
             nodeCount: 1,
           },
           warnings: [],
-          errors: Object.freeze([mapSyntaxError(error)]),
+          errors: immutable([error instanceof RangeError ? resourceLimitError(error) : mapSyntaxError(error)]),
         },
       };
     }
@@ -81,6 +82,17 @@ function createEmptyProgram(): ASTNode {
     type: "Program",
     attributes: {},
     children: [],
+  };
+}
+
+/**
+ * A valid file can still be too deeply nested (or too long a chain) for the parser's call stack: that is a
+ * resource limit, not a syntax error, and is reported as one (NA-10).
+ */
+function resourceLimitError(error: RangeError): ParserError {
+  return {
+    code: "PARSER_RESOURCE_LIMIT",
+    message: `The parser ran out of call stack on this file (very deep nesting or a very long expression), so it is not analysed. This is not a syntax error. (${error.message})`,
   };
 }
 

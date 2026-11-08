@@ -25,6 +25,14 @@ export class LegacyExodusEngine {
     }
 
     await this.context.runtime.start();
+
+    if (["stopping", "stopped"].includes(this.state)) {
+      throw new LegacyExodusError({
+        code: "ENGINE_RESTART_NOT_SUPPORTED",
+        message: "Initialization cannot complete because engine shutdown has begun.",
+      });
+    }
+
     this.state = "running";
   }
 
@@ -81,6 +89,8 @@ export class LegacyExodusEngine {
       .then(async () => {
         await this.context.storage.clearTransient();
         this.context.eventStore.clear();
+        // No record references a fact list now: in-memory records are gone, persisted ones hold the lists inline.
+        this.context.orchestrator.releaseFacts();
       })
       .finally(() => {
         this.resetPromise = null;
@@ -190,6 +200,10 @@ export class LegacyExodusEngine {
             discovery: execution.discovery,
             analysis: execution.analysis,
             ...(execution.isReused === true ? { isReused: true } : {}),
+            ...(execution.isReused === true && execution.snapshotAnalysisRunId !== undefined
+              ? { snapshotAnalysisRunId: execution.snapshotAnalysisRunId }
+              : {}),
+            ...(execution.snapshotRejection === undefined ? {} : { snapshotRejection: execution.snapshotRejection }),
           };
         }
       }

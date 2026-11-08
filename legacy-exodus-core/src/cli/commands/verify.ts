@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import type { Command } from "commander";
+import { z } from "zod";
 
 import { detectTerminalCapabilities } from "../presentation/capabilities";
 import { parseBunTestOutput } from "../presentation/test-runner";
@@ -170,6 +171,81 @@ export async function runCommand(
   });
 }
 
+// Machine-readable result of `bun run benchmark audit --json` (benchmarks/audit.ts BenchmarkAuditReport).
+// Declared here because production source must not import from benchmarks/.
+const benchmarkAuditResultSchema = z.object({
+  totalChecks: z.number().int().nonnegative(),
+  passedChecks: z.number().int().nonnegative(),
+  failedChecks: z.number().int().nonnegative(),
+  verdict: z.enum(["PASS", "PASS_WITH_CONDITIONS", "NO_GO"]),
+  checks: z.array(z.object({ id: z.string(), passed: z.boolean() })),
+  findings: z.array(z.object({ severity: z.string(), category: z.string(), description: z.string() })),
+});
+
+type BenchmarkAuditResult = z.infer<typeof benchmarkAuditResultSchema>;
+
+function parseBenchmarkAuditResult(stdout: string): BenchmarkAuditResult | undefined {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(stdout.trim());
+  } catch {
+    return undefined;
+  }
+  const parsed = benchmarkAuditResultSchema.safeParse(raw);
+  return parsed.success ? parsed.data : undefined;
+}
+
+/**
+ * Derives the Benchmark Governance gate from the audit's own reported result.
+ * The gate passes only when the audit exited zero and reports a consistent,
+ * non-empty set of checks that all passed; an unreadable result fails closed.
+ */
+function evaluateBenchmarkAuditGate(audit: CommandResult): VerificationGateResult {
+  const name = "Benchmark Governance";
+  const report = parseBenchmarkAuditResult(audit.stdout);
+  if (report === undefined) {
+    return {
+      name,
+      status: "fail",
+      details: `Audit result unreadable (exit ${audit.code}); governance not verified`,
+      durationMs: audit.durationMs,
+      diagnostics: extractDiagnosticSnippet(audit.stderr || audit.stdout),
+    };
+  }
+
+  const checksPassed = report.checks.filter((c) => c.passed).length;
+  const consistent =
+    report.checks.length === report.totalChecks &&
+    checksPassed === report.passedChecks &&
+    report.passedChecks + report.failedChecks === report.totalChecks;
+  const passed =
+    audit.code === 0 &&
+    consistent &&
+    report.verdict === "PASS" &&
+    report.totalChecks > 0 &&
+    report.passedChecks === report.totalChecks;
+
+  let details = `${report.passedChecks}/${report.totalChecks} audit checks verified`;
+  if (!consistent) {
+    details = `Audit counts inconsistent: reported ${report.passedChecks}/${report.totalChecks}, per-check results ${checksPassed}/${report.checks.length}`;
+  } else if (!passed) {
+    details = `${report.passedChecks}/${report.totalChecks} audit checks passed (verdict ${report.verdict}, exit ${audit.code})`;
+  }
+
+  const findingLines = report.findings.map((f) => `[${f.severity}] ${f.category}: ${f.description}`);
+  return {
+    name,
+    status: passed ? "pass" : "fail",
+    details,
+    durationMs: audit.durationMs,
+    diagnostics: passed
+      ? undefined
+      : findingLines.length > 0
+        ? findingLines.join("\n")
+        : extractDiagnosticSnippet(audit.stderr || audit.stdout),
+  };
+}
+
 export async function executeVerification(options: { readonly theme?: string } = {}): Promise<boolean> {
   const capabilities = detectTerminalCapabilities({ theme: options.theme });
   const presenter = new VerificationPresenter(capabilities);
@@ -204,14 +280,8 @@ export async function executeVerification(options: { readonly theme?: string } =
   });
 
   // Gate 3: Benchmark Governance Audit
-  const audit = await runCommand("bun", ["run", "benchmark", "audit"]);
-  gates.push({
-    name: "Benchmark Governance",
-    status: audit.code === 0 ? "pass" : "fail",
-    details: audit.code === 0 ? "10/10 audit checks verified" : "Governance finding(s) detected",
-    durationMs: audit.durationMs,
-    diagnostics: audit.code !== 0 ? extractDiagnosticSnippet(audit.stdout || audit.stderr) : undefined,
-  });
+  const audit = await runCommand("bun", ["run", "benchmark", "audit", "--json"]);
+  gates.push(evaluateBenchmarkAuditGate(audit));
 
   // Gate 4: Git Diff Hygiene
   const gitDiff = await runCommand("git", ["diff", "--check"]);

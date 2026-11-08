@@ -33,6 +33,7 @@ export async function executeBenchmarkRun(
 
   try {
     const memBefore = memoryUsage().rss;
+    const engineStarted = performance.now();
 
     const result = await engine.execute({
       id: "00000000-0000-4000-8000-b00000000000",
@@ -44,8 +45,12 @@ export async function executeBenchmarkRun(
       },
     });
 
+    const engineWallMs = Math.round(performance.now() - engineStarted);
     const memAfter = memoryUsage().rss;
     const peakRssMb = Math.round((Math.max(memBefore, memAfter) / (1024 * 1024)) * 10) / 10;
+    // The process's peak so far is the engine's: the summaries below re-read the projected JSON
+    // (about 930 MB on Ghost), which a later reading would count as the engine's memory (NA-04).
+    const engineMaxRssMb = Math.round((process.resourceUsage().maxRSS / 1024) * 10) / 10;
 
     if (result.type !== "AnalyzeProject") {
       throw new Error(`Unexpected engine result type: ${result.type}`);
@@ -56,6 +61,7 @@ export async function executeBenchmarkRun(
       filesAnalyzed: result.analysis.filesAnalyzed,
       parserFailures: result.analysis.parserFailures,
       symbolExtractionFailures: result.analysis.symbolExtractionFailures,
+      secondPassFailures: result.analysis.secondPassFailures ?? 0,
       unsupportedFiles: result.analysis.unsupportedFiles,
       nonSourceArtifacts: result.analysis.nonSourceArtifacts,
       unclassifiedArtifacts: result.analysis.unclassifiedArtifacts,
@@ -85,6 +91,9 @@ export async function executeBenchmarkRun(
       frameworks: result.discovery.frameworks.map((f) => f.name),
       dependencyCount: result.discovery.dependencies.length,
       peakRssMb,
+      engineMaxRssMb,
+      engineWallMs,
+      snapshotReused: result.isReused === true,
     };
   } finally {
     await engine.shutdown();
@@ -98,11 +107,11 @@ async function extractSemanticSummary(discoveryDir: string): Promise<SemanticSum
   const symbols = await readJsonSafe(join(discoveryDir, "symbols.json"));
   const depGraph = await readJsonSafe(join(discoveryDir, "dependency-graph.json"));
 
-  const calls = asArray(semantic?.calls);
+  const calls = asArray(field(semantic, "calls"));
   const allSymbols = asArray(symbols);
-  const nodes = asArray(depGraph?.nodes);
-  const edges = asArray(depGraph?.edges);
-  const cycles = asArray(depGraph?.cycles);
+  const nodes = asArray(field(depGraph, "nodes"));
+  const edges = asArray(field(depGraph, "edges"));
+  const cycles = asArray(field(depGraph, "cycles"));
 
   return {
     totalCalls: calls.length,
@@ -117,12 +126,12 @@ async function extractSemanticSummary(discoveryDir: string): Promise<SemanticSum
     dependencyModules: nodes.length,
     dependencyEdges: edges.length,
     cycles: cycles.length,
-    entryPoints: asArray(semantic?.entryPoints).length,
-    routes: asArray(semantic?.routes).length,
-    middlewareChains: asArray(semantic?.middlewareChains).length,
-    deadCodeFindings: asArray(semantic?.deadCode).length,
-    unusedImports: asArray(semantic?.unusedImports).length,
-    unusedExports: asArray(semantic?.unusedExports).length,
+    entryPoints: asArray(field(semantic, "entryPoints")).length,
+    routes: asArray(field(semantic, "routes")).length,
+    middlewareChains: asArray(field(semantic, "middlewareChains")).length,
+    deadCodeFindings: asArray(field(semantic, "deadCode")).length,
+    unusedImports: asArray(field(semantic, "unusedImports")).length,
+    unusedExports: asArray(field(semantic, "unusedExports")).length,
   };
 }
 
@@ -133,8 +142,8 @@ async function extractFlowSummary(discoveryDir: string): Promise<FlowSummary> {
   const dataFlow = await readJsonSafe(join(discoveryDir, "data-flow.json"));
   const knowledge = await readJsonSafe(join(discoveryDir, "knowledge.json"));
 
-  const rawCfgs = asArray(controlFlow?.graphs);
-  const dfGraphs = asArray(dataFlow?.graphs);
+  const rawCfgs = asArray(field(controlFlow, "graphs"));
+  const dfGraphs = asArray(field(dataFlow, "graphs"));
 
   let basicBlockCount = 0;
   let controlFlowEdgeCount = 0;
@@ -173,8 +182,8 @@ async function extractFlowSummary(discoveryDir: string): Promise<FlowSummary> {
     defUseChains,
     taintFlows,
     interproceduralFlows,
-    knowledgeNodes: asArray(knowledge?.nodes).length,
-    knowledgeEdges: asArray(knowledge?.edges).length,
+    knowledgeNodes: asArray(field(knowledge, "nodes")).length,
+    knowledgeEdges: asArray(field(knowledge, "edges")).length,
   };
 }
 
@@ -209,15 +218,21 @@ async function hashDiscoveryArtifacts(discoveryDir: string): Promise<ArtifactHas
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
-async function readJsonSafe(filePath: string): Promise<Record<string, unknown> | unknown[] | null> {
+async function readJsonSafe(filePath: string): Promise<unknown> {
   try {
     const raw = await readFile(filePath, "utf8");
-    return JSON.parse(raw) as Record<string, unknown> | unknown[];
+    return JSON.parse(raw) as unknown;
   } catch {
     return null;
   }
 }
 
-function asArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
+/** The objects of a JSON array (artifact lists hold only objects or arrays); [] for anything else. */
+function asArray(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => item !== null && typeof item === "object") : [];
+}
+
+/** A property of a parsed JSON object; undefined for arrays, primitives and null. */
+function field(value: unknown, key: string): unknown {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>)[key] : undefined;
 }

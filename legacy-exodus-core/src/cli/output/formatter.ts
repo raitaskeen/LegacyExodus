@@ -51,11 +51,25 @@ export function formatAnalyzeOutput(report: AnalyzeProjectReport): string {
     `Unclassified files: ${report.unclassifiedArtifacts}`,
     `Enumeration failures: ${enumerationFailures}`,
     `Discovery complete: ${discoveryComplete ? "yes" : "no"}`,
+    ...(report.reused === true ? [formatSnapshotReuse(report)] : []),
+    ...(report.snapshotRejection === undefined ? [] : [formatSnapshotRejection(report.snapshotRejection)]),
     `Analysis duration: ${report.durationMs.toFixed(2)}ms`,
     `Languages: ${report.languages.join(", ") || "none"}`,
     `Frameworks: ${report.frameworks.join(", ") || "none"}`,
     `Dependencies: ${report.dependencies}`,
   ].join("\n");
+}
+
+/** A stored snapshot that was refused is announced with its status and reason (NA-11). */
+export function formatSnapshotRejection(rejection: { readonly status: string; readonly reason: string }): string {
+  return `Snapshot not reused: ${rejection.status}${rejection.reason.length > 0 ? ` (${rejection.reason})` : ""}; fresh analysis ran`;
+}
+
+/** Reuse is announced explicitly; fresh analysis output is unchanged. */
+export function formatSnapshotReuse(report: AnalyzeProjectReport): string {
+  return report.snapshotAnalysisRunId === undefined
+    ? "Snapshot reused: yes (pass --refresh for fresh analysis)"
+    : `Snapshot reused: yes, from analysis run ${report.snapshotAnalysisRunId} (pass --refresh for fresh analysis)`;
 }
 
 export function formatInitOutput(report: InitReport): string {
