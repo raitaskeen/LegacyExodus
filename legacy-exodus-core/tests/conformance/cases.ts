@@ -525,6 +525,27 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // NA-12: a call that runs before its function is assigned calls `undefined`; nothing is proven. A hoisted
+    // declaration, a call after the assignment, and a closure that may run later stay resolved.
+    id: "call-before-assignment",
+    files: {
+      "a.js": [
+        "function hoist() { f(); var f = function () { return 3; }; }",
+        "function decl() { g(); function g() { return 1; } }",
+        "function later() { var k = function () { return 1; }; return k(); }",
+        "function closure() { const run = () => m(); var m = function () { return 2; }; return run(); }",
+        "module.exports = { hoist, decl, later, closure };",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "call-before-assignment:unresolved", category: "calls", has: /^a\.js@1:\d+\|hoist\|f\|UNRESOLVED\|/ },
+      { id: "call-before-assignment:hoisted-declaration-resolves", category: "calls", has: /^a\.js@2:\d+\|decl\|g\|RESOLVED\|/ },
+      { id: "call-before-assignment:after-assignment-resolves", category: "calls", has: /^a\.js@3:\d+\|later\|k\|RESOLVED\|/ },
+      { id: "call-before-assignment:closure-resolves", category: "calls", has: /^a\.js@4:\d+\|[^|]*\|m\|RESOLVED\|/ },
+    ],
+  },
+  {
     // 2026-11-08 audit probe T16: string-built SQL through a client instance is SQL injection.
     id: "taint-sql-client",
     files: {
