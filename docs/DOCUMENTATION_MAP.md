@@ -80,6 +80,7 @@ The LegacyExodus documentation system is designed as a layered knowledge archite
 * **[docs/architecture/plugin-architecture.md](architecture/plugin-architecture.md):** Current in-process plugin foundation and explicitly separated target isolation/governance model.
 
 #### 5. Architecture Decision Records (`docs/adr/` — Populated Decisions)
+* **[ADR index](adr/README.md):** every record at a glance, with status and where it is implemented.
 * **[ADR-001: Project State Architecture](adr/ADR-001-project-state-architecture.md):** Immutable state snapshots and deterministic reducers *(Accepted)*.
 * **[ADR-002: Event System Governance](adr/ADR-002-event-system-governance.md):** Domain event ledgers, synchronous event bus, and audit replay *(Accepted)*.
 * **[ADR-003: Plugin System Architecture](adr/ADR-003-plugin-system.md):** Contract-first plugin interfaces and context injection *(Accepted)*.
@@ -87,6 +88,10 @@ The LegacyExodus documentation system is designed as a layered knowledge archite
 * **[ADR-005: Storage Strategy](adr/ADR-005-storage-strategy.md):** Memory storage adapters and 64KB backpressure streaming JSON projections *(Accepted)*.
 * **[ADR-006: Security Model](adr/ADR-006-security-model.md):** Symlink isolation, relative path hashing, and fail-closed resolution *(Accepted)*.
 * **[ADR-007: Migration Pipeline](adr/ADR-007-migration-pipeline.md):** Compiler sandbox and self-healing repair loops *(Proposed / Target Architecture)*.
+* **[ADR-008: Edit-Stable Fact Identity](adr/ADR-008-edit-stable-identity.md):** Fact ids from structure, never positions *(Accepted, implemented)*.
+* **[ADR-009: Streaming, Sharded Execution](adr/ADR-009-streaming-sharded-execution.md):** Whole-run fact lists on disk *(Accepted, implemented)*.
+* **[ADR-010: Byte-Reproducible Projections](adr/ADR-010-reproducible-projections.md):** Run identity in the manifest only; one stable project id per repository *(Accepted, implemented)*.
+* **[ADR-011: Bounded-Memory Snapshot Reuse](adr/ADR-011-bounded-snapshot-reuse.md):** Verify while copying, restore lists on disk *(Accepted, implemented)*.
 
 #### 6. API Contracts & Implementation Specs (`docs/api/` & `docs/implementation/`)
 * **[docs/api/command-contracts.md](api/command-contracts.md):** CQRS command schemas (`AnalyzeProject`, `DiscoverProject`, etc.).

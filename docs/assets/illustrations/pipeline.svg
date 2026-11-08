@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 380" role="img" aria-labelledby="t d">
+  <title id="t">How LegacyExodus reads a repository</title>
+  <desc id="d">Six stages from left to right: Discover, Parse, Symbols, Graphs, Flow, and the .discovery output. Facts are resolved only when proven; unknown stays explicit.</desc>
+  <style>
+    .ink { fill: none; stroke: #16130f; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+    .soft { fill: none; stroke: #16130f; stroke-width: 1.6; stroke-linecap: round; stroke-dasharray: 6 7; }
+    .name { font: 700 17px Inter, "Segoe UI", Helvetica, Arial, sans-serif; fill: #16130f; }
+    .note { font: 400 12.5px Inter, "Segoe UI", Helvetica, Arial, sans-serif; fill: #3d362e; }
+    .mono { font: 500 12px "JetBrains Mono", Consolas, Menlo, monospace; fill: #16130f; }
+    .title { font: 800 22px Inter, "Segoe UI", Helvetica, Arial, sans-serif; fill: #16130f; }
+    .num { font: 700 12px "JetBrains Mono", Consolas, Menlo, monospace; fill: #ffffff; }
+  </style>
+
+  <!-- card -->
+  <path d="M14 10 Q480 4 946 12 Q952 190 944 370 Q480 377 16 368 Q8 190 14 10 Z" fill="#fff7f0" stroke="#e8d9cc" stroke-width="2"/>
+
+  <text class="title" x="40" y="56">How LegacyExodus reads a repository</text>
+  <path class="ink" d="M40 66 Q170 60 300 67 Q360 70 418 64" stroke="#b24418" stroke-width="4"/>
+
+  <!-- stage boxes: hand-drawn rectangles -->
+  <g>
+    <path d="M30 112 Q94 107 156 113 Q161 160 157 208 Q94 213 31 207 Q25 160 30 112 Z" fill="#ffe6d6" class="ink"/>
+    <path d="M182 111 Q246 106 308 112 Q313 160 309 207 Q246 212 183 208 Q177 160 182 111 Z" fill="#ffe6d6" class="ink"/>
+    <path d="M334 113 Q398 107 460 112 Q465 160 461 208 Q398 213 335 207 Q329 160 334 113 Z" fill="#ffe6d6" class="ink"/>
+    <path d="M486 112 Q550 106 612 113 Q617 160 613 207 Q550 213 487 208 Q481 160 486 112 Z" fill="#fde9c8" class="ink"/>
+    <path d="M638 111 Q702 107 764 112 Q769 160 765 208 Q702 212 639 207 Q633 160 638 111 Z" fill="#fde9c8" class="ink"/>
+    <path d="M790 112 Q854 106 916 113 Q921 160 917 208 Q854 213 791 207 Q785 160 790 112 Z" fill="#d9efe7" class="ink"/>
+  </g>
+
+  <!-- step numbers -->
+  <g>
+    <circle cx="44" cy="112" r="12" fill="#b24418"/><text class="num" x="40" y="116">1</text>
+    <circle cx="196" cy="111" r="12" fill="#b24418"/><text class="num" x="192" y="115">2</text>
+    <circle cx="348" cy="113" r="12" fill="#b24418"/><text class="num" x="344" y="117">3</text>
+    <circle cx="500" cy="112" r="12" fill="#b98314"/><text class="num" x="496" y="116">4</text>
+    <circle cx="652" cy="111" r="12" fill="#b98314"/><text class="num" x="648" y="115">5</text>
+    <circle cx="804" cy="112" r="12" fill="#138a6a"/><text class="num" x="800" y="116">6</text>
+  </g>
+
+  <!-- labels -->
+  <text class="name" x="46" y="148">Discover</text>
+  <text class="note" x="46" y="170">files, languages,</text>
+  <text class="note" x="46" y="186">ignore rules</text>
+
+  <text class="name" x="198" y="148">Parse</text>
+  <text class="note" x="198" y="170">one AST per file;</text>
+  <text class="note" x="198" y="186">failures explicit</text>
+
+  <text class="name" x="350" y="148">Symbols</text>
+  <text class="note" x="350" y="170">scopes, imports,</text>
+  <text class="note" x="350" y="186">exports</text>
+
+  <text class="name" x="502" y="148">Graphs</text>
+  <text class="note" x="502" y="170">modules, calls,</text>
+  <text class="note" x="502" y="186">knowledge</text>
+
+  <text class="name" x="654" y="148">Flow</text>
+  <text class="note" x="654" y="170">CFG, data flow,</text>
+  <text class="note" x="654" y="186">taint</text>
+
+  <text class="mono" x="806" y="148" style="font-weight:700;font-size:15px">.discovery/</text>
+  <text class="note" x="806" y="170">hashed, signed,</text>
+  <text class="note" x="806" y="186">byte-reproducible</text>
+
+  <!-- arrows -->
+  <g class="ink">
+    <path d="M160 160 Q170 157 179 160"/><path d="M172 154 L180 160 L172 166"/>
+    <path d="M312 159 Q322 156 331 160"/><path d="M324 154 L332 160 L324 166"/>
+    <path d="M464 160 Q474 157 483 160"/><path d="M476 154 L484 160 L476 166"/>
+    <path d="M616 160 Q626 157 635 159"/><path d="M628 153 L636 159 L628 165"/>
+    <path d="M768 160 Q778 157 787 160"/><path d="M780 154 L788 160 L780 166"/>
+  </g>
+
+  <!-- input repo sketch -->
+  <g transform="translate(36 232)">
+    <path class="ink" d="M0 10 Q2 2 12 2 L38 2 L46 10 L96 10 Q104 11 104 19 L104 62 Q103 70 95 70 L9 70 Q1 69 1 61 Z" fill="#ffffff"/>
+    <path class="soft" d="M14 30 L72 30 M14 42 L86 42 M14 54 L60 54"/>
+    <text class="note" x="112" y="34">your repository:</text>
+    <text class="note" x="112" y="50">read, never rewritten</text>
+  </g>
+
+  <!-- the repository feeds Discover -->
+  <g class="ink" stroke="#b24418">
+    <path d="M128 252 Q150 246 140 218"/><path d="M134 224 L140 215 L146 223"/>
+  </g>
+
+  <!-- evidence bracket under Graphs + Flow -->
+  <path class="soft" d="M490 228 Q492 240 504 241 L756 242 Q766 241 766 228" stroke="#2d5ba8"/>
+  <text class="note" x="500" y="266" style="fill:#2d5ba8;font-weight:600">RESOLVED only when proven,</text>
+  <text class="note" x="500" y="283" style="fill:#2d5ba8;font-weight:600">otherwise an explicit UNRESOLVED fact</text>
+
+  <!-- output note -->
+  <path class="soft" d="M854 214 Q858 236 850 256" stroke="#138a6a"/>
+  <text class="note" x="790" y="276">run identity lives in</text>
+  <text class="mono" x="790" y="293">manifest.json</text>
+  <text class="note" x="790" y="310">only (ADR-010)</text>
+
+  <text class="note" x="40" y="344" style="font-style:italic">Static facts describe source structure. They are not proof of runtime behaviour.</text>
+</svg>
