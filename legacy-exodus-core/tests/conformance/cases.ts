@@ -516,6 +516,27 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // NA-09: a name the call graph cannot pin to one declaration is still used. Duplicate sloppy declarations
+    // and an Annex B block function called after its block are not dead code; a function nothing names is.
+    id: "dead-code-unresolved-names",
+    files: {
+      "sloppy.cjs": [
+        "function dup() { return d(); }",
+        "function d() { return \"first\"; }",
+        "function d() { return \"second\"; }",
+        "function annexB(x) { if (x) { function bf() { return 1; } } return bf(); }",
+        "function neverCalled() { return 0; }",
+        "module.exports = { dup, annexB };",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "dead-code:duplicate-declaration-is-used", category: "deadCode", lacks: /^unreferenced-local-symbol\|function:d@/ },
+      { id: "dead-code:annex-b-function-is-used", category: "deadCode", lacks: /^unreferenced-local-symbol\|function:bf@/ },
+      { id: "dead-code:unnamed-function-is-dead", category: "deadCode", has: /^unreferenced-local-symbol\|function:neverCalled@/ },
+    ],
+  },
+  {
     // NA-03b: path-traversal and SSRF sinks, judged only on the argument that names the path or the URL.
     id: "taint-fs-ssrf-sinks",
     files: {
