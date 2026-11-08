@@ -1,7 +1,7 @@
 # ADR-010: Byte-Reproducible Projections
 
 ## Status
-**PROPOSED** (2026-11-08). Finding NA-06 of the 2026-11-08 fresh audit. It needs an owner decision before implementation.
+**ACCEPTED** (2026-11-08, owner). Finding NA-06 of the 2026-11-08 fresh audit. Implemented in its own PRs, each with fact-diff 0/0 (only the identity fields move).
 
 ## Context
 Two `legacy-exodus analyze` runs of the same repository produce different bytes in 7 `.discovery` files, although every fact is the same. The audit showed this by normalising the ids: the facts were then identical across runs, timezones, locales and working directories.

@@ -1,7 +1,7 @@
 # ADR-011: Bounded-Memory Snapshot Reuse
 
 ## Status
-**PROPOSED** (2026-11-08). Finding NA-16, found while fixing NA-04. It needs an owner decision before implementation.
+**ACCEPTED** (2026-11-08, owner). Finding NA-16, found while fixing NA-04. Implemented in its own PRs; the reuse budget joins the scale gate.
 
 ## Context
 Reusing a validated `.discovery` snapshot costs far more memory than analysing from scratch. On Ghost (7,172 analysed files), measured with the benchmark harness, which now reports `snapshotReused`:
