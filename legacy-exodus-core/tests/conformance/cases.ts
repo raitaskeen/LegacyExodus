@@ -86,6 +86,7 @@ const taintSnippets: Readonly<Record<string, { readonly code: string; readonly r
   "audit-array-element": { runtime: "flow", code: `const a = [req.body]; res.send(a[0]);` },
   "audit-template": { runtime: "flow", code: "res.send(`<b>${req.body}</b>`);" },
   "audit-callback": { runtime: "flow", code: `[req.body].forEach((v) => res.send(v));` },
+  "audit-callback-index-is-not-the-element": { runtime: "none", code: `[req.body].forEach((v, i) => res.send(i));` },
   "audit-returned-object-field": { runtime: "flow", code: `function wrap(v) { return { inner: v }; } res.send(wrap(req.body).inner);` },
   "audit-getter": { runtime: "flow", code: `const o = { get p() { return req.body; } }; res.send(o.p);` },
   "audit-control-only": { runtime: "none", code: `res.send(req.body.length > 3 ? "ok" : "no");` },
