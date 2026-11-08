@@ -53,6 +53,12 @@ jobs:
       - name: Benchmark Governance Audit
         run: bun run benchmark audit
 
+      - name: Accuracy report
+        # Recall and precision on the conformance corpus by category; fails on any regression.
+        run: |
+          bun run benchmarks/cli.ts accuracy --output "$RUNNER_TEMP/accuracy.md" > /dev/null
+          cat "$RUNNER_TEMP/accuracy.md" >> "$GITHUB_STEP_SUMMARY"
+
       - name: CLI smoke test
         run: bun run src/cli/index.ts --help
 

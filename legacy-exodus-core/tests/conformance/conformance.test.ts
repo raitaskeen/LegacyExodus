@@ -1,15 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { runInNewContext } from "node:vm";
+import { rm } from "node:fs/promises";
 
 import type { LegacyExodusEngine } from "@core/engine";
 import { createLegacyExodusEngine } from "@runtime/composition/services";
 
+// The accuracy report uses the same evaluation, so the report and this gate cannot disagree.
+import { analyzeCase, holds, runtimeFlow } from "../../benchmarks/accuracy";
 import { extractFacts } from "../../benchmarks/fact-diff";
-import { conformanceCases, type ConformanceCase, type Expectation } from "./cases";
+import { conformanceCases } from "./cases";
 import { knownGaps } from "./known-gaps";
 
 let engine: LegacyExodusEngine;
@@ -25,34 +23,6 @@ afterAll(async () => {
   for (const workspace of workspaces) await rm(workspace, { recursive: true, force: true });
 });
 
-async function analyze(testCase: ConformanceCase): Promise<string> {
-  const projectPath = await mkdtemp(join(tmpdir(), `lx-conformance-${testCase.id}-`));
-  workspaces.push(projectPath);
-  for (const [path, content] of Object.entries(testCase.files)) {
-    await mkdir(dirname(join(projectPath, path)), { recursive: true });
-    await writeFile(join(projectPath, path), content);
-  }
-  const result = await engine.execute({ id: randomUUID(), type: "AnalyzeProject", createdAt: new Date(), payload: { projectId: randomUUID(), path: projectPath, refresh: true } });
-  if (result.type !== "AnalyzeProject") throw new Error(`Expected AnalyzeProject, got ${result.type}`);
-  return join(projectPath, ".discovery");
-}
-
-function holds(expectation: Expectation, facts: ReturnType<typeof extractFacts>, discovery: string): boolean {
-  if (expectation.check !== undefined) return expectation.check(discovery);
-  const category = [...(facts.get(expectation.category ?? "") ?? [])];
-  if (expectation.has !== undefined && !category.some((fact) => expectation.has!.test(fact))) return false;
-  if (expectation.lacks !== undefined && category.some((fact) => expectation.lacks!.test(fact))) return false;
-  return true;
-}
-
-/** Runs `p.js` with request/response stubs and reports whether tainted input reached a sink. */
-function runtimeFlow(code: string): boolean {
-  const sent: unknown[] = [];
-  const res = { send: (value: unknown) => sent.push(value), json: (value: unknown) => sent.push(value) };
-  runInNewContext(code, { req: { body: "TAINT", query: {}, params: {} }, res, Error });
-  return sent.some((value) => JSON.stringify(value)?.includes("TAINT") === true || String(value).includes("TAINT"));
-}
-
 describe("conformance corpus", () => {
   it("has unique expectation ids and a ledger that names only real expectations", () => {
     const ids = conformanceCases.flatMap((testCase) => testCase.expectations.map((expectation) => expectation.id));
@@ -66,7 +36,8 @@ describe("conformance corpus", () => {
         // The ground truth itself is checked first: a wrong expectation must never pass as a gap.
         expect(runtimeFlow(testCase.files["p.js"] ?? "")).toBe(testCase.runtime === "flow");
       }
-      const discovery = await analyze(testCase);
+      const { discovery, workspace } = await analyzeCase(engine, testCase);
+      workspaces.push(workspace);
       const facts = extractFacts(discovery);
       const regressions: string[] = [];
       const fixed: string[] = [];
