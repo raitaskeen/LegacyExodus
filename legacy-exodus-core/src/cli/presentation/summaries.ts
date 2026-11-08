@@ -135,6 +135,14 @@ export class SummaryPresenter {
           badgeType: "warning" as const,
         }]
         : []),
+      ...(report.snapshotRejection !== undefined
+        ? [{
+          label: "Snapshot",
+          value: `not reused: ${report.snapshotRejection.status}`,
+          badge: "REFUSED",
+          badgeType: "warning" as const,
+        }]
+        : []),
     ]);
 
     const artifactsTree = [
