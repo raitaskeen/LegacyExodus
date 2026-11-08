@@ -53,11 +53,14 @@ export interface DiscoveryManifestFailure {
   readonly code: string;
 }
 
-/** A path left out on purpose because an ignore rule says it is not the project's source (BA-15). */
+/**
+ * A path left out on purpose: an ignore rule says it is not the project's source (BA-15), or it is a
+ * symbolic link, which discovery never follows (its target may lie outside the project) (NA-07).
+ */
 export interface ExcludedPath {
   readonly path: string;
-  readonly kind: "directory" | "file";
-  readonly reason: "gitignore" | "legacyexodusignore";
+  readonly kind: "directory" | "file" | "link";
+  readonly reason: "gitignore" | "legacyexodusignore" | "symbolic-link";
 }
 
 export interface FileScanResult {
@@ -103,8 +106,8 @@ const discoveryManifestFailureSchema = z.object({
 
 export const excludedPathSchema = z.object({
   path: z.string().min(1),
-  kind: z.enum(["directory", "file"]),
-  reason: z.enum(["gitignore", "legacyexodusignore"]),
+  kind: z.enum(["directory", "file", "link"]),
+  reason: z.enum(["gitignore", "legacyexodusignore", "symbolic-link"]),
 }).strict();
 
 const dependencyArtifactSchema = z.object({

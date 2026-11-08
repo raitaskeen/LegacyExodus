@@ -315,7 +315,9 @@ export class FileScanner {
 
       // Intentional traversal policy: Symbolic links are skipped to protect against
       // traversal cycles, duplicate source analysis, and escaping repository boundaries.
+      // The link itself is reported, never followed or stat-ed: what it points to is not read (NA-07).
       if (entry.isSymbolicLink()) {
+        excludedPaths.push(immutable({ path: entryRelative, kind: "link", reason: "symbolic-link" }));
         continue;
       }
 
