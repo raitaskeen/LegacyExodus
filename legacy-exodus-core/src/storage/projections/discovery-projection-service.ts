@@ -155,13 +155,13 @@ export class DiscoveryProjectionService implements RuntimeService {
         ...(graph === undefined
           ? []
           : [
-              deferredArtifact("dependency-graph.json", graph),
+              deferredArtifact("dependency-graph.json", factsOnly(graph)),
               { name: "modules.json" as const, payload: payload.files.map((file) => ({ path: file.path, language: file.language, ...(file.fileKind === undefined ? {} : { fileKind: file.fileKind }) })) },
               deferredArtifact("symbols.json", () => symbols),
-              ...(knowledge === undefined ? [] : [deferredArtifact("knowledge.json", knowledge)]),
-              ...(semantic === undefined ? [] : [deferredArtifact("semantic.json", semantic)]),
-              ...(controlFlow === undefined ? [] : [deferredArtifact("control-flow.json", controlFlow)]),
-              ...(dataFlow === undefined ? [] : [deferredArtifact("data-flow.json", dataFlow)]),
+              ...(knowledge === undefined ? [] : [deferredArtifact("knowledge.json", factsOnly(knowledge))]),
+              ...(semantic === undefined ? [] : [deferredArtifact("semantic.json", factsOnly(semantic))]),
+              ...(controlFlow === undefined ? [] : [deferredArtifact("control-flow.json", factsOnly(controlFlow))]),
+              ...(dataFlow === undefined ? [] : [deferredArtifact("data-flow.json", factsOnly(dataFlow))]),
             ]),
       ],
       metadata: {
@@ -200,6 +200,17 @@ function matchesRun(payload: RunScopedPayload, projectId: string, analysisRunId:
  * Validates every record and returns a loader of the latest matching payload. Each parse is dropped
  * before the next, so at most one large payload is alive while records are checked.
  */
+/**
+ * A fact artifact without run identity: `projectId` and `analysisRunId` live in the manifest only, so the same
+ * source, engine and configuration give the same bytes in every fact artifact (ADR-010, NA-06).
+ */
+function factsOnly<Payload extends RunScopedPayload>(load: () => Payload): () => Omit<Payload, "projectId" | "analysisRunId"> {
+  return () => {
+    const { projectId: _projectId, analysisRunId: _analysisRunId, ...facts } = load();
+    return facts;
+  };
+}
+
 function latestPayloadLoader<Payload extends RunScopedPayload>(
   records: readonly StorageRecord[],
   schema: z.ZodType<Payload>,

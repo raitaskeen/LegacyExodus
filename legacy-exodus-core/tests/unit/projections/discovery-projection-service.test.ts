@@ -95,9 +95,12 @@ describe("DiscoveryProjectionService", () => {
         language: "javascript", async: false, anonymous: false, visibility: "public", parameters: [],
         sourceSymbolName: "login",
       }]);
+      // Facts only in the artifact; the active run is named by the manifest (ADR-010).
       expect(JSON.parse(await readFile(join(projectPath, ".discovery", "knowledge.json"), "utf8"))).toEqual({
-        projectId, analysisRunId: activeRunId, nodes: [{ id: "active", kind: "symbol", name: "active", filePath: "src/index.js" }], edges: [],
+        nodes: [{ id: "active", kind: "symbol", name: "active", filePath: "src/index.js" }], edges: [],
       });
+      const manifest = JSON.parse(await readFile(join(projectPath, ".discovery", "manifest.json"), "utf8"));
+      expect({ projectId: manifest.analysis.projectId, analysisRunId: manifest.analysis.analysisRunId }).toEqual({ projectId, analysisRunId: activeRunId });
     } finally {
       await rm(projectPath, { force: true, recursive: true });
     }
@@ -205,9 +208,11 @@ describe("DiscoveryProjectionService", () => {
 
       const writtenControlFlow = JSON.parse(
         await readFile(join(projectPath, ".discovery", "control-flow.json"), "utf8"),
-      ) as { readonly projectId: string; readonly graphs: readonly { readonly scopeName: string }[] };
+      ) as { readonly projectId?: string; readonly graphs: readonly { readonly scopeName: string }[] };
 
-      expect(writtenControlFlow.projectId).toBe(projectId);
+      // Run identity is in the manifest, not in the fact artifact (ADR-010).
+      expect(writtenControlFlow.projectId).toBeUndefined();
+      expect(JSON.parse(await readFile(join(projectPath, ".discovery", "manifest.json"), "utf8")).analysis.projectId).toBe(projectId);
       expect(writtenControlFlow.graphs).toHaveLength(1);
       expect(writtenControlFlow.graphs[0]!.scopeName).toBe("login");
     } finally {
