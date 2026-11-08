@@ -26,6 +26,36 @@ session resumes from here.
   - Fast: no stage superlinear in file or function count.
   - No over-engineering: build only what a finding, a failing case or a measured budget demands.
 
+## Track 2026-11-08: fresh audit findings (NA-01 to NA-15). Read this first
+
+The fresh read-only audit of `main` at `b29d8ac` is in [../2026-11-08-fresh-audit/](../2026-11-08-fresh-audit/):
+- `AUDIT-REPORT.md`: findings, red team, scorecard (about 67/100) and feature-fit;
+- `STATUS-REPORT.md`: the whole record from 28 Oct to 8 Nov (all 28 BA findings, Ghost history, sessions);
+- `SAFETY-NET-CRITIQUE.md`: the next product, with a critique of the Gemini blueprint.
+
+**Owner decisions on 2026-11-08:**
+- Fix every open finding in the best way, and avoid both hallucination and over-engineering.
+- Strengthen the accuracy harness, with graphs and measured accuracy, before the IR phase.
+- NA-01 goes first.
+- The next product is the Behaviour Safety Net (test generator), not quantum-safe. It runs in parallel and never edits `legacy-exodus-core/src`.
+- The owner works from two Claude accounts on one PC, and both share `~/.claude` memory. This file plus memory is the hand-off. Never run two writers on one branch.
+
+| Order | Item | Sev | Allowlist (lock) | Status |
+|---|---|---|---|---|
+| 1 | NA-01 every call site is a fact: unnamed callees UNRESOLVED (`mk().run`, `new K().m`, `o[<dynamic>]`, `super.m`, `<function>`); tagged templates call their tag | P1 | `src/semantic/call-graph-builder.ts`, `tests/conformance/cases.ts` | **in progress**: branch `fix/na01-call-site-completeness`, worktree `C:\Projects\.w2\na01`. RED shown (11 expectations), conformance 54/54 green. Fact-diff so far 0 lost (fixture, src +1,139 calls, Express, Fastify), Ghost pending. Full suite to re-run idle (8 fails seen under contention, 2 rechecked and passing) |
+| 2 | NA-02 `with` / direct `eval` make names in scope UNRESOLVED (`dynamic-scope`) | P2 | call-graph-builder scope resolution | queued (after NA-01: same file) |
+| 3 | NA-05 enforce gates: `--fail-on-loss`; Express and Fastify in the CI fact-diff; ask the owner to add Fact Diff and Scale Gate to required checks | P2 | `.github/workflows/ci.yml` | queued (ruleset change = owner action) |
+| 4 | NA-04 scale gate measures the engine, not the harness read-back: production mode, re-baseline Ghost, nightly Ghost | P2 | `benchmarks/scale.ts`, `benchmarks/harness.ts`, `ghost.json` | queued |
+| 5 | NA-06 byte-reproducible CLI output (no random ids or times in artifacts) | P2 | `src/cli/commands/analyze.ts` plus projection | queued (needs a design note: ids are contract fields) |
+| 6 | NA-07 report skipped symlinks in `excludedPaths` | P2 | `src/discovery/file-scanner.ts` | queued |
+| 7 | NA-08 SQLite concurrent runs: classified error plus busy retry | P2 | `src/storage/adapters/sqlite-storage.ts` | queued |
+| 8 | NA-03 taint policy packs (fs/path, SQL, SSRF, NoSQL); callbacks; destructured-require helpers | P2 | `src/flow/taint-policy.ts`, flow builders | queued (largest; split per sink family) |
+| 9 | NA-09 dead code: duplicate declarations and Annex B; NA-12 hoisting | P3 | extractor, call graph | queued |
+| 10 | NA-10 resource-limit label; NA-11 report a rejected snapshot; NA-13 the "read-only" label | P3 | parser adapter, validator, CLI help | queued |
+| 11 | NA-14 dependabot PRs (fact-diff for `@babel/parser`) | P3 | lockfile | queued |
+| 12 | NA-15 docs truth refresh (README, CURRENT_IMPLEMENTATION, ROADMAP), BA-19/BA-25 decision | — | docs | queued, last before the IR |
+| — | Accuracy harness: per-category precision/recall against ground truth (Express, Fastify, plus new probes), graphs in the benchmark report, trend per PR | — | `benchmarks/**` | to design after NA-01/NA-02 (owner request 2026-11-08) |
+
 ## Status
 
 | Wave | Item | Findings | Allowlist (lock) | Depends on | Status |
