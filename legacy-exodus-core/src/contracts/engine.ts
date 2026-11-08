@@ -25,6 +25,8 @@ export interface AnalyzeProjectResult {
   readonly isReused?: boolean;
   /** Analysis run that produced the reused snapshot; present only with `isReused`. */
   readonly snapshotAnalysisRunId?: string;
+  /** A stored snapshot that was found but not reused, and why (NA-11). */
+  readonly snapshotRejection?: { readonly status: string; readonly reason: string };
 }
 
 export interface AnalysisSummary {

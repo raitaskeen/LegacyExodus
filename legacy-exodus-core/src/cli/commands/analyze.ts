@@ -31,6 +31,8 @@ export interface AnalyzeProjectReport {
   readonly reused?: boolean;
   /** Analysis run that produced the reused snapshot. */
   readonly snapshotAnalysisRunId?: string;
+  /** A stored snapshot that was not reused, and why: never a silent fresh run (NA-11). */
+  readonly snapshotRejection?: { readonly status: string; readonly reason: string };
 }
 
 export interface AnalyzeProjectOptions {
@@ -85,6 +87,7 @@ export async function analyzeProject(
       ...(result.isReused === true && result.snapshotAnalysisRunId !== undefined
         ? { snapshotAnalysisRunId: result.snapshotAnalysisRunId }
         : {}),
+      ...(result.snapshotRejection === undefined ? {} : { snapshotRejection: result.snapshotRejection }),
     };
   } finally {
     await engine.shutdown();
