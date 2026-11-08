@@ -12,6 +12,8 @@ export interface CommandDocGroup {
     readonly description: string;
     readonly isReadOnly?: boolean;
     readonly isMutating?: boolean;
+    /** Reads the target's source but writes generated output into it (NA-13). */
+    readonly writesOutput?: boolean;
   }[];
 }
 
@@ -76,7 +78,7 @@ export class HelpPresenter {
       {
         title: "Repository Analysis",
         commands: [
-          { name: "analyze <path>", description: "Analyze repository structure, ASTs, symbols & graph", isReadOnly: true },
+          { name: "analyze <path>", description: "Analyze repository structure, ASTs, symbols & graph", writesOutput: true },
         ],
       },
       {
@@ -104,7 +106,9 @@ export class HelpPresenter {
             ? ` ${this.theme.dim("[read-only]")}`
             : cmd.isMutating
               ? ` ${this.theme.dim("[mutates workspace]")}`
-              : "";
+              : cmd.writesOutput
+                ? ` ${this.theme.dim("[writes .discovery/]")}`
+                : "";
           return `    ${this.theme.active(paddedName)}  ${this.theme.text(cmd.description)}${badge}`;
         }).join("\n");
         return `${groupTitle}\n${groupCmds}`;
@@ -278,7 +282,7 @@ export class HelpPresenter {
 
   private renderAnalyzeHelp(): string {
     const header = this.renderHeader("analyze", "Command");
-    const desc = `  ${this.theme.text("Analyze repository structure, ASTs, symbols & graph")} ${this.theme.dim("[read-only]")}`;
+    const desc = `  ${this.theme.text("Analyze repository structure, ASTs, symbols & graph")} ${this.theme.dim("[writes .discovery/]")}`;
 
     const usage = [
       this.theme.heading("USAGE"),
