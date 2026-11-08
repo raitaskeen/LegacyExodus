@@ -6,6 +6,10 @@
 
 LegacyExodus is a deterministic local JavaScript/TypeScript repository-intelligence and static-analysis engine. It inventories a repository, parses supported source files, extracts symbols, resolves supported module relationships, builds dependency, knowledge, semantic, control-flow, and data-flow artifacts, and projects validated results to `.discovery/`.
 
+<p align="center">
+  <img src="docs/assets/illustrations/pipeline.svg" alt="How LegacyExodus reads a repository: Discover, Parse, Symbols, Graphs, Flow, then a hashed and signed .discovery output. Facts are resolved only when proven." width="100%"/>
+</p>
+
 It is intended to evolve into a governed legacy-modernization platform. Code transformation, migration planning, AI/LLM integration, Rust/Axum/SQLx generation, compiler sandboxes, deployment automation, and behavioral-equivalence certification are **target architecture and are not implemented**.
 
 ## Current implementation
@@ -38,6 +42,18 @@ The current capability boundary, with its limits, is recorded in [Current Implem
   </tr>
 </table>
 
+## Measured, not claimed
+
+Every number below comes from a command in this repository, run on a pinned corpus. CI re-checks the gates on every pull request.
+
+| What | Result | How it is checked |
+|---|---|---|
+| **Ghost** (7,172 analyzed files) | Fresh analysis 3.5–5 min at 1.7–2.6 GB peak (measured runs, 2026-11-04 to 2026-11-09, one 16 GB dev machine). Snapshot reuse about 25 s at about 1 GB peak | `bun run benchmarks/cli.ts scale ghost`; reuse measured per ADR-011 |
+| **Synthetic 10,000 files** | Fresh about 1 GB peak; reuse about 0.7 GB peak | **Scale Gate** in CI: ceilings of 2,800 MiB fresh and 1,800 MiB reuse |
+| **No fact lost by accident** | Express, Fastify, the engine's own source and a governance fixture are analysed before and after each change | **Fact Diff** in CI. A lost fact fails the PR unless the owner signs off with `facts-lost-explained` |
+| **Conformance corpus** | Expected facts per language feature, including runtime-proven taint flows | `tests/conformance`. Its known-gaps ledger is empty, and the test fails if a listed gap starts to hold |
+| **Byte-reproducible output** | Two runs of the same repository write identical fact artifacts | `tests/integration/reproducible-projections.test.ts` (ADR-010) |
+
 ## Supported inputs and limitations
 
 - First-class analysis targets are repository-local JavaScript and TypeScript, including JSX/TSX and supported ESM/CommonJS patterns.
@@ -48,7 +64,7 @@ The current capability boundary, with its limits, is recorded in [Current Implem
 - Module resolution covers repository-local modules, proven `tsconfig` paths and npm/Yarn/pnpm workspace packages by name (S3). Third-party packages in `node_modules` and package `exports`/`imports` maps are not resolved.
 - Static graphs are evidence about source structure, not proof of runtime behavior, vulnerability absence, or migration safety.
 - Benchmark fidelity is sample-based. Whole-repository migration safety is not established.
-- Measured scale: Ghost (about 7,200 analyzed files) takes about 3.5–4 minutes at 1.7–2.2 GB peak memory on a fresh analysis, and a synthetic 10,000-file repository stays under its CI ceiling. Reusing a snapshot takes about 1 GB and 25 s on Ghost, and CI holds it under its own ceiling (ADR-011). Memory still grows with repository size; no claim of unlimited scale is made.
+- Scale is measured, not unlimited: see [Measured, not claimed](#measured-not-claimed). Memory still grows with repository size.
 
 ## Quick start
 
@@ -83,10 +99,10 @@ bun run src/cli/index.ts --help
 |---|---|
 | Bun | `1.4.2` package manager (`>=1.3.0` engine range) |
 | TypeScript | `7.0.2` |
-| Babel parser | `8.0.4` |
-| Zod | `4.5.4` |
+| Babel parser | `8.0.6` |
+| Zod | `4.6.7` |
 | Commander | `15.0.0` |
-| Pino | `10.3.1` |
+| Pino | `10.4.0` |
 
 ## Architecture
 
@@ -120,6 +136,8 @@ See the [documentation index](docs/README.md), [system overview](docs/architectu
 |---|---|
 | Current capability boundary | [Current Implementation](docs/CURRENT_IMPLEMENTATION.md) |
 | Architecture | [System Overview](docs/architecture/system-overview.md) |
+| Why it is built this way | [Architecture Decision Records](docs/adr/README.md) |
+| What is next | [Roadmap](ROADMAP.md) |
 | CLI usage | [Command Reference](docs/development/cli/commands.md) |
 | Contribution workflow | [Contributing](CONTRIBUTING.md) |
 | Complete documentation map | [Documentation Map](docs/DOCUMENTATION_MAP.md) |
