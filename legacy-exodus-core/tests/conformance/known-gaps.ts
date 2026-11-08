@@ -6,8 +6,6 @@
  * exactly. A fix removes its entries in the same PR.
  */
 const gaps: Readonly<Record<string, readonly string[]>> = {
-  // A value stored in a returned object literal's field (`wrap(x).inner`).
-  "NA-03c": ["taint-audit-returned-object-field:flow"],
   // A value passed to a callback by a higher-order builtin (`[x].forEach((v) => sink(v))`).
   "NA-03d": ["taint-audit-callback:flow"],
   // SQL built from input and run through a client instance (`mysql.createConnection().query`).
