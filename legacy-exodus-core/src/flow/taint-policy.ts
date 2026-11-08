@@ -28,6 +28,20 @@ const FS_PATH_SINKS: readonly string[] = [
   "copyFile", "copyFileSync", "rename", "renameSync",
 ];
 const FS_TWO_PATH_SINKS: ReadonlySet<string> = new Set(["copyFile", "copyFileSync", "rename", "renameSync"]);
+/**
+ * SQL injection (NA-03e): a database client made by one of these factories runs the SQL text of these methods. The
+ * factory is a member or export of the module (`mysql.createConnection`, `new pg.Pool`, `new Database` from
+ * better-sqlite3 is its default export); the sink is judged on the SQL argument only.
+ */
+const DB_CLIENTS: Readonly<Record<string, { readonly factories: ReadonlySet<string>; readonly methods: ReadonlySet<string> }>> = {
+  mysql: { factories: new Set(["createConnection", "createPool"]), methods: new Set(["query", "execute"]) },
+  mysql2: { factories: new Set(["createConnection", "createPool"]), methods: new Set(["query", "execute"]) },
+  "mysql2/promise": { factories: new Set(["createConnection", "createPool"]), methods: new Set(["query", "execute"]) },
+  pg: { factories: new Set(["Client", "Pool"]), methods: new Set(["query"]) },
+  sqlite3: { factories: new Set(["Database"]), methods: new Set(["run", "all", "get", "each", "exec"]) },
+  "better-sqlite3": { factories: new Set(["default"]), methods: new Set(["exec", "prepare"]) },
+};
+
 const MODULE_SINKS: Readonly<Record<string, ReadonlySet<string>>> = {
   child_process: new Set(["exec", "execSync", "execFile", "execFileSync", "spawn", "spawnSync", "fork"]),
   vm: new Set(["runInThisContext", "runInNewContext", "runInContext", "compileFunction"]),
@@ -46,6 +60,7 @@ const MODULE_SINKS: Readonly<Record<string, ReadonlySet<string>>> = {
 const SINK_ARGUMENTS: Readonly<Record<string, readonly number[]>> = Object.fromEntries([
   ...["fs", "fs/promises"].flatMap((module) => FS_PATH_SINKS.map((name) => [`${module}.${name}`, FS_TWO_PATH_SINKS.has(name) ? [0, 1] : [0]] as const)),
   ...["http.request", "http.get", "https.request", "https.get", "fetch"].map((name) => [name, [0]] as const),
+  ...Object.entries(DB_CLIENTS).flatMap(([module, client]) => [...client.methods].map((method) => [`${module}.${method}`, [0]] as const)),
 ]);
 const MODULE_SANITIZERS: Readonly<Record<string, ReadonlySet<string>>> = {
   validator: new Set(["escape"]),
@@ -168,6 +183,28 @@ export function filePolicy(root: ASTNode, bindings: LexicalBindings): FilePolicy
     const key = keyOf(node);
     return key === undefined ? undefined : modules.get(key);
   };
+
+  // Database clients (NA-03e): `const db = mysql.createConnection(…)`, `const pool = new Pool()`, `new Database(…)`.
+  const clients = new Map<string, string>();
+  const factoryOf = (callee: ASTNode | undefined): { readonly module: string; readonly factory: string } | undefined => {
+    if (callee === undefined) return undefined;
+    if (callee.type === "MemberExpression" && callee.attributes.computed !== true) {
+      const binding = moduleOf(role(callee, "object"));
+      const factory = nameOf(role(callee, "property"));
+      return binding !== undefined && (binding.member === "*" || binding.member === "default") && factory !== undefined ? { module: binding.module, factory } : undefined;
+    }
+    const binding = moduleOf(callee);
+    return binding === undefined ? undefined : { module: binding.module, factory: binding.member === "*" ? "default" : binding.member };
+  };
+  for (const declarator of declarators) {
+    const id = role(declarator, "id");
+    let init = role(declarator, "init");
+    if (init?.type === "AwaitExpression") init = role(init, "argument");
+    if (id?.type !== "Identifier" || (init?.type !== "CallExpression" && init?.type !== "NewExpression")) continue;
+    const made = factoryOf(role(init, "callee"));
+    const key = keyOf(id);
+    if (made !== undefined && key !== undefined && DB_CLIENTS[made.module]?.factories.has(made.factory)) clients.set(key, made.module);
+  }
 
   // Express apps and routers: `express()`, `require("express")()`, `express.Router()`, `Router()`.
   const isExpressFactory = (callee: ASTNode | undefined): boolean => {
@@ -308,6 +345,8 @@ export function filePolicy(root: ASTNode, bindings: LexicalBindings): FilePolicy
       const object = role(callee, "object");
       if (method === undefined || object === undefined) return undefined;
       if (object.type === "Identifier" && baseRole(object) === "res" && RESPONSE_SINKS.has(method)) return `res.${method}`;
+      const client = object.type === "Identifier" ? clients.get(keyOf(object) ?? "") : undefined;
+      if (client !== undefined && DB_CLIENTS[client]?.methods.has(method)) return `${client}.${method}`;
       const binding = moduleOf(object);
       const module = binding !== undefined && (binding.member === "*" || binding.member === "default") ? binding.module
         : object.type === "Identifier" && nameOf(object) === "child_process" ? "child_process" : undefined;

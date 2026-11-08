@@ -6,8 +6,6 @@
  * exactly. A fix removes its entries in the same PR.
  */
 const gaps: Readonly<Record<string, readonly string[]>> = {
-  // SQL built from input and run through a client instance (`mysql.createConnection().query`).
-  "NA-03e": ["taint-sql:client-query"],
 };
 
 /** Expectation id -> owning finding. */
