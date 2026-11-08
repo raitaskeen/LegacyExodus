@@ -81,6 +81,15 @@ const taintSnippets: Readonly<Record<string, { readonly code: string; readonly r
   "condition-not-data": { runtime: "none", code: `const x = req.query.flag ? "a" : "b"; res.send(x);` },
   // BA-07: aliasing the request object.
   "destructured-body": { runtime: "flow", code: `const { body } = req; res.send(body);` },
+  // 2026-11-08 fresh audit taint probe (T1–T16), each proven by running it. Misses are owned gaps.
+  "audit-property": { runtime: "flow", code: `const o = {}; o.p = req.body; res.send(o.p);` },
+  "audit-array-element": { runtime: "flow", code: `const a = [req.body]; res.send(a[0]);` },
+  "audit-template": { runtime: "flow", code: "res.send(`<b>${req.body}</b>`);" },
+  "audit-callback": { runtime: "flow", code: `[req.body].forEach((v) => res.send(v));` },
+  "audit-returned-object-field": { runtime: "flow", code: `function wrap(v) { return { inner: v }; } res.send(wrap(req.body).inner);` },
+  "audit-getter": { runtime: "flow", code: `const o = { get p() { return req.body; } }; res.send(o.p);` },
+  "audit-control-only": { runtime: "none", code: `res.send(req.body.length > 3 ? "ok" : "no");` },
+  "audit-reassigned": { runtime: "none", code: `let v = req.body; v = "safe"; res.send(v);` },
 };
 
 const taintCases: readonly ConformanceCase[] = Object.entries(taintSnippets).map(([id, snippet]) => ({
@@ -513,6 +522,16 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "taint-cross-file-direct:argument-reaches-callee-sink", category: "taint", has: /^helpers\.js\|.*\|sink=#[0-9a-z]+:res\.send\|/ },
       { id: "taint-cross-file-direct:returned-reaches-caller-sink", category: "taint", has: /^app\.js\|.*\|sink=#[0-9a-z]+:res\.json\|/ },
       { id: "taint-cross-file-direct:helpers-analyzed", category: "dispositions", has: analyzed("helpers.js") },
+    ],
+  },
+  {
+    // 2026-11-08 audit probe T16: string-built SQL through a client instance is SQL injection.
+    id: "taint-sql-client",
+    files: {
+      "db.js": "const mysql = require(\"mysql\");\nconst conn = mysql.createConnection({});\nexports.find = function find(req, res) { conn.query(\"SELECT * FROM users WHERE id = \" + req.query.id, () => {}); };\n",
+    },
+    expectations: [
+      { id: "taint-sql:client-query", category: "taint", has: /^db\.js\|.*\|sink=#[0-9a-z]+:[^|]*query\|/ },
     ],
   },
   {
