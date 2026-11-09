@@ -1,0 +1,24 @@
+{
+  "name": "lodash",
+  "repository": "https://github.com/lodash/lodash.git",
+  "revision": "4.17.21",
+  "commit": "f299b52f39486275a9e6483b60a410e06520c538",
+  "tree": "36f7bdbcb9a5c0e0a6d3d4d09add503306863fc1",
+  "tier": "tier-2",
+  "languageProfile": [
+    "javascript"
+  ],
+  "frameworkProfile": [],
+  "sizeClass": "medium",
+  "license": "MIT",
+  "reason": "Very large single-file legacy JavaScript (lodash.js, about 17,000 lines) of mostly pure functions behind one IIFE. Stresses long functions and gives the Safety Net its first pure-function target.",
+  "knownHotspots": [
+    "lodash.js — one IIFE holding hundreds of functions",
+    "fp/ — generated functional wrappers"
+  ],
+  "knownFeatures": [
+    "IIFE module pattern",
+    "Pure functions",
+    "Very long file"
+  ]
+}
