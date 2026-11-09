@@ -108,6 +108,16 @@ describe("NA-10 resource limits are not syntax errors", () => {
     expect(response.result.errors[0]?.message).toContain("not a syntax error");
   });
 
+  test("a file the parser accepts but whose tree is too deep to check is a PARSER_RESOURCE_LIMIT, not an execution failure (XA-06)", async () => {
+    const registry = new ParserRegistry();
+    registry.register(new JavaScriptParser());
+    const source = `const x = 1;\nexport const y = ${Array(6_000).fill("x").join(" + ")};\n`;
+    const result = await new ParserManager(registry).parse(createRequest(source));
+    expect(result.errors.map((error) => error.code)).toEqual(["PARSER_RESOURCE_LIMIT"]);
+    expect(result.errors[0]?.message).toContain("not a syntax error");
+    expect(result.root.children).toEqual([]);
+  });
+
   test("a real syntax error keeps its syntax error code", async () => {
     const response = await new JavaScriptParser().parse(createRequest("let = ;\n"));
     expect(response.result.errors.length).toBeGreaterThan(0);
