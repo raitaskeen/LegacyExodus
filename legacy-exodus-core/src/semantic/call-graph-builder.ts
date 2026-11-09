@@ -101,9 +101,11 @@ export class DeterministicCallGraphBuilder {
         // A callee no name denotes is still a call site: an explicit UNRESOLVED fact, never left out (NA-01).
         const calleeName = namedCallee ?? unnamedCalleeName(node, nextContext);
         const isShadowed = namedCallee === undefined || isLexicallyShadowed(calleeName, nextContext, fileSymbols);
-        const imported = isShadowed
+        // A `require` inside a function declares its binding there, which counts as shadowing; the import
+        // still names the callee when the binding the call sees is that import and is never rebound.
+        const imported = namedCallee === undefined
           ? undefined
-          : visibleImport(fileSymbols, calleeName, nextContext.scope);
+          : isShadowed ? scopedImport(fileSymbols, calleeName, nextContext.scope) : visibleImport(fileSymbols, calleeName, nextContext.scope);
         const importTarget = imported === undefined ? undefined : targetByImportId.get(imported.id);
         // `f.call(…)`, `f.apply(…)` and `f.bind(…)(…)` are resolved as `f`; that holds only while those properties are the builtins.
         const invokesThroughWrittenProperty = invokerProperties(node).some((name) => propertyWriteCount(fileSymbols, name) > 0);
@@ -345,6 +347,8 @@ function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult, u
 
   const namespaceBlocks: NamespaceBlocks = new Map();
 
+  const moduleImports: CodeSymbol[] = [];
+
   for (const symbol of table?.symbols ?? []) {
     noteNamespaceMember(namespaceBlocks, symbol);
     const anchor = declarationAnchor(symbol.location);
@@ -356,6 +360,7 @@ function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult, u
     const namedCandidates = byName.get(symbol.name) ?? [];
     namedCandidates.push(symbol);
     byName.set(symbol.name, namedCandidates);
+    if (symbol.kind === "import" && symbol.scopeId === MODULE_SCOPE_ID) moduleImports.push(symbol);
 
     if (symbol.scopeId !== undefined) {
       const key = lexicalBindingKey(symbol.scopeId, symbol.name);
@@ -376,6 +381,19 @@ function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult, u
         classByLocation.set(key, symbol);
       }
     }
+  }
+
+  // A `require` inside a function binds in that function, though the symbol table files it as a module import.
+  const requireScopes = moduleImports.length === 0 ? new Map<string, string>() : functionLevelRequireScopes(ast, table, byAnchor);
+  for (const symbol of moduleImports) {
+    const scopeId = requireScopes.get(symbol.id);
+    if (scopeId === undefined) continue;
+    const moduleKey = lexicalBindingKey(MODULE_SCOPE_ID, symbol.name);
+    const remaining = (byScopeAndName.get(moduleKey) ?? []).filter((candidate) => candidate.id !== symbol.id);
+    if (remaining.length === 0) byScopeAndName.delete(moduleKey);
+    else byScopeAndName.set(moduleKey, remaining);
+    const scopedKey = lexicalBindingKey(scopeId, symbol.name);
+    byScopeAndName.set(scopedKey, [...(byScopeAndName.get(scopedKey) ?? []), symbol]);
   }
 
   const lexicalBindings = createLexicalBindingIndex(ast, table, byAnchor, byScopeAndName);
@@ -1176,6 +1194,46 @@ function commonJsInitializerSpecifier(node: ASTNode | undefined): string | undef
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
+/**
+ * The scope each CommonJS import bound by a `require` inside a function really belongs to, by import id. The
+ * symbol table files every `require` as a module import; one bound by `const { f } = require("./m")` in a
+ * function (no variable record of its own) exists only in that function's scope, so outside it the name is
+ * unbound or another binding. Scopes follow the lexical binding walk: `var` belongs to the function.
+ */
+function functionLevelRequireScopes(
+  ast: ASTResult,
+  table: SymbolTable | undefined,
+  byAnchor: ReadonlyMap<string, readonly CodeSymbol[]>,
+): ReadonlyMap<string, string> {
+  const scopes = new Map<string, string>();
+  const commonJsImports = new Set(
+    (table?.moduleReferences ?? []).filter(reference => reference.form === "commonjs-import").flatMap(reference => reference.importSymbolIds),
+  );
+  if (commonJsImports.size === 0) return scopes;
+  const visit = (node: ASTNode, scopeId: string, functionScopeId: string, parent?: ASTNode): void => {
+    const nestedScope = createsScope(node) ? createLexicalScopeId(node.type, node.location) : scopeId;
+    const nestedFunctionScope = isCallable(node) || node.type === "TSModuleDeclaration" || node.type === "StaticBlock" ? nestedScope : functionScopeId;
+    if (node.type === "VariableDeclarator" && parent?.type === "VariableDeclaration") {
+      const declarationScope = parent.attributes.kind === "var" ? functionScopeId : scopeId;
+      const specifier = commonJsInitializerSpecifier(node.children.find(child => child.role === "init"));
+      const anchor = declarationAnchor(node.location);
+      if (declarationScope !== "scope:module" && specifier !== undefined && anchor !== undefined) {
+        const anchored = byAnchor.get(anchor) ?? [];
+        for (const name of extractBoundNames(node.children.find(child => child.role === "id"))) {
+          if (anchored.some(symbol => symbol.kind === "variable" && symbol.name === name)) continue;
+          for (const symbol of anchored) {
+            if (symbol.kind === "import" && symbol.name === name && symbol.scopeId === "scope:module"
+              && commonJsImports.has(symbol.id) && symbol.moduleSpecifier === specifier) scopes.set(symbol.id, declarationScope);
+          }
+        }
+      }
+    }
+    for (const child of node.children) visit(child, nestedScope, nestedFunctionScope, node);
+  };
+  visit(ast.root, "scope:module", "scope:module");
+  return scopes;
+}
+
 // Associate existing records once per file. A shared name is never an association.
 function createLexicalBindingIndex(
   ast: ASTResult,
@@ -1880,6 +1938,20 @@ function visibleImport(index: FileSymbolIndex, name: string, scope: ScopeFrame):
   if (imported === undefined) return undefined;
   const binding = resolveLexicalBinding(index, name, scope);
   return binding.state === "ONE_BINDING" && binding.referenceTargets.some((target) => target.id === imported.id) ? imported : undefined;
+}
+
+/**
+ * The import a `require` inside a function binds, as the call at `scope` sees it: the one binding there is
+ * that import alone (no other declaration, parameter or block supplies the name), declared in a scope that
+ * never rebinds it.
+ */
+function scopedImport(index: FileSymbolIndex, name: string, scope: ScopeFrame): CodeSymbol | undefined {
+  const binding = resolveLexicalBinding(index, name, scope);
+  if (binding.state !== "ONE_BINDING" || binding.referenceTargets.length !== 1) return undefined;
+  const imported = binding.referenceTargets[0];
+  if (imported?.kind !== "import") return undefined;
+  const frame = declaredBindingFrame(index, name, scope);
+  return frame === undefined || isRebound(index, frame.id, name) ? undefined : imported;
 }
 
 interface CanonicalTables { readonly knownPaths: ReadonlySet<string>; readonly byCanonicalPath: ReadonlyMap<string, SymbolTable> }
