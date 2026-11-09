@@ -483,8 +483,10 @@ describe("F01-CORE whole-statement fallback and consumer boundary", () => {
         expectRt01Use(result, "x", `3:${statement.lastIndexOf("x")}`, incoming);
         expectRt01Use(result, "x", "4:19", receiver);
         expect(result.state.sinks.map((sink) => sink.argumentDefinitionIds)).toEqual([[receiver]]);
-        expect(edges(result)).toEqual(expected === "F01-FULL:transfer" ? [`${incoming}>${receiver}`] : []);
-        expect(result.graph.taintFlows).toHaveLength(expected === "F01-FULL:transfer" ? 1 : 0);
+        // XA-01: a sanitizer's receiver takes its input through a sanitizing transfer, which a command sink still sees.
+        expect(edges(result)).toEqual([`${incoming}>${receiver}`]);
+        expect(result.state.transfers.map((edge) => edge.sanitizes === true)).toEqual([expected === "F01-FULL:sanitizer"]);
+        expect(result.graph.taintFlows).toHaveLength(1);
         expectIntegrity(result);
       } else {
         expect(legacyHash(result)).toBe(expected);
@@ -700,8 +702,9 @@ describe("F01-FULL captured call inputs", () => {
     { name: "repeated reads", statement: '[[O]]x = unknownFunction([[R]]x, [[S]]x);', receiver: "x", reads: [["R", "T"], ["S", "T"]], inputs: ["T"], tainted: true },
     { name: "nested clean result", statement: '[[O]]x = unknownFunction([[I]]x = "safe");', receiver: "x", reads: [], inputs: ["I"], tainted: false },
     { name: "mixed argument order", statement: '[[O]]x = unknownFunction([[R]]x, [[I]]x = "safe", [[S]]x);', receiver: "x", reads: [["R", "T"], ["S", "I"]], inputs: ["T", "I"], tainted: true },
-    { name: "commented sanitizer", statement: '[[O]]x = sanitize(/* before */ [[R]]x /* after */);', receiver: "x", reads: [["R", "T"]], inputs: [], tainted: false },
-    { name: "commented escape", statement: '[[O]]x = validator.escape(/* before */ [[R]]x);', receiver: "x", reads: [["R", "T"]], inputs: [], tainted: false },
+    // XA-01: a sanitizer's input reaches its receiver through a sanitizing transfer; a command sink still sees it.
+    { name: "commented sanitizer", statement: '[[O]]x = sanitize(/* before */ [[R]]x /* after */);', receiver: "x", reads: [["R", "T"]], inputs: ["T"], tainted: true, sanitized: true },
+    { name: "commented escape", statement: '[[O]]x = validator.escape(/* before */ [[R]]x);', receiver: "x", reads: [["R", "T"]], inputs: ["T"], tainted: true, sanitized: true },
   ] as const) {
     test(fixture.name, async () => {
       const input = fullSource(`let [[T]]x = req.query.x;\nlet [[Y]]y = 2;\n${fixture.statement}\nchild_process.exec([[K]]${fixture.receiver});`);
@@ -712,6 +715,7 @@ describe("F01-FULL captured call inputs", () => {
       for (const [marker, binding] of fixture.reads) expectRt01Use(result, "x", input.position(marker), id(binding));
       expectRt01Use(result, fixture.receiver, input.position("K"), id("O"));
       expect(edges(result)).toEqual(fixture.inputs.map((label) => `${id(label)}>${id("O")}`).sort());
+      expect(result.state.transfers.every((edge) => (edge.sanitizes === true) === ("sanitized" in fixture))).toBe(true);
       expect(result.state.sinks.map((sink) => sink.argumentDefinitionIds)).toEqual([[id("O")]]);
       expect(result.graph.taintFlows).toHaveLength(fixture.tainted ? 1 : 0);
       if (fixture.tainted) expect(result.graph.taintFlows[0]?.path).toContain(id("T"));

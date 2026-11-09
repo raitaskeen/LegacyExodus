@@ -265,15 +265,17 @@ describe("DFG-01: Destructuring Data-Flow Precision & Semantic Integrity", () =>
   });
 
   // ─── 15. Sanitizer Interaction with Destructured Fields ───────────────────
-  it("Case 15: Sanitizer applied to specific destructured property neutralizes taint", async () => {
+  it("Case 15: Sanitizer applied to specific destructured property neutralizes taint at the response body", async () => {
     const source = `
       const { tainted, safe } = { tainted: req.body.cmd, safe: sanitize(req.body.cmd) };
-      child_process.exec(safe);
+      res.send(safe);
     `;
     const { dfg } = await parseAndAnalyze(source);
+    expect(dfg.taintFlows.filter((f) => f.path.includes("res.send")).length).toBe(0);
 
-    const taintFlows = dfg.taintFlows.filter((f) => f.path.includes("child_process.exec"));
-    expect(taintFlows.length).toBe(0);
+    // XA-01: the sanitizer escapes HTML; a command sink still sees the source.
+    const { dfg: atCommand } = await parseAndAnalyze(source.replace("res.send", "child_process.exec"));
+    expect(atCommand.taintFlows.filter((f) => f.path.includes("child_process.exec")).length).toBe(1);
   });
 
   // ─── 16. Chained Sequential Destructuring vs Nested ───────────────────────

@@ -1,8 +1,28 @@
 import { sortByKey } from "@shared/ordering";
 import { immutable } from "@shared/immutability";
 
-/** A taint transfer: whatever reaches the source definition reaches the target. */
-export interface TaintEdge { readonly sourceDefinitionId: string; readonly targetDefinitionId: string }
+/**
+ * A taint transfer: whatever reaches the source definition reaches the target. A sanitizing transfer (the
+ * value passed through a sanitizer call) marks each source it carries as sanitized (see sanitizedSourceId).
+ */
+export interface TaintEdge { readonly sourceDefinitionId: string; readonly targetDefinitionId: string; readonly sanitizes?: true }
+
+const SANITIZED = "\u0000sanitized";
+
+/**
+ * A source as it is after a sanitizer: still tainted, but clean for the sinks the sanitizer protects
+ * (XA-01). The mark travels with the source id through every transfer and is resolved at the sink.
+ */
+export function sanitizedSourceId(sourceId: string): string {
+  return sourceId.endsWith(SANITIZED) ? sourceId : sourceId + SANITIZED;
+}
+
+/** The source id without the sanitized mark, and whether it had one. */
+export function unsanitizedSourceId(sourceId: string): { readonly sourceId: string; readonly sanitized: boolean } {
+  return sourceId.endsWith(SANITIZED)
+    ? { sourceId: sourceId.slice(0, -SANITIZED.length), sanitized: true }
+    : { sourceId, sanitized: false };
+}
 export type TaintPaths = Map<string, Map<string, readonly string[]>>;
 
 /**
@@ -54,7 +74,8 @@ export function propagateTaintPaths(transfers: readonly TaintEdge[], taintPaths:
     if (sourcePaths === undefined) continue;
     let changed = false;
     const held = taintPaths.get(transfer.targetDefinitionId);
-    for (const [sourceId, path] of [...sourcePaths]) {
+    for (const [heldSourceId, path] of [...sourcePaths]) {
+      const sourceId = transfer.sanitizes === true ? sanitizedSourceId(heldSourceId) : heldSourceId;
       // A candidate no shorter than the held path is rejected; skip building it.
       const existing = held?.get(sourceId);
       if (existing !== undefined && existing.length <= path.length + 1) continue;

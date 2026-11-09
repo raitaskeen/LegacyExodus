@@ -131,10 +131,11 @@ describe("F02 binding ownership", () => {
       use(r, "R", d); use(r, "K", a);
       // Public call bindings require a proven target symbol; these calls have none.
       expect(r.graph.callBindings).toEqual([]);
-      const tainted = callee === "unknownFunction";
+      // XA-01: a sanitizer's receiver takes its input through a sanitizing transfer; a command sink still sees it.
+      const sanitizer = callee !== "unknownFunction";
       expect(r.state.transfers.filter((item) => item.targetDefinitionId === a))
-        .toEqual(tainted ? [{ sourceDefinitionId: d, targetDefinitionId: a }] : []);
-      sink(r, a, tainted, [d, a]);
+        .toEqual([{ sourceDefinitionId: d, targetDefinitionId: a, ...(sanitizer ? { sanitizes: true } : {}) }]);
+      sink(r, a, true, [d, a]);
     });
   }
   for (const statement of ["[[A]][x] = [[[R]]x]", "([[A]]{ x } = { x: [[R]]x })"]) {
@@ -230,7 +231,7 @@ describe("F02 binding ownership", () => {
     const d = definition(r, "D"), a = definition(r, "A", "x", "assignment"), b = definition(r, "B", "x", "assignment"), c = definition(r, "C", "x", "assignment"), e = definition(r, "E", "x", "assignment");
     use(r, "R", d); use(r, "U", a); use(r, "V", a); use(r, "W", b); use(r, "Z", e); use(r, "K", d);
     transfer(r, a, b);
-    expect(r.state.transfers.filter((t) => t.targetDefinitionId === c)).toEqual([]);
+    expect(r.state.transfers.filter((t) => t.targetDefinitionId === c)).toEqual([{ sourceDefinitionId: b, targetDefinitionId: c, sanitizes: true }]);
     sink(r, d, true, [d]);
   });
   test("same-function block writes replace the function-owned binding", async () => {
