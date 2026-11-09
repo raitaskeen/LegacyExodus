@@ -89,7 +89,7 @@ flowchart TD
 ```
 
 ### Governance Document Map
-* **[CODEOWNERS](.github/CODEOWNERS):** Maintainer handles (`@raitaskeen`, `@pamexo`, `@rsexo`) and package ownership rules.
+* **[CODEOWNERS](.github/CODEOWNERS):** Maintainer handles (`@raitaskeen`, `@pamexo`, `@rsexo`, `@shahzaib-h-dev`) and package ownership rules.
 * **[LICENSE](LICENSE):** Canonical MIT open-source license.
 * **[SUPPORT.md](SUPPORT.md):** Support policies, bug triage, and reproduction standards.
 * **[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md):** Contributor Covenant v2.1 community standards.

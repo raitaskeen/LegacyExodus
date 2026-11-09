@@ -29,6 +29,7 @@ Every commit must follow Conventional Commits:
 
 Co-authored-by: rsexo <raitaskeen.dev@gmail.com>
 Co-authored-by: pamexo <raimrazzaq12@gmail.com>
+Co-authored-by: shahzaib-h-dev <shahzaibdiraj480@gmail.com>
 ```
 
 Types: `fix`, `feat`, `test`, `docs`, `perf`, `refactor`, `chore`.
