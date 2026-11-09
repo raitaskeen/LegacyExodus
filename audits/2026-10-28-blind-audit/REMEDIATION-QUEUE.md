@@ -33,6 +33,16 @@ scored about 72 (7.18), not the 77 self-assessed in [`STATUS-2026-11-09.md`](../
 Eight findings, XA-01 to XA-08. Owner decisions: fix order XA-01, 02, 03, 04, then 05 to 07; `closedWorld` stays
 off; Fact Diff and Scale Gate are now required checks on main; #195 closed; #111, #112 and #117 stay open.
 
+## Track 2026-11-09: engine plan to 85-90 (ENGINE-PLAN-TO-88.md, owner-approved)
+
+| Item | What | State |
+|---|---|---|
+| A1 | Reason on every UNRESOLVED call | **Merged** #301 (`79b52d7`) |
+| A2 | Coverage table in the fact diff, `coverage` command | In review |
+| A3 | Call oracle on Express and Fastify | In progress |
+| A4 | CFG block oracle | Queued |
+| B-H | See the plan | Queued |
+
 ## Track 2026-11-09: cross-file audit findings (XA-01 to XA-08)
 
 | ID | Severity | Finding | State |
