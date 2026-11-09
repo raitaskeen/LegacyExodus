@@ -12,8 +12,36 @@ export interface SemanticCall {
   readonly calleeName: string;
   readonly resolutionState: "RESOLVED" | "UNRESOLVED";
   readonly targetSymbolId?: string;
+  /** Why an UNRESOLVED call is not proven (A1); absent on a RESOLVED call. */
+  readonly reason?: UnresolvedReason;
   readonly location?: { readonly line: number; readonly column: number };
 }
+
+/**
+ * Why a call is UNRESOLVED (A1). The first five name the check that blocked resolution; the rest describe the callee
+ * when no proof was found for it. A package import is outside the repository, never followed into `node_modules`.
+ */
+export const UNRESOLVED_REASONS = [
+  "computed-callee",     // no name denotes the callee: obj[k](), (a || b)(), f()()
+  "call-result-member",  // a method of a call result: f().g(), promise.then(), expect(x).toBe()
+  "eval-or-with",        // a direct eval in the file or an enclosing `with` may rebind the name
+  "invoker-written",     // f.call/apply/bind while the file writes that property
+  "runs-before-binding", // the call runs before its binding is defined (TDZ, require order)
+  "import-unstable",     // the import is rebound, or its export is reassigned by its module
+  "import-unresolved",   // a relative import that leads to no analysed export
+  "package-import",      // the callee, or the object it is read from, is an import of a package or Node module
+  "module-load",         // require(…) itself
+  "unbound-name",        // no declaration or import binds the name here: a global, or a missing binding
+  "parameter-callee",    // the callee is a parameter: its value comes from each caller (a callback)
+  "local-not-proven",    // a local binding exists, but it is not proven to hold one function at this call
+  "this-open",           // this.m(): the class may be extended outside, or the method replaced or borrowed
+  "global-member",       // a member of an unbound name: console.log, JSON.parse, process.exit
+  "import-member",       // a member of a repository import that is not proven
+  "parameter-member",    // a member of a parameter: opts.run(), res.json() in a handler
+  "receiver-not-proven", // a member of a local binding whose value at this call is not proven
+  "member-chain",        // a member of a member: a.b.c()
+] as const;
+export type UnresolvedReason = (typeof UNRESOLVED_REASONS)[number];
 
 export interface SymbolReference {
   readonly id: string;
@@ -80,7 +108,7 @@ export interface SemanticAnalysis {
 
 const locationSchema = z.object({ line: z.number().int().positive(), column: z.number().int().nonnegative() });
 const resolutionStateSchema = z.enum(["RESOLVED", "UNRESOLVED"]);
-export const callSchema = z.object({ id: z.string().min(1), key: z.string().min(1).optional(), sourceFilePath: z.string().min(1), callerName: z.string().min(1), calleeName: z.string().min(1), resolutionState: resolutionStateSchema, targetSymbolId: z.string().min(1).optional(), location: locationSchema.optional() });
+export const callSchema = z.object({ id: z.string().min(1), key: z.string().min(1).optional(), sourceFilePath: z.string().min(1), callerName: z.string().min(1), calleeName: z.string().min(1), resolutionState: resolutionStateSchema, targetSymbolId: z.string().min(1).optional(), reason: z.enum(UNRESOLVED_REASONS).optional(), location: locationSchema.optional() });
 export const referenceSchema = z.object({ id: z.string().min(1), key: z.string().min(1).optional(), filePath: z.string().min(1), name: z.string().min(1), kind: z.enum(["call", "identifier"]), resolutionState: resolutionStateSchema, resolvedSymbolId: z.string().min(1).optional() });
 export const scopeSchema = z.object({ id: z.string().min(1), filePath: z.string().min(1), name: z.string().min(1), declaredSymbols: z.array(z.string().min(1)), referencedNames: z.array(z.string().min(1)) });
 const evidenceStateSchema = z.enum(["CONFIRMED", "INFERRED", "UNRESOLVED", "UNSUPPORTED", "REQUIRES_REVIEW"]);

@@ -5,7 +5,7 @@ import { canonicalizePath, ModuleResolver, type DependencyGraph } from "@graph/i
 import type { SymbolTable } from "@symbols/index";
 import { createLexicalScopeId, createSelfScopeId, FactKeyer, type CodeSymbol } from "@symbols/index";
 
-import type { SemanticCall, SymbolReference } from "./semantic-contracts";
+import type { SemanticCall, SymbolReference, UnresolvedReason } from "./semantic-contracts";
 import { ClassHierarchy, collectClassHierarchyFacts } from "./class-hierarchy";
 import { stableId } from "@shared/identity";
 import { compareCodePoints } from "@shared/ordering";
@@ -119,7 +119,8 @@ export class DeterministicCallGraphBuilder {
         const importTarget = imported === undefined ? undefined : targetByImportId.get(imported.id);
         // `f.call(…)`, `f.apply(…)` and `f.bind(…)(…)` are resolved as `f`; that holds only while those properties are the builtins.
         const invokesThroughWrittenProperty = invokerProperties(node).some((name) => propertyWriteCount(fileSymbols, name) > 0);
-        const resolvedTarget = namedCallee === undefined || invokesThroughWrittenProperty || fileSymbols.directEval || withMayBind(calleeName, nextContext, fileSymbols)
+        const evalOrWith = namedCallee !== undefined && (fileSymbols.directEval || withMayBind(calleeName, nextContext, fileSymbols));
+        const resolvedTarget = namedCallee === undefined || invokesThroughWrittenProperty || evalOrWith
           ? undefined
           : imported === undefined
             ? resolveLocalCall(table, fileSymbols, calleeName, nextContext, tablesByPath, this.resolver, node)
@@ -130,12 +131,16 @@ export class DeterministicCallGraphBuilder {
         const targetSymbolId = runsTooEarly ? undefined : resolvedTarget;
         const id = hash(`${ast.metadata.sourcePath}:${nextContext.callerName}:${calleeName}:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`);
         const resolutionState = targetSymbolId === undefined ? "UNRESOLVED" as const : "RESOLVED" as const;
+        const reason = targetSymbolId !== undefined ? undefined : unresolvedReason({
+          named: namedCallee !== undefined, evalOrWith, invokerWritten: invokesThroughWrittenProperty,
+          runsTooEarly: resolvedTarget !== undefined && runsTooEarly, imported, importTarget, calleeName, index: fileSymbols, context: nextContext,
+        });
         const key = factKeyers.get(fileSymbols)?.key("call", calleeName, node.location?.start);
         const keyed = key === undefined ? {} : { key };
         const callId = key === undefined ? id : stableId("call", key);
         const reference: SymbolReference = { id: key === undefined ? hash(`reference:${id}`) : stableId("call-reference", key), ...keyed, filePath: ast.metadata.sourcePath, name: calleeName, kind: "call", resolutionState, ...(targetSymbolId === undefined ? {} : { resolvedSymbolId: targetSymbolId }) };
         references.push(reference);
-        calls.push({ id: callId, ...keyed, sourceFilePath: ast.metadata.sourcePath, callerName: nextContext.callerName, calleeName, resolutionState, ...(targetSymbolId === undefined ? {} : { targetSymbolId }), ...(node.location === undefined ? {} : { location: node.location.start }) });
+        calls.push({ id: callId, ...keyed, sourceFilePath: ast.metadata.sourcePath, callerName: nextContext.callerName, calleeName, resolutionState, ...(targetSymbolId === undefined ? {} : { targetSymbolId }), ...(reason === undefined ? {} : { reason }), ...(node.location === undefined ? {} : { location: node.location.start }) });
       }
     }
 
@@ -2183,6 +2188,81 @@ const functionBuiltins = new Set([...objectBuiltins, "apply", "bind", "call", "a
  * assignments store their value (no setters, frozen objects or read-only properties) and
  * that no code adds properties to Object.prototype or Function.prototype.
  */
+/**
+ * Why an unresolved call is not proven (A1). The blocking checks come first, in the order resolution applies them;
+ * otherwise the callee's shape names what was not proven. Classification only: it never changes a resolution.
+ */
+function unresolvedReason(input: {
+  readonly named: boolean;
+  readonly evalOrWith: boolean;
+  readonly invokerWritten: boolean;
+  readonly runsTooEarly: boolean;
+  readonly imported: CodeSymbol | undefined;
+  readonly importTarget: string | undefined;
+  readonly calleeName: string;
+  readonly index: FileSymbolIndex;
+  readonly context: ResolutionContext;
+}): UnresolvedReason {
+  if (!input.named) return /\)\.[^.()[\]]+$/.test(input.calleeName) ? "call-result-member" : "computed-callee";
+  if (input.evalOrWith) return "eval-or-with";
+  if (input.invokerWritten) return "invoker-written";
+  if (input.runsTooEarly) return "runs-before-binding";
+  const { imported, calleeName, index, context } = input;
+  if (imported !== undefined) {
+    if (input.importTarget !== undefined) return "import-unstable";
+    return isRelativeSpecifier(imported.moduleSpecifier) ? "import-unresolved" : "package-import";
+  }
+  if (calleeName === "require") return "module-load";
+  const pieces = calleeName.split(".");
+  const root = pieces[0] ?? calleeName;
+  if (pieces.length === 1) return isUnboundName(index, root, context) ? "unbound-name" : isParameter(index, root, context) ? "parameter-callee" : "local-not-proven";
+  if (root === "this") return pieces.length === 2 ? "this-open" : "member-chain";
+  const rootImport = isLexicallyShadowed(root, context, index) ? undefined : visibleImport(index, root, context.scope);
+  if (rootImport !== undefined) return isRelativeSpecifier(rootImport.moduleSpecifier) ? "import-member" : "package-import";
+  if (isUnboundName(index, root, context)) return "global-member";
+  if (isParameter(index, root, context)) return "parameter-member";
+  return pieces.length === 2 ? "receiver-not-proven" : "member-chain";
+}
+
+/** Callables of a file by their start (`line:column`), to find the function a parameter's scope belongs to. */
+const callablesByStart = new WeakMap<FileSymbolIndex, ReadonlyMap<string, readonly CodeSymbol[]>>();
+
+/** The binding `name` sees is a parameter of the function whose scope declares it. */
+function isParameter(index: FileSymbolIndex, name: string, context: ResolutionContext): boolean {
+  const binding = resolveLexicalBinding(index, name, context.scope);
+  if (binding.state !== "ONE_BINDING") return false;
+  let byStart = callablesByStart.get(index);
+  if (byStart === undefined) {
+    const map = new Map<string, CodeSymbol[]>();
+    for (const symbols of index.byName.values()) {
+      for (const symbol of symbols) {
+        if ((symbol.kind !== "function" && symbol.kind !== "method") || symbol.location === undefined) continue;
+        const key = `${symbol.location.start.line}:${symbol.location.start.column}`;
+        map.set(key, [...(map.get(key) ?? []), symbol]);
+      }
+    }
+    byStart = map;
+    callablesByStart.set(index, byStart);
+  }
+  return binding.referenceTargets.some((target) => {
+    const scope = /^scope:[A-Za-z]+:(\d+):(\d+)$/.exec(target.scopeId ?? "");
+    return scope !== null && (byStart.get(`${scope[1]}:${scope[2]}`) ?? []).some((callable) => (callable.parameters ?? []).includes(name));
+  });
+}
+
+/** A specifier naming a file (`./x`, `../x`, `/x`) rather than a package; an unknown one counts as a file. */
+function isRelativeSpecifier(specifier: string | undefined): boolean {
+  return specifier === undefined || specifier.startsWith(".") || specifier.startsWith("/");
+}
+
+/** No declaration, parameter, import or inner binding of `name` is visible at the call. */
+function isUnboundName(index: FileSymbolIndex, name: string, context: ResolutionContext): boolean {
+  return resolveLexicalBinding(index, name, context.scope).state === "NO_BINDING"
+    && !isLexicallyShadowed(name, context, index)
+    && visibleImport(index, name, context.scope) === undefined
+    && (index.byName.get(name) ?? []).length === 0;
+}
+
 /**
  * Whether a call runs before the CommonJS `require` that binds its callee (XA-05): the declarator runs in the call's
  * own execution context and ends after the call starts, so the binding is still in its TDZ (`const`, `let`) or
