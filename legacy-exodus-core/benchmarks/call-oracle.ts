@@ -176,7 +176,11 @@ export function analyzeCleanCopy(engineRoot: string, corpus: string, work: strin
 
 /** Installs a corpus copy's dev dependencies and runs its test script with `env` added; returns the exit code. */
 export function installAndTest(run: string, script: string, env: Readonly<Record<string, string>>, command: readonly string[] = ["npm", "run", script]): number | null {
-  const install = spawnSync("npm", ["install", "--no-audit", "--no-fund", "--ignore-scripts", "--loglevel=error"], { cwd: run, encoding: "utf8", shell: true, maxBuffer: 1 << 26 });
+  // A pinned lockfile (benchmarks/oracle-locks/<corpus>) makes the install exact and repeatable; without one npm
+  // resolves the dev dependencies afresh, which can fail when the registry is mid-publish.
+  const lock = join(import.meta.dir, "oracle-locks", basename(run), "package-lock.json");
+  if (existsSync(lock)) cpSync(lock, join(run, "package-lock.json"));
+  const install = spawnSync("npm", [existsSync(lock) ? "ci" : "install", "--no-audit", "--no-fund", "--ignore-scripts", "--loglevel=error"], { cwd: run, encoding: "utf8", shell: true, maxBuffer: 1 << 26 });
   if (install.status !== 0) throw new Error(`npm install failed: ${String(install.stderr).slice(0, 2000)}`);
   const tests = spawnSync(command[0]!, command.slice(1), { cwd: run, encoding: "utf8", shell: true, maxBuffer: 1 << 28, env: { ...process.env, NO_COLOR: "1", CI: "1", ...env } });
   return tests.status;
