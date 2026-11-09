@@ -158,23 +158,35 @@ describe("Expression-based taint propagation", () => {
     expect(graph.taintFlows.every((f) => f.path.at(-1) === "child_process.exec")).toBe(true);
   });
 
-  test("13. sanitizer boundary in binary concatenation blocks taint propagation", async (): Promise<void> => {
-    const source = `
+  // XA-01: the sanitizer boundary holds at the response body; a command sink still sees the source.
+  test("13. sanitizer boundary in binary concatenation blocks taint at the response body only", async (): Promise<void> => {
+    const atResponse = await buildDataFlowGraph("sanitizer-binary", `
+      const safe = "Prefix: " + sanitize(req.query.input);
+      res.send(safe);
+    `);
+    expect(atResponse.taintFlows).toEqual([]);
+    const atCommand = await buildDataFlowGraph("sanitizer-binary-command", `
       const safe = "Prefix: " + sanitize(req.query.input);
       child_process.exec(safe);
-    `;
-    const graph = await buildDataFlowGraph("sanitizer-binary", source);
-    expect(graph.taintFlows).toEqual([]);
+    `);
+    expect(atCommand.taintFlows).toHaveLength(1);
+    expect(atCommand.taintFlows[0]?.path.at(-1)).toBe("child_process.exec");
   });
 
-  test("14. sanitizer boundary with validator.escape in template literal blocks taint", async (): Promise<void> => {
-    const source = `
+  test("14. sanitizer boundary with validator.escape in template literal blocks taint at the response body only", async (): Promise<void> => {
+    const atResponse = await buildDataFlowGraph("sanitizer-template-validator", `
+      const tainted = req.body.name;
+      const safe = \`Hello \${validator.escape(tainted)}\`;
+      res.send(safe);
+    `);
+    expect(atResponse.taintFlows).toEqual([]);
+    const atCommand = await buildDataFlowGraph("sanitizer-template-validator-command", `
       const tainted = req.body.name;
       const safe = \`Hello \${validator.escape(tainted)}\`;
       child_process.exec(safe);
-    `;
-    const graph = await buildDataFlowGraph("sanitizer-template-validator", source);
-    expect(graph.taintFlows).toEqual([]);
+    `);
+    expect(atCommand.taintFlows).toHaveLength(1);
+    expect(atCommand.taintFlows[0]?.path.at(-1)).toBe("child_process.exec");
   });
 
   test("15. mixed sanitized and unsanitized expressions preserve only genuine taint", async (): Promise<void> => {
@@ -182,11 +194,14 @@ describe("Expression-based taint propagation", () => {
       const t1 = req.query.a;
       const t2 = req.body.b;
       const mixed = sanitize(t1) + " : " + t2;
-      child_process.exec(mixed);
+      res.send(mixed);
     `;
     const graph = await buildDataFlowGraph("mixed-sanitized-unsanitized", source);
     expect(graph.taintFlows).toHaveLength(1);
-    expect(graph.taintFlows[0]?.path.at(-1)).toBe("child_process.exec");
+    expect(graph.taintFlows[0]?.path.at(-1)).toBe("res.send");
+    // XA-01: at a command sink the sanitized source counts too.
+    const atCommand = await buildDataFlowGraph("mixed-sanitized-unsanitized-command", source.replace("res.send", "child_process.exec"));
+    expect(atCommand.taintFlows).toHaveLength(2);
   });
 
   test("16. composite expression directly inside sink arguments propagates taint", async (): Promise<void> => {

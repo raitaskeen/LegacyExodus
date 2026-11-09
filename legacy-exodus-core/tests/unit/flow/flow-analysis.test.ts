@@ -587,7 +587,7 @@ describe("control and data flow analysis", () => {
       const alias = input;
       child_process.exec(alias);
       const clean = sanitize(alias);
-      child_process.exec(clean);
+      res.send(clean);
       user.name = alias;
     `;
     const ast = (await new JavaScriptParser().parse({ file: { id: "scope", path: "src/scope.js", language: "javascript", size: source.length }, source })).result;
@@ -730,11 +730,16 @@ describe("control and data flow analysis", () => {
   });
 
   test("stops recognized sanitizers while retaining non-sanitized proven paths", async (): Promise<void> => {
-    const sanitized = await buildDataFlowGraph("taint-sanitized", `const input = req.body.name; const clean = sanitize(input); child_process.exec(clean);`);
+    const sanitized = await buildDataFlowGraph("taint-sanitized", `const input = req.body.name; const clean = sanitize(input); res.send(clean);`);
     expect(sanitized.taintFlows).toEqual([]);
 
-    const acrossCall = await buildDataFlowGraph("taint-sanitized-call", `function send(value) { return value; } const input = req.body.name; const clean = sanitize(input); const output = send(clean); child_process.exec(output);`);
+    const acrossCall = await buildDataFlowGraph("taint-sanitized-call", `function send(value) { return value; } const input = req.body.name; const clean = sanitize(input); const output = send(clean); res.send(output);`);
     expect(acrossCall.taintFlows).toEqual([]);
+
+    // XA-01: a sanitizer escapes HTML only, so a command sink still sees the source, across a call too.
+    const commandAcrossCall = await buildDataFlowGraph("taint-sanitized-call-command", `function send(value) { return value; } const input = req.body.name; const clean = sanitize(input); const output = send(clean); child_process.exec(output);`);
+    expect(commandAcrossCall.taintFlows).toHaveLength(1);
+    expect(commandAcrossCall.taintFlows[0]?.path.at(-1)).toBe("child_process.exec");
 
     const unrecognized = await buildDataFlowGraph("taint-unrecognized", `const input = req.body.name; const output = unknownTransform(input); child_process.exec(output);`);
     expect(unrecognized.taintFlows).toHaveLength(1);
@@ -1000,20 +1005,26 @@ describe("control and data flow analysis", () => {
     expect(consumer.taintFlows[0]?.path.length).toBeGreaterThanOrEqual(3);
   });
 
-  test("stops cross-file taint propagation when input is sanitized", async (): Promise<void> => {
-    const serviceSource = `
-      export function execute(cmd) {
-        child_process.exec(cmd);
-      }
-    `;
+  test("a sanitized value crossing files is clean at a response sink and tainted at a command sink", async (): Promise<void> => {
     const consumerSource = `
       import { execute } from "./service";
       const cleanCmd = validator.escape(req.body.command);
       execute(cleanCmd);
     `;
-    const { service } = await buildCrossFileFlow("taint-sanitized", serviceSource, consumerSource);
+    const { service: response } = await buildCrossFileFlow("taint-sanitized", `
+      export function execute(html) {
+        res.send(html);
+      }
+    `, consumerSource);
+    expect(response.taintFlows.length).toBe(0);
 
-    expect(service.taintFlows.length).toBe(0);
+    // XA-01: validator.escape escapes HTML; the command still carries the request field.
+    const { service: command } = await buildCrossFileFlow("taint-sanitized-command", `
+      export function execute(cmd) {
+        child_process.exec(cmd);
+      }
+    `, consumerSource);
+    expect(command.taintFlows.length).toBe(1);
   });
 
   test("does not propagate cross-file taint across unproven dynamic calls", async (): Promise<void> => {
@@ -1079,19 +1090,22 @@ describe("control and data flow analysis", () => {
     expect(new Set(flow?.path).size).toBe(flow?.path.length ?? 0);
   });
 
-  test("halts taint propagation through recursive cycles when sanitizer is applied", async (): Promise<void> => {
+  test("a sanitized value through a recursive cycle is clean at a response sink and tainted at a command sink", async (): Promise<void> => {
     const source = `
       function loop(val, done) {
         if (done) return val;
         return loop(val, true);
       }
       const input = validator.escape(req.body.cmd);
-      const res = loop(input, false);
-      child_process.exec(res);
+      const out = loop(input, false);
+      res.send(out);
     `;
     const { graph } = await buildResolvedDataFlow("sanitized-recursion", source);
-
     expect(graph.taintFlows.length).toBe(0);
+
+    // XA-01: the cycle terminates and the command still sees the request field.
+    const { graph: command } = await buildResolvedDataFlow("sanitized-recursion-command", source.replace("res.send", "child_process.exec"));
+    expect(command.taintFlows.length).toBe(1);
   });
 
   test("handles diamond graph with cycle deterministically without path explosion", async (): Promise<void> => {

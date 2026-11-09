@@ -77,7 +77,9 @@ describe("F02-B transactional If convergence", () => {
       const r = await analyze(`let [[D]]x = [[S]]req.query.x; [[J]]if (c) [[A]]x = ${value}; child_process.exec([[K]]x);`);
       const d = definition(r, "D", "declaration"), a = definition(r, "A");
       if (value.includes("[[R]]")) use(r, "R", d);
-      expect(r.state.transfers.filter((t) => t.targetDefinitionId === a)).toEqual([]);
+      // XA-01: a sanitizer's receiver takes its input through a sanitizing transfer.
+      expect(r.state.transfers.filter((t) => t.targetDefinitionId === a))
+        .toEqual(value.includes("[[R]]") ? [{ sourceDefinitionId: d, targetDefinitionId: a, sanitizes: true }] : []);
       sink(r, join(r, "J", [a, d]), [["S", "req.query.x", "INFERRED"]]);
     });
   }

@@ -77,22 +77,24 @@ describe("F-02: Taint preservation through CallExpression", () => {
     expect(graph.taintFlows[0]?.path.at(-1)).toBe("child_process.exec");
   });
 
-  test("6. stops recognized sanitizers: sanitize() and validator.escape()", async (): Promise<void> => {
-    const sourceSanitize = `
-      const input = req.body.name;
-      const clean = sanitize(input);
-      child_process.exec(clean);
-    `;
-    const graph1 = await buildDataFlowGraph("sanitizer-sanitize", sourceSanitize);
-    expect(graph1.taintFlows).toEqual([]);
+  // XA-01: a recognized sanitizer escapes HTML, so it protects the response body and not a command.
+  test("6. recognized sanitizers protect the response body only: sanitize() and validator.escape()", async (): Promise<void> => {
+    for (const sanitizer of ["sanitize", "validator.escape"]) {
+      const atResponse = await buildDataFlowGraph(`sanitizer-response-${sanitizer}`, `
+        const input = req.body.name;
+        const clean = ${sanitizer}(input);
+        res.send(clean);
+      `);
+      expect(atResponse.taintFlows).toEqual([]);
 
-    const sourceValidator = `
-      const input = req.body.name;
-      const clean = validator.escape(input);
-      child_process.exec(clean);
-    `;
-    const graph2 = await buildDataFlowGraph("sanitizer-validator", sourceValidator);
-    expect(graph2.taintFlows).toEqual([]);
+      const atCommand = await buildDataFlowGraph(`sanitizer-command-${sanitizer}`, `
+        const input = req.body.name;
+        const clean = ${sanitizer}(input);
+        child_process.exec(clean);
+      `);
+      expect(atCommand.taintFlows).toHaveLength(1);
+      expect(atCommand.taintFlows[0]?.path.at(-1)).toBe("child_process.exec");
+    }
   });
 
   test("7. multi-argument call propagates taint if any argument is tainted", async (): Promise<void> => {

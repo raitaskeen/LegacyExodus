@@ -10,7 +10,9 @@ import type { LexicalBindings } from "./lexical-bindings";
  *   global `eval` / `Function`;
  * - Express request sources and response sinks on the parameters of proven route handlers, whatever
  *   the parameters are called;
- * - sanitizers from their own modules.
+ * - sanitizers from their own modules. Every sanitizer listed escapes HTML only, so it protects only the
+ *   response body sinks (`res.send`, `write`, `end`, `render`, `json`, `jsonp`): a sanitized value still
+ *   reaches a file path, a command, SQL, a URL or a redirect (XA-01, see sanitizerProtects).
  * The conventional spellings `req`, `res`, `child_process.exec`, `validator.escape` and `sanitize`
  * still match, so code that does not wire handlers visibly (a handler exported to another file) keeps
  * its flows. Unknown calls are neither sources nor sinks.
@@ -69,6 +71,13 @@ const MODULE_SANITIZERS: Readonly<Record<string, ReadonlySet<string>>> = {
   "isomorphic-dompurify": new Set(["sanitize"]),
 };
 const SPELLED_SANITIZERS = new Set(["sanitize", "validator.escape"]);
+/** The sinks an HTML escaper makes safe: the response body. Not `redirect`, `sendFile` or `download`. */
+const SANITIZER_PROTECTED_SINKS: ReadonlySet<string> = new Set(["res.send", "res.write", "res.end", "res.render", "res.json", "res.jsonp"]);
+
+/** Whether a value that passed through a sanitizer is safe at the sink of this canonical name (XA-01). */
+export function sanitizerProtects(sinkName: string): boolean {
+  return SANITIZER_PROTECTED_SINKS.has(sinkName);
+}
 const ROUTE_METHODS = new Set(["get", "post", "put", "patch", "delete", "all", "use", "options", "head"]);
 const METHOD_TYPES = new Set(["ObjectMethod", "ClassMethod", "ClassPrivateMethod"]);
 

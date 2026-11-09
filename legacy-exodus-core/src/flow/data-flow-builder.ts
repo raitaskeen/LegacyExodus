@@ -6,16 +6,16 @@ import { createDataFlowGraph, createProvenCallTargets, type CallFlowBinding, typ
 import { compareCodePoints, sortByKey } from "@shared/ordering";
 import { combineTaint } from "./cfg-dataflow";
 import { cfgSinkVerdicts, type SinkVerdict } from "./cfg-taint";
-import { propagateTaintPaths, setTaintPath } from "./taint-propagation";
+import { propagateTaintPaths, sanitizedSourceId, setTaintPath, unsanitizedSourceId } from "./taint-propagation";
 import { DeterministicControlFlowGraphBuilder, type ControlFlowGraphsWithNodes } from "./control-flow-builder";
 import { resolveLexicalBindings, type LexicalBindings } from "./lexical-bindings";
-import { filePolicy, type FilePolicy } from "./taint-policy";
+import { filePolicy, sanitizerProtects, type FilePolicy } from "./taint-policy";
 import { immutable } from "@shared/immutability";
 
 export interface Scope { readonly parent?: Scope; readonly definitions: Map<string, VariableDefinition>; }
 export interface FunctionRecord { readonly name: string; readonly parameters: VariableDefinition[][]; readonly returns: VariableDefinition[]; readonly symbolId?: string; }
 export interface PendingCall { readonly id: string; readonly targetSymbolId?: string; readonly callee?: FunctionRecord; readonly argumentDefinitionIds: readonly (string | undefined)[]; readonly argumentSourceIds: readonly (string | undefined)[]; readonly receiverDefinitionId?: string; }
-export interface TaintTransfer { readonly sourceDefinitionId: string; readonly targetDefinitionId: string; }
+export interface TaintTransfer { readonly sourceDefinitionId: string; readonly targetDefinitionId: string; readonly sanitizes?: true }
 /** `verdict`: the CFG data-flow taint at this sink (Wave 3b), authoritative for sources of the sink's own function. */
 export interface PendingSink { readonly id: string; readonly name: string; readonly argumentDefinitionIds: readonly string[]; readonly verdict?: SinkVerdict; }
 export interface JoinInputs { readonly id: string; readonly incoming: readonly (string | undefined)[]; }
@@ -70,6 +70,8 @@ export class DeterministicDataFlowGraphBuilder {
    * definition of its own, so the callee's return reaches it across files like a receiver (NA-03).
    */
   private readonly callResults = new WeakMap<ASTNode, VariableDefinition>();
+  /** The value of each sanitizer call read so far (XA-01), see sanitizedResult. */
+  private readonly sanitizedResults = new WeakMap<ASTNode, VariableDefinition>();
   /** Symbols of the file being built: a proven target outside them is in another file. */
   private localSymbolIds: ReadonlySet<string> = new Set();
   private readonly parameterSlots = new WeakMap<ASTNode, VariableDefinition[][]>();
@@ -187,10 +189,12 @@ export class DeterministicDataFlowGraphBuilder {
         return sinkId;
       },
       // An unresolved call may return anything derived from its receiver and arguments; a resolved one
-      // is followed by the interprocedural transfers instead, and a sanitizer cuts taint.
+      // is followed by the interprocedural transfers instead. A sanitizer's result carries its inputs'
+      // sources marked sanitized, which only the sinks it protects ignore (XA-01).
       callValue: (call, callee, args) => {
-        if (this.policy.isSanitizer(call) || this.isResolvedCall(call, filePath, state)) return new Map();
-        return args.reduce((value, argument) => combineTaint(value, argument), callee);
+        if (this.isResolvedCall(call, filePath, state)) return new Map();
+        const value = args.reduce((combined, argument) => combineTaint(combined, argument), callee);
+        return this.policy.isSanitizer(call) ? new Map([...value].map(([sourceId, must]) => [sanitizedSourceId(sourceId), must])) : value;
       },
     }, bindings);
     const byId = new Map(state.sinks.map((sink, index) => [sink.id, index]));
@@ -269,7 +273,7 @@ export class DeterministicDataFlowGraphBuilder {
       const verdict = sink.verdict;
       if (verdict === undefined) continue;
       for (const [key, flow] of unique) {
-        if (flow.sinkId !== sink.id || !verdict.scopeSourceIds.has(flow.sourceId)) continue;
+        if (flow.sinkId !== sink.id || !verdict.scopeSourceIds.has(unsanitizedSourceId(flow.sourceId).sourceId)) continue;
         const must = verdict.taint.get(flow.sourceId);
         const crossesCallOrFile = local === undefined || flow.path.slice(1, -1).some((id) => !local.has(id));
         if (must !== undefined) unique.set(key, { ...flow, state: must ? "CONFIRMED" : "INFERRED" });
@@ -280,7 +284,17 @@ export class DeterministicDataFlowGraphBuilder {
         if (!unique.has(key)) unique.set(key, { sourceId, sinkId: sink.id, path: immutable([sourceId, sink.name]), state: must ? "CONFIRMED" : "INFERRED" });
       }
     }
-    const sorted = [...unique.values()].sort((left, right) =>
+    // A sanitized source is clean at the sinks its sanitizer protects and still tainted at every other sink (XA-01).
+    const sinkNames = new Map(state.sinks.map((sink) => [sink.id, sink.name]));
+    const judged = new Map<string, TaintFlow>();
+    for (const flow of unique.values()) {
+      const { sourceId, sanitized } = unsanitizedSourceId(flow.sourceId);
+      if (sanitized && sanitizerProtects(sinkNames.get(flow.sinkId) ?? "")) continue;
+      const restored = sanitized ? { ...flow, sourceId, path: immutable([sourceId, ...flow.path.slice(1)]) } : flow;
+      const key = sourceId + ":" + flow.sinkId;
+      if (judged.get(key)?.state !== "CONFIRMED") judged.set(key, restored);
+    }
+    const sorted = [...judged.values()].sort((left, right) =>
       compareCodePoints(`${left.sourceId}:${left.sinkId}`, `${right.sourceId}:${right.sinkId}`),
     );
     return immutable(state.factKeys === undefined ? sorted : keyTaintFlows(sorted, state.factKeys));
@@ -616,7 +630,7 @@ export class DeterministicDataFlowGraphBuilder {
     return { kind: "definition", id: definition.id };
   }
 
-  private materializeOrderedValue(value: OrderedExpressionValue, targetDefinitionId: string, state: FlowState): void {
+  private materializeOrderedValue(value: OrderedExpressionValue, targetDefinitionId: string, state: FlowState, sanitizes = false): void {
     // A value tree avoids copying growing dependency sets at each binary ancestor.
     const pending = [value];
     const definitions = new Set<string>();
@@ -628,11 +642,12 @@ export class DeterministicDataFlowGraphBuilder {
       } else if (current.kind === "definition") {
         if (!definitions.has(current.id)) {
           definitions.add(current.id);
-          this.addTransfer(state, current.id, targetDefinitionId);
+          this.addTransfer(state, current.id, targetDefinitionId, sanitizes);
         }
       } else if (!sourceIds.has(current.id)) {
         sourceIds.add(current.id);
-        this.setTaintPath(state, targetDefinitionId, current.id, [current.id, targetDefinitionId]);
+        const sourceId = sanitizes ? sanitizedSourceId(current.id) : current.id;
+        this.setTaintPath(state, targetDefinitionId, sourceId, [sourceId, targetDefinitionId]);
       }
     }
   }
@@ -964,6 +979,8 @@ export class DeterministicDataFlowGraphBuilder {
       receiver = result.id;
     }
     if (resolved !== undefined || proven !== undefined) state.pendingCalls.push({ id: proven?.callId ?? this.identify(hash(`call:${filePath}:${name}:${callPosition}`), "call", name ?? "<computed>", node, "flow-call").id, ...(proven === undefined ? {} : { targetSymbolId: proven.targetSymbolId }), ...(resolved === undefined ? {} : { callee: resolved }), argumentDefinitionIds: staged ? values.map((value) => this.orderedValueIds(value, "definition")[0]) : argumentsNodes.map((argument) => this.definitionFor(argument, scope)?.id), argumentSourceIds: staged ? values.map((value) => this.orderedValueIds(value, "source")[0]) : argumentsNodes.map((argument) => this.source(argument, filePath)), ...(receiver === undefined || cut ? {} : { receiverDefinitionId: receiver }), ...(staged ? { argumentValues: values } : {}) });
+    // A sanitizer's result carries its inputs, marked sanitized (XA-01).
+    if (staged && receiverDefinitionId !== undefined && cut) this.materializeOrderedValue({ kind: "combined", values: [receiverValue, ...values] }, receiverDefinitionId, state, true);
     if (staged && receiverDefinitionId !== undefined && !cut) {
       const calleeSource = callee === undefined ? undefined : this.source(callee, filePath);
       if (calleeSource !== undefined) this.materializeOrderedValue({ kind: "source", id: calleeSource }, receiverDefinitionId, state);
@@ -1044,18 +1061,18 @@ export class DeterministicDataFlowGraphBuilder {
     for (const flow of state.interproceduralFlows) this.addTransfer(state, flow.sourceDefinitionId, flow.targetDefinitionId);
   }
   private addInterproceduralFlow(state: FlowState, callId: string, kind: InterproceduralFlow["kind"], sourceDefinitionId: string, targetDefinitionId: string): void { state.interproceduralFlows.push({ id: hash(`interprocedural:${callId}:${kind}:${sourceDefinitionId}:${targetDefinitionId}`), callId, kind, sourceDefinitionId, targetDefinitionId }); }
-  private addTransfer(state: FlowState, sourceDefinitionId: string, targetDefinitionId: string): void {
+  private addTransfer(state: FlowState, sourceDefinitionId: string, targetDefinitionId: string, sanitizes = false): void {
     if (sourceDefinitionId === targetDefinitionId) return;
     // Constant-time dedupe per build; a linear scan made the stage quadratic (BA-28).
     let keys = this.transferKeys.get(state.transfers);
     if (keys === undefined) {
-      keys = new Set(state.transfers.map((transfer) => `${transfer.sourceDefinitionId}\u0000${transfer.targetDefinitionId}`));
+      keys = new Set(state.transfers.map((transfer) => `${transfer.sourceDefinitionId}\u0000${transfer.targetDefinitionId}${transfer.sanitizes === true ? "\u0000s" : ""}`));
       this.transferKeys.set(state.transfers, keys);
     }
-    const key = `${sourceDefinitionId}\u0000${targetDefinitionId}`;
+    const key = `${sourceDefinitionId}\u0000${targetDefinitionId}${sanitizes ? "\u0000s" : ""}`;
     if (keys.has(key)) return;
     keys.add(key);
-    state.transfers.push({ sourceDefinitionId, targetDefinitionId });
+    state.transfers.push(sanitizes ? { sourceDefinitionId, targetDefinitionId, sanitizes: true } : { sourceDefinitionId, targetDefinitionId });
   }
 
   private transferTaint(node: ASTNode, targetDefinitionId: string, scope: Scope, filePath: string, state: FlowState, captures?: ReadonlyMap<ASTNode, OrderedExpressionValue>): void {
@@ -1064,7 +1081,6 @@ export class DeterministicDataFlowGraphBuilder {
       this.materializeOrderedValue(captured, targetDefinitionId, state);
       return;
     }
-    if (this.policy.isSanitizer(node)) return;
     const sources = this.collectSources(node, filePath, state);
     for (const sourceId of sources) {
       this.setTaintPath(state, targetDefinitionId, sourceId, [sourceId, targetDefinitionId]);
@@ -1124,10 +1140,38 @@ export class DeterministicDataFlowGraphBuilder {
     return immutable([...new Set(results)].sort());
   }
 
+  /**
+   * The value of a sanitizer call (XA-01): one definition per call that holds its inputs' sources and
+   * definitions marked sanitized, so the taint still reaches every sink the sanitizer does not protect.
+   * It is wired the first time the call's value is read, where the inputs' bindings are the ones in force.
+   */
+  private sanitizedResult(node: ASTNode, scope: Scope, filePath: string, state: FlowState): VariableDefinition {
+    const existing = this.sanitizedResults.get(node);
+    if (existing !== undefined) return existing;
+    const callee = node.children.find((child) => child.role === "callee");
+    const result = this.define(`<sanitized:${memberPath(callee) ?? identifierName(callee) ?? "<computed>"}>`, "call-result", node, scope, filePath, state, undefined, false);
+    this.sanitizedResults.set(node, result);
+    const inputs = [
+      ...(callee?.type === "MemberExpression" ? callee.children.filter((child) => child.role === "object") : []),
+      ...node.children.filter((child) => child.role === "arguments"),
+    ];
+    for (const input of inputs) {
+      for (const sourceId of this.collectSources(input, filePath, state)) {
+        const marked = sanitizedSourceId(sourceId);
+        this.setTaintPath(state, result.id, marked, [marked, result.id]);
+      }
+      for (const definition of this.collectDefinitions(input, scope, filePath, state)) this.addTransfer(state, definition.id, result.id, true);
+    }
+    return result;
+  }
+
   private collectDefinitions(node: ASTNode, scope: Scope, filePath: string, state: FlowState): readonly VariableDefinition[] {
     const definitions: VariableDefinition[] = [];
     const visit = (current: ASTNode): void => {
-      if (this.policy.isSanitizer(current)) return;
+      if (this.policy.isSanitizer(current)) {
+        definitions.push(this.sanitizedResult(current, scope, filePath, state));
+        return;
+      }
       if (this.source(current, filePath) !== undefined) return;
       if (current.type === "ObjectProperty") {
         const computed = current.attributes.computed === true;

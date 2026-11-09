@@ -498,6 +498,35 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // XA-01: an HTML escaper protects the response body only. Behind it, a file path, a command and a redirect
+    // stay tainted (in Node, escape-html returns "../../etc/passwd" and "ls; rm -rf /tmp/x" unchanged).
+    id: "sanitizer-sink-kinds",
+    files: {
+      "app.js": [
+        "const express = require('express');",
+        "const fs = require('fs');",
+        "const { execSync } = require('child_process');",
+        "const escapeHtml = require('escape-html');",
+        "const app = express();",
+        "app.get('/file', (req, res) => { res.send(fs.readFileSync(escapeHtml(req.query.name), 'utf8')); });",
+        "app.get('/run', (req, res) => { execSync(escapeHtml(req.query.cmd)); });",
+        "app.get('/stored', (req, res) => { const safe = escapeHtml(req.query.path); fs.readFileSync(safe); });",
+        "app.get('/next', (req, res) => { res.redirect(escapeHtml(req.query.next)); });",
+        "app.get('/page', (req, res) => { const safe = escapeHtml(req.query.q); res.send('<p>' + safe + '</p>'); });",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "sanitized:file-path-still-tainted", check: (directory) => taintKeys(directory).some((key) => key.includes("source:req.query.name@") && key.includes("sink:fs.readFileSync@")) },
+      { id: "sanitized:command-still-tainted", check: (directory) => taintKeys(directory).some((key) => key.includes("source:req.query.cmd@") && key.includes("sink:child_process.execSync@")) },
+      { id: "sanitized:stored-value-still-tainted", check: (directory) => taintKeys(directory).some((key) => key.includes("source:req.query.path@") && key.includes("sink:fs.readFileSync@")) },
+      { id: "sanitized:redirect-still-tainted", check: (directory) => taintKeys(directory).some((key) => key.includes("source:req.query.next@") && key.includes("sink:res.redirect@")) },
+      { id: "sanitized:response-body-stays-clean", category: "taint", lacks: /\|sink=#[0-9a-z]+:res\.send\|/ },
+      // The sanitized mark is internal: no source id written to data-flow.json carries it.
+      { id: "sanitized:mark-never-written", check: (directory) => !JSON.stringify(readJson(directory, "data-flow.json")).includes("\\u0000") },
+    ],
+  },
+  {
     // S3: a workspace package imported by name resolves to its source, like a relative import.
     id: "workspace-package",
     files: {

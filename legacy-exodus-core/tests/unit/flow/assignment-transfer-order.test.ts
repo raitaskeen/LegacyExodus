@@ -101,9 +101,13 @@ describe("F01: assignment reads precede binding replacement", () => {
   for (const expression of ['x = "safe"', "x = sanitize(x)", "x = validator.escape(x)", '[x] = ["safe"]', '({ x } = { x: "safe" })']) {
     test(`${expression} does not retain stale taint`, async () => {
       const graph = await analyze(`let x = req.query.x; ${expression}; child_process.exec(x);`);
-      expect(graph.taintFlows).toEqual([]);
       const initial = definition(graph, "x", "declaration");
       const updated = definition(graph, "x", "assignment");
+      // XA-01: a sanitizer's result still carries the source, so the command sees it through the new binding only.
+      if (expression.includes("(x)")) {
+        expect(graph.taintFlows).toHaveLength(1);
+        expect(graph.taintFlows[0]?.path.at(-2)).toBe(updated.id);
+      } else expect(graph.taintFlows).toEqual([]);
       expectUses(graph, "x", expression.includes("(x)") ? [initial, updated] : [updated]);
     });
   }
