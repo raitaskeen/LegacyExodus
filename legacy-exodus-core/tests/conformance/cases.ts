@@ -796,7 +796,8 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "reason:module-load", check: (directory) => callReason(directory, 1, "require") === "module-load" },
       { id: "reason:computed-callee", check: (directory) => callReason(directory, 5, "handlers[<dynamic>]") === "computed-callee" },
       { id: "reason:runs-before-binding", check: (directory) => callReason(directory, 6, "early") === "runs-before-binding" },
-      { id: "reason:package-import", check: (directory) => callReason(directory, 8, "fs.readFileSync") === "package-import" },
+      // Since ADR-012 a call through a stable package import is EXTERNAL and has no reason.
+      { id: "reason:external-has-none", check: (directory) => callReason(directory, 8, "fs.readFileSync") === "EXTERNAL" },
       { id: "reason:unbound-name", check: (directory) => callReason(directory, 9, "undeclaredHelper") === "unbound-name" },
       { id: "reason:global-member", check: (directory) => callReason(directory, 10, "console.log") === "global-member" },
       { id: "reason:import-unresolved", check: (directory) => callReason(directory, 11, "missing") === "import-unresolved" },
@@ -824,6 +825,41 @@ export const conformanceCases: readonly ConformanceCase[] = [
     expectations: [
       { id: "foreign-export-write:replaced-export-unresolved", category: "calls", has: /^lib\/reply\.js@2:\d+\|send\|runHooks\|UNRESOLVED\|/ },
       { id: "foreign-export-write:untouched-export-resolves", category: "calls", has: /^lib\/reply\.js@2:\d+\|send\|other\|RESOLVED\|/ },
+    ],
+  },
+  {
+    // ADR-012, Phase B1: a call through a stable import of a package or Node module is EXTERNAL; a rebound import,
+    // a package member another file replaces, or a shadowing parameter keeps it UNRESOLVED.
+    id: "external-imports",
+    files: {
+      "a.js": [
+        "const fs = require(\"fs\");",
+        "const { exec } = require(\"child_process\");",
+        "const { promises } = require(\"fs\");",
+        "let lodash = require(\"lodash\");",
+        "const path = require(\"path\");",
+        "fs.readFileSync(\"x\");",
+        "exec(\"ls\");",
+        "promises.readFile(\"y\");",
+        "lodash.map([], String);",
+        "lodash = { map() {} };",
+        "path.join(\"a\", \"b\");",
+        "function local(fs) { return fs.readFileSync(\"z\"); }",
+        "",
+      ].join("\n"),
+      "patch.js": "require(\"path\").join = function () { return \"patched\"; };\n",
+      "b.mjs": "import * as os from \"os\";\nos.cpus();\n",
+    },
+    expectations: [
+      { id: "external:module-member", check: (directory) => external(directory, "a.js", 6) === "fs:readFileSync" },
+      { id: "external:named-import", check: (directory) => external(directory, "a.js", 7) === "child_process:exec" },
+      { id: "external:member-chain", check: (directory) => external(directory, "a.js", 8) === "fs:promises.readFile" },
+      { id: "external:namespace-import", check: (directory) => external(directory, "b.mjs", 2) === "os:cpus" },
+      { id: "external:rebound-import-unresolved", category: "calls", has: /^a\.js@9:\d+\|module\|lodash\.map\|UNRESOLVED\|/ },
+      { id: "external:patched-member-unresolved", category: "calls", has: /^a\.js@11:\d+\|module\|path\.join\|UNRESOLVED\|/ },
+      { id: "external:shadowing-parameter-unresolved", category: "calls", has: /^a\.js@12:\d+\|local\|fs\.readFileSync\|UNRESOLVED\|/ },
+      { id: "external:no-reason-or-target", check: (directory) => readJson(directory, "semantic.json").calls.filter((call: { resolutionState: string }) => call.resolutionState === "EXTERNAL")
+        .every((call: { reason?: string; targetSymbolId?: string; external?: unknown }) => call.reason === undefined && call.targetSymbolId === undefined && call.external !== undefined) },
     ],
   },
   {
@@ -985,11 +1021,18 @@ function taintKeys(directory: string): string[] {
   return (readJson(directory, "data-flow.json").graphs ?? []).flatMap((graph: any) => (graph.taintFlows ?? []).map((flow: any) => String(flow.key ?? "")));
 }
 
+/** `module:member` of the EXTERNAL call on `line` of `file` (ADR-012), or undefined when it is not EXTERNAL. */
+function external(directory: string, file: string, line: number): string | undefined {
+  const call = readJson(directory, "semantic.json").calls.find((item: { sourceFilePath: string; resolutionState: string; location?: { line: number } }) =>
+    item.sourceFilePath.endsWith(file) && item.location?.line === line && item.resolutionState === "EXTERNAL");
+  return call === undefined ? undefined : `${call.external.module}:${call.external.member}`;
+}
+
 /** The reason of the call to `callee` on `line` of main.js, or "RESOLVED" (A1). */
 function callReason(directory: string, line: number, callee: string): string | undefined {
   const call = readJson(directory, "semantic.json").calls.find((item: { sourceFilePath: string; calleeName: string; location?: { line: number } }) =>
     item.sourceFilePath.endsWith("main.js") && item.calleeName === callee && item.location?.line === line);
-  return call === undefined ? undefined : call.resolutionState === "RESOLVED" ? "RESOLVED" : call.reason;
+  return call === undefined ? undefined : call.resolutionState === "UNRESOLVED" ? call.reason : call.resolutionState;
 }
 
 function readJson(directory: string, name: string): any {

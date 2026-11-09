@@ -92,7 +92,7 @@ export interface GroundTruthCall {
   readonly calleeName: string;
   readonly targetFilePath?: string;
   readonly targetSymbolName?: string;
-  readonly resolutionState?: "RESOLVED" | "UNRESOLVED";
+  readonly resolutionState?: "RESOLVED" | "EXTERNAL" | "UNRESOLVED";
 }
 
 export interface GroundTruthCFG {

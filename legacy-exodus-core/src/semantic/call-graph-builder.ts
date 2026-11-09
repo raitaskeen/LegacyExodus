@@ -5,15 +5,23 @@ import { canonicalizePath, ModuleResolver, type DependencyGraph } from "@graph/i
 import type { SymbolTable } from "@symbols/index";
 import { createLexicalScopeId, createSelfScopeId, FactKeyer, type CodeSymbol } from "@symbols/index";
 
-import type { SemanticCall, SymbolReference, UnresolvedReason } from "./semantic-contracts";
+import type { ExternalTarget, SemanticCall, SymbolReference, UnresolvedReason } from "./semantic-contracts";
 import { ClassHierarchy, collectClassHierarchyFacts } from "./class-hierarchy";
 import { stableId } from "@shared/identity";
 import { compareCodePoints } from "@shared/ordering";
 import { immutable } from "@shared/immutability";
 
 export class DeterministicCallGraphBuilder {
+  /** Package members some file of the run writes (`module\u0000member`, `*` for a computed one): never EXTERNAL (ADR-012). */
+  private packageWrites: ReadonlySet<string> = new Set();
+
   /** @param resolver - the run's resolver (tsconfig aliases, workspace packages), shared with the dependency graph. */
   public constructor(public readonly resolver: ModuleResolver = new ModuleResolver()) {}
+
+  /** The package members the run's files write (see packageWriteKeys); set before any file is built. */
+  public usePackageWrites(keys: ReadonlySet<string>): void {
+    this.packageWrites = keys;
+  }
 
   public build(astResults: readonly ASTResult[], symbolTables: readonly SymbolTable[], dependencyGraph: DependencyGraph): { readonly calls: readonly SemanticCall[]; readonly references: readonly SymbolReference[] } {
     const tablesByPath = new Map(symbolTables.map((table) => [canonicalizePath(table.filePath), table]));
@@ -24,6 +32,7 @@ export class DeterministicCallGraphBuilder {
     const knownPaths = new Set(tablesByPath.keys());
     const writes = astResults.flatMap((ast) => collectForeignExportWrites(ast, tablesByPath.get(canonicalizePath(ast.metadata.sourcePath))));
     for (const id of foreignExportWriteTargets(writes, (importer, specifier) => this.resolver.resolve(importer, specifier, knownPaths).resolvedPath ?? undefined, (path) => tablesByPath.get(path)?.symbols ?? [])) unstableExportIds.add(id);
+    this.usePackageWrites(packageWriteKeys(writes, (importer, specifier) => this.resolver.resolve(importer, specifier, knownPaths).resolvedPath ?? undefined));
     const importTargetFile = new Map(dependencyGraph.edges.map((edge) => [edge.importSymbolId, edge.targetFilePath]));
     const hierarchy = new ClassHierarchy(
       astResults.map((ast) => collectClassHierarchyFacts(ast, tablesByPath.get(canonicalizePath(ast.metadata.sourcePath)))),
@@ -134,8 +143,12 @@ export class DeterministicCallGraphBuilder {
           : callsBeforeRequire(fileSymbols, imported, node);
         const targetSymbolId = runsTooEarly ? undefined : resolvedTarget;
         const id = hash(`${ast.metadata.sourcePath}:${nextContext.callerName}:${calleeName}:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`);
-        const resolutionState = targetSymbolId === undefined ? "UNRESOLVED" as const : "RESOLVED" as const;
-        const reason = targetSymbolId !== undefined ? undefined : unresolvedReason({
+        // A call proven to leave the repository: a stable import of a package or Node module, never replaced here (ADR-012).
+        const external = targetSymbolId !== undefined || namedCallee === undefined || evalOrWith || invokesThroughWrittenProperty || (resolvedTarget !== undefined && runsTooEarly)
+          ? undefined
+          : externalTarget(imported, calleeName, fileSymbols, nextContext, this.packageWrites);
+        const resolutionState = targetSymbolId !== undefined ? "RESOLVED" as const : external !== undefined ? "EXTERNAL" as const : "UNRESOLVED" as const;
+        const reason = resolutionState !== "UNRESOLVED" ? undefined : unresolvedReason({
           named: namedCallee !== undefined, evalOrWith, invokerWritten: invokesThroughWrittenProperty,
           runsTooEarly: resolvedTarget !== undefined && runsTooEarly, imported, importTarget, calleeName, index: fileSymbols, context: nextContext,
         });
@@ -144,7 +157,7 @@ export class DeterministicCallGraphBuilder {
         const callId = key === undefined ? id : stableId("call", key);
         const reference: SymbolReference = { id: key === undefined ? hash(`reference:${id}`) : stableId("call-reference", key), ...keyed, filePath: ast.metadata.sourcePath, name: calleeName, kind: "call", resolutionState, ...(targetSymbolId === undefined ? {} : { resolvedSymbolId: targetSymbolId }) };
         references.push(reference);
-        calls.push({ id: callId, ...keyed, sourceFilePath: ast.metadata.sourcePath, callerName: nextContext.callerName, calleeName, resolutionState, ...(targetSymbolId === undefined ? {} : { targetSymbolId }), ...(reason === undefined ? {} : { reason }), ...(node.location === undefined ? {} : { location: node.location.start }) });
+        calls.push({ id: callId, ...keyed, sourceFilePath: ast.metadata.sourcePath, callerName: nextContext.callerName, calleeName, resolutionState, ...(targetSymbolId === undefined ? {} : { targetSymbolId }), ...(external === undefined ? {} : { external }), ...(reason === undefined ? {} : { reason }), ...(node.location === undefined ? {} : { location: node.location.start }) });
       }
     }
 
@@ -2319,6 +2332,46 @@ function isParameter(index: FileSymbolIndex, name: string, context: ResolutionCo
     const scope = /^scope:[A-Za-z]+:(\d+):(\d+)$/.exec(target.scopeId ?? "");
     return scope !== null && (byStart.get(`${scope[1]}:${scope[2]}`) ?? []).some((callable) => (callable.parameters ?? []).includes(name));
   });
+}
+
+/**
+ * Where a call goes when it is proven to leave the repository through an import (ADR-012): its callee, or the object it
+ * reads the callee from, is an import of a package or Node module whose binding is never rebound, and no file of the run
+ * writes that member of that module. A member chain is kept as written (`promises.readFile`).
+ */
+function externalTarget(imported: CodeSymbol | undefined, calleeName: string, index: FileSymbolIndex, context: ResolutionContext, packageWrites: ReadonlySet<string>): ExternalTarget | undefined {
+  const pieces = calleeName.split(".");
+  const root = pieces[0] ?? calleeName;
+  const binding = imported !== undefined
+    ? imported
+    : pieces.length > 1 && root !== "this" && !isLexicallyShadowed(root, context, index) ? visibleImport(index, root, context.scope) : undefined;
+  if (binding === undefined || binding.kind !== "import" || isRelativeSpecifier(binding.moduleSpecifier)) return undefined;
+  if (binding.scopeId === MODULE_SCOPE_ID && isRebound(index, MODULE_SCOPE_ID, binding.name)) return undefined;
+  const module = packageName(binding.moduleSpecifier!);
+  const source = binding.sourceSymbolName;
+  const whole = source === "*" || (binding.defaultExport && source === undefined);
+  const path = [...(whole ? [] : [source ?? binding.name]), ...(imported !== undefined ? [] : pieces.slice(1))];
+  const member = path.length === 0 ? "default" : path.join(".");
+  if (packageWrites.has(`${module}\u0000${path[0] ?? "default"}`) || packageWrites.has(`${module}\u0000*`)) return undefined;
+  return { module, member };
+}
+
+/** A package or Node module specifier without the `node:` scheme: `node:fs` and `fs` are one module. */
+function packageName(specifier: string): string {
+  return specifier.startsWith("node:") ? specifier.slice(5) : specifier;
+}
+
+/**
+ * The package members a run's files write (`require("fs").readFileSync = …`, `fs.readFileSync = …` through an import):
+ * keys `module\u0000member`, `*` for a computed member. A specifier that resolves to a repository file is not a package.
+ */
+export function packageWriteKeys(writes: readonly ForeignExportWrite[], resolveFile: (importerPath: string, specifier: string) => string | undefined): ReadonlySet<string> {
+  const keys = new Set<string>();
+  for (const write of writes) {
+    if (isRelativeSpecifier(write.specifier) || resolveFile(write.importerPath, write.specifier) !== undefined) continue;
+    keys.add(`${packageName(write.specifier)}\u0000${write.name}`);
+  }
+  return keys;
 }
 
 /** A specifier naming a file (`./x`, `../x`, `/x`) rather than a package; an unknown one counts as a file. */

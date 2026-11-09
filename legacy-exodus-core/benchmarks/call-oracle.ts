@@ -324,6 +324,13 @@ export function runCallOracle(engineRoot: string, corpus: string): OracleResult 
       const call = site === undefined ? undefined : engineCallAt(site);
       if (call === undefined) continue;
       matchedSites++;
+      // An EXTERNAL call claims to leave the repository (ADR-012): entering a repository function contradicts it.
+      if (call.resolutionState === "EXTERNAL") {
+        const line = `${file}:${site!.start.line}:${site!.start.column} ${call.calleeName} -> engine EXTERNAL ${call.external?.module}:${call.external?.member}, observed ${[...callees].join(", ")}`;
+        if ([...callees].every((callee) => usesProxyquire(splitPosition(callee)[0]))) substitutions.push(line);
+        else contradictions.push(line);
+        continue;
+      }
       if (call.resolutionState !== "RESOLVED") {
         const reason = call.reason ?? "not-recorded";
         unresolvedByReason.set(reason, (unresolvedByReason.get(reason) ?? 0) + 1);
