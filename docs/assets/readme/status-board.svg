@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 400" width="960" height="400" role="img" aria-labelledby="t d">
+  <title id="t">What works today, and what does not yet</title>
+  <desc id="d">Four columns. Works today: CLI and runtime, discovery and parsing, storage and snapshot reuse, deterministic .discovery output, plugin contracts. Partial, with documented limits: symbols and module graphs, calls and control flow, data flow and taint, knowledge graph, Express semantics. Planned next: semantic IR, JavaScript to TypeScript migration, the Migration Readiness Assessment, the Behaviour Safety Net test generator. Target architecture: migration planning and transformation, bounded AI gateway, equivalence gates, PHP, Java and Rails.</desc>
+  <style>
+    .ink { fill: none; stroke: #16130f; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .head { font: 800 17px Inter, "Segoe UI", Helvetica, Arial, sans-serif; fill: #16130f; }
+    .sub { font: 400 12px Inter, "Segoe UI", Helvetica, Arial, sans-serif; fill: #3d362e; }
+    .item { font: 500 13.5px Inter, "Segoe UI", Helvetica, Arial, sans-serif; fill: #16130f; }
+    .tag { font: 700 10.5px "JetBrains Mono", Consolas, Menlo, monospace; fill: #ffffff; letter-spacing: 0.8px; }
+  </style>
+
+  <path d="M8 6 Q480 1 952 7 Q958 200 951 394 Q480 399 9 393 Q3 200 8 6 Z" style="fill:#fff7f0" stroke="#e8d9cc" stroke-width="2"/>
+
+  <!-- column 1: works today -->
+  <g transform="translate(24 24)">
+    <path class="ink" d="M2 3 Q105 0 208 4 Q212 175 209 350 Q105 354 3 351 Q-2 175 2 3 Z" style="fill:#ffffff"/>
+    <path d="M14 18 Q60 15 108 18 Q110 28 108 38 Q60 40 14 38 Q12 28 14 18 Z" style="fill:#138a6a"/>
+    <text class="tag" x="24" y="32">WORKS TODAY</text>
+    <text class="head" x="16" y="70">Shipped</text>
+    <text class="sub" x="16" y="88">tested on every pull request</text>
+    <g class="item">
+      <text x="34" y="130">CLI, runtime, lifecycle</text>
+      <text x="34" y="170">Discovery and parsing</text>
+      <text x="34" y="210">Storage, snapshot reuse</text>
+      <text x="34" y="250">Byte-identical .discovery</text>
+      <text x="34" y="290">Plugin contracts</text>
+    </g>
+    <g fill="none" stroke="#138a6a" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M16 125 L21 130 L28 120"/><path d="M16 165 L21 170 L28 160"/><path d="M16 205 L21 210 L28 200"/>
+      <path d="M16 245 L21 250 L28 240"/><path d="M16 285 L21 290 L28 280"/>
+    </g>
+  </g>
+
+  <!-- column 2: partial -->
+  <g transform="translate(256 24)">
+    <path class="ink" d="M3 4 Q105 1 207 3 Q211 175 208 351 Q105 353 2 350 Q-2 175 3 4 Z" style="fill:#ffffff"/>
+    <path d="M14 18 Q60 15 96 18 Q98 28 96 38 Q60 40 14 38 Q12 28 14 18 Z" style="fill:#b98314"/>
+    <text class="tag" x="26" y="32">PARTIAL</text>
+    <text class="head" x="16" y="70">Limits documented</text>
+    <text class="sub" x="16" y="88">unproven stays UNRESOLVED</text>
+    <g class="item">
+      <text x="34" y="130">Symbols, module graphs</text>
+      <text x="34" y="170">Calls, control flow</text>
+      <text x="34" y="210">Data flow and taint</text>
+      <text x="34" y="250">Knowledge graph</text>
+      <text x="34" y="290">Express semantics</text>
+    </g>
+    <g stroke="#b98314" stroke-width="2">
+      <circle cx="22" cy="125" r="6" style="fill:#fde9c8"/><circle cx="22" cy="165" r="6" style="fill:#fde9c8"/>
+      <circle cx="22" cy="205" r="6" style="fill:#fde9c8"/><circle cx="22" cy="245" r="6" style="fill:#fde9c8"/>
+      <circle cx="22" cy="285" r="6" style="fill:#fde9c8"/>
+    </g>
+    <g fill="#b98314">
+      <path d="M22 119 A6 6 0 0 1 22 131 Z"/><path d="M22 159 A6 6 0 0 1 22 171 Z"/><path d="M22 199 A6 6 0 0 1 22 211 Z"/>
+      <path d="M22 239 A6 6 0 0 1 22 251 Z"/><path d="M22 279 A6 6 0 0 1 22 291 Z"/>
+    </g>
+    <text class="sub" x="16" y="330">node_modules not resolved;</text>
+    <text class="sub" x="16" y="345">only Express is modelled</text>
+  </g>
+
+  <!-- column 3: planned -->
+  <g transform="translate(488 24)">
+    <path class="ink" d="M2 3 Q105 0 208 4 Q212 175 208 350 Q105 354 3 351 Q-1 175 2 3 Z" style="fill:#ffffff"/>
+    <path d="M14 18 Q60 15 112 18 Q114 28 112 38 Q60 40 14 38 Q12 28 14 18 Z" style="fill:#2d5ba8"/>
+    <text class="tag" x="24" y="32">PLANNED NEXT</text>
+    <text class="head" x="16" y="70">Designed, not built</text>
+    <text class="sub" x="16" y="88">in the roadmap order</text>
+    <g class="item">
+      <text x="34" y="130">Semantic IR (Wave 6)</text>
+      <text x="34" y="170">JS to TypeScript (Wave 7)</text>
+      <text x="34" y="210">Readiness Assessment</text>
+      <text x="34" y="250">Behaviour Safety Net</text>
+    </g>
+    <text class="sub" x="34" y="266">characterization test generator</text>
+    <g stroke="#2d5ba8" stroke-width="2" fill="none" stroke-dasharray="3 3">
+      <circle cx="22" cy="125" r="6"/><circle cx="22" cy="165" r="6"/><circle cx="22" cy="205" r="6"/><circle cx="22" cy="245" r="6"/>
+    </g>
+  </g>
+
+  <!-- column 4: target -->
+  <g transform="translate(720 24)">
+    <path class="ink" d="M3 4 Q105 1 206 3 Q210 175 207 351 Q105 353 2 350 Q-2 175 3 4 Z" style="fill:#f7f7f5" stroke-dasharray="7 6"/>
+    <path d="M14 18 Q60 15 84 18 Q86 28 84 38 Q60 40 14 38 Q12 28 14 18 Z" style="fill:#5f5f5b"/>
+    <text class="tag" x="24" y="32">TARGET</text>
+    <text class="head" x="16" y="70">Long-term direction</text>
+    <text class="sub" x="16" y="88">not implemented</text>
+    <g class="item" style="fill:#3d362e">
+      <text x="34" y="130">Migration planning</text>
+      <text x="34" y="170">Bounded AI gateway</text>
+      <text x="34" y="210">Equivalence gates</text>
+      <text x="34" y="250">PHP, Java, Rails</text>
+    </g>
+    <g stroke="#a3a39f" stroke-width="2" fill="none">
+      <path d="M16 125 L28 125"/><path d="M16 165 L28 165"/><path d="M16 205 L28 205"/><path d="M16 245 L28 245"/>
+    </g>
+  </g>
+</svg>

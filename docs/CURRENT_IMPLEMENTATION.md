@@ -4,7 +4,11 @@
 
 **Implementation truth:** `main`. `core-foundation` and `docs-foundation` are retired as integration branches (2026-10-28). No SHA is pinned here; verify the exact revision you review.
 
-This page is the concise status boundary for LegacyExodus. Implementation source, executable tests, and verified runtime behavior remain authoritative if this page drifts.
+This page is the concise status boundary for LegacyExodus. Implementation source, executable tests, and verified runtime behavior remain authoritative if this page drifts. Finding ids NA-xx refer to the 2026-11-08 fresh audit; all sixteen are merged.
+
+<p align="center">
+  <img src="assets/readme/status-board.svg" width="100%" alt="What works today, what is partial with documented limits, what is planned next and what is target architecture."/>
+</p>
 
 ## Current core (implemented; limits below)
 
@@ -35,8 +39,8 @@ This page is the concise status boundary for LegacyExodus. Implementation source
 ## Known deferred capabilities
 
 - **#111 / IA-HIGH-002 — framework semantics:** current analysis is generic deterministic JavaScript/TypeScript analysis plus narrow Express route and middleware recognition for proven patterns. Comprehensive React, NestJS, Angular, Vue, Fastify, or other framework runtime semantics are not implemented.
-- **#112 / IA-HIGH-003 — taint policy boundary:** current deterministic propagation uses built-in source, sink, and sanitizer rules. A typed, versioned, project-configurable, or plugin-extensible taint-policy architecture is not implemented.
-- **#117 / IA-MED-004 — package/workspace resolution:** current resolution covers repository-local relative modules and proven `tsconfig` path aliases. Full Node resolution, `node_modules`, package `exports`/`imports`, and npm/pnpm/Yarn workspace resolution are not implemented.
+- **#112 / IA-HIGH-003 — taint policy boundary:** sources, sinks and sanitizers live in one versioned policy module (`src/flow/taint-policy.ts`, version `builtin-3`), matched by the binding a name actually resolves to (BA-07). A project-configurable or plugin-extensible policy is not implemented.
+- **#117 / IA-MED-004 — package/workspace resolution:** resolution covers repository-local modules, proven `tsconfig`/`jsconfig` paths, and npm/Yarn/pnpm workspace packages by name, including a workspace package's `exports` (S3). Third-party packages in `node_modules` and package `imports` maps are not resolved.
 
 ## Not implemented
 

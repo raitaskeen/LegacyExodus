@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 320" width="960" height="320" role="img" aria-labelledby="t d">
+  <title id="t">LegacyExodus: reverse-engineer legacy, migrate with proof</title>
+  <desc id="d">A tangled legacy repository on the left is read into a tidy, sealed graph of evidence on the right. Deterministic, local, evidence first.</desc>
+  <style>
+    .ink { fill: none; stroke: #16130f; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+    .thin { fill: none; stroke: #16130f; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+    .word { font: 800 46px Inter, "Segoe UI", Helvetica, Arial, sans-serif; fill: #16130f; letter-spacing: -1.5px; }
+    .tag { font: 600 21px Inter, "Segoe UI", Helvetica, Arial, sans-serif; fill: #3d362e; }
+    .chip { font: 600 12.5px "JetBrains Mono", Consolas, Menlo, monospace; fill: #16130f; }
+    .lab { font: 600 12px "JetBrains Mono", Consolas, Menlo, monospace; fill: #16130f; }
+    .hand { font: italic 500 13px Inter, "Segoe UI", Helvetica, Arial, sans-serif; fill: #b24418; }
+  </style>
+
+  <!-- paper card -->
+  <path d="M10 8 Q480 2 950 9 Q957 160 949 312 Q480 318 12 311 Q4 160 10 8 Z" fill="#fff7f0" stroke="#e8d9cc" stroke-width="2"/>
+  <!-- kiln band -->
+  <path d="M10 8 Q22 160 12 311 L30 311 Q40 160 28 8 Z" fill="#b24418"/>
+
+  <!-- logo mark -->
+  <g transform="translate(64 62)">
+    <path d="M0 0 L0 40 L40 40" fill="none" stroke="#16130f" stroke-width="7" stroke-linecap="square"/>
+    <path d="M14 26 L36 4" fill="none" stroke="#b24418" stroke-width="7" stroke-linecap="round"/>
+    <path d="M24 3 L37 3 L37 16" fill="none" stroke="#b24418" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text class="word" x="120" y="102">LegacyExodus</text>
+  <path class="ink" d="M122 116 Q250 110 380 117 Q420 119 452 113" stroke="#b24418" stroke-width="4"/>
+
+  <text class="tag" x="64" y="160">Reverse-engineer legacy.</text>
+  <text class="tag" x="64" y="190">Migrate with proof.</text>
+
+  <!-- chips -->
+  <g>
+    <path d="M64 226 Q120 223 176 226 Q178 240 176 254 Q120 256 64 254 Q61 240 64 226 Z" class="thin" style="fill:#ffe6d6"/>
+    <text class="chip" x="76" y="245">deterministic</text>
+    <path d="M190 226 Q227 223 264 226 Q266 240 264 254 Q227 256 190 254 Q187 240 190 226 Z" class="thin" style="fill:#d9efe7"/>
+    <text class="chip" x="203" y="245">local</text>
+    <path d="M278 226 Q350 223 422 226 Q424 240 422 254 Q350 256 278 254 Q275 240 278 226 Z" class="thin" style="fill:#dde6f5"/>
+    <text class="chip" x="291" y="245">evidence first</text>
+  </g>
+  <text class="hand" x="64" y="288">JavaScript and TypeScript today. Your code never leaves your machine.</text>
+
+  <!-- left: tangled legacy box -->
+  <g transform="translate(520 70)">
+    <path d="M0 6 Q2 0 10 0 L120 2 Q128 3 128 11 L127 168 Q126 176 118 176 L8 175 Q0 174 1 166 Z" class="ink" style="fill:#ffffff"/>
+    <path class="thin" stroke="#a3a39f" d="M18 28 C60 10 40 70 90 40 S 30 120 100 100 S 20 150 70 140 S 110 60 40 80 S 90 160 110 150"/>
+    <path class="thin" stroke="#b98314" d="M22 120 C50 90 80 130 60 60 S 104 30 96 120"/>
+    <text class="lab" x="18" y="198">legacy repo</text>
+  </g>
+
+  <!-- arrow through the engine -->
+  <g class="ink" stroke="#b24418" stroke-width="3">
+    <path d="M660 158 Q690 150 722 158"/>
+    <path d="M712 148 L724 158 L712 168"/>
+  </g>
+  <text class="hand" x="694" y="128" text-anchor="middle">read,</text>
+  <text class="hand" x="694" y="144" text-anchor="middle">never rewritten</text>
+
+  <!-- right: tidy evidence graph -->
+  <g transform="translate(740 64)">
+    <path d="M0 6 Q2 0 10 0 L180 2 Q188 3 188 11 L187 178 Q186 186 178 186 L8 185 Q0 184 1 176 Z" class="ink" style="fill:#f7f7f5"/>
+    <g class="thin">
+      <path d="M40 40 L94 34 M94 34 L150 52 M40 40 L60 96 M94 34 L104 96 M60 96 L104 96 M104 96 L150 52 M60 96 L46 146 M104 96 L130 146"/>
+    </g>
+    <g stroke="#16130f" stroke-width="1.8">
+      <circle cx="40" cy="40" r="9" fill="#b24418"/>
+      <circle cx="94" cy="34" r="9" fill="#ffe6d6"/>
+      <circle cx="150" cy="52" r="9" fill="#ffe6d6"/>
+      <circle cx="60" cy="96" r="9" fill="#d9efe7"/>
+      <circle cx="104" cy="96" r="9" fill="#d9efe7"/>
+      <circle cx="46" cy="146" r="9" fill="#dde6f5"/>
+      <circle cx="130" cy="146" r="9" fill="#ffffff" stroke-dasharray="3 3"/>
+    </g>
+    <text class="lab" x="142" y="168" style="font-size:10px;fill:#5f5f5b">?</text>
+    <text class="lab" x="10" y="208">.discovery/ sealed</text>
+    <!-- seal -->
+    <g transform="translate(166 -6)">
+      <path d="M0 14 Q2 0 16 0 Q30 1 31 15 Q30 29 16 30 Q2 29 0 14 Z" fill="#138a6a" stroke="#16130f" stroke-width="1.6"/>
+      <path d="M9 15 L14 20 L23 10" fill="none" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+</svg>

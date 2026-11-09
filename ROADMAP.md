@@ -2,6 +2,10 @@
 
 This roadmap tracks the development progress of LegacyExodus across deterministic repository intelligence, verification hardening, migration fidelity, and future transformation stages.
 
+<p align="center">
+  <img src="docs/assets/readme/four-stages.svg" width="100%" alt="Four stages: VyrixScout discovery, implemented; NolaraStruct understanding, partial, where the work is now; ZelvoxForge planning and transformation, target architecture; VymosGate validation and approval, target architecture."/>
+</p>
+
 ---
 
 ## Roadmap Status Taxonomy
@@ -16,12 +20,12 @@ Every capability and milestone is strictly classified into one of the following 
 
 ---
 
-## Where we are (2026-11-08)
+## Where we are (2026-11-09)
 
 ```mermaid
 flowchart LR
     A["Waves 0–5<br/>blind-audit fixes<br/>BA-01…BA-28"]:::done --> B["ADR-008 / ADR-009<br/>stable ids,<br/>streaming execution"]:::done
-    B --> C["Fresh-audit fixes<br/>NA-01…NA-16"]:::now
+    B --> C["Fresh-audit fixes<br/>NA-01…NA-16"]:::done
     C --> D["Wave 6<br/>Semantic IR"]:::next
     D --> E["Wave 7<br/>JS → TypeScript<br/>migration"]:::next
     E --> F["Wave 8<br/>PHP → Java → Ruby"]:::later
@@ -35,10 +39,11 @@ flowchart LR
 |---|---|:---:|---|
 | **Waves 0–5** | Fixes for the 2026-10-28 blind audit: parser dialects, TS declarations and resolution, CFG-based data flow, taint policy, Express model, discovery policy, dead code, stable identity | **`COMPLETED`** | PRs #204–#250; the conformance ledger was empty at the end. BA-19 (knowledge-graph unification) and BA-25 (plugin capabilities) are not scheduled |
 | **ADR-008, ADR-009** | Edit-stable fact identity; whole-run fact lists on disk | **`COMPLETED`** | #238–#257. Ghost peak memory fell from 9.9 GB to about 2 GB, with fact-diff 0/0 at every step |
-| **Fresh-audit fixes** | NA-01…NA-16 from the [2026-11-08 audit](https://github.com/raitaskeen/LegacyExodus/pull/203) | **`IN PROGRESS`** | Merged: NA-01, NA-02, NA-03a to NA-03e, NA-04, NA-05, NA-06 (ADR-010: byte-identical fact artifacts, stable project id), NA-07 to NA-13, NA-15 (docs refresh), NA-16 (ADR-011: bounded snapshot reuse). Dependency updates merge one at a time behind a fact-diff (NA-14) |
-| **Accuracy harness** | Recall and precision per fact category on the conformance corpus; runtime-proven taint ground truth | **`IN PROGRESS`** | `bun run benchmarks/cli.ts accuracy`; CI publishes it with every PR (#273) |
-| **Wave 6, Semantic IR** | A language-neutral IR built from proven facts only, each unit carrying its evidence state | **`PLANNED`** | Starts after the fresh-audit fixes. Entry criteria are in the remediation queue |
+| **Fresh-audit fixes** | NA-01…NA-16 from the [2026-11-08 audit](https://github.com/raitaskeen/LegacyExodus/pull/203) | **`COMPLETED`** | All sixteen merged (#259–#286), each with no fact lost: NA-01, NA-02, NA-03a to NA-03e, NA-04, NA-05, NA-06 (ADR-010: byte-identical fact artifacts, stable project id), NA-07 to NA-13, NA-15 (docs refresh), NA-16 (ADR-011: bounded snapshot reuse). Dependency updates merge one at a time behind a fact-diff (NA-14) |
+| **Accuracy harness** | Recall and precision per fact category on the conformance corpus; runtime-proven taint ground truth | **`COMPLETED`** | `bun run benchmarks/cli.ts accuracy`; CI publishes it with every PR (#273) |
+| **Wave 6, Semantic IR** | A language-neutral IR built from proven facts only, each unit carrying its evidence state | **`PLANNED`** | Next. Entry criteria are in the remediation queue |
 | **Wave 7, first migration** | JS → TypeScript (owner decision, 2026-11-03), verified by the project's own tests plus characterization tests | **`PLANNED`** | Builds on Wave 6 |
+| **Products** | Migration Readiness Assessment (first product, a report from the engine evidence); Behaviour Safety Net (a characterization test generator, which must run customer code and so needs its own design review) | **`PLANNED`** | Owner decisions, 2026-11-03 and 2026-11-08 |
 | **Wave 8, languages** | PHP, then Java, then Ruby on Rails, each through the existing adapter seams with its own conformance corpus and pinned benchmark | **`PLANNED`** | Owner order, 2026-11-03 |
 
 ### Gates every change passes

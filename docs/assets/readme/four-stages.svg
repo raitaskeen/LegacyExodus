@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 270" width="960" height="270" role="img" aria-labelledby="t d">
+  <title id="t">The four stages of LegacyExodus, and where the work is now</title>
+  <desc id="d">A road with four stations. VyrixScout, discovery: implemented. NolaraStruct, understanding: partial, and the work is here now. ZelvoxForge, planning and transformation: target architecture. VymosGate, validation and approval: target architecture.</desc>
+  <style>
+    .ink { fill: none; stroke: #16130f; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+    .name { font: 800 17px Inter, "Segoe UI", Helvetica, Arial, sans-serif; fill: #16130f; }
+    .what { font: 500 13px Inter, "Segoe UI", Helvetica, Arial, sans-serif; fill: #3d362e; }
+    .tag { font: 700 10.5px "JetBrains Mono", Consolas, Menlo, monospace; letter-spacing: 0.8px; }
+    .num { font: 800 16px Inter, "Segoe UI", Helvetica, Arial, sans-serif; fill: #ffffff; }
+    .hand { font: italic 600 13px Inter, "Segoe UI", Helvetica, Arial, sans-serif; fill: #b24418; }
+  </style>
+
+  <path d="M8 6 Q480 1 952 7 Q958 135 951 264 Q480 269 9 263 Q3 135 8 6 Z" style="fill:#fff7f0" stroke="#e8d9cc" stroke-width="2"/>
+
+  <!-- the road: solid where built, dashed ahead -->
+  <path class="ink" d="M60 120 Q180 108 300 122 Q390 132 470 118" stroke="#b24418" stroke-width="5"/>
+  <path class="ink" d="M470 118 Q600 104 700 122 Q800 136 900 116" stroke="#a3a39f" stroke-width="5" stroke-dasharray="12 10"/>
+
+  <!-- station 1 -->
+  <g transform="translate(110 116)">
+    <circle r="20" style="fill:#138a6a" stroke="#16130f" stroke-width="2"/>
+    <text class="num" x="-5" y="6">1</text>
+  </g>
+  <text class="name" x="52" y="176">VyrixScout</text>
+  <text class="what" x="52" y="196">Discovery</text>
+  <text class="tag" x="52" y="220" style="fill:#138a6a">IMPLEMENTED</text>
+
+  <!-- station 2 -->
+  <g transform="translate(340 126)">
+    <circle r="20" style="fill:#b98314" stroke="#16130f" stroke-width="2"/>
+    <text class="num" x="-5" y="6">2</text>
+  </g>
+  <text class="name" x="282" y="186">NolaraStruct</text>
+  <text class="what" x="282" y="206">Understanding</text>
+  <text class="tag" x="282" y="230" style="fill:#b98314">PARTIAL</text>
+
+  <!-- you are here flag -->
+  <g transform="translate(400 30)">
+    <path class="ink" d="M0 0 L0 74"/>
+    <path d="M0 2 Q30 -2 58 6 Q50 14 58 22 Q30 16 0 20 Z" style="fill:#b24418" stroke="#16130f" stroke-width="1.6"/>
+    <text class="hand" x="66" y="18">the work is here</text>
+  </g>
+
+  <!-- station 3 -->
+  <g transform="translate(610 112)">
+    <circle r="20" style="fill:#ffffff" stroke="#16130f" stroke-width="2" stroke-dasharray="5 4"/>
+    <text class="num" x="-5" y="6" style="fill:#16130f">3</text>
+  </g>
+  <text class="name" x="552" y="172">ZelvoxForge</text>
+  <text class="what" x="552" y="192">Planning and transformation</text>
+  <text class="tag" x="552" y="216" style="fill:#5f5f5b">TARGET ARCHITECTURE</text>
+
+  <!-- station 4 -->
+  <g transform="translate(850 124)">
+    <circle r="20" style="fill:#ffffff" stroke="#16130f" stroke-width="2" stroke-dasharray="5 4"/>
+    <text class="num" x="-5" y="6" style="fill:#16130f">4</text>
+  </g>
+  <text class="name" x="770" y="184">VymosGate</text>
+  <text class="what" x="770" y="204">Validation and approval</text>
+  <text class="tag" x="770" y="228" style="fill:#5f5f5b">TARGET ARCHITECTURE</text>
+
+  <text class="what" x="52" y="254" style="font-style:italic;fill:#5f5f5b">Solid road: built and tested. Dashed: designed, not implemented.</text>
+</svg>
