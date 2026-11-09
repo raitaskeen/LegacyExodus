@@ -26,11 +26,25 @@ session resumes from here.
   - Fast: no stage superlinear in file or function count.
   - No over-engineering: build only what a finding, a failing case or a measured budget demands.
 
-## Current status (2026-11-09). Read this first
+## Current status (2026-11-09, evening). Read this first
 
-[`../2026-11-08-fresh-audit/STATUS-2026-11-09.md`](../2026-11-08-fresh-audit/STATUS-2026-11-09.md) is the latest
-overall report: score (about 77, self-assessed), every remaining finding, accuracy, pending owner decisions, and
-where everything lives. `main` = `68faf62`. All NA findings are fixed; BA-19 and BA-25 remain (design-level).
+The latest audit is [`../2026-11-10-blind-audit/AUDIT-REPORT.md`](../2026-11-10-blind-audit/AUDIT-REPORT.md): main `d30ffaa`
+scored about 72 (7.18), not the 77 self-assessed in [`STATUS-2026-11-09.md`](../2026-11-08-fresh-audit/STATUS-2026-11-09.md).
+Eight findings, XA-01 to XA-08. Owner decisions: fix order XA-01, 02, 03, 04, then 05 to 07; `closedWorld` stays
+off; Fact Diff and Scale Gate are now required checks on main; #195 closed; #111, #112 and #117 stay open.
+
+## Track 2026-11-09: cross-file audit findings (XA-01 to XA-08)
+
+| ID | Severity | Finding | State |
+|---|---|---|---|
+| XA-01 | High | An HTML escaper cut taint for every sink | **Fixed** #294 (`d6aa5e3`) |
+| XA-02 | High | Exported subclass left its internal base closed | In progress |
+| XA-03 | Medium | Method written on an exported instance in another file ignored | Queued |
+| XA-04 | Medium | Computed read borrowing a method in the same file not seen | Queued |
+| XA-05 | Low | Call before its CommonJS `require` binds is RESOLVED | Queued |
+| XA-06 | Low | Validator stack overflow drops a parsable file as `PARSER_EXECUTION_FAILED` | Queued |
+| XA-07 | Low | README/CI wording says more than the code proves | Queued (after the fixes) |
+| XA-08 | Info | `closedWorld` cannot be switched on | Owner: stays off |
 
 ## Track 2026-11-08: fresh audit findings (NA-01 to NA-15)
 
