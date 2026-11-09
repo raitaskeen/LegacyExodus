@@ -190,9 +190,9 @@ jobs:
 
   # Phase A3: runs Express's and Fastify's own test suites with every function
   # instrumented and checks each RESOLVED call against the function the run really
-  # entered. Reporting only until the export-write gap it found is fixed; then it
-  # fails on any contradiction. Uses the runner's Node and installs each corpus's
-  # dev dependencies from npm.
+  # entered. Any contradiction (a false RESOLVED fact) fails the job; a module a test
+  # swaps with proxyquire is reported apart. Uses the runner's Node and installs each
+  # corpus's dev dependencies from npm.
   call-oracle:
     name: Call Oracle
     if: github.event_name == 'pull_request'
@@ -228,6 +228,7 @@ jobs:
           benchmarks/.cache/express
           benchmarks/.cache/fastify
           --output call-oracle.md
+          --fail-on-contradiction
 
       - name: Publish the call oracle to job summary
         if: always()
