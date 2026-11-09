@@ -26,7 +26,13 @@ session resumes from here.
   - Fast: no stage superlinear in file or function count.
   - No over-engineering: build only what a finding, a failing case or a measured budget demands.
 
-## Track 2026-11-08: fresh audit findings (NA-01 to NA-15). Read this first
+## Current status (2026-11-09). Read this first
+
+[`../2026-11-08-fresh-audit/STATUS-2026-11-09.md`](../2026-11-08-fresh-audit/STATUS-2026-11-09.md) is the latest
+overall report: score (about 77, self-assessed), every remaining finding, accuracy, pending owner decisions, and
+where everything lives. `main` = `68faf62`. All NA findings are fixed; BA-19 and BA-25 remain (design-level).
+
+## Track 2026-11-08: fresh audit findings (NA-01 to NA-15)
 
 The fresh read-only audit of `main` at `b29d8ac` is in [../2026-11-08-fresh-audit/](../2026-11-08-fresh-audit/):
 - `AUDIT-REPORT.md`: findings, red team, scorecard (about 67/100) and feature-fit;
@@ -57,6 +63,7 @@ The fresh read-only audit of `main` at `b29d8ac` is in [../2026-11-08-fresh-audi
 | 12 | NA-15 docs truth refresh (README, CURRENT_IMPLEMENTATION, ROADMAP), BA-19/BA-25 decision | — | docs | **#275 merged** 2026-11-09 (docs state NA-03c/d/e fixed). Docs part 2 (visual layout, Mermaid, ADR index) next after NA-12 |
 | — | Accuracy harness: per-category precision/recall against ground truth (Express, Fastify, plus new probes), graphs in the benchmark report, trend per PR | — | `benchmarks/**` | PR #273: `benchmarks/cli.ts accuracy` (recall/precision per category plus Mermaid chart, CI summary, fails on regression); PR #274: audit probes as runtime-proven cases, 3 owned gaps |
 | — | 2026-11-09 night | — | — | Merged and verified: #283 NA-12, #284 ADR-010 step 2 (stable projectId), #285 + #286 ADR-011 (NA-16: Ghost reuse 11,610 -> ~1,000 MiB, 79 -> 25 s; Scale Gate reuse step, CI 708 MiB vs 1,800 ceiling). Every NA finding is now merged. #287 docs visual pass (auto-merge). #195 waits for the owner to close. #287 merged. #288 (ghost.json reuse note) auto-merge. Website PR LegacyExodus/legacyexodus-web#4 open for owner review; not merged, since a merge may publish |
+| — | 2026-11-09, website and call resolution | — | — | Website PR LegacyExodus/legacyexodus-web#4 merged and live (products page, Ghost benchmarks, SEO; Cloudflare previews fixed with an empty `[previews]` block). Unresolved-call study (Ghost 84% unresolved, 77% of them in tests; causes in STATUS-2026-11-09). Fixed: #290 function-level `require` binds in its function (also removed a false RESOLVED class), #291 directory requires through `package.json` `main` (Fastify +962), #292 `this.method()` in classes that do not escape their file (`src/semantic/class-hierarchy.ts`; Ghost +36, engine +63). All merged with the owner's `facts-lost-explained` label (state changes only), main tree verified, CI green. Owner decision open: `closedWorld` for exported classes (Ghost +891) |
 | — | After all findings, docs and issues close (owner 2026-11-08) | — | — | separate session: website legacyexodus.tech (test generator and modules, research), SEO for leads. Docs: accuracy first, then Mermaid workflows and illustrations in the site palette (see memory brand-and-docs-direction) |
 
 ## Status
