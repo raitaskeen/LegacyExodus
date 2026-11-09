@@ -20,6 +20,10 @@ export class DeterministicCallGraphBuilder {
     const importsByFile = new Map<string, readonly { readonly id: string; readonly name: string }[]>();
     const targetByImportId = new Map(dependencyGraph.edges.map((edge) => [edge.importSymbolId, edge.targetExportSymbolId]));
     const unstableExportIds = new Set(astResults.flatMap((ast) => collectUnstableExportIds(ast, tablesByPath.get(canonicalizePath(ast.metadata.sourcePath)))));
+    // An export another file writes (`require("./hooks").run = stub`) can change after definition too (OR-01).
+    const knownPaths = new Set(tablesByPath.keys());
+    const writes = astResults.flatMap((ast) => collectForeignExportWrites(ast, tablesByPath.get(canonicalizePath(ast.metadata.sourcePath))));
+    for (const id of foreignExportWriteTargets(writes, (importer, specifier) => this.resolver.resolve(importer, specifier, knownPaths).resolvedPath ?? undefined, (path) => tablesByPath.get(path)?.symbols ?? [])) unstableExportIds.add(id);
     const importTargetFile = new Map(dependencyGraph.edges.map((edge) => [edge.importSymbolId, edge.targetFilePath]));
     const hierarchy = new ClassHierarchy(
       astResults.map((ast) => collectClassHierarchyFacts(ast, tablesByPath.get(canonicalizePath(ast.metadata.sourcePath)))),
@@ -720,6 +724,73 @@ export function collectUnstableExportIds(ast: ASTResult, table: SymbolTable | un
     }
     return symbol.exported && symbol.scopeId === MODULE_SCOPE_ID && rebound(symbol.name);
   }).map((symbol) => symbol.id);
+}
+
+/** A property written on another module's value, as one file sees it (OR-01). `*` is a computed name. */
+export interface ForeignExportWrite { readonly importerPath: string; readonly specifier: string; readonly name: string }
+
+/**
+ * Writes this file makes to another module's exports: `require("./x").name = …`, or `x.name = …` where `x` is an
+ * import holding a whole module (`const x = require("./x")`, a default import). Found by the oracle on Fastify: a test
+ * replaced `require('../../lib/hooks').onSendHookRunner` and the engine still resolved calls to the original.
+ * A name bound to such an import anywhere in the file counts, which only over-approximates.
+ */
+export function collectForeignExportWrites(ast: ASTResult, table: SymbolTable | undefined): readonly ForeignExportWrite[] {
+  const importerPath = canonicalizePath(ast.metadata.sourcePath);
+  const moduleImports = new Map<string, string>();
+  for (const symbol of table?.symbols ?? []) {
+    if (symbol.kind === "import" && symbol.defaultExport && typeof symbol.moduleSpecifier === "string") moduleImports.set(symbol.name, symbol.moduleSpecifier);
+  }
+  const writes: ForeignExportWrite[] = [];
+  const visit = (node: ASTNode): void => {
+    if (node.type === "AssignmentExpression") {
+      const left = node.children.find((child) => child.role === "left");
+      if (left?.type === "MemberExpression" || left?.type === "OptionalMemberExpression") {
+        const object = left.children.find((child) => child.role === "object");
+        const property = left.children.find((child) => child.role === "property");
+        const name = left.attributes.computed === true
+          ? (property?.type === "StringLiteral" && typeof property.attributes.value === "string" ? property.attributes.value : "*")
+          : identifier(property) ?? "*";
+        const specifier = object?.type === "CallExpression" ? requiredSpecifier(object)
+          : object?.type === "Identifier" ? moduleImports.get(identifier(object) ?? "") : undefined;
+        if (specifier !== undefined) writes.push({ importerPath, specifier, name });
+      }
+    }
+    for (const child of node.children) visit(child);
+  };
+  visit(ast.root);
+  return writes;
+}
+
+/** `require("literal")` and its specifier. */
+function requiredSpecifier(call: ASTNode): string | undefined {
+  const callee = call.children.find((child) => child.role === "callee");
+  const args = call.children.filter((child) => child.role === "arguments");
+  if (callee?.type !== "Identifier" || identifier(callee) !== "require" || args.length !== 1) return undefined;
+  const value = args[0]?.type === "StringLiteral" ? args[0].attributes.value : undefined;
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+/**
+ * The export symbols those writes may replace: in the file each specifier resolves to, the exports and exported
+ * declarations of that name (all of them for a computed name). A specifier that resolves to no analysed file names
+ * a package, which no call in the repository resolves into anyway.
+ */
+export function foreignExportWriteTargets(
+  writes: readonly ForeignExportWrite[],
+  resolveFile: (importerPath: string, specifier: string) => string | undefined,
+  symbolsOf: (path: string) => readonly CodeSymbol[],
+): readonly string[] {
+  const ids = new Set<string>();
+  for (const write of writes) {
+    const target = resolveFile(write.importerPath, write.specifier);
+    if (target === undefined) continue;
+    for (const symbol of symbolsOf(canonicalizePath(target))) {
+      const exported = (symbol.kind === "export" && symbol.moduleSpecifier === undefined) || (symbol.exported && symbol.kind !== "import");
+      if (exported && (write.name === "*" || symbol.name === write.name)) ids.add(symbol.id);
+    }
+  }
+  return [...ids].sort(compareCodePoints);
 }
 
 function isUnstableTarget(index: FileSymbolIndex, targetSymbolId: string | undefined): boolean {

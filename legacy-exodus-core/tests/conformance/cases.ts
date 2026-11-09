@@ -812,6 +812,21 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // OR-01, found by the call oracle on Fastify: another file replaces an export, so calls to it are not proven.
+    // In Node, after test/t.js runs its first line, reply.send() calls the Stub.
+    id: "foreign-export-write",
+    files: {
+      "lib/hooks.js": "function runHooks() { return \"real\"; }\nfunction other() { return 1; }\nmodule.exports = { runHooks, other };\n",
+      "lib/reply.js": "const { runHooks, other } = require(\"./hooks\");\nfunction send() { runHooks(); other(); }\nmodule.exports = { send };\n",
+      "lib/patch.js": "const hooks = require(\"./hooks\");\nexports.install = function install() { hooks.runHooks = () => \"patched\"; };\n",
+      "test/t.js": "require(\"../lib/hooks\").runHooks = function Stub() { return \"stub\"; };\nrequire(\"../lib/reply\").send();\n",
+    },
+    expectations: [
+      { id: "foreign-export-write:replaced-export-unresolved", category: "calls", has: /^lib\/reply\.js@2:\d+\|send\|runHooks\|UNRESOLVED\|/ },
+      { id: "foreign-export-write:untouched-export-resolves", category: "calls", has: /^lib\/reply\.js@2:\d+\|send\|other\|RESOLVED\|/ },
+    ],
+  },
+  {
     // 2026-11-08 audit probe T16: string-built SQL through a client instance is SQL injection.
     id: "taint-sql-client",
     files: {
