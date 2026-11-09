@@ -778,7 +778,7 @@ export const conformanceCases: readonly ConformanceCase[] = [
         "const early = () => 1;",
         "fs.readFileSync(\"x\");",
         "undeclaredHelper();",
-        "console.log(\"x\");",
+        "myGlobal.log(\"x\");",
         "missing();",
         "function run(cb) { cb(); }",
         "class K { go() { return this.help(); } help() { return 1; } }",
@@ -793,13 +793,14 @@ export const conformanceCases: readonly ConformanceCase[] = [
       ].join("\n"),
     },
     expectations: [
-      { id: "reason:module-load", check: (directory) => callReason(directory, 1, "require") === "module-load" },
+      // Since ADR-012 B1b, `require` in a CommonJS file is EXTERNAL (commonjs:require); module-load remains for other files.
+      { id: "reason:commonjs-require-external", check: (directory) => callReason(directory, 1, "require") === "EXTERNAL" },
       { id: "reason:computed-callee", check: (directory) => callReason(directory, 5, "handlers[<dynamic>]") === "computed-callee" },
       { id: "reason:runs-before-binding", check: (directory) => callReason(directory, 6, "early") === "runs-before-binding" },
       // Since ADR-012 a call through a stable package import is EXTERNAL and has no reason.
       { id: "reason:external-has-none", check: (directory) => callReason(directory, 8, "fs.readFileSync") === "EXTERNAL" },
       { id: "reason:unbound-name", check: (directory) => callReason(directory, 9, "undeclaredHelper") === "unbound-name" },
-      { id: "reason:global-member", check: (directory) => callReason(directory, 10, "console.log") === "global-member" },
+      { id: "reason:global-member", check: (directory) => callReason(directory, 10, "myGlobal.log") === "global-member" },
       { id: "reason:import-unresolved", check: (directory) => callReason(directory, 11, "missing") === "import-unresolved" },
       { id: "reason:parameter-callee", check: (directory) => callReason(directory, 12, "cb") === "parameter-callee" },
       { id: "reason:this-open", check: (directory) => callReason(directory, 13, "this.help") === "this-open" },
@@ -825,6 +826,36 @@ export const conformanceCases: readonly ConformanceCase[] = [
     expectations: [
       { id: "foreign-export-write:replaced-export-unresolved", category: "calls", has: /^lib\/reply\.js@2:\d+\|send\|runHooks\|UNRESOLVED\|/ },
       { id: "foreign-export-write:untouched-export-resolves", category: "calls", has: /^lib\/reply\.js@2:\d+\|send\|other\|RESOLVED\|/ },
+    ],
+  },
+  {
+    // ADR-012, Phase B1b: a call on an unbound standard global is EXTERNAL unless some file writes that path; a test
+    // runner's globals stay UNRESOLVED; `require` is EXTERNAL only in CommonJS.
+    id: "external-globals",
+    files: {
+      "a.js": [
+        "const fs = require(\"fs\");",
+        "Object.keys({});",
+        "process.nextTick(() => {});",
+        "setTimeout(() => {}, 1);",
+        "console.log(\"x\");",
+        "process.stdout.write(\"y\");",
+        "describe(\"suite\", () => {});",
+        "",
+      ].join("\n"),
+      "patch.js": "process.stdout.write = function () {};\nconsole[\"log\"] = () => {};\n",
+      "e.mjs": "import fs from \"fs\";\nrequire(\"x\");\nMath.max(1, 2);\n",
+    },
+    expectations: [
+      { id: "global:commonjs-require", check: (directory) => external(directory, "a.js", 1) === "commonjs:require" },
+      { id: "global:object-member", check: (directory) => external(directory, "a.js", 2) === "global:Object.keys" },
+      { id: "global:process-member", check: (directory) => external(directory, "a.js", 3) === "global:process.nextTick" },
+      { id: "global:function", check: (directory) => external(directory, "a.js", 4) === "global:setTimeout" },
+      { id: "global:esm-member", check: (directory) => external(directory, "e.mjs", 3) === "global:Math.max" },
+      { id: "global:written-member-unresolved", category: "calls", has: /^a\.js@5:\d+\|module\|console\.log\|UNRESOLVED\|/ },
+      { id: "global:written-path-unresolved", category: "calls", has: /^a\.js@6:\d+\|module\|process\.stdout\.write\|UNRESOLVED\|/ },
+      { id: "global:test-runner-unresolved", category: "calls", has: /^a\.js@7:\d+\|module\|describe\|UNRESOLVED\|/ },
+      { id: "global:esm-require-unresolved", category: "calls", has: /^e\.mjs@2:\d+\|module\|require\|UNRESOLVED\|/ },
     ],
   },
   {
