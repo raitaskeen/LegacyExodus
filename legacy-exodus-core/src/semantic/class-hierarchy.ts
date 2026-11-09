@@ -19,7 +19,9 @@ import { canonicalizePath } from "@graph/index";
  *
  * Assumptions, as elsewhere in the call graph: other files do not write or read methods by computed key or reflection (`proto[name] = f`,
  * `Reflect.get(o, "run")`; the calling file's own such writes are checked there), and a class body is strict mode
- * (an unbound method call has no `this`, so it throws rather than reaching another object).
+ * (an unbound method call has no `this`, so it throws rather than reaching another object). In the class's own
+ * file, a computed read as a value of `this`, the class, its `prototype` or a variable holding `new C()` borrows
+ * any method of the class (XA-04); a computed read of any other object there is assumed not to reach an instance.
  */
 
 /** What a class's `extends` denotes, as far as one file can tell. */
@@ -37,6 +39,11 @@ export interface ClassFact {
   readonly members: readonly string[];
   /** Whether code outside its file can reach the class itself (and so extend it). */
   readonly escapes: boolean;
+  /**
+   * Whether its file reads `this` (in its body), the class, its `prototype` or a variable holding `new C()` by a
+   * computed key as a value (`const f = c[key]`), which may take any of its methods (XA-04).
+   */
+  readonly computedReads?: boolean;
 }
 
 export interface ClassHierarchyFile {
@@ -74,10 +81,48 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
   const foreignWritten = new Set<string>();
   const borrowed = new Set<string>();
   const valueUses = new Map<string, number>();
+  // XA-04: classes whose `this` is read by a computed key, names whose value is read so, and the variables that
+  // hold `new C()` (variable -> class names).
+  const computedThisClasses = new Set<string>();
+  const computedObjectNames = new Set<string>();
+  const instanceClasses = new Map<string, Set<string>>();
+  const noteInstance = (variable: ASTNode | undefined, value: ASTNode | undefined): void => {
+    const variableName = variable?.type === "Identifier" ? nameOf(variable) : undefined;
+    const className = value?.type === "NewExpression" ? newCalleeName(value) : undefined;
+    if (variableName === undefined || className === undefined) return;
+    instanceClasses.set(variableName, new Set([...(instanceClasses.get(variableName) ?? []), className]));
+  };
+  const noteComputedRead = (object: ASTNode | undefined, currentClass: string | undefined): void => {
+    if (object === undefined) return;
+    if (object.type === "ThisExpression") {
+      if (currentClass !== undefined) computedThisClasses.add(currentClass);
+      return;
+    }
+    if (object.type === "NewExpression") {
+      const className = newCalleeName(object);
+      if (className !== undefined) computedObjectNames.add(className);
+      return;
+    }
+    if (object.type === "MemberExpression" && object.attributes.computed !== true) {
+      const base = object.children.find((child) => child.role === "object");
+      const property = object.children.find((child) => child.role === "property");
+      if (base?.type === "Identifier" && property !== undefined && nameOf(property) === "prototype") {
+        const name = nameOf(base);
+        if (name !== undefined) computedObjectNames.add(name);
+      }
+      return;
+    }
+    if (object.type === "Identifier") {
+      const name = nameOf(object);
+      if (name !== undefined) computedObjectNames.add(name);
+    }
+  };
 
-  const visit = (node: ASTNode, parent: ASTNode | undefined): void => {
+  const visit = (node: ASTNode, parent: ASTNode | undefined, currentClass: string | undefined): void => {
+    let classInside = currentClass;
     if (node.type === "ClassDeclaration" || node.type === "ClassExpression") {
       const symbol = node.location === undefined ? undefined : classByStart.get(`${node.location.start.line}:${node.location.start.column}`);
+      if (symbol !== undefined) classInside = symbol.id;
       if (symbol !== undefined) {
         const superNode = node.children.find((child) => child.role === "superClass");
         const id = node.children.find((child) => child.role === "id");
@@ -101,8 +146,11 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
         written.add(name ?? COMPUTED);
         if (name !== undefined && !isOwnObject(node.children.find((child) => child.role === "object"))) foreignWritten.add(name);
       }
-      else if (!called && !tagged && name !== undefined && parent?.type !== "UpdateExpression"
-        && !(parent?.type === "UnaryExpression" && parent.attributes.operator === "delete")) borrowed.add(name);
+      else if (!called && !tagged && parent?.type !== "UpdateExpression"
+        && !(parent?.type === "UnaryExpression" && parent.attributes.operator === "delete")) {
+        if (name !== undefined) borrowed.add(name);
+        else if (node.attributes.computed === true) noteComputedRead(node.children.find((child) => child.role === "object"), currentClass);
+      }
     }
     if (node.type === "ObjectPattern") {
       // Destructuring reads each named property as a value: `const { run } = obj`.
@@ -110,19 +158,30 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
         if (property.type !== "ObjectProperty") continue;
         const name = keyName(property);
         if (name !== undefined) borrowed.add(name);
+        else if (property.attributes.computed === true && parent?.type === "VariableDeclarator" && node.role === "id") {
+          noteComputedRead(parent.children.find((child) => child.role === "init"), currentClass);
+        }
       }
     }
+    if (node.type === "VariableDeclarator") noteInstance(node.children.find((child) => child.role === "id"), node.children.find((child) => child.role === "init"));
+    if (node.type === "AssignmentExpression") noteInstance(node.children.find((child) => child.role === "left"), node.children.find((child) => child.role === "right"));
     if (node.type === "Identifier" && isValueUse(node, parent)) {
       const name = nameOf(node);
       if (name !== undefined) valueUses.set(name, (valueUses.get(name) ?? 0) + 1);
     }
-    for (const child of node.children) visit(child, node);
+    for (const child of node.children) visit(child, node, classInside);
   };
-  visit(ast.root, undefined);
+  visit(ast.root, undefined, undefined);
+  const computedClassNames = new Set<string>();
+  for (const name of computedObjectNames) {
+    computedClassNames.add(name);
+    for (const className of instanceClasses.get(name) ?? []) computedClassNames.add(className);
+  }
   return {
     filePath,
     classes: classes.map(({ name, expression, exported, ...fact }) => ({
       ...fact,
+      ...(computedThisClasses.has(fact.id) || (name !== undefined && computedClassNames.has(name)) ? { computedReads: true } : {}),
       escapes: exported || expression || name === undefined || (valueUses.get(name) ?? 0) > 0,
     })),
     writtenNames: [...written].sort(),
@@ -215,6 +274,12 @@ function superclassRef(node: ASTNode, byName: ReadonlyMap<string, readonly CodeS
     return { kind: "import", importId: imported.id, specifier: imported.moduleSpecifier ?? "" };
   }
   return { kind: "unknown" };
+}
+
+/** The class name a `new C(…)` constructs, when its callee is a plain name. */
+function newCalleeName(node: ASTNode): string | undefined {
+  const callee = node.children.find((child) => child.role === "callee");
+  return callee?.type === "Identifier" ? nameOf(callee) : undefined;
 }
 
 function memberPropertyName(member: ASTNode): string | undefined {
@@ -322,9 +387,12 @@ export class ClassHierarchy {
     return names.has(name) || names.has(COMPUTED);
   }
 
-  /** Whether some file reads a property named `name` as a value, so a method of that name may run with another `this`. */
-  public isBorrowed(name: string): boolean {
-    return this.borrowed.has(name);
+  /**
+   * Whether some file reads a property named `name` as a value, or the file of `classId` reads the class, its
+   * prototype or an instance by a computed key (XA-04), so a method may run with another `this`.
+   */
+  public isBorrowed(name: string, classId?: string): boolean {
+    return this.borrowed.has(name) || (classId !== undefined && this.classes.get(classId)?.computedReads === true);
   }
 
   /**

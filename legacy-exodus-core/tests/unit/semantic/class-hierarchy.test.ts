@@ -109,5 +109,8 @@ describe("ClassHierarchy", () => {
     const hierarchy = new ClassHierarchy([file("x.js", [], { borrowedNames: ["lend"] })], () => undefined);
     expect(hierarchy.isBorrowed("lend")).toBe(true);
     expect(hierarchy.isBorrowed("run")).toBe(false);
+    const computed = new ClassHierarchy([file("c.js", [{ ...cls("C", "c.js", ["run"]), computedReads: true }, cls("D", "c.js", ["run"])])], () => undefined);
+    expect(computed.isBorrowed("run", "C")).toBe(true);
+    expect(computed.isBorrowed("run", "D")).toBe(false);
   });
 });
