@@ -124,7 +124,10 @@ export class DeterministicCallGraphBuilder {
           : imported === undefined
             ? resolveLocalCall(table, fileSymbols, calleeName, nextContext, tablesByPath, this.resolver, node)
             : isRebound(fileSymbols, MODULE_SCOPE_ID, calleeName) || isUnstableTarget(fileSymbols, importTarget) ? undefined : importTarget;
-        const targetSymbolId = imported === undefined && runsBeforeAssignment(resolvedTarget, node, nextContext, fileSymbols, ast.root) ? undefined : resolvedTarget;
+        const runsTooEarly = imported === undefined
+          ? runsBeforeAssignment(resolvedTarget, node, nextContext, fileSymbols, ast.root)
+          : callsBeforeRequire(fileSymbols, imported, node);
+        const targetSymbolId = runsTooEarly ? undefined : resolvedTarget;
         const id = hash(`${ast.metadata.sourcePath}:${nextContext.callerName}:${calleeName}:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`);
         const resolutionState = targetSymbolId === undefined ? "UNRESOLVED" as const : "RESOLVED" as const;
         const key = factKeyers.get(fileSymbols)?.key("call", calleeName, node.location?.start);
@@ -266,6 +269,8 @@ interface BindingWrites {
   readonly declaringContext: ReadonlyMap<string, string>;
   /** Where each call expression executes. */
   readonly callSites: ReadonlyMap<ASTNode, ExecutionSite>;
+  /** The execution context and end of each variable declarator, by declaration anchor (XA-05). */
+  readonly declaratorSites: ReadonlyMap<string, { readonly contextId: string; readonly end: SourcePoint }>;
   /** Frame (with its enclosing frames) for each scope id, to resolve names as seen from a symbol's scope. */
   readonly scopeFrames: ReadonlyMap<string, ScopeFrame>;
   /** Binding keys whose declaration the symbol table places in the wrong scope (see collectUnscopedBindings). */
@@ -741,6 +746,7 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
   const writeSites = new Map<string, WriteSite[]>();
   const declaringContext = new Map<string, string>();
   const callSites = new Map<ASTNode, ExecutionSite>();
+  const declaratorSites = new Map<string, { readonly contextId: string; readonly end: SourcePoint }>();
   const scopeFrames = new Map<string, ScopeFrame>();
 
   const bindingKeyAt = (name: string, scope: ScopeFrame): string => {
@@ -865,6 +871,10 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
     if (node.type === "CallExpression" || node.type === "OptionalCallExpression" || node.type === "NewExpression") {
       if (node.location !== undefined) callSites.set(node, { contextId: walk.contextId, loopIds: walk.loopIds, start: node.location.start });
     }
+    if (node.type === "VariableDeclarator" && node.location !== undefined) {
+      const anchor = declarationAnchor(node.location);
+      if (anchor !== undefined) declaratorSites.set(anchor, { contextId: walk.contextId, end: node.location.end });
+    }
     if (node.type === "CallExpression" || node.type === "OptionalCallExpression") {
       const callee = node.children.find((child) => child.role === "callee");
       const args = node.children.filter((child) => child.role === "arguments");
@@ -943,7 +953,7 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
     }
   };
   visit(root, { scope: createScope(MODULE_SCOPE_ID), contextId: MODULE_SCOPE_ID, loopIds: [], unconditional: true }, undefined);
-  return immutable({ reboundBindings, propertyWrites, unknownPropertyWrites, propertyWriteSites, declaredValues, writeSites, declaringContext, callSites, scopeFrames, unscopedBindings, blockFunctionVars });
+  return immutable({ reboundBindings, propertyWrites, unknownPropertyWrites, propertyWriteSites, declaredValues, writeSites, declaringContext, callSites, declaratorSites, scopeFrames, unscopedBindings, blockFunctionVars });
 }
 
 const classFieldTypes = new Set(["ClassProperty", "ClassPrivateProperty", "PropertyDefinition", "ClassAccessorProperty"]);
@@ -2173,6 +2183,19 @@ const functionBuiltins = new Set([...objectBuiltins, "apply", "bind", "call", "a
  * assignments store their value (no setters, frozen objects or read-only properties) and
  * that no code adds properties to Object.prototype or Function.prototype.
  */
+/**
+ * Whether a call runs before the CommonJS `require` that binds its callee (XA-05): the declarator runs in the call's
+ * own execution context and ends after the call starts, so the binding is still in its TDZ (`const`, `let`) or
+ * undefined (`var`) and the call throws. An ESM import is hoisted and has no declarator. A call in a nested
+ * function is not judged: when that function runs is not known here.
+ */
+function callsBeforeRequire(index: FileSymbolIndex, imported: CodeSymbol, callNode: ASTNode): boolean {
+  const anchor = declarationAnchor(imported.location);
+  const declarator = anchor === undefined ? undefined : index.writes.declaratorSites.get(anchor);
+  const call = index.writes.callSites.get(callNode);
+  return declarator !== undefined && call !== undefined && declarator.contextId === call.contextId && comparePoints(call.start, declarator.end) < 0;
+}
+
 function isDefinedBeforeCall(index: FileSymbolIndex, definition: CodeSymbol, receiver: string, frame: ScopeFrame, callNode: ASTNode | undefined): boolean {
   return startsWithout(index, receiver, frame, definition.name) || definitionRunsFirst(index, definition.name, callNode) || encloses(definition.location, callNode?.location);
 }

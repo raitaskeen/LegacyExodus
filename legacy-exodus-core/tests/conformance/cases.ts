@@ -743,6 +743,27 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // XA-05: a call that runs before its CommonJS require binds throws (ReferenceError for const, TypeError for var).
+    id: "call-before-require",
+    files: {
+      "m.js": "exports.a = function a() { return 1; };\n",
+      "main.js": [
+        "a();",
+        "const { a } = require(\"./m\");",
+        "function g() { b(); var { a: b } = require(\"./m\"); }",
+        "a();",
+        "function later() { return a(); }",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "require-order:module-call-before-unresolved", category: "calls", has: /^main\.js@1:0\|module\|a\|UNRESOLVED\|/ },
+      { id: "require-order:function-call-before-unresolved", category: "calls", has: /^main\.js@3:\d+\|g\|b\|UNRESOLVED\|/ },
+      { id: "require-order:call-after-resolves", category: "calls", has: /^main\.js@4:0\|module\|a\|RESOLVED\|/ },
+      { id: "require-order:nested-function-resolves", category: "calls", has: /^main\.js@5:\d+\|later\|a\|RESOLVED\|/ },
+    ],
+  },
+  {
     // 2026-11-08 audit probe T16: string-built SQL through a client instance is SQL injection.
     id: "taint-sql-client",
     files: {
