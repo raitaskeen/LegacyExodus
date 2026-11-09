@@ -591,6 +591,46 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // Public `this` dispatch: `this.m()` in a class method calls the class's own `m` when the class does not escape its
+    // file (an exported class may be extended by its users, F-002), no class extending it defines `m`, nothing
+    // replaces `m`, and the calling method is never read as a value (borrowed). The classes in a.js are used, never
+    // exported.
+    id: "this-dispatch",
+    files: {
+      "a.js": [
+        "class Plain { helper() { return 1; } run() { return this.helper(); } }",
+        "class Kept { helper() { return 1; } runKept() { return this.helper(); } } class Child extends Kept { extra() { return 2; } }",
+        "class Shadowed { helper() { return 1; } runShadowed() { return this.helper(); } } class Over extends Shadowed { helper() { return 2; } }",
+        "class Lent { helper() { return 1; } lend() { return this.helper(); } } setTimeout(new Lent().lend);",
+        "class Nested { helper() { return 1; } runNested() { return function () { return this.helper(); }; } }",
+        "class Arrow { helper() { return 1; } runArrow() { const f = () => this.helper(); return f(); } }",
+        "class Stat { helper() { return 1; } static make() { return this.helper(); } }",
+        "new Plain().run(); new Kept().runKept(); new Shadowed().runShadowed(); new Nested().runNested(); new Arrow().runArrow(); new Stat();",
+        "",
+      ].join("\n"),
+      // A class whose superclass cannot be followed may extend any class, so its members may override any method.
+      "lone.js": "class Lone { assist() { return 1; } runLone() { return this.assist(); } }\nnew Lone().runLone();\n",
+      "mixed.js": "class Mixed extends mix(Object) { assist() { return 2; } }\nmodule.exports = Mixed;\n",
+      // Any write of the name in the class's file may replace the method (here, per instance in the constructor).
+      "r.js": "class Replaced { constructor() { this.helper = () => 0; } helper() { return 1; } runReplaced() { return this.helper(); } }\nnew Replaced().runReplaced();\n",
+      // An exported class stays open: the subclass here overrides, and so might one outside the repository.
+      "base.js": "class Base { helper() { return 1; } runBase() { return this.helper(); } }\nmodule.exports = Base;\n",
+      "sub.js": "const Base = require('./base');\nclass Sub extends Base { helper() { return 2; } }\nmodule.exports = Sub;\n",
+    },
+    expectations: [
+      { id: "this-dispatch:own-method-resolves", category: "calls", has: /^a\.js@1:\d+\|run\|this\.helper\|RESOLVED\|/ },
+      { id: "this-dispatch:subclass-without-override-resolves", category: "calls", has: /^a\.js@2:\d+\|runKept\|this\.helper\|RESOLVED\|/ },
+      { id: "this-dispatch:same-file-override-unresolved", category: "calls", has: /^a\.js@3:\d+\|runShadowed\|this\.helper\|UNRESOLVED\|/ },
+      { id: "this-dispatch:borrowed-method-unresolved", category: "calls", has: /^a\.js@4:\d+\|lend\|this\.helper\|UNRESOLVED\|/ },
+      { id: "this-dispatch:nested-function-unresolved", category: "calls", has: /^a\.js@5:\d+\|[^|]*\|this\.helper\|UNRESOLVED\|/ },
+      { id: "this-dispatch:arrow-in-method-resolves", category: "calls", has: /^a\.js@6:\d+\|[^|]*\|this\.helper\|RESOLVED\|/ },
+      { id: "this-dispatch:static-to-instance-unresolved", category: "calls", has: /^a\.js@7:\d+\|make\|this\.helper\|UNRESOLVED\|/ },
+      { id: "this-dispatch:replaced-in-constructor-unresolved", category: "calls", has: /^r\.js@1:\d+\|runReplaced\|this\.helper\|UNRESOLVED\|/ },
+      { id: "this-dispatch:unknown-superclass-may-override", category: "calls", has: /^lone\.js@1:\d+\|runLone\|this\.assist\|UNRESOLVED\|/ },
+      { id: "this-dispatch:imported-subclass-overrides", category: "calls", has: /^base\.js@1:\d+\|runBase\|this\.helper\|UNRESOLVED\|/ },
+    ],
+  },
+  {
     // 2026-11-08 audit probe T16: string-built SQL through a client instance is SQL injection.
     id: "taint-sql-client",
     files: {

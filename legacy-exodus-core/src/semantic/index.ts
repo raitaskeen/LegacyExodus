@@ -1,3 +1,4 @@
+export { ClassHierarchy, collectClassHierarchyFacts, type ClassHierarchyFile } from "./class-hierarchy";
 export { collectUnstableExportIds, DeterministicCallGraphBuilder } from "./call-graph-builder";
 export { DeterministicSemanticAnalysisEngine, FactUsage, findHttpCalls } from "./semantic-engine";
 export type { SemanticContext } from "./semantic-context";

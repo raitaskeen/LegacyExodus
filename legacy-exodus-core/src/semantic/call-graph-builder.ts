@@ -6,6 +6,7 @@ import type { SymbolTable } from "@symbols/index";
 import { createLexicalScopeId, createSelfScopeId, FactKeyer, type CodeSymbol } from "@symbols/index";
 
 import type { SemanticCall, SymbolReference } from "./semantic-contracts";
+import { ClassHierarchy, collectClassHierarchyFacts } from "./class-hierarchy";
 import { stableId } from "@shared/identity";
 import { compareCodePoints } from "@shared/ordering";
 import { immutable } from "@shared/immutability";
@@ -19,11 +20,16 @@ export class DeterministicCallGraphBuilder {
     const importsByFile = new Map<string, readonly { readonly id: string; readonly name: string }[]>();
     const targetByImportId = new Map(dependencyGraph.edges.map((edge) => [edge.importSymbolId, edge.targetExportSymbolId]));
     const unstableExportIds = new Set(astResults.flatMap((ast) => collectUnstableExportIds(ast, tablesByPath.get(canonicalizePath(ast.metadata.sourcePath)))));
+    const importTargetFile = new Map(dependencyGraph.edges.map((edge) => [edge.importSymbolId, edge.targetFilePath]));
+    const hierarchy = new ClassHierarchy(
+      astResults.map((ast) => collectClassHierarchyFacts(ast, tablesByPath.get(canonicalizePath(ast.metadata.sourcePath)))),
+      (importId) => importTargetFile.get(importId),
+    );
     const calls: SemanticCall[] = [];
     const references: SymbolReference[] = [];
 
     for (const ast of [...astResults].sort((left, right) => compareCodePoints(left.metadata.sourcePath, right.metadata.sourcePath))) {
-      this.buildForFile(ast, tablesByPath, importsByFile, targetByImportId, unstableExportIds, calls, references);
+      this.buildForFile(ast, tablesByPath, importsByFile, targetByImportId, unstableExportIds, calls, references, hierarchy);
     }
 
     return immutable({ calls: immutable(calls), references: immutable(references) });
@@ -32,6 +38,8 @@ export class DeterministicCallGraphBuilder {
   /**
    * @param unstableExportIds - Export symbols of every analyzed module whose value can change
    *   after definition (see collectUnstableExportIds); imports resolving to them stay UNRESOLVED.
+   * @param hierarchy - The repository's class hierarchy and borrowed method names (see class-hierarchy.ts). Without
+   *   it, public `this.m()` calls stay UNRESOLVED.
    */
   public buildForFile(
     ast: ASTResult,
@@ -41,12 +49,14 @@ export class DeterministicCallGraphBuilder {
     unstableExportIds: ReadonlySet<string>,
     calls: SemanticCall[],
     references: SymbolReference[],
+    hierarchy?: ClassHierarchy,
   ): void {
     const initialContext: ResolutionContext = {
       callerName: "module",
       scope: createScope("scope:module"),
       receiverTypes: new Map(),
       constantBindings: new Map(),
+      ...(hierarchy === undefined ? {} : { hierarchy }),
     };
     predeclareScopeBindings(ast.root, initialContext);
     const boundCallees = new Set<ASTNode>();
@@ -310,6 +320,16 @@ interface ResolutionContext {
   readonly constantBindings: ReadonlyMap<string, string | null>;
   /** Inside a `with` body: the frame around the `with` statement (NA-02). */
   readonly withOuter?: ScopeFrame;
+  readonly hierarchy?: ClassHierarchy;
+  /** Where `this` is an instance (or, static, the constructor) of a class: see thisClassFor. */
+  readonly thisClass?: ThisClass;
+}
+
+interface ThisClass {
+  readonly classId: string;
+  readonly isStatic: boolean;
+  /** The method whose body this is, which could be borrowed; none in a field initializer, static block or constructor. */
+  readonly method?: string;
 }
 
 function createScope(id: string, parent?: ScopeFrame, selfName?: string): ScopeFrame {
@@ -1504,6 +1524,7 @@ function childContext(node: ASTNode, context: ResolutionContext, index: FileSymb
       containerName = undefined;
     }
   }
+  const thisClass = thisClassFor(node, context);
   return {
     callerName,
     scope,
@@ -1512,7 +1533,38 @@ function childContext(node: ASTNode, context: ResolutionContext, index: FileSymb
     receiverTypes: context.receiverTypes,
     constantBindings: context.constantBindings,
     ...(context.withOuter === undefined ? {} : { withOuter: context.withOuter }),
+    ...(context.hierarchy === undefined ? {} : { hierarchy: context.hierarchy }),
+    ...(thisClass === undefined ? {} : { thisClass }),
   };
+}
+
+/**
+ * What `this` is inside `node`. A class method's body (and an arrow function in it) sees the instance, or the class
+ * for a static method; so does a field initializer or static block. A class body itself, and any other function,
+ * sees another `this`. Class members are visited directly below their class, whose symbol is `containerId`.
+ */
+function thisClassFor(node: ASTNode, context: ResolutionContext): ThisClass | undefined {
+  if (node.type === "ArrowFunctionExpression") return context.thisClass;
+  if (node.type === "ClassMethod" || node.type === "ClassPrivateMethod") {
+    if (context.containerId === undefined) return undefined;
+    const kind = node.attributes.kind;
+    const name = kind === "constructor" ? undefined : methodKeyName(node);
+    // A method whose name is computed may be borrowed under any name: it never counts as unborrowed.
+    if (kind !== "constructor" && name === undefined) return undefined;
+    return { classId: context.containerId, isStatic: node.attributes.static === true, ...(name === undefined ? {} : { method: name }) };
+  }
+  if (classFieldTypes.has(node.type) || node.type === "StaticBlock") {
+    return context.containerId === undefined ? undefined : { classId: context.containerId, isStatic: node.type === "StaticBlock" || node.attributes.static === true };
+  }
+  if (isCallable(node) || node.type === "ClassDeclaration" || node.type === "ClassExpression") return undefined;
+  return context.thisClass;
+}
+
+/** A method's name for the borrowing check; a private method (`#m`) cannot be read outside its class at all. */
+function methodKeyName(method: ASTNode): string | undefined {
+  const key = method.children.find((child) => child.role === "key");
+  if (key?.type === "PrivateName") return undefined;
+  return method.attributes.computed === true ? staticPropertyKey(key) : key?.type === "Identifier" ? identifier(key) : staticPropertyKey(key);
 }
 
 /**
@@ -2059,6 +2111,21 @@ function resolveLocalCall(
     const candidate = candidates.length === 1 ? candidates[0] : undefined;
     // No other write may replace it: a field's own initializer is the one permitted write.
     if (candidate !== undefined && propertyWriteCount(index, methodName) === ownPropertyWrites(index, candidate)) return candidate.id;
+  }
+
+  // 1b. Public `this` dispatch, where `this` is the instance (or class) of C (thisClassFor): C declares the method
+  //     once in its body and nothing in this file replaces it, no class extending C anywhere in the repository
+  //     defines that name, and the method this call runs in is never read as a value anywhere, so it cannot run
+  //     with another `this` (see class-hierarchy.ts for the assumptions).
+  const thisClass = context.thisClass;
+  if (receiver === "this" && !methodName.startsWith("#") && thisClass !== undefined && context.hierarchy !== undefined) {
+    const candidates = (index.byName.get(methodName) ?? []).filter(
+      (symbol) => symbol.kind === "method" && symbol.containerId === thisClass.classId && isClassBodyMethod(index, symbol, thisClass.classId, thisClass.isStatic),
+    );
+    const candidate = candidates.length === 1 ? candidates[0] : undefined;
+    if (candidate !== undefined && propertyWriteCount(index, methodName) === ownPropertyWrites(index, candidate)
+      && !context.hierarchy.mayOverride(thisClass.classId, methodName)
+      && (thisClass.method === undefined || !context.hierarchy.isBorrowed(thisClass.method))) return candidate.id;
   }
 
   // 2. Object container method (e.g. app.init after `app.init = function …`): the container
