@@ -31,13 +31,13 @@ That evidence is the ground a safe migration stands on. Migration itself, meanin
 ## How it reads a repository
 
 <p align="center">
-  <img src="docs/assets/illustrations/pipeline.svg" width="100%" alt="Six stages: Discover, Parse, Symbols, Graphs, Flow, and a hashed, signed, byte-reproducible .discovery output. A fact is RESOLVED only when proven, otherwise an explicit UNRESOLVED fact."/>
+  <img src="docs/assets/illustrations/pipeline.svg" width="100%" alt="Six stages: Discover, Parse, Symbols, Graphs, Flow, and a hashed, signed, byte-reproducible .discovery output. A fact is RESOLVED only when proven under stated assumptions, otherwise an explicit UNRESOLVED fact."/>
 </p>
 
 <table>
   <tr>
     <td width="25%" valign="top"><b>Observe</b><br/><sub>Every file is inventoried and given a disposition: analysed, non-source, unclassified, unsupported or failed. Nothing is dropped silently.</sub></td>
-    <td width="25%" valign="top"><b>Understand</b><br/><sub>Symbols, module and call graphs, control flow, data flow and taint, each built from proven facts only.</sub></td>
+    <td width="25%" valign="top"><b>Understand</b><br/><sub>Symbols, module and call graphs, control flow, data flow and taint, each built from proven facts only, under the assumptions <a href="docs/CURRENT_IMPLEMENTATION.md#assumptions-behind-resolved">listed here</a>.</sub></td>
     <td width="25%" valign="top"><b>Seal</b><br/><sub>Facts are written to <code>.discovery/</code> with hashes in a signed manifest. Two runs write byte-identical fact files.</sub></td>
     <td width="25%" valign="top"><b>Stay honest</b><br/><sub>What the engine cannot prove becomes an explicit <code>UNRESOLVED</code> fact, never a guess.</sub></td>
   </tr>
@@ -56,7 +56,7 @@ That evidence is the ground a safe migration stands on. Migration itself, meanin
 | Storage (memory, SQLite) and validated snapshot reuse | `VERIFIED` | Reuse verifies each artifact while copying it: about 1 GB and 25 s on Ghost |
 | Deterministic `.discovery` projections | `VERIFIED` | Byte-identical fact artifacts; run identity lives in `manifest.json` only |
 | Symbols, ESM and CommonJS, module and dependency graphs | `PARTIAL` | TS resolution, `tsconfig` paths and workspace packages resolve; packages in `node_modules` do not |
-| Call analysis and control-flow graphs | `PARTIAL` | Every call site is a fact; a target is `RESOLVED` only when proven |
+| Call analysis and control-flow graphs | `PARTIAL` | Every call site is a fact; a target is `RESOLVED` only when proven, under the [stated assumptions](docs/CURRENT_IMPLEMENTATION.md#assumptions-behind-resolved) |
 | Data flow and taint | `PARTIAL` | Cross-file flows; Express sources; process, eval, file-path, request-URL and SQL sinks; built-in policy only |
 | Knowledge graph | `PARTIAL` | File and symbol nodes, contains and imports edges |
 | Framework semantics | `PARTIAL` | Express routes and middleware only |
@@ -67,7 +67,7 @@ The full boundary, with every limit and the audit finding behind it, is in **[Cu
 
 ## Measured, not claimed
 
-Every figure comes from a command in this repository, run on a pinned public corpus. CI re-checks the gates on every pull request.
+Every figure comes from a command in this repository, run on a pinned public corpus. On every pull request CI runs the tests, the accuracy report, the fact diff and the scale gate, and a failing one blocks the merge. The Ghost figures are measured locally.
 
 <table>
   <tr>
