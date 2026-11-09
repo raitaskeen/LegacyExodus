@@ -11,6 +11,6 @@ export { dependencyGraphNodeSchema, validateDependencyGraph, validateCurrentDepe
 export { dependencyGraphNodes, DeterministicDependencyGraphBuilder } from "./dependency-graph-builder";
 export { ModuleResolver, canonicalizePath } from "./module-resolver";
 export type { KnownPathLookup, ModuleResolutionOptions, ResolvedImport, WorkspacePackage } from "./module-resolver";
-export { findPackageEntryFiles, loadWorkspacePackages } from "./workspace-loader";
+export { findPackageEntryFiles, loadDirectoryMains, loadWorkspacePackages } from "./workspace-loader";
 export { loadTsConfigResolution, parseJsonc } from "./tsconfig-loader";
 export type { JsoncResult, TsConfigDiagnostic, TsConfigDiagnosticCode, TsConfigResolution } from "./tsconfig-loader";
