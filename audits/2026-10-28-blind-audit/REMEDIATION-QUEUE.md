@@ -40,7 +40,7 @@ off; Fact Diff and Scale Gate are now required checks on main; #195 closed; #111
 | A1 | Reason on every UNRESOLVED call | **Merged** #301 (`79b52d7`) |
 | A2 | Coverage table in the fact diff, `coverage` command | **Merged** #302 |
 | A3 | Call oracle on Express and Fastify | **Merged** #304; corpora #303; its first finding OR-01 fixed #305 (`3fe46ec`); gate #306 |
-| A4 | CFG block oracle | Queued |
+| A4 | CFG block oracle (flow oracle: unreachable and dead-code claims) | **Merged** #307 (`67f9e62`): 0 contradictions on Express and Fastify |
 | B-H | See the plan | Queued |
 
 ## Track 2026-11-09: cross-file audit findings (XA-01 to XA-08)
