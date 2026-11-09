@@ -32,6 +32,51 @@ export interface CorpusDiff extends FactDiff {
   readonly corpus: string;
   readonly baseMs: number;
   readonly headMs: number;
+  readonly baseCoverage?: CallCoverage;
+  readonly headCoverage?: CallCoverage;
+}
+
+/**
+ * How many calls have a proven target, and why the others do not (Phase A2). A call without a recorded reason
+ * (an engine before A1) counts under `not-recorded`.
+ */
+export interface CallCoverage {
+  readonly calls: number;
+  readonly resolved: number;
+  readonly byReason: ReadonlyMap<string, number>;
+}
+
+/** Reads the calls of one `.discovery` directory into a coverage summary. */
+export function measureCoverage(discoveryDirectory: string): CallCoverage {
+  const calls: readonly { readonly resolutionState?: string; readonly reason?: string }[] = readArtifact(discoveryDirectory, "semantic.json")?.calls ?? [];
+  const byReason = new Map<string, number>();
+  let resolved = 0;
+  for (const call of calls) {
+    if (call.resolutionState === "RESOLVED") { resolved++; continue; }
+    const reason = call.reason ?? "not-recorded";
+    byReason.set(reason, (byReason.get(reason) ?? 0) + 1);
+  }
+  return { calls: calls.length, resolved, byReason };
+}
+
+/** A count as a share of all calls, one decimal. */
+function share(count: number, total: number): string {
+  return total === 0 ? "0.0%" : `${((100 * count) / total).toFixed(1)}%`;
+}
+
+/** Markdown coverage table for one corpus: base and head side by side, or head alone. */
+export function formatCoverage(head: CallCoverage, base?: CallCoverage): string[] {
+  const rows: [string, number, number | undefined][] = [["resolved", head.resolved, base?.resolved]];
+  const reasons = [...new Set([...head.byReason.keys(), ...(base?.byReason.keys() ?? [])])]
+    .sort((left, right) => (head.byReason.get(right) ?? 0) - (head.byReason.get(left) ?? 0) || compare(left, right));
+  for (const reason of reasons) rows.push([reason, head.byReason.get(reason) ?? 0, base === undefined ? undefined : base.byReason.get(reason) ?? 0]);
+  const lines = base === undefined
+    ? [`Calls: ${head.calls}.`, "", "| Calls | Count | Share |", "|---|---|---|"]
+    : [`Calls: base ${base.calls}, head ${head.calls}.`, "", "| Calls | Base | Head | Share (head) |", "|---|---|---|---|"];
+  for (const [label, count, baseCount] of rows) {
+    lines.push(base === undefined ? `| ${label} | ${count} | ${share(count, head.calls)} |` : `| ${label} | ${baseCount ?? 0} | ${count} | ${share(count, head.calls)} |`);
+  }
+  return [...lines, ""];
 }
 
 /** Code-point order, independent of locale and ICU version. */
@@ -207,7 +252,7 @@ export function diffFacts(base: FactSet, head: FactSet): FactDiff {
 }
 
 /** Analyzes a fresh copy of `corpus` with the engine at `engineRoot` and returns its facts. */
-export function analyzeWith(engineRoot: string, corpus: string): { readonly facts: FactSet; readonly durationMs: number } {
+export function analyzeWith(engineRoot: string, corpus: string): { readonly facts: FactSet; readonly durationMs: number; readonly coverage: CallCoverage } {
   const cli = join(engineRoot, "src/cli/index.ts");
   if (!existsSync(cli)) throw new Error(`Not an engine root (missing ${cli}): ${engineRoot}`);
   const work = mkdtempSync(join(tmpdir(), "lx-fact-diff-"));
@@ -224,7 +269,7 @@ export function analyzeWith(engineRoot: string, corpus: string): { readonly fact
     const report = JSON.parse(run.stdout) as { readonly durationMs: number };
     // No projection means no evidence; reporting "no change" for it would hide a broken engine.
     if (!existsSync(join(copy, ".discovery", "manifest.json"))) throw new Error(`analyze wrote no .discovery/manifest.json for ${corpus} with ${engineRoot}`);
-    return { facts: extractFacts(join(copy, ".discovery")), durationMs: report.durationMs };
+    return { facts: extractFacts(join(copy, ".discovery")), durationMs: report.durationMs, coverage: measureCoverage(join(copy, ".discovery")) };
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
@@ -235,7 +280,7 @@ export function runFactDiff(baseEngine: string, headEngine: string, corpora: rea
   return corpora.map((corpus) => {
     const base = analyzeWith(resolve(baseEngine), corpus);
     const head = analyzeWith(resolve(headEngine), corpus);
-    return { corpus, baseMs: base.durationMs, headMs: head.durationMs, ...diffFacts(base.facts, head.facts) };
+    return { corpus, baseMs: base.durationMs, headMs: head.durationMs, baseCoverage: base.coverage, headCoverage: head.coverage, ...diffFacts(base.facts, head.facts) };
   });
 }
 
@@ -245,6 +290,7 @@ export function formatFactDiff(results: readonly CorpusDiff[], limit = 50): stri
   for (const result of results) {
     const delta = result.baseMs === 0 ? "n/a" : `${(((result.headMs - result.baseMs) / result.baseMs) * 100).toFixed(1)}%`;
     lines.push(`## ${result.corpus}`, "", `Lost ${result.lost}, gained ${result.gained}. Engine time ${Math.round(result.baseMs)} ms -> ${Math.round(result.headMs)} ms (${delta}, single run).`, "");
+    if (result.headCoverage !== undefined) lines.push(...formatCoverage(result.headCoverage, result.baseCoverage));
     const changed = result.categories.filter((category) => category.lost.length > 0 || category.gained.length > 0);
     if (changed.length === 0) { lines.push("No fact changed.", ""); continue; }
     lines.push("| Category | Base | Head | Lost | Gained |", "|---|---|---|---|---|");

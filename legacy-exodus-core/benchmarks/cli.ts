@@ -27,7 +27,7 @@ import { runBenchmark } from "./runner";
 import { compareBenchmarkRuns, formatComparisonMarkdown } from "./compare";
 import { isAuditPassing, runBenchmarkSelfAudit } from "./audit";
 import { executeBenchmarkRun } from "./harness";
-import { diffFacts, extractFacts, formatFactDiff, runFactDiff, type CorpusDiff } from "./fact-diff";
+import { analyzeWith, diffFacts, extractFacts, formatCoverage, formatFactDiff, runFactDiff, type CorpusDiff } from "./fact-diff";
 import { generateMarkdownReport } from "./scripts/report";
 import { runFidelityValidation } from "./fidelity/runner";
 import { ensureCacheEntryVerified } from "./scripts/acquire";
@@ -176,6 +176,22 @@ async function main(): Promise<void> {
         console.error("Scale budget exceeded.");
         process.exit(1);
       }
+      break;
+    }
+    case "coverage": {
+      // Phase A2: calls with a proven target and the reasons for the rest, per corpus, with this engine.
+      const valuedFlags = new Set(["--output"]);
+      const corpora = args.slice(1).filter((arg, index, rest) => !arg.startsWith("--") && !valuedFlags.has(rest[index - 1] ?? ""));
+      if (corpora.length === 0) {
+        console.error("Usage: bun run benchmarks/cli.ts coverage <corpus-dir>... [--output <file>]");
+        process.exit(1);
+      }
+      const engine = resolve(import.meta.dir, "..");
+      const sections = corpora.flatMap((corpus) => [`## ${corpus}`, "", ...formatCoverage(analyzeWith(engine, corpus).coverage)]);
+      const markdown = ["# Call coverage", "", ...sections].join("\n");
+      const output = getArgValue(args, "--output");
+      if (output !== undefined) await writeFile(resolve(output), markdown, "utf8");
+      console.log(markdown);
       break;
     }
     case "fact-diff": {
