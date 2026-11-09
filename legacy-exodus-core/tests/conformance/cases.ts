@@ -550,6 +550,33 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // A `require` inside a function binds its import there, not in the module. The call resolves while that
+    // import is the one binding it sees; a parameter of the same name, a reassignment or a call outside that
+    // function keeps it UNRESOLVED.
+    id: "scoped-require",
+    files: {
+      "obj.js": "function createLogger() { return 1; }\nmodule.exports = { createLogger };\n",
+      "alt.js": "function createLogger() { return 2; }\nmodule.exports = { createLogger };\n",
+      "a.js": [
+        "function inner() { const { createLogger } = require('./obj.js'); return createLogger(); }",
+        "function param(createLogger) { return createLogger(); }",
+        "function rebound() { let { createLogger } = require('./obj.js'); createLogger = () => 0; return createLogger(); }",
+        "function second() { const { createLogger } = require('./alt.js'); return createLogger(); }",
+        "function outside() { return createLogger(); }",
+        "module.exports = { inner, param, rebound, second, outside };",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "scoped-require:resolves", category: "calls", has: /^a\.js@1:\d+\|inner\|createLogger\|RESOLVED\|/ },
+      { id: "scoped-require:parameter-unresolved", category: "calls", has: /^a\.js@2:\d+\|param\|createLogger\|UNRESOLVED\|/ },
+      { id: "scoped-require:rebound-unresolved", category: "calls", has: /^a\.js@3:\d+\|rebound\|createLogger\|UNRESOLVED\|/ },
+      { id: "scoped-require:other-module-resolves", category: "calls", has: /^a\.js@4:\d+\|second\|createLogger\|RESOLVED\|/ },
+      // Outside the function that required it the name is unbound: calling it throws, nothing is proven.
+      { id: "scoped-require:outside-unresolved", category: "calls", has: /^a\.js@5:\d+\|outside\|createLogger\|UNRESOLVED\|/ },
+    ],
+  },
+  {
     // 2026-11-08 audit probe T16: string-built SQL through a client instance is SQL injection.
     id: "taint-sql-client",
     files: {
