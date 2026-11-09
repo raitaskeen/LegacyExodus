@@ -157,20 +157,37 @@ function callSites(file: string, source: string): CallSite[] {
   return sites;
 }
 
-/** Runs the oracle on one corpus directory with the engine at `engineRoot`. */
-export function runCallOracle(engineRoot: string, corpus: string): OracleResult {
+/**
+ * A clean copy of a pinned corpus (no `.git`, `.discovery` or dependencies) analysed by the engine at `engineRoot`,
+ * inside `work`. Shared by the call and flow oracles.
+ */
+export function analyzeCleanCopy(engineRoot: string, corpus: string, work: string): { readonly name: string; readonly script: string; readonly clean: string } {
   const name = basename(resolve(corpus));
   const script = TEST_SCRIPTS[name];
   if (script === undefined) throw new Error(`No test script is configured for corpus ${name}.`);
+  const clean = join(work, "clean", name);
+  cpSync(resolve(corpus), clean, { recursive: true, filter: (path) => !/[\\/](\.discovery|\.git|node_modules)([\\/]|$)/.test(path) });
+  const analyzed = spawnSync(process.execPath, ["run", join(engineRoot, "src/cli/index.ts"), "analyze", clean, "--refresh", "--json"], {
+    cwd: engineRoot, encoding: "utf8", maxBuffer: 1 << 26, env: { ...process.env, LEGACY_EXODUS_HOME: join(work, "home"), NO_COLOR: "1" },
+  });
+  if (analyzed.status !== 0) throw new Error(`analyze failed: ${String(analyzed.stderr).slice(0, 2000)}`);
+  return { name, script, clean };
+}
+
+/** Installs a corpus copy's dev dependencies and runs its test script with `env` added; returns the exit code. */
+export function installAndTest(run: string, script: string, env: Readonly<Record<string, string>>, command: readonly string[] = ["npm", "run", script]): number | null {
+  const install = spawnSync("npm", ["install", "--no-audit", "--no-fund", "--ignore-scripts", "--loglevel=error"], { cwd: run, encoding: "utf8", shell: true, maxBuffer: 1 << 26 });
+  if (install.status !== 0) throw new Error(`npm install failed: ${String(install.stderr).slice(0, 2000)}`);
+  const tests = spawnSync(command[0]!, command.slice(1), { cwd: run, encoding: "utf8", shell: true, maxBuffer: 1 << 28, env: { ...process.env, NO_COLOR: "1", CI: "1", ...env } });
+  return tests.status;
+}
+
+/** Runs the oracle on one corpus directory with the engine at `engineRoot`. */
+export function runCallOracle(engineRoot: string, corpus: string): OracleResult {
   const work = mkdtempSync(join(tmpdir(), "lx-call-oracle-"));
   try {
     // 1. The engine's facts, from a clean copy (no dependencies installed, as in the fact diff).
-    const clean = join(work, "clean", name);
-    cpSync(resolve(corpus), clean, { recursive: true, filter: (path) => !/[\\/](\.discovery|\.git|node_modules)([\\/]|$)/.test(path) });
-    const analyzed = spawnSync(process.execPath, ["run", join(engineRoot, "src/cli/index.ts"), "analyze", clean, "--refresh", "--json"], {
-      cwd: engineRoot, encoding: "utf8", maxBuffer: 1 << 26, env: { ...process.env, LEGACY_EXODUS_HOME: join(work, "home"), NO_COLOR: "1" },
-    });
-    if (analyzed.status !== 0) throw new Error(`analyze failed: ${String(analyzed.stderr).slice(0, 2000)}`);
+    const { name, script, clean } = analyzeCleanCopy(engineRoot, corpus, work);
     const semantic = JSON.parse(readFileSync(join(clean, ".discovery", "semantic.json"), "utf8"));
     const symbols: any[] = JSON.parse(readFileSync(join(clean, ".discovery", "symbols.json"), "utf8"));
 
@@ -190,16 +207,11 @@ export function runCallOracle(engineRoot: string, corpus: string): OracleResult 
         skippedFiles.push(file);
       }
     }
-    const install = spawnSync("npm", ["install", "--no-audit", "--no-fund", "--ignore-scripts", "--loglevel=error"], { cwd: run, encoding: "utf8", shell: true, maxBuffer: 1 << 26 });
-    if (install.status !== 0) throw new Error(`npm install failed: ${String(install.stderr).slice(0, 2000)}`);
     const traces = join(work, "traces");
     mkdirSync(traces);
     const preload = join(work, "lx-preload.cjs");
     writeFileSync(preload, preloadSource(run, files, traces));
-    const tests = spawnSync("npm", ["run", script], {
-      cwd: run, encoding: "utf8", shell: true, maxBuffer: 1 << 28,
-      env: { ...process.env, NODE_OPTIONS: `--require=${preload}`, NO_COLOR: "1", CI: "1" },
-    });
+    const testExit = installAndTest(run, script, { NODE_OPTIONS: `--require=${preload}` });
 
     // 3. Observed call site -> functions entered, in original coordinates.
     const observed = new Map<string, Set<string>>();
@@ -332,7 +344,7 @@ export function runCallOracle(engineRoot: string, corpus: string): OracleResult 
         if (process.env.LX_ORACLE_DEBUG !== undefined && unverifiable <= 25) console.error("UNVERIFIABLE", file, site!.start.line, call.calleeName, target?.kind, target?.name, JSON.stringify(target?.location), [...callees].join(" "));
       }
     }
-    return { corpus: name, testExit: tests.status, observedSites: observed.size, matchedSites, resolvedAgree, contradictions, substitutions, unverifiable, unresolvedByReason, instrumentedFiles: insertions.size, skippedFiles };
+    return { corpus: name, testExit, observedSites: observed.size, matchedSites, resolvedAgree, contradictions, substitutions, unverifiable, unresolvedByReason, instrumentedFiles: insertions.size, skippedFiles };
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
@@ -346,7 +358,8 @@ function splitPosition(position: string): [string, number, number] {
 }
 
 const lineStarts = new Map<string, number[]>();
-function offsetOf(path: string, line: number, column: number): number {
+/** The character offset of a 1-based line and 0-based column in the file at `path`. */
+export function offsetOf(path: string, line: number, column: number): number {
   let starts = lineStarts.get(path);
   if (starts === undefined) {
     const source = existsSync(path) ? readFileSync(path, "utf8") : "";
