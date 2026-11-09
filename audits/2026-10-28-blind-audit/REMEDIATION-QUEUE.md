@@ -38,8 +38,8 @@ off; Fact Diff and Scale Gate are now required checks on main; #195 closed; #111
 | ID | Severity | Finding | State |
 |---|---|---|---|
 | XA-01 | High | An HTML escaper cut taint for every sink | **Fixed** #294 (`d6aa5e3`) |
-| XA-02 | High | Exported subclass left its internal base closed | In progress |
-| XA-03 | Medium | Method written on an exported instance in another file ignored | Queued |
+| XA-02 | High | Exported subclass left its internal base closed | **Fixed** #295 (`6bff174`) |
+| XA-03 | Medium | Method written on an exported instance in another file ignored | In progress |
 | XA-04 | Medium | Computed read borrowing a method in the same file not seen | Queued |
 | XA-05 | Low | Call before its CommonJS `require` binds is RESOLVED | Queued |
 | XA-06 | Low | Validator stack overflow drops a parsable file as `PARSER_EXECUTION_FAILED` | Queued |
