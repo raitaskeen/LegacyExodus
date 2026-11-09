@@ -43,8 +43,8 @@ off; Fact Diff and Scale Gate are now required checks on main; #195 closed; #111
 | XA-04 | Medium | Computed read borrowing a method in the same file not seen | **Fixed** #297 (`d1e2121`), narrow rule (owner) |
 | XA-05 | Low | Call before its CommonJS `require` binds is RESOLVED | **Fixed** #298 (`4986949`) |
 | XA-06 | Low | Validator stack overflow drops a parsable file as `PARSER_EXECUTION_FAILED` | **Fixed** #299 (`65328f2`) |
-| XA-07 | Low | README/CI wording says more than the code proves | In review #300 |
-| XA-08 | Info | `closedWorld` cannot be switched on | Owner: stays off |
+| XA-07 | Low | README/CI wording says more than the code proves | **Fixed** #300 (`e33eb87`) |
+| XA-08 | Info | `closedWorld` cannot be switched on | Closed: stays off (owner), documented in #300 |
 
 ## Track 2026-11-08: fresh audit findings (NA-01 to NA-15)
 
