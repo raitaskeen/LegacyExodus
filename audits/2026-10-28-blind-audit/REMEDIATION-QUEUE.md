@@ -41,8 +41,8 @@ off; Fact Diff and Scale Gate are now required checks on main; #195 closed; #111
 | XA-02 | High | Exported subclass left its internal base closed | **Fixed** #295 (`6bff174`) |
 | XA-03 | Medium | Method written on an exported instance in another file ignored | **Fixed** #296 (`e5f9e1e`) |
 | XA-04 | Medium | Computed read borrowing a method in the same file not seen | **Fixed** #297 (`d1e2121`), narrow rule (owner) |
-| XA-05 | Low | Call before its CommonJS `require` binds is RESOLVED | In progress |
-| XA-06 | Low | Validator stack overflow drops a parsable file as `PARSER_EXECUTION_FAILED` | Queued |
+| XA-05 | Low | Call before its CommonJS `require` binds is RESOLVED | **Fixed** #298 (`4986949`) |
+| XA-06 | Low | Validator stack overflow drops a parsable file as `PARSER_EXECUTION_FAILED` | In progress |
 | XA-07 | Low | README/CI wording says more than the code proves | Queued (after the fixes) |
 | XA-08 | Info | `closedWorld` cannot be switched on | Owner: stays off |
 
