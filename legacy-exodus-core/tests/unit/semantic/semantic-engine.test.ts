@@ -204,7 +204,9 @@ describe("DeterministicSemanticAnalysisEngine", () => {
     const calls = analysis.calls.filter((call) => call.calleeName.endsWith(".handle"));
 
     expect(aHandle?.id).toBeDefined();
-    expect(calls.filter((call) => call.calleeName === "this.handle").map((call) => call.targetSymbolId)).toEqual([undefined]);
+    // A never escapes this file, no class extends it, nothing replaces handle and invoke is never borrowed:
+    // `this` in invoke is an A, so this.handle() is A's handle (class-hierarchy.ts).
+    expect(calls.filter((call) => call.calleeName === "this.handle").map((call) => call.targetSymbolId)).toEqual([aHandle?.id]);
     expect(calls.filter((call) => call.calleeName === "a.handle").map((call) => call.targetSymbolId)).toEqual([aHandle?.id]);
     expect(calls.filter((call) => call.calleeName === "unknown.handle").map((call) => call.targetSymbolId)).toEqual([undefined]);
     expect(calls.filter((call) => call.calleeName === "receiver.handle").map((call) => call.targetSymbolId)).toEqual([undefined]);
