@@ -13,8 +13,9 @@ import { canonicalizePath } from "@graph/index";
  *
  * A class that escapes its file (exported, or used as a value other than `new C()`, `extends C`, a type or a static
  * member) may be subclassed by code outside the analysed files, a library's users for instance (F-002), so its public
- * methods are open unless the hierarchy is built closed-world. A class that does not escape can only be extended in
- * its own file.
+ * methods are open unless the hierarchy is built closed-world. So are the methods of every class it extends: an
+ * outside subclass of an exported `Public extends Base` overrides `Base`'s methods too (XA-02). A class that neither
+ * escapes nor has an escaping class below it can only be extended in the analysed files.
  *
  * Assumptions, as elsewhere in the call graph: other files do not write or read methods by computed key or reflection (`proto[name] = f`,
  * `Reflect.get(o, "run")`; the calling file's own such writes are checked there), and a class body is strict mode
@@ -232,6 +233,7 @@ export class ClassHierarchy {
   /** Members of classes with an unknown superclass, and of their subclasses: they may override any class's members. */
   private readonly unknownOverrides = new Set<string>();
   private readonly overrideCache = new Map<string, ReadonlySet<string>>();
+  private readonly openCache = new Map<string, boolean>();
 
   /**
    * @param closedWorld - Treat the analysed files as the whole program, so a class that escapes its file is extended
@@ -274,7 +276,7 @@ export class ClassHierarchy {
 
   /** Whether a class that extends `classId`, directly or not, anywhere in the repository may define `name`. */
   public mayOverride(classId: string, name: string): boolean {
-    if (!this.closedWorld && this.classes.get(classId)?.escapes !== false) return true;
+    if (!this.closedWorld && this.mayBeExtendedOutside(classId)) return true;
     if (this.unknownOverrides.has(name) || this.unknownOverrides.has(COMPUTED)) return true;
     let names = this.overrideCache.get(classId);
     if (names === undefined) {
@@ -289,16 +291,40 @@ export class ClassHierarchy {
     return this.borrowed.has(name);
   }
 
+  /**
+   * Whether code outside the analysed files may extend `classId` or a class below it (open world): the class, or any
+   * class that extends it here, escapes its file or is not known (XA-02).
+   */
+  private mayBeExtendedOutside(classId: string): boolean {
+    let open = this.openCache.get(classId);
+    if (open === undefined) {
+      open = this.subtreeEscapes(classId, new Set());
+      this.openCache.set(classId, open);
+    }
+    return open;
+  }
+
+  private subtreeEscapes(classId: string, seen: Set<string>): boolean {
+    if (seen.has(classId)) return false;
+    seen.add(classId);
+    if (this.classes.get(classId)?.escapes !== false) return true;
+    return this.children(classId).some((child) => this.subtreeEscapes(child.id, seen));
+  }
+
+  /** The classes that extend `classId` directly: by name in its file, or through an import of its file. */
+  private children(classId: string): readonly ClassFact[] {
+    const fact = this.classes.get(classId);
+    return [
+      ...(this.childrenByClass.get(classId) ?? []),
+      ...(fact === undefined ? [] : this.childrenByFile.get(fact.filePath) ?? []),
+    ];
+  }
+
   private subtreeMembers(classId: string, seen: Set<string>): Set<string> {
     const names = new Set<string>();
     if (seen.has(classId)) return names;
     seen.add(classId);
-    const fact = this.classes.get(classId);
-    const children = [
-      ...(this.childrenByClass.get(classId) ?? []),
-      ...(fact === undefined ? [] : this.childrenByFile.get(fact.filePath) ?? []),
-    ];
-    for (const child of children) {
+    for (const child of this.children(classId)) {
       for (const name of this.ownMembers(child)) names.add(name);
       for (const name of this.subtreeMembers(child.id, seen)) names.add(name);
     }

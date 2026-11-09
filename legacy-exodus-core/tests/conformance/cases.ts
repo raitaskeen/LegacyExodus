@@ -660,6 +660,26 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // XA-02: an exported subclass lets a package's users override the methods of the internal class it extends.
+    // In Node, `class Mine extends Public { helper() { return "mine"; } }` makes `new Mine().run()` return "mine".
+    id: "this-dispatch-escaping-subclass",
+    files: {
+      "lib.js": [
+        "class Base { run() { return this.helper(); } helper() { return \"base\"; } }",
+        "class Public extends Base {}",
+        "class Kept { run() { return this.helper(); } helper() { return \"kept\"; } }",
+        "class Inner extends Kept {}",
+        "new Inner().run();",
+        "module.exports = { Public };",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "this-dispatch:exported-subclass-keeps-base-open", category: "calls", has: /^lib\.js@1:\d+\|run\|this\.helper\|UNRESOLVED\|/ },
+      { id: "this-dispatch:internal-subclass-resolves", category: "calls", has: /^lib\.js@3:\d+\|run\|this\.helper\|RESOLVED\|/ },
+    ],
+  },
+  {
     // 2026-11-08 audit probe T16: string-built SQL through a client instance is SQL injection.
     id: "taint-sql-client",
     files: {
