@@ -39,7 +39,7 @@ off; Fact Diff and Scale Gate are now required checks on main; #195 closed; #111
 |---|---|---|
 | A1 | Reason on every UNRESOLVED call | **Merged** #301 (`79b52d7`) |
 | A2 | Coverage table in the fact diff, `coverage` command | **Merged** #302 |
-| A3 | Call oracle on Express and Fastify | In progress |
+| A3 | Call oracle on Express and Fastify | **Merged** #304; corpora koa, lodash, axios, hono #303; OR-01 fix #305 in CI |
 | A4 | CFG block oracle | Queued |
 | B-H | See the plan | Queued |
 
