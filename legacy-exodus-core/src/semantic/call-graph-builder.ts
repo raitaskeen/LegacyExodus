@@ -2125,7 +2125,7 @@ function resolveLocalCall(
     const candidate = candidates.length === 1 ? candidates[0] : undefined;
     if (candidate !== undefined && propertyWriteCount(index, methodName) === ownPropertyWrites(index, candidate)
       && !context.hierarchy.mayOverride(thisClass.classId, methodName)
-      && (thisClass.method === undefined || !context.hierarchy.isBorrowed(thisClass.method))) return candidate.id;
+      && (thisClass.method === undefined || !context.hierarchy.isBorrowed(thisClass.method, thisClass.classId))) return candidate.id;
   }
 
   // 2. Object container method (e.g. app.init after `app.init = function …`): the container

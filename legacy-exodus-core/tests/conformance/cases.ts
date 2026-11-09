@@ -707,6 +707,42 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // XA-04: a computed read of an instance takes a method as a value; it then runs with another `this`.
+    // In Node, `f.call({ helper() { return "other"; } })` returns "other".
+    id: "this-dispatch-computed-borrow",
+    files: {
+      "a.js": [
+        "class C { run() { return this.helper(); } helper() { return \"C\"; } }",
+        "const c = new C(); const key = \"run\"; const f = c[key];",
+        "f.call({ helper() { return \"other\"; } });",
+        "",
+      ].join("\n"),
+      "self.js": [
+        "class S { run() { return this.helper(); } helper() { return 1; } pick(k) { return this[k]; } }",
+        "new S().run();",
+        "",
+      ].join("\n"),
+      "proto.js": [
+        "class P { run() { return this.helper(); } helper() { return 1; } }",
+        "const k = \"run\"; const g = P.prototype[k];",
+        "",
+      ].join("\n"),
+      // Control: a computed read of an unrelated array does not reach the instance (the stated assumption).
+      "plain.js": [
+        "class Q { run() { return this.helper(); } helper() { return 1; } }",
+        "const items = [1, 2]; const i = 0; const first = items[i];",
+        "new Q().run();",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "this-dispatch:instance-computed-read-unresolved", category: "calls", has: /^a\.js@1:\d+\|run\|this\.helper\|UNRESOLVED\|/ },
+      { id: "this-dispatch:this-computed-read-unresolved", category: "calls", has: /^self\.js@1:\d+\|run\|this\.helper\|UNRESOLVED\|/ },
+      { id: "this-dispatch:prototype-computed-read-unresolved", category: "calls", has: /^proto\.js@1:\d+\|run\|this\.helper\|UNRESOLVED\|/ },
+      { id: "this-dispatch:unrelated-computed-read-resolves", category: "calls", has: /^plain\.js@1:\d+\|run\|this\.helper\|RESOLVED\|/ },
+    ],
+  },
+  {
     // 2026-11-08 audit probe T16: string-built SQL through a client instance is SQL injection.
     id: "taint-sql-client",
     files: {
