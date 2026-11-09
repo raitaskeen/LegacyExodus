@@ -124,7 +124,8 @@ jobs:
 
   # Reports which analysis facts a pull request loses and gains compared with its
   # base, with call coverage per corpus. A lost fact fails it unless the owner labels
-  # the PR `facts-lost-explained` (NA-05).
+  # the PR `facts-lost-explained` (NA-05). An UNRESOLVED call or reference that becomes
+  # RESOLVED or EXTERNAL at the same site is listed as upgraded, not lost (owner decision).
   fact-diff:
     name: Fact Diff
     if: github.event_name == 'pull_request'

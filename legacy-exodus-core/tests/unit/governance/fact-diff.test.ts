@@ -51,6 +51,30 @@ describe("fact diff", () => {
     expect(formatFactDiff([{ corpus: "sample", baseMs: 10, headMs: 12, ...diff }])).toContain("| calls | 1 | 1 | 1 | 1 |");
   });
 
+  it("counts an UNRESOLVED call proven at the same site as upgraded, not lost (owner decision, Phase B)", () => {
+    const base = discovery({ "symbols.json": [symbolA, symbolB], "semantic.json": { calls: [call("UNRESOLVED"), { ...call("UNRESOLVED"), calleeName: "fs.readFile", location: { line: 4, column: 0 } }] } });
+    const head = discovery({ "symbols.json": [symbolA, symbolB], "semantic.json": { calls: [call("RESOLVED", symbolB.id), { ...call("EXTERNAL"), calleeName: "fs.readFile", location: { line: 4, column: 0 } }] } });
+
+    const diff = diffFacts(extractFacts(base), extractFacts(head));
+    const calls = diff.categories.find((category) => category.category === "calls");
+
+    expect(diff.lost).toBe(0);
+    expect(calls?.gained).toEqual([]);
+    expect(calls?.upgraded).toEqual(["main.js@3:0|module|b|UNRESOLVED|-", "main.js@4:0|module|fs.readFile|UNRESOLVED|-"]);
+    expect(formatFactDiff([{ corpus: "sample", baseMs: 10, headMs: 12, ...diff }])).toContain("upgraded 2 (UNRESOLVED -> RESOLVED or EXTERNAL at the same site)");
+  });
+
+  it("still counts a call that disappears, or a RESOLVED call that changes, as lost", () => {
+    const base = discovery({ "symbols.json": [symbolA, symbolB], "semantic.json": { calls: [call("RESOLVED", symbolB.id), { ...call("UNRESOLVED"), location: { line: 9, column: 0 } }] } });
+    const head = discovery({ "symbols.json": [symbolA, symbolB], "semantic.json": { calls: [call("EXTERNAL")] } });
+
+    const diff = diffFacts(extractFacts(base), extractFacts(head));
+    const calls = diff.categories.find((category) => category.category === "calls");
+
+    expect(calls?.lost).toEqual(["main.js@3:0|module|b|RESOLVED|function:b@2:0@lib.js", "main.js@9:0|module|b|UNRESOLVED|-"]);
+    expect(calls?.upgraded).toEqual([]);
+  });
+
   it("counts repeated identical references instead of collapsing them", () => {
     const reference = { id: "r", filePath: "main.js", name: "b", kind: "identifier", resolutionState: "RESOLVED", resolvedSymbolId: symbolB.id };
     const base = discovery({ "symbols.json": [symbolB], "semantic.json": { references: [reference, { ...reference, id: "s" }] } });

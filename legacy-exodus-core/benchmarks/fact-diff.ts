@@ -20,12 +20,49 @@ export interface CategoryDiff {
   readonly head: number;
   readonly lost: readonly string[];
   readonly gained: readonly string[];
+  /** Base facts of an UNRESOLVED call or reference that the head proves at the same site (owner decision, Phase B). */
+  readonly upgraded: readonly string[];
 }
 
 export interface FactDiff {
   readonly categories: readonly CategoryDiff[];
   readonly lost: number;
   readonly gained: number;
+  readonly upgraded: number;
+}
+
+/** Categories whose facts end in `|<state>|<target>`, where an UNRESOLVED fact can become a proven one. */
+const UPGRADABLE = new Set(["calls", "references"]);
+const PROVEN_STATES = new Set(["RESOLVED", "EXTERNAL"]);
+
+/** A call or reference fact split into its site (everything before the state), its state and its target. */
+function stateOf(fact: string): { readonly site: string; readonly state: string } | undefined {
+  const parts = fact.replace(/ #\d+$/, "").split("|");
+  if (parts.length < 3) return undefined;
+  return { site: parts.slice(0, -2).join("|"), state: parts[parts.length - 2]! };
+}
+
+/**
+ * Pairs each lost UNRESOLVED fact with a gained RESOLVED or EXTERNAL fact at the same site, one for one. Such a
+ * pair is knowledge gained, not a fact lost; a RESOLVED fact that changes or disappears stays a loss.
+ */
+function upgrades(lost: readonly string[], gained: readonly string[]): { readonly lost: string[]; readonly gained: string[]; readonly upgraded: string[] } {
+  const proven = new Map<string, string[]>();
+  for (const fact of gained) {
+    const parsed = stateOf(fact);
+    if (parsed !== undefined && PROVEN_STATES.has(parsed.state)) proven.set(parsed.site, [...(proven.get(parsed.site) ?? []), fact]);
+  }
+  const used = new Set<string>();
+  const upgraded: string[] = [];
+  const stillLost: string[] = [];
+  for (const fact of lost) {
+    const parsed = stateOf(fact);
+    const match = parsed?.state === "UNRESOLVED" ? (proven.get(parsed.site) ?? []).find((candidate) => !used.has(candidate)) : undefined;
+    if (match === undefined) { stillLost.push(fact); continue; }
+    used.add(match);
+    upgraded.push(fact);
+  }
+  return { lost: stillLost, gained: gained.filter((fact) => !used.has(fact)), upgraded };
 }
 
 export interface CorpusDiff extends FactDiff {
@@ -236,18 +273,16 @@ export function diffFacts(base: FactSet, head: FactSet): FactDiff {
   const categories = [...new Set([...base.keys(), ...head.keys()])].sort(compare).map((category): CategoryDiff => {
     const before = base.get(category) ?? new Set<string>();
     const after = head.get(category) ?? new Set<string>();
-    return {
-      category,
-      base: before.size,
-      head: after.size,
-      lost: [...before].filter((fact) => !after.has(fact)).sort(compare),
-      gained: [...after].filter((fact) => !before.has(fact)).sort(compare),
-    };
+    const lost = [...before].filter((fact) => !after.has(fact)).sort(compare);
+    const gained = [...after].filter((fact) => !before.has(fact)).sort(compare);
+    const paired = UPGRADABLE.has(category) ? upgrades(lost, gained) : { lost, gained, upgraded: [] };
+    return { category, base: before.size, head: after.size, lost: paired.lost, gained: paired.gained, upgraded: paired.upgraded };
   });
   return {
     categories,
     lost: categories.reduce((sum, category) => sum + category.lost.length, 0),
     gained: categories.reduce((sum, category) => sum + category.gained.length, 0),
+    upgraded: categories.reduce((sum, category) => sum + category.upgraded.length, 0),
   };
 }
 
@@ -289,15 +324,16 @@ export function formatFactDiff(results: readonly CorpusDiff[], limit = 50): stri
   const lines: string[] = ["# Fact diff", ""];
   for (const result of results) {
     const delta = result.baseMs === 0 ? "n/a" : `${(((result.headMs - result.baseMs) / result.baseMs) * 100).toFixed(1)}%`;
-    lines.push(`## ${result.corpus}`, "", `Lost ${result.lost}, gained ${result.gained}. Engine time ${Math.round(result.baseMs)} ms -> ${Math.round(result.headMs)} ms (${delta}, single run).`, "");
+    const upgradedNote = result.upgraded > 0 ? `, upgraded ${result.upgraded} (UNRESOLVED -> RESOLVED or EXTERNAL at the same site)` : "";
+    lines.push(`## ${result.corpus}`, "", `Lost ${result.lost}, gained ${result.gained}${upgradedNote}. Engine time ${Math.round(result.baseMs)} ms -> ${Math.round(result.headMs)} ms (${delta}, single run).`, "");
     if (result.headCoverage !== undefined) lines.push(...formatCoverage(result.headCoverage, result.baseCoverage));
-    const changed = result.categories.filter((category) => category.lost.length > 0 || category.gained.length > 0);
+    const changed = result.categories.filter((category) => category.lost.length > 0 || category.gained.length > 0 || category.upgraded.length > 0);
     if (changed.length === 0) { lines.push("No fact changed.", ""); continue; }
-    lines.push("| Category | Base | Head | Lost | Gained |", "|---|---|---|---|---|");
-    for (const category of changed) lines.push(`| ${category.category} | ${category.base} | ${category.head} | ${category.lost.length} | ${category.gained.length} |`);
+    lines.push("| Category | Base | Head | Lost | Gained | Upgraded |", "|---|---|---|---|---|---|");
+    for (const category of changed) lines.push(`| ${category.category} | ${category.base} | ${category.head} | ${category.lost.length} | ${category.gained.length} | ${category.upgraded.length} |`);
     lines.push("");
     for (const category of changed) {
-      for (const [label, facts] of [["Lost", category.lost], ["Gained", category.gained]] as const) {
+      for (const [label, facts] of [["Lost", category.lost], ["Gained", category.gained], ["Upgraded", category.upgraded]] as const) {
         if (facts.length === 0) continue;
         lines.push(`### ${label} ${category.category}`, "", ...facts.slice(0, limit).map((fact) => `- \`${fact}\``));
         if (facts.length > limit) lines.push(`- … ${facts.length - limit} more`);
