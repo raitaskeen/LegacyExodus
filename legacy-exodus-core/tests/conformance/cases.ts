@@ -764,6 +764,54 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // A1: every UNRESOLVED call says why; a RESOLVED call has no reason.
+    id: "unresolved-reasons",
+    files: {
+      "m.js": "exports.ok = function ok() { return 1; };\n",
+      "main.js": [
+        "const fs = require(\"fs\");",
+        "const { missing } = require(\"./gone\");",
+        "const { ok } = require(\"./m\");",
+        "const handlers = {};",
+        "handlers[process.argv[2]]();",
+        "early();",
+        "const early = () => 1;",
+        "fs.readFileSync(\"x\");",
+        "undeclaredHelper();",
+        "console.log(\"x\");",
+        "missing();",
+        "function run(cb) { cb(); }",
+        "class K { go() { return this.help(); } help() { return 1; } }",
+        "module.exports = K;",
+        "let v = ok; v = String; v();",
+        "const obj = makeObj(); obj.run();",
+        "function h(req, res) { res.json(1); }",
+        "obj.a.b();",
+        "run(ok);",
+        "makeObj().run();",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "reason:module-load", check: (directory) => callReason(directory, 1, "require") === "module-load" },
+      { id: "reason:computed-callee", check: (directory) => callReason(directory, 5, "handlers[<dynamic>]") === "computed-callee" },
+      { id: "reason:runs-before-binding", check: (directory) => callReason(directory, 6, "early") === "runs-before-binding" },
+      { id: "reason:package-import", check: (directory) => callReason(directory, 8, "fs.readFileSync") === "package-import" },
+      { id: "reason:unbound-name", check: (directory) => callReason(directory, 9, "undeclaredHelper") === "unbound-name" },
+      { id: "reason:global-member", check: (directory) => callReason(directory, 10, "console.log") === "global-member" },
+      { id: "reason:import-unresolved", check: (directory) => callReason(directory, 11, "missing") === "import-unresolved" },
+      { id: "reason:parameter-callee", check: (directory) => callReason(directory, 12, "cb") === "parameter-callee" },
+      { id: "reason:this-open", check: (directory) => callReason(directory, 13, "this.help") === "this-open" },
+      { id: "reason:local-not-proven", check: (directory) => callReason(directory, 15, "v") === "local-not-proven" },
+      { id: "reason:receiver-not-proven", check: (directory) => callReason(directory, 16, "obj.run") === "receiver-not-proven" },
+      { id: "reason:parameter-member", check: (directory) => callReason(directory, 17, "res.json") === "parameter-member" },
+      { id: "reason:member-chain", check: (directory) => callReason(directory, 18, "obj.a.b") === "member-chain" },
+      { id: "reason:call-result-member", check: (directory) => callReason(directory, 20, "makeObj().run") === "call-result-member" },
+      { id: "reason:resolved-has-none", check: (directory) => callReason(directory, 19, "run") === "RESOLVED" },
+      { id: "reason:every-unresolved-call-has-one", check: (directory) => readJson(directory, "semantic.json").calls.every((call: { resolutionState: string; reason?: string }) => (call.resolutionState === "UNRESOLVED") === (call.reason !== undefined)) },
+    ],
+  },
+  {
     // 2026-11-08 audit probe T16: string-built SQL through a client instance is SQL injection.
     id: "taint-sql-client",
     files: {
@@ -920,6 +968,13 @@ export const conformanceCases: readonly ConformanceCase[] = [
 /** Keys of every taint flow in the analysis (each names its source and its sink). */
 function taintKeys(directory: string): string[] {
   return (readJson(directory, "data-flow.json").graphs ?? []).flatMap((graph: any) => (graph.taintFlows ?? []).map((flow: any) => String(flow.key ?? "")));
+}
+
+/** The reason of the call to `callee` on `line` of main.js, or "RESOLVED" (A1). */
+function callReason(directory: string, line: number, callee: string): string | undefined {
+  const call = readJson(directory, "semantic.json").calls.find((item: { sourceFilePath: string; calleeName: string; location?: { line: number } }) =>
+    item.sourceFilePath.endsWith("main.js") && item.calleeName === callee && item.location?.line === line);
+  return call === undefined ? undefined : call.resolutionState === "RESOLVED" ? "RESOLVED" : call.reason;
 }
 
 function readJson(directory: string, name: string): any {
