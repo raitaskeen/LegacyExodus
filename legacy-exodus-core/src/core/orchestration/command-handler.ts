@@ -467,7 +467,8 @@ export class AnalyzeProjectHandler {
     // Exports reassigned by their own module; the call graph must know them before any importer is built.
     const unstableExportIds = new Set<string>();
     // Class hierarchy facts for public `this` dispatch (class-hierarchy.ts): classes and the names their files write,
-    // kept only for files that declare a class; the names read as values, for every file, in one set.
+    // kept for files that declare a class; for any other file, only the names it writes on foreign objects (XA-03);
+    // the names read as values, for every file, in one set.
     const classHierarchyFiles: ClassHierarchyFile[] = [];
     const borrowedNames = new Set<string>();
     const dispositions = new Map<string, AnalysisFileDisposition>();
@@ -547,6 +548,9 @@ export class AnalyzeProjectHandler {
         const classFacts = collectClassHierarchyFacts(ast, table);
         for (const name of classFacts.borrowedNames) borrowedNames.add(name);
         if (classFacts.classes.length > 0) classHierarchyFiles.push({ ...classFacts, borrowedNames: [] });
+        else if (classFacts.foreignWrittenNames.length > 0) {
+          classHierarchyFiles.push({ filePath: classFacts.filePath, classes: [], writtenNames: [], foreignWrittenNames: classFacts.foreignWrittenNames, borrowedNames: [] });
+        }
         await astStore.write(ast);
         successfullyParsedFiles.push(file);
         symbolSpool ??= this.factStore().spool();
@@ -606,7 +610,7 @@ export class AnalyzeProjectHandler {
       const targetByImportId = new Map(dependencyGraph.edges.map((edge) => [edge.importSymbolId, edge.targetExportSymbolId]));
       const importTargetFile = new Map(dependencyGraph.edges.map((edge) => [edge.importSymbolId, edge.targetFilePath]));
       const classHierarchy = new ClassHierarchy(
-        [...classHierarchyFiles, { filePath: "", classes: [], writtenNames: [], borrowedNames: [...borrowedNames] }],
+        [...classHierarchyFiles, { filePath: "", classes: [], writtenNames: [], foreignWrittenNames: [], borrowedNames: [...borrowedNames] }],
         (importId) => importTargetFile.get(importId),
       );
 

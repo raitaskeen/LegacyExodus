@@ -44,6 +44,11 @@ export interface ClassHierarchyFile {
   readonly classes: readonly ClassFact[];
   /** Property names the file writes (`x.m = …`), `*` for a computed one. */
   readonly writtenNames: readonly string[];
+  /**
+   * Property names the file writes by name on an object that may be another module's instance (XA-03): not `this`
+   * (a class's own writes on `this` are its members) and not the file's own `exports` / `module.exports`.
+   */
+  readonly foreignWrittenNames: readonly string[];
   /** Property names the file reads as a value rather than calling them. */
   readonly borrowedNames: readonly string[];
 }
@@ -66,6 +71,7 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
   }
   const classes: Array<Omit<ClassFact, "escapes"> & { readonly name: string | undefined; readonly expression: boolean; readonly exported: boolean }> = [];
   const written = new Set<string>();
+  const foreignWritten = new Set<string>();
   const borrowed = new Set<string>();
   const valueUses = new Map<string, number>();
 
@@ -91,7 +97,10 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
       const role = node.role;
       const called = (parent?.type === "CallExpression" || parent?.type === "OptionalCallExpression" || parent?.type === "NewExpression") && role === "callee";
       const tagged = parent?.type === "TaggedTemplateExpression" && role === "tag";
-      if (parent?.type === "AssignmentExpression" && role === "left") written.add(name ?? COMPUTED);
+      if (parent?.type === "AssignmentExpression" && role === "left") {
+        written.add(name ?? COMPUTED);
+        if (name !== undefined && !isOwnObject(node.children.find((child) => child.role === "object"))) foreignWritten.add(name);
+      }
       else if (!called && !tagged && name !== undefined && parent?.type !== "UpdateExpression"
         && !(parent?.type === "UnaryExpression" && parent.attributes.operator === "delete")) borrowed.add(name);
     }
@@ -117,8 +126,20 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
       escapes: exported || expression || name === undefined || (valueUses.get(name) ?? 0) > 0,
     })),
     writtenNames: [...written].sort(),
+    foreignWrittenNames: [...foreignWritten].sort(),
     borrowedNames: [...borrowed].sort(),
   };
+}
+
+/** `this`, `exports` or `module.exports`: an object a write in this file cannot make another module's instance. */
+function isOwnObject(object: ASTNode | undefined): boolean {
+  if (object === undefined) return false;
+  if (object.type === "ThisExpression") return true;
+  if (object.type === "Identifier") return nameOf(object) === "exports";
+  if (object.type !== "MemberExpression" || object.attributes.computed === true) return false;
+  const base = object.children.find((child) => child.role === "object");
+  const property = object.children.find((child) => child.role === "property");
+  return base?.type === "Identifier" && nameOf(base) === "module" && property !== undefined && nameOf(property) === "exports";
 }
 
 /**
@@ -232,6 +253,12 @@ export class ClassHierarchy {
   private readonly borrowed = new Set<string>();
   /** Members of classes with an unknown superclass, and of their subclasses: they may override any class's members. */
   private readonly unknownOverrides = new Set<string>();
+  /**
+   * The file that writes each property name on a foreign object (`obj.m = …`), or `true` when several do. Such a
+   * write may replace `m` on an instance of any class, an exported singleton for instance (XA-03); the class's own
+   * file is checked where the call is.
+   */
+  private readonly foreignWriters = new Map<string, string | true>();
   private readonly overrideCache = new Map<string, ReadonlySet<string>>();
   private readonly openCache = new Map<string, boolean>();
 
@@ -247,6 +274,10 @@ export class ClassHierarchy {
     const unknownRoots: ClassFact[] = [];
     for (const file of files) {
       for (const name of file.borrowedNames) this.borrowed.add(name);
+      for (const name of file.foreignWrittenNames) {
+        const writer = this.foreignWriters.get(name);
+        this.foreignWriters.set(name, writer === undefined || writer === file.filePath ? file.filePath : true);
+      }
       if (file.classes.some((fact) => fact.superclass !== undefined)) this.writtenByFile.set(file.filePath, new Set(file.writtenNames));
       for (const fact of file.classes) {
         this.classes.set(fact.id, fact);
@@ -274,9 +305,14 @@ export class ClassHierarchy {
     }
   }
 
-  /** Whether a class that extends `classId`, directly or not, anywhere in the repository may define `name`. */
+  /**
+   * Whether a class that extends `classId`, directly or not, anywhere in the repository may define `name`, or
+   * another file may write `name` on one of its instances.
+   */
   public mayOverride(classId: string, name: string): boolean {
     if (!this.closedWorld && this.mayBeExtendedOutside(classId)) return true;
+    const writer = this.foreignWriters.get(name);
+    if (writer !== undefined && writer !== this.classes.get(classId)?.filePath) return true;
     if (this.unknownOverrides.has(name) || this.unknownOverrides.has(COMPUTED)) return true;
     let names = this.overrideCache.get(classId);
     if (names === undefined) {

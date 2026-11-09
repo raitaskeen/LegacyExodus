@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { ClassHierarchy, type ClassFact, type ClassHierarchyFile } from "@semantic/class-hierarchy";
 
 const file = (filePath: string, classes: ClassFact[], extra: Partial<ClassHierarchyFile> = {}): ClassHierarchyFile =>
-  ({ filePath, classes, writtenNames: [], borrowedNames: [], ...extra });
+  ({ filePath, classes, writtenNames: [], foreignWrittenNames: [], borrowedNames: [], ...extra });
 const cls = (id: string, filePath: string, members: string[], superclass?: ClassFact["superclass"], escapes = false): ClassFact =>
   ({ id, filePath, members, escapes, ...(superclass === undefined ? {} : { superclass }) });
 
@@ -35,6 +35,31 @@ describe("ClassHierarchy", () => {
       cls("Inner", "lib.js", [], { kind: "class", id: "Base" }),
     ])];
     expect(new ClassHierarchy(internal, () => undefined).mayOverride("Base", "helper")).toBe(false);
+  });
+
+  it("counts a name another file writes on a foreign object, but not one only the class's own file writes (XA-03)", () => {
+    const hierarchy = new ClassHierarchy([
+      file("logger.js", [cls("Logger", "logger.js", ["format", "log"])], { foreignWrittenNames: ["log"] }),
+      file("app.js", [], { writtenNames: ["*", "format", "tick"], foreignWrittenNames: ["format"] }),
+    ], () => undefined);
+    expect(hierarchy.mayOverride("Logger", "format")).toBe(true);
+    expect(hierarchy.mayOverride("Logger", "log")).toBe(false);
+    // A write on `this` in another file is that file's own class member, not a write on this instance.
+    expect(hierarchy.mayOverride("Logger", "tick")).toBe(false);
+    expect(new ClassHierarchy([
+      file("logger.js", [cls("Logger", "logger.js", ["format"])]),
+      file("app.js", [], { foreignWrittenNames: ["format"] }),
+    ], () => undefined, true).mayOverride("Logger", "format")).toBe(true);
+  });
+
+  it("collects foreign writes but not writes on this or the module's own exports (XA-03)", async () => {
+    const { collectClassHierarchyFacts } = await import("@semantic/class-hierarchy");
+    const { JavaScriptParser } = await import("@parser/index");
+    const source = "class R { constructor() { this.helper = () => 0; } }\nexports.run = 1;\nmodule.exports.start = 2;\nlogger.format = 3;\n";
+    const parsed = await new JavaScriptParser().parse({ file: { id: "w", path: "w.js", language: "javascript", size: source.length }, source });
+    const facts = collectClassHierarchyFacts(parsed.result, undefined);
+    expect(facts.foreignWrittenNames).toEqual(["format"]);
+    expect(facts.writtenNames).toEqual(["format", "helper", "run", "start"]);
   });
 
   it("finds overrides through local and imported subclasses, transitively", () => {

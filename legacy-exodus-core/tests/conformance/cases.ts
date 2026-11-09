@@ -680,6 +680,33 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // XA-03: another file may replace a method on an exported instance. In Node, after app.js runs,
+    // `logger.log("hi")` returns "patched hi".
+    id: "this-dispatch-instance-write",
+    files: {
+      "logger.js": [
+        "class Logger { log(m) { return this.format(m); } format(m) { return \"[log] \" + m; } }",
+        "module.exports = new Logger();",
+        "",
+      ].join("\n"),
+      "app.js": [
+        "const logger = require(\"./logger\");",
+        "logger.format = function (m) { return \"patched \" + m; };",
+        "logger.log(\"hi\");",
+        "",
+      ].join("\n"),
+      "clock.js": [
+        "class Clock { now() { return this.tick(); } tick() { return 1; } }",
+        "module.exports = new Clock();",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "this-dispatch:written-in-another-file-unresolved", category: "calls", has: /^logger\.js@1:\d+\|log\|this\.format\|UNRESOLVED\|/ },
+      { id: "this-dispatch:never-written-resolves", category: "calls", has: /^clock\.js@1:\d+\|now\|this\.tick\|RESOLVED\|/ },
+    ],
+  },
+  {
     // 2026-11-08 audit probe T16: string-built SQL through a client instance is SQL injection.
     id: "taint-sql-client",
     files: {
