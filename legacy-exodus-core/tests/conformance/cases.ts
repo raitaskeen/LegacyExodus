@@ -577,6 +577,20 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // `require("..")` in a package's tests loads the package through its package.json `main`, before any
+    // index file (Node's directory resolution). Fastify's tests call it this way about a thousand times.
+    id: "directory-main",
+    files: {
+      "package.json": "{ \"name\": \"probe\", \"main\": \"entry.js\" }\n",
+      "entry.js": "function root() { return 1; }\nmodule.exports = root;\n",
+      "index.js": "function other() { return 2; }\nmodule.exports = other;\n",
+      "test/t.js": "const root = require('..');\nroot();\n",
+    },
+    expectations: [
+      { id: "directory-main:resolves-through-main", category: "calls", has: /^test\/t\.js@2:\d+\|module\|root\|RESOLVED\|.*@entry\.js$/ },
+    ],
+  },
+  {
     // 2026-11-08 audit probe T16: string-built SQL through a client instance is SQL injection.
     id: "taint-sql-client",
     files: {

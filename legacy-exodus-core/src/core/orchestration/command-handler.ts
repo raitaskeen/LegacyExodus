@@ -20,7 +20,7 @@ import type {
 import { createDomainEvent, type DomainEvent } from "@core/events/domain-event";
 import { validateProjectDiscovery, type FileArtifact } from "@contracts/discovery";
 import { DiscoveryEngine, DiscoveryValidator, type DiscoveryResult } from "@discovery/index";
-import { dependencyGraphNodes, DeterministicDependencyGraphBuilder, ModuleResolver, canonicalizePath, dependencyGraphNodeSchema, findPackageEntryFiles, loadTsConfigResolution, loadWorkspacePackages, validateCurrentDependencyGraph, type TsConfigDiagnostic } from "@graph/index";
+import { dependencyGraphNodes, DeterministicDependencyGraphBuilder, ModuleResolver, canonicalizePath, dependencyGraphNodeSchema, findPackageEntryFiles, loadDirectoryMains, loadTsConfigResolution, loadWorkspacePackages, validateCurrentDependencyGraph, type TsConfigDiagnostic } from "@graph/index";
 import { DeterministicControlFlowGraphBuilder, DeterministicDataFlowGraphBuilder, DeterministicFlowAnalysisEngine, createProvenCallTargets, type ConnectionContext, type ControlFlowGraph, type DataFlowGraphBody } from "@flow/index";
 import { buildKnowledgeGraphOnDisk } from "@knowledge/index";
 import { rmSync } from "node:fs";
@@ -575,7 +575,11 @@ export class AnalyzeProjectHandler {
       const tsConfig = await loadTsConfigResolution(discovery.projectPath);
       this.tsConfigDiagnostics = tsConfig.diagnostics;
       // One resolver for the run: tsconfig aliases and workspace packages (S3) mean the same everywhere.
-      const resolver = new ModuleResolver({ ...tsConfig.options, packages: await loadWorkspacePackages(discovery.projectPath, discovery.files) });
+      const resolver = new ModuleResolver({
+        ...tsConfig.options,
+        packages: await loadWorkspacePackages(discovery.projectPath, discovery.files),
+        directoryMains: await loadDirectoryMains(discovery.projectPath, discovery.files),
+      });
       // Symbol nodes, one per symbol, are sorted on disk (ADR-009 step 5); the graph in memory keeps the import edges.
       const dependencyGraph = new DeterministicDependencyGraphBuilder(resolver).build(symbolTables, discovery.files, []);
       const dependencyNodes = sortedFactArray(this.factStore(), dependencyGraphNodes(fullTables()), (node) => node.id);

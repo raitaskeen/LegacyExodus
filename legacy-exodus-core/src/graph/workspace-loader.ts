@@ -7,6 +7,22 @@ import { canonicalizePath, type WorkspacePackage } from "./module-resolver";
 import { immutable } from "@shared/immutability";
 
 /**
+ * The `main` of every `package.json` discovery found, by its project-relative POSIX directory (`.` for the
+ * root). Node loads a required directory through its `main` before its index, so `require("..")` in a
+ * package's tests is the package. Only manifests already in the inventory are read; unreadable ones and
+ * those without a string `main` are skipped.
+ */
+export async function loadDirectoryMains(projectPath: string, files: readonly FileArtifact[]): Promise<Readonly<Record<string, string>>> {
+  const mains: Record<string, string> = {};
+  const manifests = files.map((file) => canonicalizePath(file.path)).filter((path) => posix.basename(path) === "package.json").sort();
+  for (const path of manifests) {
+    const manifest = await readJson(join(projectPath, path));
+    if (typeof manifest?.main === "string" && manifest.main.length > 0) mains[canonicalizePath(posix.dirname(path))] = manifest.main;
+  }
+  return immutable(mains);
+}
+
+/**
  * Workspace packages of a monorepo by name (S3): the patterns of the root `package.json`
  * `workspaces` (an array, or `{ packages }`) and of `pnpm-workspace.yaml` select package
  * directories among the manifests discovery already found, so nothing outside the project is read.

@@ -20,6 +20,8 @@ export interface ModuleResolutionOptions {
   readonly paths?: Readonly<Record<string, readonly string[]>>;
   /** Workspace packages by name (S3, see workspace-loader.ts). */
   readonly packages?: Readonly<Record<string, WorkspacePackage>>;
+  /** `package.json` `main` by project-relative POSIX directory (`.` for the root), see loadDirectoryMains. */
+  readonly directoryMains?: Readonly<Record<string, string>>;
 }
 
 /** A workspace package: its project-relative POSIX root and the manifest fields naming its entry points. */
@@ -70,8 +72,27 @@ export class ModuleResolver {
     return immutable({
       importerPath,
       moduleSpecifier,
-      resolvedPath: firstKnown(candidatesFor(basePath, importerIsTypeScript), knownPaths),
+      resolvedPath: this.resolveRelative(basePath, knownPaths, importerIsTypeScript),
     });
+  }
+
+  /**
+   * A relative path as Node loads it: as a file, then as a directory through its `package.json` `main`, then
+   * through the directory's index. A `main` that leaves its directory is not followed.
+   */
+  private resolveRelative(basePath: string, knownPaths: ReadonlySet<string>, importerIsTypeScript: boolean): string | null {
+    const candidates = candidatesFor(basePath, importerIsTypeScript);
+    const main = this.options.directoryMains !== undefined && Object.hasOwn(this.options.directoryMains, basePath)
+      ? this.options.directoryMains[basePath]
+      : undefined;
+    if (main === undefined) return firstKnown(candidates, knownPaths);
+    const indexes = new Set((importerIsTypeScript ? INDEX_FILES_FOR_TYPESCRIPT : INDEX_FILES_FOR_JAVASCRIPT).map((index) => posix.join(basePath, index)));
+    const asFile = firstKnown(candidates.filter((candidate) => !indexes.has(candidate)), knownPaths);
+    if (asFile !== null) return asFile;
+    const mainPath = canonicalizePath(posix.join(basePath, main));
+    const inside = basePath === "." ? mainPath !== ".." && !mainPath.startsWith("../") : mainPath === basePath || mainPath.startsWith(`${basePath}/`);
+    const viaMain = inside ? firstKnown(candidatesFor(mainPath, importerIsTypeScript), knownPaths) : null;
+    return viaMain ?? firstKnown(candidates, knownPaths);
   }
 
   private getKnownPathSet(files: KnownPathLookup): ReadonlySet<string> {
