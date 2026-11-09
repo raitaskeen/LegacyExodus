@@ -1,0 +1,28 @@
+{
+  "name": "hono",
+  "repository": "https://github.com/honojs/hono.git",
+  "revision": "v4.6.3",
+  "commit": "c34e602206bf53c04ce48e95e9c6dda614b2a4eb",
+  "tree": "7003afe4da93ab3bb547da5ba26b09a70885e785",
+  "tier": "tier-2",
+  "languageProfile": [
+    "typescript"
+  ],
+  "frameworkProfile": [
+    "hono"
+  ],
+  "sizeClass": "medium",
+  "license": "MIT",
+  "reason": "TypeScript-first web framework with heavy generics, routers and middleware. The TypeScript corpus for the type-checker phase.",
+  "knownHotspots": [
+    "src/hono-base.ts — routing core",
+    "src/router/ — several router implementations",
+    "src/middleware/ — many middleware modules"
+  ],
+  "knownFeatures": [
+    "TypeScript",
+    "Generics",
+    "Routers",
+    "Middleware"
+  ]
+}

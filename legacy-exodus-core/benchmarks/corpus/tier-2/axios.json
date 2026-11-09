@@ -1,0 +1,27 @@
+{
+  "name": "axios",
+  "repository": "https://github.com/axios/axios.git",
+  "revision": "v1.7.7",
+  "commit": "5b8a826771b77ab30081d033fdba9ef3b90e439a",
+  "tree": "09dd7f460fe98a6174a84d4f80480fe084f2ff84",
+  "tier": "tier-2",
+  "languageProfile": [
+    "javascript",
+    "typescript"
+  ],
+  "frameworkProfile": [],
+  "sizeClass": "medium",
+  "license": "MIT",
+  "reason": "Modern ESM JavaScript HTTP client with Node and browser adapters, interceptors and its own test suite. Represents current JavaScript that ships .d.ts types by hand.",
+  "knownHotspots": [
+    "lib/core/Axios.js — request pipeline and interceptors",
+    "lib/adapters/ — http and xhr adapters",
+    "lib/helpers/ — small utilities"
+  ],
+  "knownFeatures": [
+    "ESM",
+    "Classes",
+    "Interceptor chains",
+    "Hand-written .d.ts"
+  ]
+}

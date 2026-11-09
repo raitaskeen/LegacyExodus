@@ -1,0 +1,28 @@
+{
+  "name": "koa",
+  "repository": "https://github.com/koajs/koa.git",
+  "revision": "2.15.3",
+  "commit": "77cbf2e47ea7067c937b0f21ea0aa4fb73bac115",
+  "tree": "f3edaf52f3155cf8d7b241b9bde89e9e5fe6294e",
+  "tier": "tier-1",
+  "languageProfile": [
+    "javascript"
+  ],
+  "frameworkProfile": [
+    "koa"
+  ],
+  "sizeClass": "small",
+  "license": "MIT",
+  "reason": "Classic CommonJS web framework: middleware composition, prototype-based request/response/context delegation. Represents the legacy Node backends a JS to TypeScript migration meets most.",
+  "knownHotspots": [
+    "lib/application.js — middleware stack and handle",
+    "lib/context.js — delegated properties",
+    "lib/response.js — getters and setters on the response"
+  ],
+  "knownFeatures": [
+    "CommonJS",
+    "Middleware composition",
+    "Prototype delegation",
+    "Getters and setters"
+  ]
+}
