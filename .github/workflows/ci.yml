@@ -197,7 +197,7 @@ jobs:
     name: Call Oracle
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
 
     defaults:
       run:
@@ -233,3 +233,18 @@ jobs:
       - name: Publish the call oracle to job summary
         if: always()
         run: cat call-oracle.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run the flow oracle
+        # Phase A4: the same test suites under V8 coverage; a statement the CFG marks
+        # unreachable, or a function reported as dead code, that ran fails the job.
+        if: always()
+        run: >-
+          bun run benchmarks/cli.ts flow-oracle
+          benchmarks/.cache/express
+          benchmarks/.cache/fastify
+          --output flow-oracle.md
+          --fail-on-contradiction
+
+      - name: Publish the flow oracle to job summary
+        if: always()
+        run: cat flow-oracle.md >> "$GITHUB_STEP_SUMMARY"

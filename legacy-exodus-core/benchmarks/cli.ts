@@ -29,6 +29,7 @@ import { isAuditPassing, runBenchmarkSelfAudit } from "./audit";
 import { executeBenchmarkRun } from "./harness";
 import { analyzeWith, diffFacts, extractFacts, formatCoverage, formatFactDiff, runFactDiff, type CorpusDiff } from "./fact-diff";
 import { formatOracle, runCallOracle } from "./call-oracle";
+import { formatFlowOracle, runFlowOracle } from "./flow-oracle";
 import { generateMarkdownReport } from "./scripts/report";
 import { runFidelityValidation } from "./fidelity/runner";
 import { ensureCacheEntryVerified } from "./scripts/acquire";
@@ -195,6 +196,22 @@ async function main(): Promise<void> {
       console.log(markdown);
       break;
     }
+    case "flow-oracle": {
+      // Phase A4: run a pinned corpus's own tests under V8 coverage; check unreachable and dead-code claims.
+      const corpora = args.slice(1).filter((arg, index, rest) => !arg.startsWith("--") && rest[index - 1] !== "--output");
+      if (corpora.length === 0) {
+        console.error("Usage: bun run benchmarks/cli.ts flow-oracle <corpus-dir>... [--output <file>] [--fail-on-contradiction]");
+        process.exit(1);
+      }
+      const engine = resolve(import.meta.dir, "..");
+      const results = corpora.map((corpus) => runFlowOracle(engine, corpus));
+      const markdown = ["# Flow oracle", "", ...results.map(formatFlowOracle)].join("\n");
+      const output = getArgValue(args, "--output");
+      if (output !== undefined) await writeFile(resolve(output), markdown, "utf8");
+      console.log(markdown);
+      if (args.includes("--fail-on-contradiction") && results.some((result) => result.contradictions.length > 0)) process.exitCode = 1;
+      break;
+    }
     case "call-oracle": {
       // Phase A3: run a pinned corpus's own tests with every function instrumented and check the engine's calls.
       const corpora = args.slice(1).filter((arg, index, rest) => !arg.startsWith("--") && rest[index - 1] !== "--output");
@@ -300,6 +317,8 @@ function printUsage(): void {
     "    fidelity [target-path]             Validate migration discovery fidelity against ground truth",
     "    fact-diff --base D --head D C...   Diff projected facts of two engines on corpus dirs",
     "    call-oracle <corpus-dir>...        Run a pinned corpus's tests instrumented; check RESOLVED calls",
+    "    flow-oracle <corpus-dir>...        Run a pinned corpus's tests under coverage; check unreachable and dead claims",
+    "    coverage <corpus-dir>...           Calls with a proven target and the reasons for the rest",
     "    accuracy [--output F]              Recall and precision on the conformance corpus, by category",
     "    scale <name>                       Time and peak memory of a scale corpus against its budgets",
     "    scale synthetic <files>            The same for the synthetic corpus of <files> modules (10000)",
