@@ -15,6 +15,28 @@ describe("ClassHierarchy", () => {
     expect(new ClassHierarchy(files, () => undefined).mayOverride("Unknown", "helper")).toBe(true);
   });
 
+  it("keeps a class open when a class below it escapes, unless built closed-world (XA-02)", () => {
+    const files = [file("lib.js", [
+      cls("Base", "lib.js", ["helper"]),
+      cls("Public", "lib.js", [], { kind: "class", id: "Base" }, true),
+    ])];
+    expect(new ClassHierarchy(files, () => undefined).mayOverride("Base", "helper")).toBe(true);
+    expect(new ClassHierarchy(files, () => undefined, true).mayOverride("Base", "helper")).toBe(false);
+
+    const deeper = [file("lib.js", [
+      cls("Base", "lib.js", ["helper"]),
+      cls("Mid", "lib.js", [], { kind: "class", id: "Base" }),
+      cls("Public", "lib.js", [], { kind: "class", id: "Mid" }, true),
+    ])];
+    expect(new ClassHierarchy(deeper, () => undefined).mayOverride("Base", "helper")).toBe(true);
+
+    const internal = [file("lib.js", [
+      cls("Base", "lib.js", ["helper"]),
+      cls("Inner", "lib.js", [], { kind: "class", id: "Base" }),
+    ])];
+    expect(new ClassHierarchy(internal, () => undefined).mayOverride("Base", "helper")).toBe(false);
+  });
+
   it("finds overrides through local and imported subclasses, transitively", () => {
     const hierarchy = new ClassHierarchy([
       file("base.js", [cls("Base", "base.js", ["helper", "other"])]),
