@@ -1127,11 +1127,22 @@ export const conformanceCases: readonly ConformanceCase[] = [
         "passed.beep();",
         "replaced.start();",
         "patched.stop();",
+        "const target = require(\"./target\");",
+        "target.go(); target.leave(); target.stay();",
         "",
       ].join("\n"),
       "plugin.js": "const patched = require(\"./patched\");\npatched.stop = () => \"patched\";\n",
+      // A file writing names on its own fresh exports object does not block them elsewhere; one whose "alias" is
+      // another module's object, or a nested parameter of the alias's name, does.
+      "target.js": "var api = module.exports = {};\napi.go = function go() { return 1; };\napi.leave = function leave() { return 2; };\napi.stay = function stay() { return 3; };\n",
+      "writer-fresh.js": "var proto = module.exports = function () {};\nproto.go = function go() { return \"router\"; };\n",
+      "writer-required.js": "var other = module.exports = require(\"./target\");\nother.leave = function leave() { return \"patched\"; };\n",
+      "writer-nested.js": "var p = module.exports = {};\nfunction patch(p) { p.stay = function stay() { return \"patched\"; }; }\nmodule.exports.patch = patch;\n",
     },
     expectations: [
+      { id: "export:own-fresh-alias-write-does-not-block", category: "calls", has: /^use\.js@16:\d+\|module\|target\.go\|RESOLVED\|method:go@2:\d+@target\.js/ },
+      { id: "export:alias-of-other-module-blocks", category: "calls", has: /^use\.js@16:\d+\|module\|target\.leave\|UNRESOLVED\|/ },
+      { id: "export:nested-parameter-write-blocks", category: "calls", has: /^use\.js@16:\d+\|module\|target\.stay\|UNRESOLVED\|/ },
       { id: "export:literal-function-binding-resolves", category: "calls", has: /^use\.js@8:\d+\|module\|lit\.helper\|RESOLVED\|/ },
       { id: "export:literal-function-expression-resolves", category: "calls", has: /^use\.js@8:\d+\|module\|lit\.run\|RESOLVED\|/ },
       { id: "export:literal-getter-unresolved", category: "calls", has: /^use\.js@8:\d+\|module\|lit\.size\|UNRESOLVED\|/ },

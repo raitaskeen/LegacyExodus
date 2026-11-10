@@ -118,6 +118,16 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
     }
   };
 
+  // C3: top-level writes on an alias of this file's own exports object are writes on that object.
+  const exportAliases = ownExportAliases(ast.root);
+  const topLevelAssignments = new Set<ASTNode>();
+  for (const statement of ast.root.children) {
+    const expression = statement.type === "ExpressionStatement" ? statement.children.find((child) => child.role === "expression") : undefined;
+    if (expression?.type === "AssignmentExpression") topLevelAssignments.add(expression);
+  }
+  const isOwnAlias = (object: ASTNode | undefined, assignment: ASTNode | undefined): boolean =>
+    object?.type === "Identifier" && assignment !== undefined && topLevelAssignments.has(assignment) && exportAliases.has(nameOf(object) ?? "");
+
   const visit = (node: ASTNode, parent: ASTNode | undefined, currentClass: string | undefined): void => {
     let classInside = currentClass;
     if (node.type === "ClassDeclaration" || node.type === "ClassExpression") {
@@ -144,7 +154,8 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
       const tagged = parent?.type === "TaggedTemplateExpression" && role === "tag";
       if (parent?.type === "AssignmentExpression" && role === "left") {
         written.add(name ?? COMPUTED);
-        if (name !== undefined && !isOwnObject(node.children.find((child) => child.role === "object"))) foreignWritten.add(name);
+        const object = node.children.find((child) => child.role === "object");
+        if (name !== undefined && !isOwnObject(object) && !isOwnAlias(object, parent)) foreignWritten.add(name);
       }
       else if (!called && !tagged && parent?.type !== "UpdateExpression"
         && !(parent?.type === "UnaryExpression" && parent.attributes.operator === "delete")) {
@@ -188,6 +199,70 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
     foreignWrittenNames: [...foreignWritten].sort(),
     borrowedNames: [...borrowed].sort(),
   };
+}
+
+function isModuleExportsNode(node: ASTNode | undefined): boolean {
+  if (node?.type !== "MemberExpression" || node.attributes.computed === true) return false;
+  const base = node.children.find((child) => child.role === "object");
+  const property = node.children.find((child) => child.role === "property");
+  return base?.type === "Identifier" && nameOf(base) === "module" && property !== undefined && nameOf(property) === "exports";
+}
+
+/** A value that is a new object made here, never another module's: a literal, a function or class, `Object.create(…)`. */
+function isFreshValue(node: ASTNode | undefined): boolean {
+  if (node === undefined) return false;
+  if (["ObjectExpression", "FunctionExpression", "ArrowFunctionExpression", "ClassExpression"].includes(node.type)) return true;
+  if (node.type !== "CallExpression") return false;
+  const callee = node.children.find((child) => child.role === "callee");
+  const base = callee?.type === "MemberExpression" ? callee.children.find((child) => child.role === "object") : undefined;
+  const property = callee?.type === "MemberExpression" ? callee.children.find((child) => child.role === "property") : undefined;
+  return base?.type === "Identifier" && nameOf(base) === "Object" && property !== undefined && nameOf(property) === "create";
+}
+
+/**
+ * Phase C3: names that hold this file's own exports object, declared at the top of the file and never reassigned:
+ * `var app = exports = module.exports = {}`, `var proto = module.exports = function …`, `const api = module.exports`, or
+ * `var res = Object.create(…); … module.exports = res`. The value must be made here (isFreshValue), so the alias can
+ * never be another module's object.
+ */
+function ownExportAliases(root: ASTNode): Set<string> {
+  const reassigned = new Set<string>();
+  const walk = (node: ASTNode): void => {
+    if (node.type === "AssignmentExpression") {
+      const left = node.children.find((child) => child.role === "left");
+      if (left?.type === "Identifier" && nameOf(left) !== undefined) reassigned.add(nameOf(left)!);
+    }
+    for (const child of node.children) walk(child);
+  };
+  walk(root);
+  const aliases = new Set<string>();
+  const freshDeclared = new Set<string>();
+  for (const statement of root.children) {
+    if (statement.type === "VariableDeclaration") {
+      const declarators = statement.children.filter((child) => child.type === "VariableDeclarator");
+      if (declarators.length !== 1) continue;
+      const id = declarators[0]!.children.find((child) => child.role === "id");
+      const name = id?.type === "Identifier" ? nameOf(id) : undefined;
+      let value = declarators[0]!.children.find((child) => child.role === "init");
+      if (name === undefined || reassigned.has(name)) continue;
+      if (isModuleExportsNode(value)) { aliases.add(name); continue; }
+      let toExports = false;
+      while (value?.type === "AssignmentExpression" && value.attributes.operator === "=") {
+        const left = value.children.find((child) => child.role === "left");
+        if (isModuleExportsNode(left)) toExports = true;
+        else if (!(left?.type === "Identifier" && nameOf(left) === "exports")) { value = undefined; break; }
+        value = value.children.find((child) => child.role === "right");
+      }
+      if (isFreshValue(value)) (toExports ? aliases : freshDeclared).add(name);
+    }
+    const expression = statement.type === "ExpressionStatement" ? statement.children.find((child) => child.role === "expression") : undefined;
+    if (expression?.type === "AssignmentExpression" && isModuleExportsNode(expression.children.find((child) => child.role === "left"))) {
+      const right = expression.children.find((child) => child.role === "right");
+      const name = right?.type === "Identifier" ? nameOf(right) : undefined;
+      if (name !== undefined && freshDeclared.has(name)) aliases.add(name);
+    }
+  }
+  return aliases;
 }
 
 /** `this`, `exports` or `module.exports`: an object a write in this file cannot make another module's instance. */
