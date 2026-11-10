@@ -42,8 +42,8 @@ off; Fact Diff and Scale Gate are now required checks on main; #195 closed; #111
 | A3 | Call oracle on Express and Fastify | **Merged** #304; corpora #303; its first finding OR-01 fixed #305 (`3fe46ec`); gate #306 |
 | A4 | CFG block oracle (flow oracle: unreachable and dead-code claims) | **Merged** #307 (`67f9e62`): 0 contradictions on Express and Fastify |
 | B1 | EXTERNAL package and Node module calls (ADR-012) | **Merged** #309 (`2ef5a7b`); oracle lockfiles #310; upgrade rule #308 |
-| B1b | EXTERNAL standard globals and CommonJS require | In review #311 |
-| C | Receiver tracking, see PHASE-C-DESIGN.md | Next |
+| B1b | EXTERNAL standard globals and CommonJS require | **Merged** #311 (`410509f`) |
+| C | Receiver tracking, see PHASE-C-DESIGN.md | C1 (factory objects) built: Fastify oracle recall 7.1% -> 33.2%, 0 contradictions |
 | D-H | See the plan | Queued |
 
 ## Track 2026-11-09: cross-file audit findings (XA-01 to XA-08)
