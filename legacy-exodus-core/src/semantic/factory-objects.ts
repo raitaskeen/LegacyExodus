@@ -159,8 +159,9 @@ function prototypeOwner(node: ASTNode | undefined): string | undefined {
 /**
  * Phase C2: constructor functions declared in the file and the methods their prototype is given by name,
  * `F.prototype.m = function …` (or a function's name). A fresh `F.prototype` holds only `constructor`, so a call on an
- * instance before the assignment runs throws rather than reaching another function; this is why `F` must not inherit
- * (it is never passed to a call) and its prototype never replaced. A method name written by name anywhere else in the
+ * instance before the assignment runs throws rather than reaching another function; this is why `F` is never passed to a
+ * call and its prototype never replaced, except through one recognised parent link (C2b, parentLink), where a top-level
+ * call before the methods are assigned stays unresolved instead. A method name written by name anywhere else in the
  * file, on any object, is left out, as for C1.
  */
 function collectConstructors(ast: ASTResult, symbols: readonly CodeSymbol[], byStart: ReadonlyMap<string, CodeSymbol[]>): FactoryFact[] {
