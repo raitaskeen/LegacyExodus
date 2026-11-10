@@ -81,20 +81,37 @@ export interface CallCoverage {
   readonly calls: number;
   readonly resolved: number;
   readonly byReason: ReadonlyMap<string, number>;
+  /** Calls in source files and in test files, and how many of each are accounted for (RESOLVED or EXTERNAL). */
+  readonly source?: { readonly calls: number; readonly accounted: number };
+  readonly tests?: { readonly calls: number; readonly accounted: number };
+}
+
+/**
+ * Whether a file is test code: under a `test`, `tests`, `__tests__` or `spec` directory, or named `*.test.*` or
+ * `*.spec.*`. Test code is most of the unknown calls on some corpora (assertion and runner calls), and migration cares
+ * most about source, so coverage reports the two apart.
+ */
+export function isTestPath(path: string): boolean {
+  return /(^|\/)(test|tests|__tests__|spec)\//.test(path) || /\.(test|spec)\.[cm]?[jt]sx?$/.test(path);
 }
 
 /** Reads the calls of one `.discovery` directory into a coverage summary. */
 export function measureCoverage(discoveryDirectory: string): CallCoverage {
-  const calls: readonly { readonly resolutionState?: string; readonly reason?: string }[] = readArtifact(discoveryDirectory, "semantic.json")?.calls ?? [];
+  const calls: readonly { readonly resolutionState?: string; readonly reason?: string; readonly sourceFilePath?: string }[] = readArtifact(discoveryDirectory, "semantic.json")?.calls ?? [];
   const byReason = new Map<string, number>();
   let resolved = 0;
+  const source = { calls: 0, accounted: 0 };
+  const tests = { calls: 0, accounted: 0 };
   for (const call of calls) {
+    const side = isTestPath(call.sourceFilePath ?? "") ? tests : source;
+    side.calls++;
+    if (call.resolutionState === "RESOLVED" || call.resolutionState === "EXTERNAL") side.accounted++;
     if (call.resolutionState === "RESOLVED") { resolved++; continue; }
     // An EXTERNAL call (ADR-012) is accounted for, as its own row.
     const reason = call.resolutionState === "EXTERNAL" ? "external" : call.reason ?? "not-recorded";
     byReason.set(reason, (byReason.get(reason) ?? 0) + 1);
   }
-  return { calls: calls.length, resolved, byReason };
+  return { calls: calls.length, resolved, byReason, source, tests };
 }
 
 /** A count as a share of all calls, one decimal. */
@@ -114,7 +131,10 @@ export function formatCoverage(head: CallCoverage, base?: CallCoverage): string[
   for (const [label, count, baseCount] of rows) {
     lines.push(base === undefined ? `| ${label} | ${count} | ${share(count, head.calls)} |` : `| ${label} | ${baseCount ?? 0} | ${count} | ${share(count, head.calls)} |`);
   }
-  return [...lines, ""];
+  const split = head.source !== undefined && head.tests !== undefined
+    ? [`Accounted for (RESOLVED or EXTERNAL): source files ${share(head.source.accounted, head.source.calls)} of ${head.source.calls} calls, test files ${share(head.tests.accounted, head.tests.calls)} of ${head.tests.calls}.`, ""]
+    : [];
+  return [...lines, "", ...split];
 }
 
 /** Code-point order, independent of locale and ICU version. */
