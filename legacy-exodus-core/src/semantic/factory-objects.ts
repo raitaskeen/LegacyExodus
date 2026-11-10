@@ -161,6 +161,13 @@ function collectConstructors(ast: ASTResult, symbols: readonly CodeSymbol[], byS
   const writes = new Map<string, number>();
   const prototypeWrites = new Map<string, [string, ASTNode][]>();
   const disqualified = new Set<string>();
+  // Only a top-level statement's `F` is surely the file's own `F`; one in a function may be a parameter or a local of
+  // that name, so a prototype write there disqualifies the name.
+  const topLevel = new Set<ASTNode>();
+  for (const statement of ast.root.children) {
+    const expression = statement.type === "ExpressionStatement" ? role(statement, "expression") : undefined;
+    if (expression?.type === "AssignmentExpression") topLevel.add(expression);
+  }
   walkAll(ast.root, (node) => {
     if (node.type === "AssignmentExpression") {
       const left = role(node, "left");
@@ -168,7 +175,14 @@ function collectConstructors(ast: ASTResult, symbols: readonly CodeSymbol[], byS
         const name = nameOf(role(left, "property"));
         if (name !== undefined) writes.set(name, (writes.get(name) ?? 0) + 1);
         const owner = prototypeOwner(role(left, "object"));
-        if (owner !== undefined && name !== undefined) prototypeWrites.set(owner, [...(prototypeWrites.get(owner) ?? []), [name, role(node, "right")!]]);
+        if (owner !== undefined && name !== undefined && node.attributes.operator === "=" && topLevel.has(node)) {
+          prototypeWrites.set(owner, [...(prototypeWrites.get(owner) ?? []), [name, role(node, "right")!]]);
+        } else if (owner !== undefined) disqualified.add(owner);
+      }
+      // `F.prototype[key] = …` may write any name.
+      if ((left?.type === "MemberExpression" || left?.type === "OptionalMemberExpression") && left.attributes.computed === true) {
+        const owner = prototypeOwner(role(left, "object"));
+        if (owner !== undefined) disqualified.add(owner);
       }
       // `F.prototype = …` replaces the prototype; `F = …` rebinds the constructor.
       const replaced = prototypeOwner(left);
