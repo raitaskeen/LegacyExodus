@@ -1157,6 +1157,73 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // Phase C3b: a factory copies properties onto the object it returns (`merge-descriptors`, `Object.assign`), as
+    // Express's createApplication does. The copies are replayed in order: without overwrite the first source to hold a
+    // name keeps it, with overwrite the last does. A source with unknown names, a copy in a branch, or a name the
+    // factory's file writes leaves the call unresolved.
+    id: "factory-copies",
+    files: {
+      "lib/application.js": [
+        "var app = exports = module.exports = {};",
+        "app.init = function init() { return \"init\"; };",
+        "app.use = function use() { return \"use\"; };",
+        "app.on = function on() { return \"app on\"; };",
+        "",
+      ].join("\n"),
+      "lib/express.js": [
+        "var EventEmitter = require(\"events\").EventEmitter;",
+        "var mixin = require(\"merge-descriptors\");",
+        "var proto = require(\"./application\");",
+        "var local = { use: function () { return \"local\"; } };",
+        "function keepFirst() { var a = function () {}; mixin(a, EventEmitter.prototype, false); mixin(a, proto, false); return a; }",
+        "function overwrite() { var b = function () {}; mixin(b, EventEmitter.prototype, false); mixin(b, proto); return b; }",
+        "function unknownSource() { var c = function () {}; mixin(c, local, false); return c; }",
+        "function conditional(flag) { var d = function () {}; mixin(d, EventEmitter.prototype, false); if (flag) mixin(d, proto); return d; }",
+        "function assigned() { var e = {}; Object.assign(e, EventEmitter.prototype, proto); return e; }",
+        "module.exports = { keepFirst: keepFirst, overwrite: overwrite, unknownSource: unknownSource, conditional: conditional, assigned: assigned };",
+        "",
+      ].join("\n"),
+      "lib/writes.js": [
+        "var mixin = require(\"merge-descriptors\");",
+        "var proto = require(\"./application\");",
+        "function writesName() { var f = function () {}; mixin(f, proto, false); f.init = function () { return \"own\"; }; return f; }",
+        "module.exports = { writesName: writesName };",
+        "",
+      ].join("\n"),
+      "test.js": [
+        "const x = require(\"./lib/express\");",
+        "const w = require(\"./lib/writes\");",
+        "const a = x.keepFirst();",
+        "a.use();",
+        "a.on();",
+        "const b = x.overwrite();",
+        "b.on();",
+        "const c = x.unknownSource();",
+        "c.use();",
+        "const d = x.conditional(true);",
+        "d.on();",
+        "const e = x.assigned();",
+        "e.on();",
+        "e.emit();",
+        "const f = w.writesName();",
+        "f.init();",
+        "f.use();",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "copies:module-member-resolves", category: "calls", has: /^test\.js@4:\d+\|module\|a\.use\|RESOLVED\|method:use@3:\d+@lib\/application\.js/ },
+      { id: "copies:first-source-kept-without-overwrite", check: (directory) => external(directory, "test.js", 5) === "events:EventEmitter.prototype.on" },
+      { id: "copies:later-source-wins-with-overwrite", category: "calls", has: /^test\.js@7:\d+\|module\|b\.on\|RESOLVED\|method:on@4:\d+@lib\/application\.js/ },
+      { id: "copies:unknown-source-unresolved", category: "calls", has: /^test\.js@9:\d+\|module\|c\.use\|UNRESOLVED\|/ },
+      { id: "copies:copy-in-branch-unresolved", category: "calls", has: /^test\.js@11:\d+\|module\|d\.on\|UNRESOLVED\|/ },
+      { id: "copies:object-assign-last-wins", category: "calls", has: /^test\.js@13:\d+\|module\|e\.on\|RESOLVED\|method:on@4:\d+@lib\/application\.js/ },
+      { id: "copies:object-assign-builtin-external", check: (directory) => external(directory, "test.js", 14) === "events:EventEmitter.prototype.emit" },
+      { id: "copies:name-written-by-factory-file-unresolved", category: "calls", has: /^test\.js@16:\d+\|module\|f\.init\|UNRESOLVED\|/ },
+      { id: "copies:other-names-still-resolve", category: "calls", has: /^test\.js@17:\d+\|module\|f\.use\|RESOLVED\|method:use@3:\d+@lib\/application\.js/ },
+    ],
+  },
+  {
     // ADR-012, Phase B1: a call through a stable import of a package or Node module is EXTERNAL; a rebound import,
     // a package member another file replaces, or a shadowing parameter keeps it UNRESOLVED.
     id: "external-imports",

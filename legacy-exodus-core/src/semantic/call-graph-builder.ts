@@ -50,6 +50,7 @@ export class DeterministicCallGraphBuilder {
     const factories = new FactoryIndex(
       astResults.map((ast) => collectFactoryFacts(ast, tablesByPath.get(canonicalizePath(ast.metadata.sourcePath)))),
       (name, filePath) => hierarchy.isWrittenOutside(name, filePath),
+      (importer, specifier) => { const resolved = this.resolver.resolve(importer, specifier, knownPaths).resolvedPath; return resolved === null ? undefined : canonicalizePath(resolved); },
     );
     const calls: SemanticCall[] = [];
     const references: SymbolReference[] = [];
@@ -166,7 +167,8 @@ export class DeterministicCallGraphBuilder {
           ? undefined
           : externalTarget(imported, calleeName, fileSymbols, nextContext, this.packageWrites)
             ?? globalTarget(calleeName, fileSymbols, nextContext, this.globalWrites, commonJsFiles.get(fileSymbols) === true)
-            ?? valueTarget(calleeName, fileSymbols, nextContext, this.globalWrites);
+            ?? valueTarget(calleeName, fileSymbols, nextContext, this.globalWrites)
+            ?? factoryExternalTarget(calleeName, fileSymbols, nextContext);
         const resolutionState = targetSymbolId !== undefined ? "RESOLVED" as const : external !== undefined ? "EXTERNAL" as const : "UNRESOLVED" as const;
         if (targetSymbolId !== undefined) {
           const resolved = resolvedCallTargets.get(fileSymbols) ?? new Map<ASTNode, string>();
@@ -2563,6 +2565,23 @@ function globalPathUnwritten(path: readonly string[], globalWrites: ReadonlySet<
     if (globalWrites.has(prefix) || globalWrites.has(`${prefix}.*`)) return false;
   }
   return true;
+}
+
+/**
+ * Phase C3b: `x.m()` with `x` bound once to a factory call whose object got `m` from a known built-in prototype by a
+ * copy (`mixin(app, EventEmitter.prototype, false)`): EXTERNAL, `events:EventEmitter.prototype.on`.
+ */
+function factoryExternalTarget(calleeName: string, index: FileSymbolIndex, context: ResolutionContext): ExternalTarget | undefined {
+  const pieces = calleeName.split(".");
+  if (pieces.length !== 2 || context.factories === undefined) return undefined;
+  const [receiver, method] = pieces as [string, string];
+  if (receiver === "this" || receiver.length === 0 || method.length === 0) return undefined;
+  const frame = declaredBindingFrame(index, receiver, context.scope);
+  if (frame === undefined || isRebound(index, frame.id, receiver)) return undefined;
+  const init = index.writes.declaredValues.get(bindingWriteKey(frame.id, receiver));
+  const producer = init?.type === "CallExpression" ? resolvedCallTargets.get(index)?.get(init) : undefined;
+  if (producer === undefined || propertyWriteCount(index, method) > 0) return undefined;
+  return context.factories.externalOf(producer, method);
 }
 
 /**
