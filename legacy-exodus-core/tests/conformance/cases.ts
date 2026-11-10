@@ -859,6 +859,51 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // Phase C1: a method of the object literal a repository factory returns. In Node, `app.get("/x")` returns "get /x" and
+    // `app.ready()` returns "patched ready" (the factory's own file replaces it).
+    id: "factory-objects",
+    files: {
+      "app.js": [
+        "const kState = Symbol(\"state\");",
+        "function inject() { return \"inject\"; }",
+        "function create(options) {",
+        "  const app = {",
+        "    [kState]: {},",
+        "    get: function _get(path) { return \"get \" + path; },",
+        "    listen() { return \"listen\"; },",
+        "    inject: inject,",
+        "    ready: function () { return \"ready\"; },",
+        "    get prefix() { return \"/\"; },",
+        "  };",
+        "  app.ready = function () { return \"patched ready\"; };",
+        "  return app;",
+        "}",
+        "module.exports = create;",
+        "",
+      ].join("\n"),
+      "test/t.js": [
+        "const create = require(\"../app\");",
+        "const app = create();",
+        "app.get(\"/x\");",
+        "app.listen();",
+        "app.inject();",
+        "app.ready();",
+        "let other = create();",
+        "other = {};",
+        "other.get(\"/y\");",
+        "",
+      ].join("\n"),
+      "plugin.js": "module.exports = function plugin(instance) { instance.listen = () => \"replaced\"; };\n",
+    },
+    expectations: [
+      { id: "factory:function-property-resolves", category: "calls", has: /^test\/t\.js@3:\d+\|module\|app\.get\|RESOLVED\|variable:get@6:4@app\.js/ },
+      { id: "factory:shorthand-function-resolves", category: "calls", has: /^test\/t\.js@5:\d+\|module\|app\.inject\|RESOLVED\|function:inject@2:0@app\.js/ },
+      { id: "factory:written-elsewhere-unresolved", category: "calls", has: /^test\/t\.js@4:\d+\|module\|app\.listen\|UNRESOLVED\|/ },
+      { id: "factory:written-in-factory-file-unresolved", category: "calls", has: /^test\/t\.js@6:\d+\|module\|app\.ready\|UNRESOLVED\|/ },
+      { id: "factory:rebound-binding-unresolved", category: "calls", has: /^test\/t\.js@9:\d+\|module\|other\.get\|UNRESOLVED\|/ },
+    ],
+  },
+  {
     // ADR-012, Phase B1: a call through a stable import of a package or Node module is EXTERNAL; a rebound import,
     // a package member another file replaces, or a shadowing parameter keeps it UNRESOLVED.
     id: "external-imports",

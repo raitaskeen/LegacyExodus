@@ -7,6 +7,7 @@ import { createLexicalScopeId, createSelfScopeId, FactKeyer, type CodeSymbol } f
 
 import type { ExternalTarget, SemanticCall, SymbolReference, UnresolvedReason } from "./semantic-contracts";
 import { ClassHierarchy, collectClassHierarchyFacts } from "./class-hierarchy";
+import { collectFactoryFacts, FactoryIndex } from "./factory-objects";
 import { stableId } from "@shared/identity";
 import { compareCodePoints } from "@shared/ordering";
 import { immutable } from "@shared/immutability";
@@ -46,11 +47,15 @@ export class DeterministicCallGraphBuilder {
       astResults.map((ast) => collectClassHierarchyFacts(ast, tablesByPath.get(canonicalizePath(ast.metadata.sourcePath)))),
       (importId) => importTargetFile.get(importId),
     );
+    const factories = new FactoryIndex(
+      astResults.map((ast) => collectFactoryFacts(ast, tablesByPath.get(canonicalizePath(ast.metadata.sourcePath)))),
+      (name) => hierarchy.isWrittenByName(name),
+    );
     const calls: SemanticCall[] = [];
     const references: SymbolReference[] = [];
 
     for (const ast of [...astResults].sort((left, right) => compareCodePoints(left.metadata.sourcePath, right.metadata.sourcePath))) {
-      this.buildForFile(ast, tablesByPath, importsByFile, targetByImportId, unstableExportIds, calls, references, hierarchy);
+      this.buildForFile(ast, tablesByPath, importsByFile, targetByImportId, unstableExportIds, calls, references, hierarchy, factories);
     }
 
     return immutable({ calls: immutable(calls), references: immutable(references) });
@@ -71,6 +76,7 @@ export class DeterministicCallGraphBuilder {
     calls: SemanticCall[],
     references: SymbolReference[],
     hierarchy?: ClassHierarchy,
+    factories?: FactoryIndex,
   ): void {
     const initialContext: ResolutionContext = {
       callerName: "module",
@@ -78,6 +84,7 @@ export class DeterministicCallGraphBuilder {
       receiverTypes: new Map(),
       constantBindings: new Map(),
       ...(hierarchy === undefined ? {} : { hierarchy }),
+      ...(factories === undefined ? {} : { factories }),
     };
     predeclareScopeBindings(ast.root, initialContext);
     const boundCallees = new Set<ASTNode>();
@@ -159,6 +166,11 @@ export class DeterministicCallGraphBuilder {
           : externalTarget(imported, calleeName, fileSymbols, nextContext, this.packageWrites)
             ?? globalTarget(calleeName, fileSymbols, nextContext, this.globalWrites, commonJsFiles.get(fileSymbols) === true);
         const resolutionState = targetSymbolId !== undefined ? "RESOLVED" as const : external !== undefined ? "EXTERNAL" as const : "UNRESOLVED" as const;
+        if (targetSymbolId !== undefined) {
+          const resolved = resolvedCallTargets.get(fileSymbols) ?? new Map<ASTNode, string>();
+          resolved.set(node, targetSymbolId);
+          resolvedCallTargets.set(fileSymbols, resolved);
+        }
         const reason = resolutionState !== "UNRESOLVED" ? undefined : unresolvedReason({
           named: namedCallee !== undefined, evalOrWith, invokerWritten: invokesThroughWrittenProperty,
           runsTooEarly: resolvedTarget !== undefined && runsTooEarly, imported, importTarget, calleeName, index: fileSymbols, context: nextContext,
@@ -359,6 +371,8 @@ interface ResolutionContext {
   /** Inside a `with` body: the frame around the `with` statement (NA-02). */
   readonly withOuter?: ScopeFrame;
   readonly hierarchy?: ClassHierarchy;
+  /** Objects repository factories return (Phase C1, factory-objects.ts). */
+  readonly factories?: FactoryIndex;
   /** Where `this` is an instance (or, static, the constructor) of a class: see thisClassFor. */
   readonly thisClass?: ThisClass;
 }
@@ -1644,6 +1658,7 @@ function childContext(node: ASTNode, context: ResolutionContext, index: FileSymb
     constantBindings: context.constantBindings,
     ...(context.withOuter === undefined ? {} : { withOuter: context.withOuter }),
     ...(context.hierarchy === undefined ? {} : { hierarchy: context.hierarchy }),
+    ...(context.factories === undefined ? {} : { factories: context.factories }),
     ...(thisClass === undefined ? {} : { thisClass }),
   };
 }
@@ -2238,6 +2253,19 @@ function resolveLocalCall(
       && (thisClass.method === undefined || !context.hierarchy.isBorrowed(thisClass.method, thisClass.classId))) return candidate.id;
   }
 
+  // 1c. Factory object (Phase C1): `const x = F()` where the call resolved to a repository factory that returns one
+  //     object literal, which holds a function at `methodName` that no file replaces (see factory-objects.ts). The
+  //     binding is written once, and the factory call was resolved before this one in the file.
+  if (receiver !== "this" && context.factories !== undefined) {
+    const frame = declaredBindingFrame(index, receiver, context.scope);
+    if (frame !== undefined && !isRebound(index, frame.id, receiver)) {
+      const init = index.writes.declaredValues.get(bindingWriteKey(frame.id, receiver));
+      const producer = init?.type === "CallExpression" ? resolvedCallTargets.get(index)?.get(init) : undefined;
+      const method = producer === undefined ? undefined : context.factories.methodOf(producer, methodName);
+      if (method !== undefined) return method;
+    }
+  }
+
   // 2. Object container method (e.g. app.init after `app.init = function …`): the container
   //    binding never changes, the property is declared once on that same binding and never
   //    otherwise written, and the call cannot run before the definition takes effect.
@@ -2439,6 +2467,9 @@ function globalTarget(calleeName: string, index: FileSymbolIndex, context: Resol
   }
   return { module: "global", member: calleeName };
 }
+
+/** The target of each call resolved so far in a file, by call node: a factory call's result is looked up here (C1). */
+const resolvedCallTargets = new WeakMap<FileSymbolIndex, Map<ASTNode, string>>();
 
 /** A package or Node module specifier without the `node:` scheme: `node:fs` and `fs` are one module. */
 function packageName(specifier: string): string {

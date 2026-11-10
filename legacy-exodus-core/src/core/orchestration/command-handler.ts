@@ -27,7 +27,7 @@ import { rmSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { ParserManager, type ASTResult } from "@parser/index";
-import { callSchema, ClassHierarchy, collectClassHierarchyFacts, collectForeignExportWrites, collectGlobalWrites, collectUnstableExportIds, foreignExportWriteTargets, packageWriteKeys, type ForeignExportWrite, DeterministicCallGraphBuilder, DeterministicSemanticAnalysisEngine, FactUsage, findHttpCalls, referenceSchema, SortedFactList, type ClassHierarchyFile, type ExpressRoute, type MiddlewareChain, type SemanticAnalysis, type SemanticCall, type SymbolReference } from "@semantic/index";
+import { callSchema, ClassHierarchy, collectClassHierarchyFacts, collectFactoryFacts, FactoryIndex, type FactoryFile, collectForeignExportWrites, collectGlobalWrites, collectUnstableExportIds, foreignExportWriteTargets, packageWriteKeys, type ForeignExportWrite, DeterministicCallGraphBuilder, DeterministicSemanticAnalysisEngine, FactUsage, findHttpCalls, referenceSchema, SortedFactList, type ClassHierarchyFile, type ExpressRoute, type MiddlewareChain, type SemanticAnalysis, type SemanticCall, type SymbolReference } from "@semantic/index";
 import { createOwnedStorageRecord, createStorageRecord, type StorageRecord } from "@storage/index";
 import { codeSymbolSchema, JavaScriptSymbolExtractor, type CodeSymbol, type SymbolTable } from "@symbols/index";
 import { RunScopedAstStore, type AnalysisAstStoreFactory } from "./run-scoped-ast-store";
@@ -474,6 +474,8 @@ export class AnalyzeProjectHandler {
     // kept for files that declare a class; for any other file, only the names it writes on foreign objects (XA-03);
     // the names read as values, for every file, in one set.
     const classHierarchyFiles: ClassHierarchyFile[] = [];
+    // Objects repository factories return (Phase C1), kept only for files that have such a factory.
+    const factoryFiles: FactoryFile[] = [];
     const borrowedNames = new Set<string>();
     const dispositions = new Map<string, AnalysisFileDisposition>();
     const successfullyParsedFiles: FileArtifact[] = [];
@@ -552,6 +554,8 @@ export class AnalyzeProjectHandler {
         foreignExportWrites.push(...collectForeignExportWrites(ast, table));
         for (const path of collectGlobalWrites(ast)) globalWrites.add(path);
         const classFacts = collectClassHierarchyFacts(ast, table);
+        const factoryFacts = collectFactoryFacts(ast, table);
+        if (factoryFacts.factories.length > 0) factoryFiles.push(factoryFacts);
         for (const name of classFacts.borrowedNames) borrowedNames.add(name);
         if (classFacts.classes.length > 0) classHierarchyFiles.push({ ...classFacts, borrowedNames: [] });
         else if (classFacts.foreignWrittenNames.length > 0) {
@@ -621,6 +625,7 @@ export class AnalyzeProjectHandler {
         [...classHierarchyFiles, { filePath: "", classes: [], writtenNames: [], foreignWrittenNames: [], borrowedNames: [...borrowedNames] }],
         (importId) => importTargetFile.get(importId),
       );
+      const factoryIndex = new FactoryIndex(factoryFiles, (name) => classHierarchy.isWrittenByName(name));
 
       const callGraphBuilder = new DeterministicCallGraphBuilder(resolver);
       callGraphBuilder.usePackageWrites(packageWrites);
@@ -679,7 +684,7 @@ export class AnalyzeProjectHandler {
 
         const fileCalls: SemanticCall[] = [];
         const fileReferences: SymbolReference[] = [];
-        callGraphBuilder.buildForFile(ast, tablesByPath, importsByFile, targetByImportId, unstableExportIds, fileCalls, fileReferences, classHierarchy);
+        callGraphBuilder.buildForFile(ast, tablesByPath, importsByFile, targetByImportId, unstableExportIds, fileCalls, fileReferences, classHierarchy, factoryIndex);
         usage.add(fileCalls, fileReferences);
         calls.appendFile(fileCalls);
         references.appendFile(fileReferences);
