@@ -20,6 +20,12 @@ export interface FactoryFact {
   readonly ids: readonly string[];
   /** Property name to the symbol of the function it holds. */
   readonly methods: readonly (readonly [string, string])[];
+  /**
+   * Phase C2: the methods belong to `new F()`'s instance, through `F.prototype`, not to `F()`'s result. Set for a
+   * constructor function whose prototype is never replaced or passed to a call, whose body returns no value, and
+   * that is never passed to a call itself (`util.inherits(F, Base)` could give an early call another target).
+   */
+  readonly constructed?: true;
 }
 
 export interface FactoryFile {
@@ -133,26 +139,102 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
     const ids = [functionSymbol.id, ...symbols.filter((symbol) => symbol.kind === "export" && symbol.moduleSpecifier === undefined && symbol.sourceSymbolName === functionSymbol.name).map((symbol) => symbol.id)];
     factories.push({ ids: [...new Set(ids)].sort(), methods: kept });
   });
+  factories.push(...collectConstructors(ast, symbols, byStart));
   return { filePath, factories };
+}
+
+/** `F.prototype` for a plain identifier `F`, or undefined. */
+function prototypeOwner(node: ASTNode | undefined): string | undefined {
+  if (node?.type !== "MemberExpression" || node.attributes.computed === true) return undefined;
+  const object = role(node, "object");
+  return nameOf(role(node, "property")) === "prototype" && object?.type === "Identifier" ? nameOf(object) : undefined;
+}
+
+/**
+ * Phase C2: constructor functions declared in the file and the methods their prototype is given by name,
+ * `F.prototype.m = function …` (or a function's name). A fresh `F.prototype` holds only `constructor`, so a call on an
+ * instance before the assignment runs throws rather than reaching another function; this is why `F` must not inherit
+ * (it is never passed to a call) and its prototype never replaced. A method name written by name anywhere else in the
+ * file, on any object, is left out, as for C1.
+ */
+function collectConstructors(ast: ASTResult, symbols: readonly CodeSymbol[], byStart: ReadonlyMap<string, CodeSymbol[]>): FactoryFact[] {
+  const writes = new Map<string, number>();
+  const prototypeWrites = new Map<string, [string, ASTNode][]>();
+  const disqualified = new Set<string>();
+  walkAll(ast.root, (node) => {
+    if (node.type === "AssignmentExpression") {
+      const left = role(node, "left");
+      if ((left?.type === "MemberExpression" || left?.type === "OptionalMemberExpression") && left.attributes.computed !== true) {
+        const name = nameOf(role(left, "property"));
+        if (name !== undefined) writes.set(name, (writes.get(name) ?? 0) + 1);
+        const owner = prototypeOwner(role(left, "object"));
+        if (owner !== undefined && name !== undefined) prototypeWrites.set(owner, [...(prototypeWrites.get(owner) ?? []), [name, role(node, "right")!]]);
+      }
+      // `F.prototype = …` replaces the prototype; `F = …` rebinds the constructor.
+      const replaced = prototypeOwner(left);
+      if (replaced !== undefined) disqualified.add(replaced);
+      if (left?.type === "Identifier" && nameOf(left) !== undefined) disqualified.add(nameOf(left)!);
+    }
+    if (node.type === "CallExpression" || node.type === "NewExpression" || node.type === "OptionalCallExpression") {
+      for (const argument of node.children.filter((child) => child.role === "arguments")) {
+        if (argument.type === "Identifier" && nameOf(argument) !== undefined) disqualified.add(nameOf(argument)!);
+        const owner = prototypeOwner(argument);
+        if (owner !== undefined) disqualified.add(owner);
+      }
+    }
+  });
+
+  const found: FactoryFact[] = [];
+  for (const node of ast.root.children) {
+    if (node.type !== "FunctionDeclaration") continue;
+    const functionSymbol = (byStart.get(startKey(node.location) ?? "") ?? []).find((symbol) => symbol.kind === "function");
+    const body = role(node, "body");
+    if (functionSymbol === undefined || body === undefined || disqualified.has(functionSymbol.name)) continue;
+    let returnsValue = false;
+    walkOwn(body, (inner) => { if (inner.type === "ReturnStatement" && role(inner, "argument") !== undefined) returnsValue = true; });
+    if (returnsValue) continue;
+    const methods: [string, string][] = [];
+    for (const [name, value] of prototypeWrites.get(functionSymbol.name) ?? []) {
+      if (writes.get(name) !== 1 || name === "constructor" || name === "__proto__") continue;
+      const isFunction = value.type === "FunctionExpression" || value.type === "ArrowFunctionExpression"
+        || (value.type === "Identifier" && symbols.some((symbol) => symbol.kind === "function" && symbol.name === nameOf(value)));
+      if (!isFunction) continue;
+      const candidates = symbols.filter((symbol) => symbol.name === name && symbol.containerName === `${functionSymbol.name}.prototype` && symbol.kind === "method");
+      if (candidates.length === 1) methods.push([name, candidates[0]!.id]);
+    }
+    if (methods.length === 0) continue;
+    methods.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+    const ids = [functionSymbol.id, ...symbols.filter((symbol) => symbol.kind === "export" && symbol.moduleSpecifier === undefined && symbol.sourceSymbolName === functionSymbol.name).map((symbol) => symbol.id)];
+    found.push({ ids: [...new Set(ids)].sort(), methods, constructed: true });
+  }
+  return found;
 }
 
 /** The run's factories, looked up by the symbol a factory call resolves to. */
 export class FactoryIndex {
-  private readonly methodsById = new Map<string, ReadonlyMap<string, string>>();
+  private readonly methodsById = new Map<string, { readonly filePath: string; readonly methods: ReadonlyMap<string, string> }>();
+  private readonly prototypeById = new Map<string, { readonly filePath: string; readonly methods: ReadonlyMap<string, string> }>();
 
-  /** @param writtenElsewhere - whether some file writes a property of that name on an object other than `this`. */
-  public constructor(files: Iterable<FactoryFile>, private readonly writtenElsewhere: (name: string) => boolean) {
+  /**
+   * @param writtenElsewhere - whether a file other than `filePath` writes a property of that name on an object other
+   *   than `this` and its own exports. The factory's own file was checked when its facts were collected.
+   */
+  public constructor(files: Iterable<FactoryFile>, private readonly writtenElsewhere: (name: string, filePath: string) => boolean) {
     for (const file of files) {
       for (const factory of file.factories) {
-        const methods = new Map(factory.methods);
-        for (const id of factory.ids) this.methodsById.set(id, methods);
+        const entry = { filePath: file.filePath, methods: new Map(factory.methods) };
+        for (const id of factory.ids) (factory.constructed === true ? this.prototypeById : this.methodsById).set(id, entry);
       }
     }
   }
 
-  /** The function a factory's returned object holds at `name`, when the call resolved to `producerId`. */
-  public methodOf(producerId: string, name: string): string | undefined {
-    const target = this.methodsById.get(producerId)?.get(name);
-    return target === undefined || this.writtenElsewhere(name) ? undefined : target;
+  /**
+   * The function the object made by a call resolved to `producerId` holds at `name`: a factory's returned literal for
+   * `F()` (C1), a constructor's prototype for `new F()` (C2).
+   */
+  public methodOf(producerId: string, name: string, constructed = false): string | undefined {
+    const entry = (constructed ? this.prototypeById : this.methodsById).get(producerId);
+    const target = entry?.methods.get(name);
+    return target === undefined || this.writtenElsewhere(name, entry!.filePath) ? undefined : target;
   }
 }

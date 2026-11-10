@@ -49,7 +49,7 @@ export class DeterministicCallGraphBuilder {
     );
     const factories = new FactoryIndex(
       astResults.map((ast) => collectFactoryFacts(ast, tablesByPath.get(canonicalizePath(ast.metadata.sourcePath)))),
-      (name) => hierarchy.isWrittenByName(name),
+      (name, filePath) => hierarchy.isWrittenOutside(name, filePath),
     );
     const calls: SemanticCall[] = [];
     const references: SymbolReference[] = [];
@@ -85,6 +85,7 @@ export class DeterministicCallGraphBuilder {
       constantBindings: new Map(),
       ...(hierarchy === undefined ? {} : { hierarchy }),
       ...(factories === undefined ? {} : { factories }),
+      globalWrites: this.globalWrites,
     };
     predeclareScopeBindings(ast.root, initialContext);
     const boundCallees = new Set<ASTNode>();
@@ -374,6 +375,8 @@ interface ResolutionContext {
   readonly hierarchy?: ClassHierarchy;
   /** Objects repository factories return (Phase C1, factory-objects.ts). */
   readonly factories?: FactoryIndex;
+  /** Standard-global paths the run's files write (ADR-012, Phase B1b; collectGlobalWrites). */
+  readonly globalWrites?: ReadonlySet<string>;
   /** Where `this` is an instance (or, static, the constructor) of a class: see thisClassFor. */
   readonly thisClass?: ThisClass;
 }
@@ -1660,6 +1663,7 @@ function childContext(node: ASTNode, context: ResolutionContext, index: FileSymb
     ...(context.withOuter === undefined ? {} : { withOuter: context.withOuter }),
     ...(context.hierarchy === undefined ? {} : { hierarchy: context.hierarchy }),
     ...(context.factories === undefined ? {} : { factories: context.factories }),
+    ...(context.globalWrites === undefined ? {} : { globalWrites: context.globalWrites }),
     ...(thisClass === undefined ? {} : { thisClass }),
   };
 }
@@ -2198,6 +2202,38 @@ function resolveNamespaceCall(
   return isUnstableTarget(index, directSymbol?.id) ? undefined : directSymbol?.id;
 }
 
+/**
+ * Rule 2, object container method (e.g. app.init after `app.init = function …`): the container binding never changes,
+ * the property is declared once on that same binding and never otherwise written, and the call cannot run before the
+ * definition takes effect.
+ */
+function containerMethod(index: FileSymbolIndex, receiver: string, methodName: string, context: ResolutionContext, callNode: ASTNode | undefined): string | undefined {
+  const containerFrame = declaredBindingFrame(index, receiver, context.scope);
+  if (containerFrame === undefined || isRebound(index, containerFrame.id, receiver)) return undefined;
+  const declared = (index.byName.get(methodName) ?? []).filter(
+    (symbol) => symbol.containerName === receiver && isDefinedOnBinding(index, symbol, receiver, containerFrame),
+  );
+  const candidates = declared.filter((symbol) => symbol.kind === "method" || symbol.kind === "function");
+  const candidate = candidates.length === 1 && declared.length === 1 ? candidates[0] : undefined;
+  // A member-assigned definition is itself the one permitted write; a class member admits none
+  // and, called on the class, must be a static method declared in its body.
+  if (candidate === undefined || propertyWriteCount(index, methodName) !== (candidate.containerId === undefined ? 1 : ownPropertyWrites(index, candidate))) return undefined;
+  const proven = candidate.containerId !== undefined
+    ? isClassBodyMethod(index, candidate, candidate.containerId, true)
+    : isDefinedBeforeCall(index, candidate, receiver, containerFrame, callNode);
+  return proven ? candidate.id : undefined;
+}
+
+/** `P` in `Object.create(P)` with exactly one plain-identifier argument, `Object` the unbound, unwritten global. */
+function objectCreateArgument(value: ASTNode | undefined, index: FileSymbolIndex, context: ResolutionContext): string | undefined {
+  if (value?.type !== "CallExpression") return undefined;
+  const path = memberPathOf(value.children.find((child) => child.role === "callee"));
+  if (path?.length !== 2 || path[0] !== "Object" || path[1] !== "create" || !isUnboundName(index, "Object", context)) return undefined;
+  if (context.globalWrites === undefined || !globalPathUnwritten(path, context.globalWrites)) return undefined;
+  const args = value.children.filter((child) => child.role === "arguments");
+  return args.length === 1 && args[0]!.type === "Identifier" ? identifier(args[0]) : undefined;
+}
+
 /** Writes that may replace `propertyName`; dynamic and reflective writes cannot reach private names. */
 function propertyWriteCount(index: FileSymbolIndex, propertyName: string): number {
   const writes = index.writes.propertyWrites.get(propertyName) ?? 0;
@@ -2261,30 +2297,28 @@ function resolveLocalCall(
     const frame = declaredBindingFrame(index, receiver, context.scope);
     if (frame !== undefined && !isRebound(index, frame.id, receiver)) {
       const init = index.writes.declaredValues.get(bindingWriteKey(frame.id, receiver));
-      const producer = init?.type === "CallExpression" ? resolvedCallTargets.get(index)?.get(init) : undefined;
-      const method = producer === undefined ? undefined : context.factories.methodOf(producer, methodName);
+      // 1d. Constructor prototype (Phase C2): `const x = new F()` where F's prototype holds `methodName`.
+      const producer = init?.type === "CallExpression" || init?.type === "NewExpression" ? resolvedCallTargets.get(index)?.get(init) : undefined;
+      const method = producer === undefined ? undefined : context.factories.methodOf(producer, methodName, init?.type === "NewExpression");
       if (method !== undefined) return method;
     }
   }
 
-  // 2. Object container method (e.g. app.init after `app.init = function …`): the container
-  //    binding never changes, the property is declared once on that same binding and never
-  //    otherwise written, and the call cannot run before the definition takes effect.
-  const containerFrame = receiver === "this" ? undefined : declaredBindingFrame(index, receiver, context.scope);
-  if (containerFrame !== undefined && !isRebound(index, containerFrame.id, receiver)) {
-    const declared = (index.byName.get(methodName) ?? []).filter(
-      (symbol) => symbol.containerName === receiver && isDefinedOnBinding(index, symbol, receiver, containerFrame),
-    );
-    const candidates = declared.filter((symbol) => symbol.kind === "method" || symbol.kind === "function");
-    const candidate = candidates.length === 1 && declared.length === 1 ? candidates[0] : undefined;
-    // A member-assigned definition is itself the one permitted write; a class member admits none
-    // and, called on the class, must be a static method declared in its body.
-    if (candidate !== undefined && propertyWriteCount(index, methodName) === (candidate.containerId === undefined ? 1 : ownPropertyWrites(index, candidate))) {
-      if (candidate.containerId !== undefined
-        ? isClassBodyMethod(index, candidate, candidate.containerId, true)
-        : isDefinedBeforeCall(index, candidate, receiver, containerFrame, callNode)) return candidate.id;
-    }
+  // 1e. Object.create (Phase C2): `const x = Object.create(P)`, with one argument, makes an object with no own
+  //     properties whose prototype is P; `x.m()` reaches P's `m` as `P.m()` would (rule 2), when no file writes a
+  //     property named `m` elsewhere (XA-03) and `Object.create` is the unwritten global.
+  if (receiver !== "this") {
+    const frame = declaredBindingFrame(index, receiver, context.scope);
+    const init = frame === undefined || isRebound(index, frame.id, receiver) ? undefined : index.writes.declaredValues.get(bindingWriteKey(frame.id, receiver));
+    const prototype = objectCreateArgument(init, index, context);
+    const target = prototype === undefined || context.hierarchy === undefined ? undefined : containerMethod(index, prototype, methodName, context, callNode);
+    const definedIn = target === undefined ? undefined : index.byName.get(methodName)?.find((symbol) => symbol.id === target)?.filePath;
+    if (definedIn !== undefined && !context.hierarchy!.isWrittenOutside(methodName, definedIn)) return target;
   }
+
+  // 2. Object container method (e.g. app.init after `app.init = function …`).
+  const target = receiver === "this" ? undefined : containerMethod(index, receiver, methodName, context, callNode);
+  if (target !== undefined) return target;
 
   // 3. Imported namespace receiver (e.g. import * as api from "./api"; api.ping() or api["ping"]())
   const namespaceImport = receiver === "this" || isLexicallyShadowed(receiver, context, index) ? undefined : visibleImport(index, receiver, context.scope);

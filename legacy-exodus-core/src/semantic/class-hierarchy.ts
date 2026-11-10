@@ -392,6 +392,12 @@ export class ClassHierarchy {
     return this.foreignWriters.has(name);
   }
 
+  /** isWrittenByName, leaving out the writes of `filePath` itself (its own writes are checked where it is analysed). */
+  public isWrittenOutside(name: string, filePath: string): boolean {
+    const writer = this.foreignWriters.get(name);
+    return writer !== undefined && writer !== filePath;
+  }
+
   /**
    * Whether some file reads a property named `name` as a value, or the file of `classId` reads the class, its
    * prototype or an instance by a computed key (XA-04), so a method may run with another `this`.
