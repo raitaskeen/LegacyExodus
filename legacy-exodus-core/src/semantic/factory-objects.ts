@@ -197,13 +197,12 @@ function collectConstructors(ast: ASTResult, symbols: readonly CodeSymbol[], byS
       if (expression.type === "AssignmentExpression") handled.add(role(expression, "right")!);
       links.set(link.child, [...(links.get(link.child) ?? []), { parent: link.parent, at: position }]);
     }
-    const defined = standardObject ? literalDefinition(expression) : undefined;
-    if (defined !== undefined) {
-      handled.add(expression);
-      writes.set(defined.name, (writes.get(defined.name) ?? 0) + 1);
-    }
+    if (standardObject && literalDefinition(expression) !== undefined) handled.add(expression);
   });
   walkAll(ast.root, (node) => {
+    // A literal-key `Object.defineProperty(o, "m", …)` anywhere in the file writes `m`.
+    const defined = node.type === "CallExpression" ? literalKeyWrite(node) : undefined;
+    if (defined !== undefined) writes.set(defined, (writes.get(defined) ?? 0) + 1);
     if (node.type === "AssignmentExpression") {
       const left = role(node, "left");
       if ((left?.type === "MemberExpression" || left?.type === "OptionalMemberExpression") && left.attributes.computed !== true) {
@@ -320,13 +319,26 @@ function parentLink(expression: ASTNode, symbols: readonly CodeSymbol[], standar
   return child === undefined || parent === undefined ? undefined : { child, parent };
 }
 
-/** `Object.defineProperty(F.prototype, "name", …)`: a write of that one name. */
+/**
+ * `Object.defineProperty(F.prototype, "name", …)` or `Object.defineProperty(F, "name", …)`: a write of that one name
+ * (a static property of F leaves its instances alone, unless the name is `prototype`).
+ */
 function literalDefinition(expression: ASTNode): { readonly name: string } | undefined {
   if (expression.type !== "CallExpression" || pathOf(role(expression, "callee"))?.join(".") !== "Object.defineProperty") return undefined;
   const args = callArguments(expression);
   const key = args[1];
-  if (args.length !== 3 || prototypeOwner(args[0]) === undefined || key?.type !== "StringLiteral" || typeof key.attributes.value !== "string") return undefined;
+  const target = args[0];
+  if (args.length !== 3 || key?.type !== "StringLiteral" || typeof key.attributes.value !== "string") return undefined;
+  if (prototypeOwner(target) === undefined && !(target?.type === "Identifier" && key.attributes.value !== "prototype")) return undefined;
   return { name: key.attributes.value };
+}
+
+/** The name an `Object.defineProperty(o, "m", …)` call writes, whatever `o` is. */
+function literalKeyWrite(call: ASTNode): string | undefined {
+  const path = pathOf(role(call, "callee"))?.join(".");
+  if (path !== "Object.defineProperty" && path !== "Reflect.defineProperty") return undefined;
+  const key = callArguments(call)[1];
+  return key?.type === "StringLiteral" && typeof key.attributes.value === "string" ? key.attributes.value : undefined;
 }
 
 const STANDARD_ERRORS = new Set(["Error", "TypeError", "RangeError", "SyntaxError", "ReferenceError", "EvalError", "URIError"]);
