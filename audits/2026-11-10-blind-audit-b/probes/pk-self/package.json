@@ -1,0 +1,1 @@
+{ "name": "selfpkg", "exports": { ".": "./lib/index.js", "./helpers": "./lib/helpers.js" } }
