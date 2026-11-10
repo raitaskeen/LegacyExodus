@@ -625,7 +625,7 @@ export class AnalyzeProjectHandler {
         [...classHierarchyFiles, { filePath: "", classes: [], writtenNames: [], foreignWrittenNames: [], borrowedNames: [...borrowedNames] }],
         (importId) => importTargetFile.get(importId),
       );
-      const factoryIndex = new FactoryIndex(factoryFiles, (name) => classHierarchy.isWrittenByName(name));
+      const factoryIndex = new FactoryIndex(factoryFiles, (name, filePath) => classHierarchy.isWrittenOutside(name, filePath));
 
       const callGraphBuilder = new DeterministicCallGraphBuilder(resolver);
       callGraphBuilder.usePackageWrites(packageWrites);
