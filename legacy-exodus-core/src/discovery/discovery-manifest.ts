@@ -6,7 +6,8 @@ const MANIFEST_MAC_DOMAIN = "legacy-exodus/discovery-manifest/v1\n";
 const LOCATION_DIGEST_DOMAIN = "legacy-exodus/discovery-location/v1\n";
 /** 2: the project location is a keyed digest, never a plaintext path (BA-26). */
 // 3: fact artifacts carry no run identity (ADR-010); older snapshots are refused and analysed again.
-export const MANIFEST_SCHEMA_VERSION = 3;
+/** 4: calls and call references can be EXTERNAL (ADR-012). */
+export const MANIFEST_SCHEMA_VERSION = 4;
 
 export const discoveryManifestSchema = z.object({
   schemaVersion: z.number().int().positive(),

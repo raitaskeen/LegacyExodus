@@ -27,7 +27,7 @@ import { rmSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { ParserManager, type ASTResult } from "@parser/index";
-import { callSchema, ClassHierarchy, collectClassHierarchyFacts, collectForeignExportWrites, collectUnstableExportIds, foreignExportWriteTargets, type ForeignExportWrite, DeterministicCallGraphBuilder, DeterministicSemanticAnalysisEngine, FactUsage, findHttpCalls, referenceSchema, SortedFactList, type ClassHierarchyFile, type ExpressRoute, type MiddlewareChain, type SemanticAnalysis, type SemanticCall, type SymbolReference } from "@semantic/index";
+import { callSchema, ClassHierarchy, collectClassHierarchyFacts, collectForeignExportWrites, collectUnstableExportIds, foreignExportWriteTargets, packageWriteKeys, type ForeignExportWrite, DeterministicCallGraphBuilder, DeterministicSemanticAnalysisEngine, FactUsage, findHttpCalls, referenceSchema, SortedFactList, type ClassHierarchyFile, type ExpressRoute, type MiddlewareChain, type SemanticAnalysis, type SemanticCall, type SymbolReference } from "@semantic/index";
 import { createOwnedStorageRecord, createStorageRecord, type StorageRecord } from "@storage/index";
 import { codeSymbolSchema, JavaScriptSymbolExtractor, type CodeSymbol, type SymbolTable } from "@symbols/index";
 import { RunScopedAstStore, type AnalysisAstStoreFactory } from "./run-scoped-ast-store";
@@ -610,6 +610,7 @@ export class AnalyzeProjectHandler {
       const tablesByPath = new Map(symbolTables.map((table) => [canonicalizePath(table.filePath), table]));
       const symbolsByPath = new Map(symbolTables.map((table) => [canonicalizePath(table.filePath), table.symbols]));
       for (const id of foreignExportWriteTargets(foreignExportWrites, (importer, specifier) => resolver.resolve(importer, specifier, discovery.files).resolvedPath ?? undefined, (path) => symbolsByPath.get(path) ?? [])) unstableExportIds.add(id);
+      const packageWrites = packageWriteKeys(foreignExportWrites, (importer, specifier) => resolver.resolve(importer, specifier, discovery.files).resolvedPath ?? undefined);
       const importsByFile = new Map(symbolTables.map((table) => [canonicalizePath(table.filePath), table.symbols.filter((symbol) => symbol.kind === "import")]));
       const targetByImportId = new Map(dependencyGraph.edges.map((edge) => [edge.importSymbolId, edge.targetExportSymbolId]));
       const importTargetFile = new Map(dependencyGraph.edges.map((edge) => [edge.importSymbolId, edge.targetFilePath]));
@@ -619,6 +620,7 @@ export class AnalyzeProjectHandler {
       );
 
       const callGraphBuilder = new DeterministicCallGraphBuilder(resolver);
+      callGraphBuilder.usePackageWrites(packageWrites);
       const controlFlowBuilder = new DeterministicControlFlowGraphBuilder();
       const dataFlowBuilder = new DeterministicDataFlowGraphBuilder();
 

@@ -10,9 +10,11 @@ export interface SemanticCall {
   readonly sourceFilePath: string;
   readonly callerName: string;
   readonly calleeName: string;
-  readonly resolutionState: "RESOLVED" | "UNRESOLVED";
+  readonly resolutionState: CallState;
   readonly targetSymbolId?: string;
-  /** Why an UNRESOLVED call is not proven (A1); absent on a RESOLVED call. */
+  /** Where an EXTERNAL call goes (ADR-012): a package or Node module and the member it calls. */
+  readonly external?: ExternalTarget;
+  /** Why an UNRESOLVED call is not proven (A1); absent on a RESOLVED or EXTERNAL call. */
   readonly reason?: UnresolvedReason;
   readonly location?: { readonly line: number; readonly column: number };
 }
@@ -43,6 +45,15 @@ export const UNRESOLVED_REASONS = [
 ] as const;
 export type UnresolvedReason = (typeof UNRESOLVED_REASONS)[number];
 
+/**
+ * RESOLVED: proven to land on one function of the repository. EXTERNAL: proven to call into a package, a Node module or
+ * a built-in, which no file of the repository replaces (ADR-012). UNRESOLVED: neither, with a reason.
+ */
+export type CallState = "RESOLVED" | "EXTERNAL" | "UNRESOLVED";
+
+/** `module`: a package or Node module name (without `node:`); `member`: the path called in it, `default` for the module itself. */
+export interface ExternalTarget { readonly module: string; readonly member: string }
+
 export interface SymbolReference {
   readonly id: string;
   /** Edit-stable key: enclosing owners, name and ordinal (ADR-008). */
@@ -50,7 +61,7 @@ export interface SymbolReference {
   readonly filePath: string;
   readonly name: string;
   readonly kind: "call" | "identifier";
-  readonly resolutionState: "RESOLVED" | "UNRESOLVED";
+  readonly resolutionState: CallState;
   readonly resolvedSymbolId?: string;
 }
 
@@ -107,8 +118,9 @@ export interface SemanticAnalysis {
 }
 
 const locationSchema = z.object({ line: z.number().int().positive(), column: z.number().int().nonnegative() });
-const resolutionStateSchema = z.enum(["RESOLVED", "UNRESOLVED"]);
-export const callSchema = z.object({ id: z.string().min(1), key: z.string().min(1).optional(), sourceFilePath: z.string().min(1), callerName: z.string().min(1), calleeName: z.string().min(1), resolutionState: resolutionStateSchema, targetSymbolId: z.string().min(1).optional(), reason: z.enum(UNRESOLVED_REASONS).optional(), location: locationSchema.optional() });
+const resolutionStateSchema = z.enum(["RESOLVED", "EXTERNAL", "UNRESOLVED"]);
+const externalTargetSchema = z.object({ module: z.string().min(1), member: z.string().min(1) });
+export const callSchema = z.object({ id: z.string().min(1), key: z.string().min(1).optional(), sourceFilePath: z.string().min(1), callerName: z.string().min(1), calleeName: z.string().min(1), resolutionState: resolutionStateSchema, targetSymbolId: z.string().min(1).optional(), external: externalTargetSchema.optional(), reason: z.enum(UNRESOLVED_REASONS).optional(), location: locationSchema.optional() });
 export const referenceSchema = z.object({ id: z.string().min(1), key: z.string().min(1).optional(), filePath: z.string().min(1), name: z.string().min(1), kind: z.enum(["call", "identifier"]), resolutionState: resolutionStateSchema, resolvedSymbolId: z.string().min(1).optional() });
 export const scopeSchema = z.object({ id: z.string().min(1), filePath: z.string().min(1), name: z.string().min(1), declaredSymbols: z.array(z.string().min(1)), referencedNames: z.array(z.string().min(1)) });
 const evidenceStateSchema = z.enum(["CONFIRMED", "INFERRED", "UNRESOLVED", "UNSUPPORTED", "REQUIRES_REVIEW"]);

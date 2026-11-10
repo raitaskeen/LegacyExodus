@@ -90,7 +90,8 @@ export function measureCoverage(discoveryDirectory: string): CallCoverage {
   let resolved = 0;
   for (const call of calls) {
     if (call.resolutionState === "RESOLVED") { resolved++; continue; }
-    const reason = call.reason ?? "not-recorded";
+    // An EXTERNAL call (ADR-012) is accounted for, as its own row.
+    const reason = call.resolutionState === "EXTERNAL" ? "external" : call.reason ?? "not-recorded";
     byReason.set(reason, (byReason.get(reason) ?? 0) + 1);
   }
   return { calls: calls.length, resolved, byReason };

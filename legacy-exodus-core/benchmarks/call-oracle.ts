@@ -141,6 +141,19 @@ export function originalColumn(insertions: readonly Insertion[] | undefined, lin
   return column - shift;
 }
 
+/**
+ * The call a V8 caller position belongs to. Several calls can cover one position: `request(createApp())` reaches past
+ * `request(` to its argument's start. The call that starts last is the innermost one there; among calls starting
+ * together (`f().g()`) the shorter wins.
+ */
+export function innermostSite<Site extends { readonly from: number; readonly to: number }>(sites: readonly Site[], offset: number): Site | undefined {
+  let best: Site | undefined;
+  for (const site of sites) {
+    if (site.from <= offset && offset <= site.to && (best === undefined || site.from > best.from || (site.from === best.from && site.to - site.from < best.to - best.from))) best = site;
+  }
+  return best;
+}
+
 /** Call and new expressions of one original file, with the span a V8 caller position falls in. */
 function callSites(file: string, source: string): CallSite[] {
   const sites: CallSite[] = [];
@@ -243,9 +256,7 @@ export function runCallOracle(engineRoot: string, corpus: string): OracleResult 
         sitesByFile.set(file, sites);
       }
       const offset = offsetOf(join(clean, file), line, column);
-      let best: CallSite | undefined;
-      for (const site of sites) if (site.from <= offset && offset <= site.to && (best === undefined || site.to - site.from < best.to - best.from)) best = site;
-      return best;
+      return innermostSite(sites, offset);
     };
     const engineCalls = new Map<string, any[]>();
     for (const call of semantic.calls ?? []) {
@@ -328,6 +339,13 @@ export function runCallOracle(engineRoot: string, corpus: string): OracleResult 
       const call = site === undefined ? undefined : engineCallAt(site);
       if (call === undefined) continue;
       matchedSites++;
+      // An EXTERNAL call claims to leave the repository (ADR-012): entering a repository function contradicts it.
+      if (call.resolutionState === "EXTERNAL") {
+        const line = `${file}:${site!.start.line}:${site!.start.column} ${call.calleeName} -> engine EXTERNAL ${call.external?.module}:${call.external?.member}, observed ${[...callees].join(", ")}`;
+        if ([...callees].every((callee) => usesProxyquire(splitPosition(callee)[0]))) substitutions.push(line);
+        else contradictions.push(line);
+        continue;
+      }
       if (call.resolutionState !== "RESOLVED") {
         const reason = call.reason ?? "not-recorded";
         unresolvedByReason.set(reason, (unresolvedByReason.get(reason) ?? 0) + 1);
