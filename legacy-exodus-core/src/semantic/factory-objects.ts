@@ -79,6 +79,13 @@ export interface FactoryFile {
   readonly exportMembers?: readonly (readonly [string, string])[];
   /** Phase C3b: every name the exports object holds (functions or not), when the file builds it plainly. */
   readonly exportNames?: readonly string[];
+  /**
+   * Phase C3b: `module.exports = require("./x")`, the file's only write of `module.exports`: a call through this file's
+   * default export reaches x's default export. The ids are this file's default export symbols.
+   */
+  readonly reexportsDefault?: { readonly exportIds: readonly string[]; readonly specifier: string };
+  /** Phase C3b: the factory ids that are this file's one default export (`module.exports = createApplication`). */
+  readonly defaultFactoryIds?: readonly string[];
 }
 
 const FUNCTION_TYPES = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ObjectMethod", "ClassMethod", "ClassPrivateMethod"]);
@@ -201,11 +208,32 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
   });
   factories.push(...collectConstructors(ast, symbols, byStart));
   const { members: exportMembers, names: exportNames } = collectExportMembers(ast, symbols);
+  // C3b: the file's one default export, when it is a factory, or a re-export of another file's default.
+  const defaults = symbols.filter((symbol) => symbol.kind === "export" && symbol.defaultExport);
+  let moduleExportsWrites = 0;
+  walkAll(ast.root, (node) => { if (node.type === "AssignmentExpression" && isModuleExports(role(node, "left"))) moduleExportsWrites++; });
+  const single = defaults.length === 1 && moduleExportsWrites === 1 ? defaults[0] : undefined;
+  const defaultFactoryIds = single === undefined ? [] : factories.filter((factory) => factory.constructed !== true && factory.ids.includes(single.id)).flatMap((factory) => factory.ids);
+  let reexportsDefault: { exportIds: string[]; specifier: string } | undefined;
+  if (single !== undefined) {
+    for (const statement of ast.root.children) {
+      const expression = statement.type === "ExpressionStatement" ? role(statement, "expression") : undefined;
+      const right = expression?.type === "AssignmentExpression" && isModuleExports(role(expression, "left")) ? role(expression, "right") : undefined;
+      if (right?.type !== "CallExpression" || pathOf(role(right, "callee"))?.join(".") !== "require") continue;
+      const argument = callArguments(right)[0];
+      const specifier = argument?.type === "StringLiteral" && typeof argument.attributes.value === "string" ? argument.attributes.value : undefined;
+      if (specifier !== undefined && /^\.\.?(\/|$)/.test(specifier) && !symbols.some((symbol) => symbol.name === "require" && symbol.kind !== "export")) {
+        reexportsDefault = { exportIds: [single.id], specifier };
+      }
+    }
+  }
   return {
     filePath,
     factories,
     ...(exportMembers.length === 0 ? {} : { exportMembers }),
     ...(exportNames === undefined ? {} : { exportNames }),
+    ...(reexportsDefault === undefined ? {} : { reexportsDefault }),
+    ...(defaultFactoryIds.length === 0 ? {} : { defaultFactoryIds }),
   };
 }
 
@@ -671,7 +699,26 @@ export class FactoryIndex {
         };
         for (const id of factory.ids) (factory.constructed === true ? this.prototypeById : this.methodsById).set(id, entry);
       }
+      const defaultEntry = file.defaultFactoryIds?.[0] === undefined ? undefined : this.methodsById.get(file.defaultFactoryIds[0]);
+      if (defaultEntry !== undefined) this.methodsById.set(`default:${file.filePath}`, defaultEntry);
+      for (const id of file.reexportsDefault?.exportIds ?? []) this.reexports.set(id, { importer: file.filePath, specifier: file.reexportsDefault!.specifier });
     }
+  }
+
+  private readonly reexports = new Map<string, { readonly importer: string; readonly specifier: string }>();
+
+  /** A factory by the symbol its call resolved to, through `module.exports = require("./x")` re-exports (C3b). */
+  private factoryEntry(producerId: string): FactoryEntry | undefined {
+    let id = producerId;
+    for (let hop = 0; hop < 8; hop++) {
+      const entry = this.methodsById.get(id);
+      if (entry !== undefined) return entry;
+      const link = this.reexports.get(id);
+      const target = link === undefined ? undefined : this.resolveModule(link.importer, link.specifier);
+      if (target === undefined) return undefined;
+      id = `default:${target}`;
+    }
+    return undefined;
   }
 
   /** C3a: the function `require(filePath).name` reaches, when that file builds its exports object plainly. */
@@ -707,7 +754,7 @@ export class FactoryIndex {
 
   /** C3b: the built-in a factory's object holds at `name`, copied from a known prototype such as `EventEmitter`'s. */
   public externalOf(producerId: string, name: string): { readonly module: string; readonly member: string } | undefined {
-    const entry = this.methodsById.get(producerId);
+    const entry = this.factoryEntry(producerId);
     if (entry?.copies === undefined) return undefined;
     const provider = this.provider(entry, name);
     if (provider?.kind !== "external" || this.writtenElsewhere(name, entry.filePath)) return undefined;
@@ -719,7 +766,7 @@ export class FactoryIndex {
    * `F()` (C1) or what its copies bring (C3b), a constructor's prototype for `new F()` (C2).
    */
   public methodOf(producerId: string, name: string, constructed = false, topLevelCall?: { readonly filePath: string; readonly line: number; readonly column: number }): string | undefined {
-    const entry = (constructed ? this.prototypeById : this.methodsById).get(producerId);
+    const entry = constructed ? this.prototypeById.get(producerId) : this.factoryEntry(producerId);
     if (entry?.copies !== undefined) {
       const provider = this.provider(entry, name);
       if (provider?.kind === "module") return this.exportMemberOf(provider.filePath, name);

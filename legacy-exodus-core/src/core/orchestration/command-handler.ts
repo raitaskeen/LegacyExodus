@@ -555,7 +555,7 @@ export class AnalyzeProjectHandler {
         for (const path of collectGlobalWrites(ast)) globalWrites.add(path);
         const classFacts = collectClassHierarchyFacts(ast, table);
         const factoryFacts = collectFactoryFacts(ast, table);
-        if (factoryFacts.factories.length > 0 || factoryFacts.exportMembers !== undefined || factoryFacts.exportNames !== undefined) factoryFiles.push(factoryFacts);
+        if (factoryFacts.factories.length > 0 || factoryFacts.exportMembers !== undefined || factoryFacts.exportNames !== undefined || factoryFacts.reexportsDefault !== undefined) factoryFiles.push(factoryFacts);
         for (const name of classFacts.borrowedNames) borrowedNames.add(name);
         if (classFacts.classes.length > 0) classHierarchyFiles.push({ ...classFacts, borrowedNames: [] });
         else if (classFacts.foreignWrittenNames.length > 0) {
