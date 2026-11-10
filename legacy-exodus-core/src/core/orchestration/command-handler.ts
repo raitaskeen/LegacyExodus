@@ -27,7 +27,7 @@ import { rmSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { ParserManager, type ASTResult } from "@parser/index";
-import { callSchema, ClassHierarchy, collectClassHierarchyFacts, collectForeignExportWrites, collectUnstableExportIds, foreignExportWriteTargets, packageWriteKeys, type ForeignExportWrite, DeterministicCallGraphBuilder, DeterministicSemanticAnalysisEngine, FactUsage, findHttpCalls, referenceSchema, SortedFactList, type ClassHierarchyFile, type ExpressRoute, type MiddlewareChain, type SemanticAnalysis, type SemanticCall, type SymbolReference } from "@semantic/index";
+import { callSchema, ClassHierarchy, collectClassHierarchyFacts, collectForeignExportWrites, collectGlobalWrites, collectUnstableExportIds, foreignExportWriteTargets, packageWriteKeys, type ForeignExportWrite, DeterministicCallGraphBuilder, DeterministicSemanticAnalysisEngine, FactUsage, findHttpCalls, referenceSchema, SortedFactList, type ClassHierarchyFile, type ExpressRoute, type MiddlewareChain, type SemanticAnalysis, type SemanticCall, type SymbolReference } from "@semantic/index";
 import { createOwnedStorageRecord, createStorageRecord, type StorageRecord } from "@storage/index";
 import { codeSymbolSchema, JavaScriptSymbolExtractor, type CodeSymbol, type SymbolTable } from "@symbols/index";
 import { RunScopedAstStore, type AnalysisAstStoreFactory } from "./run-scoped-ast-store";
@@ -468,6 +468,8 @@ export class AnalyzeProjectHandler {
     const unstableExportIds = new Set<string>();
     // Writes to another module's exports, resolved once the run's resolver exists (OR-01).
     const foreignExportWrites: ForeignExportWrite[] = [];
+    // Standard-global paths the run's files write (ADR-012, Phase B1b).
+    const globalWrites = new Set<string>();
     // Class hierarchy facts for public `this` dispatch (class-hierarchy.ts): classes and the names their files write,
     // kept for files that declare a class; for any other file, only the names it writes on foreign objects (XA-03);
     // the names read as values, for every file, in one set.
@@ -548,6 +550,7 @@ export class AnalyzeProjectHandler {
         }
         for (const id of collectUnstableExportIds(ast, table)) unstableExportIds.add(id);
         foreignExportWrites.push(...collectForeignExportWrites(ast, table));
+        for (const path of collectGlobalWrites(ast)) globalWrites.add(path);
         const classFacts = collectClassHierarchyFacts(ast, table);
         for (const name of classFacts.borrowedNames) borrowedNames.add(name);
         if (classFacts.classes.length > 0) classHierarchyFiles.push({ ...classFacts, borrowedNames: [] });
@@ -621,6 +624,7 @@ export class AnalyzeProjectHandler {
 
       const callGraphBuilder = new DeterministicCallGraphBuilder(resolver);
       callGraphBuilder.usePackageWrites(packageWrites);
+      callGraphBuilder.useGlobalWrites(globalWrites);
       const controlFlowBuilder = new DeterministicControlFlowGraphBuilder();
       const dataFlowBuilder = new DeterministicDataFlowGraphBuilder();
 

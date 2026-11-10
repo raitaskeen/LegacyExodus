@@ -14,6 +14,8 @@ import { immutable } from "@shared/immutability";
 export class DeterministicCallGraphBuilder {
   /** Package members some file of the run writes (`module\u0000member`, `*` for a computed one): never EXTERNAL (ADR-012). */
   private packageWrites: ReadonlySet<string> = new Set();
+  /** Standard-global paths some file of the run writes (`console.log`, `JSON`, `process.*`): never EXTERNAL (ADR-012). */
+  private globalWrites: ReadonlySet<string> = new Set();
 
   /** @param resolver - the run's resolver (tsconfig aliases, workspace packages), shared with the dependency graph. */
   public constructor(public readonly resolver: ModuleResolver = new ModuleResolver()) {}
@@ -21,6 +23,11 @@ export class DeterministicCallGraphBuilder {
   /** The package members the run's files write (see packageWriteKeys); set before any file is built. */
   public usePackageWrites(keys: ReadonlySet<string>): void {
     this.packageWrites = keys;
+  }
+
+  /** The standard-global paths the run's files write (see collectGlobalWrites); set before any file is built. */
+  public useGlobalWrites(paths: ReadonlySet<string>): void {
+    this.globalWrites = paths;
   }
 
   public build(astResults: readonly ASTResult[], symbolTables: readonly SymbolTable[], dependencyGraph: DependencyGraph): { readonly calls: readonly SemanticCall[]; readonly references: readonly SymbolReference[] } {
@@ -33,6 +40,7 @@ export class DeterministicCallGraphBuilder {
     const writes = astResults.flatMap((ast) => collectForeignExportWrites(ast, tablesByPath.get(canonicalizePath(ast.metadata.sourcePath))));
     for (const id of foreignExportWriteTargets(writes, (importer, specifier) => this.resolver.resolve(importer, specifier, knownPaths).resolvedPath ?? undefined, (path) => tablesByPath.get(path)?.symbols ?? [])) unstableExportIds.add(id);
     this.usePackageWrites(packageWriteKeys(writes, (importer, specifier) => this.resolver.resolve(importer, specifier, knownPaths).resolvedPath ?? undefined));
+    this.useGlobalWrites(new Set(astResults.flatMap((ast) => collectGlobalWrites(ast))));
     const importTargetFile = new Map(dependencyGraph.edges.map((edge) => [edge.importSymbolId, edge.targetFilePath]));
     const hierarchy = new ClassHierarchy(
       astResults.map((ast) => collectClassHierarchyFacts(ast, tablesByPath.get(canonicalizePath(ast.metadata.sourcePath)))),
@@ -75,6 +83,8 @@ export class DeterministicCallGraphBuilder {
     const boundCallees = new Set<ASTNode>();
     const table = tablesByPath.get(canonicalizePath(ast.metadata.sourcePath));
     const fileSymbols = createFileSymbolIndex(table, ast, unstableExportIds);
+    // `require` is the module wrapper's own binding only in CommonJS: never in .mjs/.mts or a file with ESM syntax.
+    commonJsFiles.set(fileSymbols, !/\.m[jt]s$/i.test(ast.metadata.sourcePath) && !(table?.moduleReferences ?? []).some((reference) => reference.form.startsWith("esm")));
     factKeyers.set(fileSymbols, new FactKeyer(ast.metadata.sourcePath, ast.root, fileSymbols.ownerSymbols));
     this.visit(ast.root, ast, initialContext, tablesByPath, importsByFile, targetByImportId, calls, references, boundCallees, fileSymbols, undefined, false);
   }
@@ -146,7 +156,8 @@ export class DeterministicCallGraphBuilder {
         // A call proven to leave the repository: a stable import of a package or Node module, never replaced here (ADR-012).
         const external = targetSymbolId !== undefined || namedCallee === undefined || evalOrWith || invokesThroughWrittenProperty || (resolvedTarget !== undefined && runsTooEarly)
           ? undefined
-          : externalTarget(imported, calleeName, fileSymbols, nextContext, this.packageWrites);
+          : externalTarget(imported, calleeName, fileSymbols, nextContext, this.packageWrites)
+            ?? globalTarget(calleeName, fileSymbols, nextContext, this.globalWrites, commonJsFiles.get(fileSymbols) === true);
         const resolutionState = targetSymbolId !== undefined ? "RESOLVED" as const : external !== undefined ? "EXTERNAL" as const : "UNRESOLVED" as const;
         const reason = resolutionState !== "UNRESOLVED" ? undefined : unresolvedReason({
           named: namedCallee !== undefined, evalOrWith, invokerWritten: invokesThroughWrittenProperty,
@@ -2354,6 +2365,79 @@ function externalTarget(imported: CodeSymbol | undefined, calleeName: string, in
   const member = path.length === 0 ? "default" : path.join(".");
   if (packageWrites.has(`${module}\u0000${path[0] ?? "default"}`) || packageWrites.has(`${module}\u0000*`)) return undefined;
   return { module, member };
+}
+
+/**
+ * Standard JavaScript and Node globals a call can reach without an import (ADR-012, Phase B1b). Test-framework globals
+ * (`describe`, `it`, `expect`) are not here: a runner injects them, which the repository cannot show. `eval` and
+ * `Function` are left out: they run code the analysis cannot see.
+ */
+const STANDARD_GLOBALS: ReadonlySet<string> = new Set([
+  "Object", "Array", "String", "Number", "Boolean", "Symbol", "BigInt", "Math", "JSON", "Date", "RegExp", "Intl", "Reflect", "Proxy",
+  "Error", "TypeError", "RangeError", "SyntaxError", "ReferenceError", "EvalError", "URIError", "AggregateError",
+  "Promise", "Map", "Set", "WeakMap", "WeakSet", "WeakRef", "FinalizationRegistry",
+  "ArrayBuffer", "SharedArrayBuffer", "DataView", "Atomics", "Int8Array", "Uint8Array", "Uint8ClampedArray", "Int16Array", "Uint16Array",
+  "Int32Array", "Uint32Array", "Float32Array", "Float64Array", "BigInt64Array", "BigUint64Array",
+  "parseInt", "parseFloat", "isNaN", "isFinite", "encodeURI", "encodeURIComponent", "decodeURI", "decodeURIComponent",
+  "console", "setTimeout", "setInterval", "setImmediate", "clearTimeout", "clearInterval", "clearImmediate", "queueMicrotask",
+  "structuredClone", "process", "Buffer", "URL", "URLSearchParams", "TextEncoder", "TextDecoder", "AbortController", "AbortSignal",
+  "fetch", "atob", "btoa", "performance",
+]);
+/** Whether each file being built is CommonJS, where `require` is the module wrapper's own function. */
+const commonJsFiles = new WeakMap<FileSymbolIndex, boolean>();
+
+/** Names through which code reaches the global object itself. */
+const GLOBAL_OBJECTS: ReadonlySet<string> = new Set(["globalThis", "global", "window", "self"]);
+
+/**
+ * The standard-global paths one file writes: `console.log = …` gives `console.log`, `globalThis.JSON = …` and
+ * `JSON = …` give `JSON`, a computed member `console[k] = …` gives `console.*`. Any binding of the name counts,
+ * which only over-approximates: a write recorded wrongly can only keep a call UNRESOLVED.
+ */
+export function collectGlobalWrites(ast: ASTResult): readonly string[] {
+  const paths = new Set<string>();
+  const pathOf = (node: ASTNode | undefined): string[] | undefined => {
+    if (node === undefined) return undefined;
+    if (node.type === "Identifier") { const name = identifier(node); return name === undefined ? undefined : [name]; }
+    if (node.type !== "MemberExpression" && node.type !== "OptionalMemberExpression") return undefined;
+    const base = pathOf(node.children.find((child) => child.role === "object"));
+    if (base === undefined) return undefined;
+    const property = node.children.find((child) => child.role === "property");
+    const name = node.attributes.computed === true
+      ? (property?.type === "StringLiteral" && typeof property.attributes.value === "string" ? property.attributes.value : "*")
+      : identifier(property) ?? "*";
+    return [...base, name];
+  };
+  const visit = (node: ASTNode): void => {
+    if (node.type === "AssignmentExpression") {
+      const path = pathOf(node.children.find((child) => child.role === "left"));
+      const relative = path !== undefined && GLOBAL_OBJECTS.has(path[0]!) ? path.slice(1) : path;
+      if (relative !== undefined && relative.length > 0 && STANDARD_GLOBALS.has(relative[0]!)) paths.add(relative.join("."));
+    }
+    for (const child of node.children) visit(child);
+  };
+  visit(ast.root);
+  return [...paths].sort(compareCodePoints);
+}
+
+/**
+ * Where a call goes when its root is a standard global (ADR-012, Phase B1b): no declaration, parameter or import binds
+ * the root in the file, and no file of the run writes the path called or any part of it (`console.log`, `console`,
+ * `console.*`). `require(…)` is the CommonJS module wrapper's own function in a CommonJS file.
+ */
+function globalTarget(calleeName: string, index: FileSymbolIndex, context: ResolutionContext, globalWrites: ReadonlySet<string>, commonJs: boolean): ExternalTarget | undefined {
+  const pieces = calleeName.split(".");
+  const root = pieces[0] ?? calleeName;
+  if (calleeName === "require") {
+    return commonJs && isUnboundName(index, "require", context) ? { module: "commonjs", member: "require" } : undefined;
+  }
+  if (!STANDARD_GLOBALS.has(root) || pieces.some((piece) => piece.length === 0 || piece.includes("[") || piece.includes("("))) return undefined;
+  if (!isUnboundName(index, root, context)) return undefined;
+  for (let length = 1; length <= pieces.length; length++) {
+    const prefix = pieces.slice(0, length).join(".");
+    if (globalWrites.has(prefix) || globalWrites.has(`${prefix}.*`)) return undefined;
+  }
+  return { module: "global", member: calleeName };
 }
 
 /** A package or Node module specifier without the `node:` scheme: `node:fs` and `fs` are one module. */
