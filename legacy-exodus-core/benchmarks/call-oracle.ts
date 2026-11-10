@@ -141,6 +141,19 @@ export function originalColumn(insertions: readonly Insertion[] | undefined, lin
   return column - shift;
 }
 
+/**
+ * The call a V8 caller position belongs to. Several calls can cover one position: `request(createApp())` reaches past
+ * `request(` to its argument's start. The call that starts last is the innermost one there; among calls starting
+ * together (`f().g()`) the shorter wins.
+ */
+export function innermostSite<Site extends { readonly from: number; readonly to: number }>(sites: readonly Site[], offset: number): Site | undefined {
+  let best: Site | undefined;
+  for (const site of sites) {
+    if (site.from <= offset && offset <= site.to && (best === undefined || site.from > best.from || (site.from === best.from && site.to - site.from < best.to - best.from))) best = site;
+  }
+  return best;
+}
+
 /** Call and new expressions of one original file, with the span a V8 caller position falls in. */
 function callSites(file: string, source: string): CallSite[] {
   const sites: CallSite[] = [];
@@ -243,9 +256,7 @@ export function runCallOracle(engineRoot: string, corpus: string): OracleResult 
         sitesByFile.set(file, sites);
       }
       const offset = offsetOf(join(clean, file), line, column);
-      let best: CallSite | undefined;
-      for (const site of sites) if (site.from <= offset && offset <= site.to && (best === undefined || site.to - site.from < best.to - best.from)) best = site;
-      return best;
+      return innermostSite(sites, offset);
     };
     const engineCalls = new Map<string, any[]>();
     for (const call of semantic.calls ?? []) {

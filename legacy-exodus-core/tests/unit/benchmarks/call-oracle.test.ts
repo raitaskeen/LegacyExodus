@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { instrument, originalColumn, preloadSource } from "../../../benchmarks/call-oracle";
+import { innermostSite, instrument, originalColumn, preloadSource } from "../../../benchmarks/call-oracle";
 
 describe("call oracle instrumentation (Phase A3)", () => {
   test("adds a probe after a function's directives and wraps an arrow's expression body", () => {
@@ -12,6 +12,16 @@ describe("call oracle instrumentation (Phase A3)", () => {
     const { code, insertions } = instrument(source, 7);
     expect(code).toBe("function f() { 'use strict';__lxEnter(7,1,0); return 1; }\nconst g = (x) => (__lxEnter(7,2,10),x + 1);\n");
     expect(insertions.map((insertion) => [insertion.line, insertion.column, insertion.length])).toEqual([[1, 28, 17], [2, 17, 19], [2, 22, 1]]);
+  });
+
+  test("gives a position to the call that starts last there, so request(createApp()) is not request's", () => {
+    // `    request(createApp())`: request spans 4..12 (to just past its parenthesis), createApp 12..22.
+    const request = { from: 4, to: 12, name: "request" };
+    const createApp = { from: 12, to: 22, name: "createApp" };
+    expect(innermostSite([request, createApp], 12)?.name).toBe("createApp");
+    expect(innermostSite([request, createApp], 4)?.name).toBe("request");
+    // `f().g()`: both start at 0; the shorter callee span (f) owns position 0.
+    expect(innermostSite([{ from: 0, to: 6, name: "g" }, { from: 0, to: 2, name: "f" }], 0)?.name).toBe("f");
   });
 
   test("maps an instrumented column back to the original column on that line", () => {
