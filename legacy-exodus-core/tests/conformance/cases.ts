@@ -829,6 +829,37 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // ADR-012, Phase B1c: an alias of a standard global's path, and a built-in method on a literal or `new` value bound
+    // once, are EXTERNAL; a rebound binding, a method name the file writes, or a patched prototype keeps it UNRESOLVED.
+    id: "external-builtin-values",
+    files: {
+      "a.js": [
+        "var isArray = Array.isArray;",
+        "isArray([]);",
+        "const out = [];",
+        "out.push(1);",
+        "const seen = new Map();",
+        "seen.get(\"k\");",
+        "const name = \"x\";",
+        "name.toUpperCase();",
+        "let moved = [];",
+        "moved = {};",
+        "moved.push(2);",
+        "",
+      ].join("\n"),
+      "b.js": "const list = [];\nlist.map = function () {};\nlist.map(String);\n",
+      "patch.js": "String.prototype.toUpperCase = function () { return \"patched\"; };\n",
+    },
+    expectations: [
+      { id: "builtin:global-alias", check: (directory) => external(directory, "a.js", 2) === "global:Array.isArray" },
+      { id: "builtin:array-literal-method", check: (directory) => external(directory, "a.js", 4) === "global:Array.prototype.push" },
+      { id: "builtin:new-map-method", check: (directory) => external(directory, "a.js", 6) === "global:Map.prototype.get" },
+      { id: "builtin:patched-prototype-unresolved", category: "calls", has: /^a\.js@8:\d+\|module\|name\.toUpperCase\|UNRESOLVED\|/ },
+      { id: "builtin:rebound-binding-unresolved", category: "calls", has: /^a\.js@11:\d+\|module\|moved\.push\|UNRESOLVED\|/ },
+      { id: "builtin:own-property-written-not-external", category: "calls", lacks: /^b\.js@3:\d+\|module\|list\.map\|EXTERNAL\|/ },
+    ],
+  },
+  {
     // ADR-012, Phase B1b: a call on an unbound standard global is EXTERNAL unless some file writes that path; a test
     // runner's globals stay UNRESOLVED; `require` is EXTERNAL only in CommonJS.
     id: "external-globals",

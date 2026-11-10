@@ -164,7 +164,8 @@ export class DeterministicCallGraphBuilder {
         const external = targetSymbolId !== undefined || namedCallee === undefined || evalOrWith || invokesThroughWrittenProperty || (resolvedTarget !== undefined && runsTooEarly)
           ? undefined
           : externalTarget(imported, calleeName, fileSymbols, nextContext, this.packageWrites)
-            ?? globalTarget(calleeName, fileSymbols, nextContext, this.globalWrites, commonJsFiles.get(fileSymbols) === true);
+            ?? globalTarget(calleeName, fileSymbols, nextContext, this.globalWrites, commonJsFiles.get(fileSymbols) === true)
+            ?? valueTarget(calleeName, fileSymbols, nextContext, this.globalWrites);
         const resolutionState = targetSymbolId !== undefined ? "RESOLVED" as const : external !== undefined ? "EXTERNAL" as const : "UNRESOLVED" as const;
         if (targetSymbolId !== undefined) {
           const resolved = resolvedCallTargets.get(fileSymbols) ?? new Map<ASTNode, string>();
@@ -2470,6 +2471,87 @@ function globalTarget(calleeName: string, index: FileSymbolIndex, context: Resol
 
 /** The target of each call resolved so far in a file, by call node: a factory call's result is looked up here (C1). */
 const resolvedCallTargets = new WeakMap<FileSymbolIndex, Map<ASTNode, string>>();
+
+/**
+ * Built-in prototype methods, by the constructor whose instances a literal or `new` makes (ADR-012, Phase B1c). Only
+ * methods that every instance inherits are listed; an own property of the same name is excluded by the write check.
+ */
+const BUILTIN_METHODS: Readonly<Record<string, ReadonlySet<string>>> = {
+  Array: new Set(["at", "concat", "copyWithin", "entries", "every", "fill", "filter", "find", "findIndex", "findLast", "findLastIndex", "flat", "flatMap",
+    "forEach", "includes", "indexOf", "join", "keys", "lastIndexOf", "map", "pop", "push", "reduce", "reduceRight", "reverse", "shift", "slice", "some",
+    "sort", "splice", "toReversed", "toSorted", "toSpliced", "unshift", "values", "with"]),
+  String: new Set(["at", "charAt", "charCodeAt", "codePointAt", "concat", "endsWith", "includes", "indexOf", "lastIndexOf", "localeCompare", "match",
+    "matchAll", "normalize", "padEnd", "padStart", "repeat", "replace", "replaceAll", "search", "slice", "split", "startsWith", "substring", "substr",
+    "toLocaleLowerCase", "toLocaleUpperCase", "toLowerCase", "toUpperCase", "trim", "trimEnd", "trimStart"]),
+  RegExp: new Set(["exec", "test"]),
+  Map: new Set(["clear", "delete", "entries", "forEach", "get", "has", "keys", "set", "values"]),
+  Set: new Set(["add", "clear", "delete", "entries", "forEach", "has", "keys", "values"]),
+  WeakMap: new Set(["delete", "get", "has", "set"]),
+  WeakSet: new Set(["add", "delete", "has"]),
+  Date: new Set(["getDate", "getDay", "getFullYear", "getHours", "getMilliseconds", "getMinutes", "getMonth", "getSeconds", "getTime",
+    "getTimezoneOffset", "toISOString", "toJSON", "toUTCString"]),
+  URLSearchParams: new Set(["append", "delete", "entries", "forEach", "get", "getAll", "has", "keys", "set", "sort", "values"]),
+};
+
+/** The built-in a literal or `new` expression makes: `[]` an Array, `""` a String, `new Map()` a Map (the global, unbound). */
+function builtinKind(value: ASTNode | undefined, index: FileSymbolIndex, context: ResolutionContext): string | undefined {
+  if (value === undefined) return undefined;
+  if (value.type === "ArrayExpression") return "Array";
+  if (value.type === "StringLiteral" || value.type === "TemplateLiteral") return "String";
+  if (value.type === "RegExpLiteral") return "RegExp";
+  if (value.type === "NewExpression") {
+    const callee = value.children.find((child) => child.role === "callee");
+    const name = callee?.type === "Identifier" ? identifier(callee) : undefined;
+    return name !== undefined && BUILTIN_METHODS[name] !== undefined && isUnboundName(index, name, context) ? name : undefined;
+  }
+  return undefined;
+}
+
+/** A member path rooted at an identifier (`Array.isArray`, `Object.prototype.toString`), or undefined. */
+function memberPathOf(node: ASTNode | undefined): string[] | undefined {
+  if (node === undefined) return undefined;
+  if (node.type === "Identifier") { const name = identifier(node); return name === undefined ? undefined : [name]; }
+  if (node.type !== "MemberExpression" || node.attributes.computed === true) return undefined;
+  const base = memberPathOf(node.children.find((child) => child.role === "object"));
+  const property = identifier(node.children.find((child) => child.role === "property"));
+  return base === undefined || property === undefined ? undefined : [...base, property];
+}
+
+/** Whether no file of the run writes `path` or any part of it (see collectGlobalWrites). */
+function globalPathUnwritten(path: readonly string[], globalWrites: ReadonlySet<string>): boolean {
+  for (let length = 1; length <= path.length; length++) {
+    const prefix = path.slice(0, length).join(".");
+    if (globalWrites.has(prefix) || globalWrites.has(`${prefix}.*`)) return false;
+  }
+  return true;
+}
+
+/**
+ * Where a call goes through a binding whose value is proven built-in (ADR-012, Phase B1c), the binding being written once:
+ * - an alias of a standard global's path: `var isArray = Array.isArray; isArray(x)` calls `Array.isArray`;
+ * - a built-in method on a literal or `new` value: `const out = []; out.push(x)` calls `Array.prototype.push`, when the
+ *   file writes no property of that name and no file writes the built-in's prototype or the method on it.
+ * A computed write (`out[i] = …`) is assumed not to produce the method's name, as elsewhere.
+ */
+function valueTarget(calleeName: string, index: FileSymbolIndex, context: ResolutionContext, globalWrites: ReadonlySet<string>): ExternalTarget | undefined {
+  const pieces = calleeName.split(".");
+  if (pieces.length > 2 || pieces.some((piece) => piece.length === 0 || piece.includes("[") || piece.includes("("))) return undefined;
+  const name = pieces[0]!;
+  if (name === "this") return undefined;
+  const frame = declaredBindingFrame(index, name, context.scope);
+  if (frame === undefined || isRebound(index, frame.id, name)) return undefined;
+  const value = index.writes.declaredValues.get(bindingWriteKey(frame.id, name));
+  if (pieces.length === 1) {
+    const path = value?.type === "MemberExpression" ? memberPathOf(value) : undefined;
+    if (path === undefined || path.length < 2 || !STANDARD_GLOBALS.has(path[0]!) || !isUnboundName(index, path[0]!, context)) return undefined;
+    return globalPathUnwritten(path, globalWrites) ? { module: "global", member: path.join(".") } : undefined;
+  }
+  const method = pieces[1]!;
+  const kind = builtinKind(value, index, context);
+  if (kind === undefined || !BUILTIN_METHODS[kind]!.has(method)) return undefined;
+  if ((index.writes.propertyWrites.get(method) ?? 0) > 0) return undefined;
+  return globalPathUnwritten([kind, "prototype", method], globalWrites) ? { module: "global", member: `${kind}.prototype.${method}` } : undefined;
+}
 
 /** A package or Node module specifier without the `node:` scheme: `node:fs` and `fs` are one module. */
 function packageName(specifier: string): string {
