@@ -1056,7 +1056,7 @@ export const conformanceCases: readonly ConformanceCase[] = [
       ].join("\n"),
       "base.js": "function Base() { this.flow = function () { return \"own\"; }; }\nmodule.exports = Base;\n",
       "statics.js": [
-        "function Model() {}",
+        "function Model() { if (!(this instanceof Model)) return new Model(); }",
         "Model.prototype.save = function save() { return \"saved\"; };",
         "Object.defineProperty(Model, \"kinds\", { value: [] });",
         "const model = new Model();",

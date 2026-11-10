@@ -244,8 +244,16 @@ function collectConstructors(ast: ASTResult, symbols: readonly CodeSymbol[], byS
     if (linked.length > 1) continue;
     const link = linked[0];
     if (link !== undefined && (link.at > (firstMethodAt.get(functionSymbol.name) ?? Number.POSITIVE_INFINITY) || !knownParent(link.parent, symbols, disqualified))) continue;
+    // `new F()` yields `this`, unless the body returns another object. `return this` and the ES5 guard
+    // `if (!(this instanceof F)) return new F(…)` both yield an F.
     let returnsValue = false;
-    walkOwn(body, (inner) => { if (inner.type === "ReturnStatement" && role(inner, "argument") !== undefined) returnsValue = true; });
+    walkOwn(body, (inner) => {
+      if (inner.type !== "ReturnStatement") return;
+      const argument = role(inner, "argument");
+      const callee = argument?.type === "NewExpression" ? role(argument, "callee") : undefined;
+      const selfConstructed = callee?.type === "Identifier" && nameOf(callee) === functionSymbol.name;
+      if (argument !== undefined && argument.type !== "ThisExpression" && !selfConstructed) returnsValue = true;
+    });
     if (returnsValue) continue;
     const methods: [string, string][] = [];
     for (const [name, value] of prototypeWrites.get(functionSymbol.name) ?? []) {
