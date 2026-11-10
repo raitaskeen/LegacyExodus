@@ -49,6 +49,7 @@ A RESOLVED call is proven on these assumptions. Code that breaks one can make a 
   - its own file reads none of `this` (in its body), the class, `C.prototype`, a variable holding `new C()` or `new C()` itself by a computed key as a value (XA-04). A computed read of any other object in that file, such as `items[i]`, is assumed not to reach an instance.
 - **Class bodies are strict mode:** an unbound method call has no `this`.
 - **CommonJS order:** a call that runs in the same function before its `require` declarator stays UNRESOLVED (XA-05). A call in a nested function is assumed to run after the module's requires.
+- **Factory objects (Phase C1):** `x.m()` resolves to a function of the object literal a repository factory returns when `x` is bound once to a call resolved to that factory, every return of the factory gives that one never-reassigned literal (no spread), `m` is defined there once and not as a getter or setter, the factory's file writes no property named `m`, and no other file writes a property named `m` on an object other than `this` and its own exports. A computed key or computed write (`fastify[kState] = …`) is assumed not to produce the name `m`; `Object.assign` or `Object.defineProperty` onto the object is not followed.
 
 ## Known deferred capabilities
 

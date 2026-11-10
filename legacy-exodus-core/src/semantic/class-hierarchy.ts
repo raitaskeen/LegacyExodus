@@ -387,6 +387,11 @@ export class ClassHierarchy {
     return names.has(name) || names.has(COMPUTED);
   }
 
+  /** Whether some file writes a property named `name` by name on an object other than `this` and its own exports. */
+  public isWrittenByName(name: string): boolean {
+    return this.foreignWriters.has(name);
+  }
+
   /**
    * Whether some file reads a property named `name` as a value, or the file of `classId` reads the class, its
    * prototype or an instance by a computed key (XA-04), so a method may run with another `this`.
