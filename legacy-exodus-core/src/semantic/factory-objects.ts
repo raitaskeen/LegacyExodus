@@ -37,6 +37,11 @@ export interface FactoryFact {
 export interface FactoryFile {
   readonly filePath: string;
   readonly factories: readonly FactoryFact[];
+  /**
+   * Phase C3a: functions the file's exports object holds by name, when `module.exports` is one object literal or an
+   * object the file names and fills (`var app = exports = module.exports = {}; app.use = function …`). Name to symbol.
+   */
+  readonly exportMembers?: readonly (readonly [string, string])[];
 }
 
 const FUNCTION_TYPES = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ObjectMethod", "ClassMethod", "ClassPrivateMethod"]);
@@ -146,7 +151,125 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
     factories.push({ ids: [...new Set(ids)].sort(), methods: kept });
   });
   factories.push(...collectConstructors(ast, symbols, byStart));
-  return { filePath, factories };
+  const exportMembers = collectExportMembers(ast, symbols);
+  return { filePath, factories, ...(exportMembers.length === 0 ? {} : { exportMembers }) };
+}
+
+function isModuleExports(node: ASTNode | undefined): boolean {
+  return pathOf(node)?.join(".") === "module.exports";
+}
+
+/** The members of `module.exports = { … }`, or `undefined` when the literal could hide or replace one. */
+function literalMembers(literal: ASTNode): Map<string, ASTNode> | undefined {
+  const members = new Map<string, ASTNode>();
+  const seen = new Map<string, number>();
+  for (const property of literal.children) {
+    // A spread may supply or replace any name.
+    if (property.type !== "ObjectProperty" && property.type !== "ObjectMethod") return undefined;
+    const name = keyName(property);
+    if (name === undefined) {
+      if (property.attributes.computed === true) return undefined;
+      continue;
+    }
+    seen.set(name, (seen.get(name) ?? 0) + 1);
+    if (property.type === "ObjectMethod" && property.attributes.kind !== "method") continue;
+    members.set(name, property);
+  }
+  for (const [name, count] of seen) if (count > 1) members.delete(name);
+  return members;
+}
+
+/**
+ * Phase C3a: what a `require` of this file returns, by member name, when the file builds its exports object in one of
+ * two plain ways, at the top of the file:
+ * - `module.exports = { use: function …, init: init }`, the only write of `module.exports`, with no spread or computed
+ *   key; a member is a function expression, a method, or a function declared at the top of the file and never
+ *   reassigned;
+ * - `var app = exports = module.exports = {}` (or `const app = module.exports` with no write of `module.exports`), `app`
+ *   never reassigned, then `app.use = function …` statements.
+ * A name written by name anywhere else in the file (on any object), or passed as a literal key to
+ * `Object.defineProperty`, is left out; so is everything when the exports object or its alias is passed to a call. A
+ * computed write (`app[method] = …`) is assumed not to produce the name, as for C1.
+ */
+function collectExportMembers(ast: ASTResult, symbols: readonly CodeSymbol[]): (readonly [string, string])[] {
+  if (symbols.some((symbol) => (symbol.name === "module" || symbol.name === "exports") && symbol.kind !== "export" && symbol.kind !== "import")) return [];
+  let moduleExportsWrites = 0;
+  const writes = new Map<string, number>();
+  const reassigned = new Set<string>();
+  const passed = new Set<string>();
+  walkAll(ast.root, (node) => {
+    if (node.type === "AssignmentExpression") {
+      const left = role(node, "left");
+      if (isModuleExports(left)) moduleExportsWrites++;
+      if (left?.type === "Identifier" && nameOf(left) !== undefined) reassigned.add(nameOf(left)!);
+      if ((left?.type === "MemberExpression" || left?.type === "OptionalMemberExpression") && left.attributes.computed !== true) {
+        const name = nameOf(role(left, "property"));
+        if (name !== undefined) writes.set(name, (writes.get(name) ?? 0) + 1);
+      }
+    }
+    if (node.type === "CallExpression" || node.type === "NewExpression" || node.type === "OptionalCallExpression") {
+      const literal = literalKeyWrite(node);
+      if (literal !== undefined) writes.set(literal, (writes.get(literal) ?? 0) + 1);
+      for (const argument of callArguments(node)) {
+        if (isModuleExports(argument)) passed.add("module.exports");
+        else if (argument.type === "Identifier" && nameOf(argument) !== undefined) passed.add(nameOf(argument)!);
+      }
+    }
+  });
+  if (passed.has("module.exports") || passed.has("exports")) return [];
+
+  const topFunctions = new Map<string, CodeSymbol>();
+  for (const symbol of symbols) if (symbol.kind === "function" && symbol.scopeId === "scope:module" && !reassigned.has(symbol.name)) topFunctions.set(symbol.name, symbol);
+  const isFunctionValue = (value: ASTNode | undefined): boolean =>
+    value?.type === "FunctionExpression" || value?.type === "ArrowFunctionExpression" || (value?.type === "Identifier" && topFunctions.has(nameOf(value) ?? ""));
+  const result: [string, string][] = [];
+
+  for (const statement of ast.root.children) {
+    // Form 1: `module.exports = { … }`.
+    const expression = statement.type === "ExpressionStatement" ? role(statement, "expression") : undefined;
+    if (expression?.type === "AssignmentExpression" && expression.attributes.operator === "=" && isModuleExports(role(expression, "left"))
+      && role(expression, "right")?.type === "ObjectExpression" && moduleExportsWrites === 1) {
+      const members = literalMembers(role(expression, "right")!) ?? new Map<string, ASTNode>();
+      for (const [name, property] of members) {
+        if ((writes.get(name) ?? 0) > 0) continue;
+        const value = property.type === "ObjectMethod" ? property : role(property, "value") ?? (property.attributes.shorthand === true ? role(property, "key") : undefined);
+        if (property.type !== "ObjectMethod" && !isFunctionValue(value)) continue;
+        const exported = symbols.filter((symbol) => symbol.kind === "export" && !symbol.defaultExport && symbol.name === name && startKey(symbol.location) === startKey(property.location));
+        if (exported.length === 1) result.push([name, exported[0]!.id]);
+      }
+    }
+  }
+
+  // Form 2: an alias of the exports object, filled by top-level statements.
+  for (const statement of ast.root.children) {
+    if (statement.type !== "VariableDeclaration") continue;
+    const declarators = statement.children.filter((child) => child.type === "VariableDeclarator");
+    if (declarators.length !== 1) continue;
+    const alias = nameOf(role(declarators[0]!, "id"));
+    let init = role(declarators[0]!, "init");
+    if (alias === undefined || init === undefined || reassigned.has(alias) || passed.has(alias)) continue;
+    let viaWrite = false;
+    // `exports = module.exports = {}`: walk the assignment chain to its innermost value.
+    while (init?.type === "AssignmentExpression" && init.attributes.operator === "=") {
+      const left = role(init, "left");
+      if (isModuleExports(left)) viaWrite = true;
+      else if (!(left?.type === "Identifier" && nameOf(left) === "exports")) { init = undefined; break; }
+      init = role(init, "right");
+    }
+    const fresh = viaWrite && moduleExportsWrites === 1 && init?.type === "ObjectExpression" && init.children.length === 0;
+    const direct = !viaWrite && isModuleExports(init) && moduleExportsWrites === 0;
+    if (!fresh && !direct) continue;
+    for (const inner of ast.root.children) {
+      const write = inner.type === "ExpressionStatement" ? role(inner, "expression") : undefined;
+      const left = write?.type === "AssignmentExpression" && write.attributes.operator === "=" ? role(write, "left") : undefined;
+      if (left?.type !== "MemberExpression" || left.attributes.computed === true || nameOf(role(left, "object")) !== alias) continue;
+      const name = nameOf(role(left, "property"));
+      if (name === undefined || writes.get(name) !== 1 || !isFunctionValue(role(write!, "right"))) continue;
+      const method = symbols.filter((symbol) => symbol.name === name && symbol.containerName === alias && (symbol.kind === "method" || symbol.kind === "variable") && symbol.scopeId === "scope:module");
+      if (method.length === 1) result.push([name, method[0]!.id]);
+    }
+  }
+  return result.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
 }
 
 /** `F.prototype` for a plain identifier `F`, or undefined. */
@@ -381,8 +504,11 @@ export class FactoryIndex {
    * @param writtenElsewhere - whether a file other than `filePath` writes a property of that name on an object other
    *   than `this` and its own exports. The factory's own file was checked when its facts were collected.
    */
+  private readonly exportMembersByFile = new Map<string, ReadonlyMap<string, string>>();
+
   public constructor(files: Iterable<FactoryFile>, private readonly writtenElsewhere: (name: string, filePath: string) => boolean) {
     for (const file of files) {
+      if (file.exportMembers !== undefined) this.exportMembersByFile.set(file.filePath, new Map(file.exportMembers));
       for (const factory of file.factories) {
         const entry = { filePath: file.filePath, methods: new Map(factory.methods), ...(factory.readyAt === undefined ? {} : { readyAt: factory.readyAt }) };
         for (const id of factory.ids) (factory.constructed === true ? this.prototypeById : this.methodsById).set(id, entry);
@@ -394,6 +520,12 @@ export class FactoryIndex {
    * The function the object made by a call resolved to `producerId` holds at `name`: a factory's returned literal for
    * `F()` (C1), a constructor's prototype for `new F()` (C2).
    */
+  /** C3a: the function `require(filePath).name` reaches, when that file builds its exports object plainly. */
+  public exportMemberOf(filePath: string, name: string): string | undefined {
+    const target = this.exportMembersByFile.get(filePath)?.get(name);
+    return target === undefined || this.writtenElsewhere(name, filePath) ? undefined : target;
+  }
+
   public methodOf(producerId: string, name: string, constructed = false, topLevelCall?: { readonly filePath: string; readonly line: number; readonly column: number }): string | undefined {
     const entry = (constructed ? this.prototypeById : this.methodsById).get(producerId);
     const target = entry?.methods.get(name);

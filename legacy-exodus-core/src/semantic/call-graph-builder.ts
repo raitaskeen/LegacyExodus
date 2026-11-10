@@ -2187,6 +2187,9 @@ function resolveNamespaceCall(
   if (targetTable === undefined) return undefined;
 
   if (wholeModuleRequire) {
+    // C3a: a module that builds its exports object plainly (`module.exports = { … }`, or an alias it fills).
+    const member = context.factories?.exportMemberOf(canonicalizePath(targetTable.filePath), methodName);
+    if (member !== undefined) return isUnstableTarget(index, member) ? undefined : member;
     if (targetTable.symbols.some((s) => s.kind === "export" && s.defaultExport)) return undefined;
     const property = targetTable.symbols.filter((s) => s.kind === "export" && s.moduleSpecifier === undefined && s.name === methodName);
     return property.length === 1 && property[0] !== undefined && !isUnstableTarget(index, property[0].id) ? property[0].id : undefined;
