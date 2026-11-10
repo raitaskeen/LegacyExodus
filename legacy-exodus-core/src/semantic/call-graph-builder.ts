@@ -2299,7 +2299,9 @@ function resolveLocalCall(
       const init = index.writes.declaredValues.get(bindingWriteKey(frame.id, receiver));
       // 1d. Constructor prototype (Phase C2): `const x = new F()` where F's prototype holds `methodName`.
       const producer = init?.type === "CallExpression" || init?.type === "NewExpression" ? resolvedCallTargets.get(index)?.get(init) : undefined;
-      const method = producer === undefined ? undefined : context.factories.methodOf(producer, methodName, init?.type === "NewExpression");
+      const start = callNode?.location?.start;
+      const topLevelCall = context.callerName === "module" && start !== undefined ? { filePath: canonicalizePath(table.filePath), line: start.line, column: start.column } : undefined;
+      const method = producer === undefined ? undefined : context.factories.methodOf(producer, methodName, init?.type === "NewExpression", topLevelCall);
       if (method !== undefined) return method;
     }
   }

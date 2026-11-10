@@ -26,6 +26,12 @@ export interface FactoryFact {
    * that is never passed to a call itself (`util.inherits(F, Base)` could give an early call another target).
    */
   readonly constructed?: true;
+  /**
+   * Phase C2b: where the constructor has a parent, the end of its last top-level prototype method write. Before it, a
+   * call could reach the parent's method of the same name, so a top-level call of the same file that starts earlier is
+   * not resolved. A call inside a function is assumed to run after the module has loaded.
+   */
+  readonly readyAt?: { readonly line: number; readonly column: number };
 }
 
 export interface FactoryFile {
@@ -164,10 +170,39 @@ function collectConstructors(ast: ASTResult, symbols: readonly CodeSymbol[], byS
   // Only a top-level statement's `F` is surely the file's own `F`; one in a function may be a parameter or a local of
   // that name, so a prototype write there disqualifies the name.
   const topLevel = new Set<ASTNode>();
-  for (const statement of ast.root.children) {
+  // Phase C2b: top-level statements that link `F` to a parent, or define a literal-named prototype property; their
+  // arguments do not disqualify `F`. Statement positions order the links before the methods.
+  const handled = new Set<ASTNode>();
+  const links = new Map<string, { readonly parent: string; readonly at: number }[]>();
+  const firstMethodAt = new Map<string, number>();
+  const lastMethodEnd = new Map<string, { readonly line: number; readonly column: number }>();
+  // `Object.create` and friends are the standard ones only where the file binds no `Object` of its own.
+  const standardObject = !symbols.some((symbol) => symbol.name === "Object");
+  ast.root.children.forEach((statement, position) => {
     const expression = statement.type === "ExpressionStatement" ? role(statement, "expression") : undefined;
-    if (expression?.type === "AssignmentExpression") topLevel.add(expression);
-  }
+    if (expression === undefined) return;
+    if (expression.type === "AssignmentExpression") {
+      topLevel.add(expression);
+      const left = role(expression, "left");
+      const owner = left?.type === "MemberExpression" && left.attributes.computed !== true ? prototypeOwner(role(left, "object")) : undefined;
+      if (owner !== undefined) {
+        if (!firstMethodAt.has(owner)) firstMethodAt.set(owner, position);
+        if (expression.location !== undefined) lastMethodEnd.set(owner, expression.location.end);
+      }
+    }
+    const link = parentLink(expression, symbols, standardObject);
+    if (link !== undefined) {
+      handled.add(expression);
+      // The `Object.create(X.prototype)` on the right reads X's prototype; it does not change it.
+      if (expression.type === "AssignmentExpression") handled.add(role(expression, "right")!);
+      links.set(link.child, [...(links.get(link.child) ?? []), { parent: link.parent, at: position }]);
+    }
+    const defined = standardObject ? literalDefinition(expression) : undefined;
+    if (defined !== undefined) {
+      handled.add(expression);
+      writes.set(defined.name, (writes.get(defined.name) ?? 0) + 1);
+    }
+  });
   walkAll(ast.root, (node) => {
     if (node.type === "AssignmentExpression") {
       const left = role(node, "left");
@@ -186,10 +221,10 @@ function collectConstructors(ast: ASTResult, symbols: readonly CodeSymbol[], byS
       }
       // `F.prototype = …` replaces the prototype; `F = …` rebinds the constructor.
       const replaced = prototypeOwner(left);
-      if (replaced !== undefined) disqualified.add(replaced);
+      if (replaced !== undefined && !handled.has(node)) disqualified.add(replaced);
       if (left?.type === "Identifier" && nameOf(left) !== undefined) disqualified.add(nameOf(left)!);
     }
-    if (node.type === "CallExpression" || node.type === "NewExpression" || node.type === "OptionalCallExpression") {
+    if ((node.type === "CallExpression" || node.type === "NewExpression" || node.type === "OptionalCallExpression") && !handled.has(node)) {
       for (const argument of node.children.filter((child) => child.role === "arguments")) {
         if (argument.type === "Identifier" && nameOf(argument) !== undefined) disqualified.add(nameOf(argument)!);
         const owner = prototypeOwner(argument);
@@ -204,6 +239,12 @@ function collectConstructors(ast: ASTResult, symbols: readonly CodeSymbol[], byS
     const functionSymbol = (byStart.get(startKey(node.location) ?? "") ?? []).find((symbol) => symbol.kind === "function");
     const body = role(node, "body");
     if (functionSymbol === undefined || body === undefined || disqualified.has(functionSymbol.name)) continue;
+    // C2b: at most one parent link, before every method, to a parent whose constructor cannot give the instance an own
+    // method this file does not see (a package, a standard error, or a constructor declared here).
+    const linked = links.get(functionSymbol.name) ?? [];
+    if (linked.length > 1) continue;
+    const link = linked[0];
+    if (link !== undefined && (link.at > (firstMethodAt.get(functionSymbol.name) ?? Number.POSITIVE_INFINITY) || !knownParent(link.parent, symbols, disqualified))) continue;
     let returnsValue = false;
     walkOwn(body, (inner) => { if (inner.type === "ReturnStatement" && role(inner, "argument") !== undefined) returnsValue = true; });
     if (returnsValue) continue;
@@ -219,15 +260,101 @@ function collectConstructors(ast: ASTResult, symbols: readonly CodeSymbol[], byS
     if (methods.length === 0) continue;
     methods.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
     const ids = [functionSymbol.id, ...symbols.filter((symbol) => symbol.kind === "export" && symbol.moduleSpecifier === undefined && symbol.sourceSymbolName === functionSymbol.name).map((symbol) => symbol.id)];
-    found.push({ ids: [...new Set(ids)].sort(), methods, constructed: true });
+    const readyAt = link === undefined ? undefined : lastMethodEnd.get(functionSymbol.name);
+    found.push({ ids: [...new Set(ids)].sort(), methods, constructed: true, ...(readyAt === undefined ? {} : { readyAt }) });
   }
   return found;
 }
 
+/** A member path rooted at an identifier (`util.inherits`), or undefined. */
+function pathOf(node: ASTNode | undefined): string[] | undefined {
+  if (node?.type === "Identifier") { const name = nameOf(node); return name === undefined ? undefined : [name]; }
+  if (node?.type !== "MemberExpression" || node.attributes.computed === true) return undefined;
+  const base = pathOf(role(node, "object"));
+  const property = nameOf(role(node, "property"));
+  return base === undefined || property === undefined ? undefined : [...base, property];
+}
+
+function callArguments(node: ASTNode): ASTNode[] {
+  return node.children.filter((child) => child.role === "arguments");
+}
+
+/** The module-scope import binding `name`, when the file has exactly one declaration of that name. */
+function moduleImport(name: string, symbols: readonly CodeSymbol[]): CodeSymbol | undefined {
+  const declared = symbols.filter((symbol) => symbol.name === name && symbol.scopeId === "scope:module" && symbol.kind !== "export");
+  const imports = declared.filter((symbol) => symbol.kind === "import");
+  // A CommonJS `const X = require(…)` is an import and a variable of the same name.
+  return imports.length === 1 && declared.every((symbol) => symbol.kind === "import" || symbol.kind === "variable") ? imports[0] : undefined;
+}
+
+/**
+ * Phase C2b: `F.prototype = Object.create(X.prototype)`, `Object.setPrototypeOf(F.prototype, X.prototype)` or
+ * `inherits(F, X)` from `util` or the `inherits` package.
+ */
+function parentLink(expression: ASTNode, symbols: readonly CodeSymbol[], standardObject: boolean): { readonly child: string; readonly parent: string } | undefined {
+  if (expression.type === "AssignmentExpression" && expression.attributes.operator === "=") {
+    if (!standardObject) return undefined;
+    const child = prototypeOwner(role(expression, "left"));
+    const right = role(expression, "right");
+    if (child === undefined || right?.type !== "CallExpression" || pathOf(role(right, "callee"))?.join(".") !== "Object.create") return undefined;
+    const args = callArguments(right);
+    const parent = args.length === 1 ? prototypeOwner(args[0]) : undefined;
+    return parent === undefined ? undefined : { child, parent };
+  }
+  if (expression.type !== "CallExpression") return undefined;
+  const callee = pathOf(role(expression, "callee"));
+  const args = callArguments(expression);
+  if (args.length !== 2 || callee === undefined) return undefined;
+  if (callee.join(".") === "Object.setPrototypeOf") {
+    if (!standardObject) return undefined;
+    const child = prototypeOwner(args[0]);
+    const parent = prototypeOwner(args[1]);
+    return child === undefined || parent === undefined ? undefined : { child, parent };
+  }
+  const binding = moduleImport(callee[0]!, symbols);
+  const fromUtil = callee.length === 2 && callee[1] === "inherits" && binding?.moduleSpecifier === "util" && binding.sourceSymbolName === undefined;
+  const direct = callee.length === 1 && (binding?.moduleSpecifier === "inherits" || (binding?.moduleSpecifier === "util" && binding.sourceSymbolName === "inherits"));
+  if (!fromUtil && !direct) return undefined;
+  const child = args[0]!.type === "Identifier" ? nameOf(args[0]) : undefined;
+  const parent = args[1]!.type === "Identifier" ? nameOf(args[1]) : undefined;
+  return child === undefined || parent === undefined ? undefined : { child, parent };
+}
+
+/** `Object.defineProperty(F.prototype, "name", …)`: a write of that one name. */
+function literalDefinition(expression: ASTNode): { readonly name: string } | undefined {
+  if (expression.type !== "CallExpression" || pathOf(role(expression, "callee"))?.join(".") !== "Object.defineProperty") return undefined;
+  const args = callArguments(expression);
+  const key = args[1];
+  if (args.length !== 3 || prototypeOwner(args[0]) === undefined || key?.type !== "StringLiteral" || typeof key.attributes.value !== "string") return undefined;
+  return { name: key.attributes.value };
+}
+
+const STANDARD_ERRORS = new Set(["Error", "TypeError", "RangeError", "SyntaxError", "ReferenceError", "EvalError", "URIError"]);
+
+/**
+ * A parent whose constructor gives instances no own method the analysis misses: a package or Node module import
+ * (assumed to set only data fields), a standard error (no binding of that name in the file), or a constructor declared
+ * at the top of this file (its `this.m = …` writes count as this file's writes of `m`).
+ */
+function knownParent(parent: string, symbols: readonly CodeSymbol[], disqualified: ReadonlySet<string>): boolean {
+  if (disqualified.has(parent)) return false;
+  const declared = symbols.filter((symbol) => symbol.name === parent && symbol.kind !== "export");
+  if (declared.length === 0) return STANDARD_ERRORS.has(parent);
+  const imported = moduleImport(parent, symbols);
+  if (imported !== undefined) return imported.moduleSpecifier !== undefined && !/^[./]/.test(imported.moduleSpecifier);
+  return declared.length === 1 && declared[0]!.kind === "function" && declared[0]!.scopeId === "scope:module";
+}
+
 /** The run's factories, looked up by the symbol a factory call resolves to. */
+interface FactoryEntry {
+  readonly filePath: string;
+  readonly methods: ReadonlyMap<string, string>;
+  readonly readyAt?: { readonly line: number; readonly column: number };
+}
+
 export class FactoryIndex {
-  private readonly methodsById = new Map<string, { readonly filePath: string; readonly methods: ReadonlyMap<string, string> }>();
-  private readonly prototypeById = new Map<string, { readonly filePath: string; readonly methods: ReadonlyMap<string, string> }>();
+  private readonly methodsById = new Map<string, FactoryEntry>();
+  private readonly prototypeById = new Map<string, FactoryEntry>();
 
   /**
    * @param writtenElsewhere - whether a file other than `filePath` writes a property of that name on an object other
@@ -236,7 +363,7 @@ export class FactoryIndex {
   public constructor(files: Iterable<FactoryFile>, private readonly writtenElsewhere: (name: string, filePath: string) => boolean) {
     for (const file of files) {
       for (const factory of file.factories) {
-        const entry = { filePath: file.filePath, methods: new Map(factory.methods) };
+        const entry = { filePath: file.filePath, methods: new Map(factory.methods), ...(factory.readyAt === undefined ? {} : { readyAt: factory.readyAt }) };
         for (const id of factory.ids) (factory.constructed === true ? this.prototypeById : this.methodsById).set(id, entry);
       }
     }
@@ -246,9 +373,14 @@ export class FactoryIndex {
    * The function the object made by a call resolved to `producerId` holds at `name`: a factory's returned literal for
    * `F()` (C1), a constructor's prototype for `new F()` (C2).
    */
-  public methodOf(producerId: string, name: string, constructed = false): string | undefined {
+  public methodOf(producerId: string, name: string, constructed = false, topLevelCall?: { readonly filePath: string; readonly line: number; readonly column: number }): string | undefined {
     const entry = (constructed ? this.prototypeById : this.methodsById).get(producerId);
     const target = entry?.methods.get(name);
-    return target === undefined || this.writtenElsewhere(name, entry!.filePath) ? undefined : target;
+    if (target === undefined || this.writtenElsewhere(name, entry!.filePath)) return undefined;
+    // C2b: a top-level call of the constructor's own file that starts before its methods are all assigned.
+    const ready = entry!.readyAt;
+    if (ready !== undefined && topLevelCall !== undefined && topLevelCall.filePath === entry!.filePath
+      && (topLevelCall.line < ready.line || (topLevelCall.line === ready.line && topLevelCall.column < ready.column))) return undefined;
+    return target;
   }
 }
