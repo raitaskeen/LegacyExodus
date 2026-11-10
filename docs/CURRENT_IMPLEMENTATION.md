@@ -50,6 +50,10 @@ A RESOLVED call is proven on these assumptions. Code that breaks one can make a 
 - **Class bodies are strict mode:** an unbound method call has no `this`.
 - **CommonJS order:** a call that runs in the same function before its `require` declarator stays UNRESOLVED (XA-05). A call in a nested function is assumed to run after the module's requires.
 - **Factory objects (Phase C1):** `x.m()` resolves to a function of the object literal a repository factory returns when `x` is bound once to a call resolved to that factory, every return of the factory gives that one never-reassigned literal (no spread), `m` is defined there once and not as a getter or setter, the factory's file writes no property named `m`, and no other file writes a property named `m` on an object other than `this` and its own exports. A computed key or computed write (`fastify[kState] = …`) is assumed not to produce the name `m`; `Object.assign` or `Object.defineProperty` onto the object is not followed.
+- **EXTERNAL calls (ADR-012)** name a package, Node module or standard global, not a function in the repository, on the same assumptions:
+  - a package import is EXTERNAL when no file writes a property onto the import (B1);
+  - a call on an unbound standard global (`Object.keys`, `process.nextTick`) is EXTERNAL when no file writes that path or a prefix of it; `require` is EXTERNAL only in CommonJS (B1b);
+  - an alias of such a path (`var isArray = Array.isArray`) and a built-in method on a literal or `new` value bound once (`const out = []; out.push(x)`) are EXTERNAL when the file writes no property of the method's name and no file writes the built-in's prototype or the method on it (B1c). Another file giving an escaped literal its own method of that name is assumed not to happen.
 
 ## Known deferred capabilities
 
