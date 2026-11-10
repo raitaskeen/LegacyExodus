@@ -43,7 +43,9 @@ off; Fact Diff and Scale Gate are now required checks on main; #195 closed; #111
 | A4 | CFG block oracle (flow oracle: unreachable and dead-code claims) | **Merged** #307 (`67f9e62`): 0 contradictions on Express and Fastify |
 | B1 | EXTERNAL package and Node module calls (ADR-012) | **Merged** #309 (`2ef5a7b`); oracle lockfiles #310; upgrade rule #308 |
 | B1b | EXTERNAL standard globals and CommonJS require | **Merged** #311 (`410509f`) |
-| C | Receiver tracking, see PHASE-C-DESIGN.md | C1 **Merged** #312 (`7ea08c4`): Fastify oracle recall 7.1% -> 34.3% (CI), 0 contradictions; coverage source/test split #313; B1c (built-in aliases and literal methods) in test |
+| B1c | EXTERNAL aliases of globals and built-in methods on literal values | PR #314 (green; src EXTERNAL 24.9% -> 33.3%, 0 lost on 9 corpora) |
+| A2b | Coverage split: source files vs test files | **Merged** #313 (`7470e0e`) |
+| C | Receiver tracking, see PHASE-C-DESIGN.md | C1 **Merged** #312 (`7ea08c4`): Fastify oracle recall 7.1% -> 34.3% (CI), 0 contradictions. C2 (new F() prototypes, Object.create(P)) on feat/c2-prototype-objects: 0 changes on 8 library corpora, mongoose 92 upgraded / 0 lost. Next C2b: ES5 inheritance (`F.prototype = Object.create(Base.prototype)`, `util.inherits`, `setPrototypeOf`), then C3 |
 | D-H | See the plan | Queued |
 
 ## Track 2026-11-09: cross-file audit findings (XA-01 to XA-08)
