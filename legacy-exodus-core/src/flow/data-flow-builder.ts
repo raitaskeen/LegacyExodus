@@ -740,13 +740,20 @@ export class DeterministicDataFlowGraphBuilder {
       }
     }
     const body = node.children.find((child) => child.role === "body");
-    if (body !== undefined) this.visit(body, functionScope, filePath, state, record);
+    // A concise arrow body (`(v) => v`) is the function's return value (XB-01).
+    if (body !== undefined && node.type === "ArrowFunctionExpression" && body.type !== "BlockStatement") this.returnExpression(body, body, functionScope, filePath, state, record);
+    else if (body !== undefined) this.visit(body, functionScope, filePath, state, record);
   }
 
   private returnValue(node: ASTNode, scope: Scope, filePath: string, state: FlowState, currentFunction: FunctionRecord | undefined): void {
     const argument = node.children.find((child) => child.role === "argument");
-    if (argument === undefined || currentFunction === undefined) { if (argument !== undefined) this.visit(argument, scope, filePath, state, currentFunction); return; }
-    const returned = this.define(`${currentFunction.name}:return`, "return", node, scope, filePath, state, undefined);
+    if (argument !== undefined) this.returnExpression(argument, node, scope, filePath, state, currentFunction);
+  }
+
+  /** `argument` is what the function returns; `node` (the return statement, or a concise arrow body) anchors the definition. */
+  private returnExpression(argument: ASTNode, node: ASTNode, scope: Scope, filePath: string, state: FlowState, currentFunction: FunctionRecord | undefined): void {
+    if (currentFunction === undefined) { this.visit(argument, scope, filePath, state, currentFunction); return; }
+    const returned = this.define(`${currentFunction.name.length > 0 ? currentFunction.name : "<anonymous>"}:return`, "return", node, scope, filePath, state, undefined);
     currentFunction.returns.push(returned);
     const callee = argument.children.find((child) => child.role === "callee");
     const source = argument.type === "CallExpression" && callee?.type !== "MemberExpression" ? undefined : this.definitionFor(argument, scope);
@@ -1297,7 +1304,42 @@ class BranchDefinitions extends Map<string, VariableDefinition> {
 }
 
 function createScope(parent?: Scope): Scope { return { parent, definitions: new Map() }; }
-function collectFunctions(root: ASTNode, symbols: readonly CodeSymbol[]): Map<ASTNode, FunctionRecord> { const records = new Map<ASTNode, FunctionRecord>(); const callables = new Map<string, CodeSymbol[]>(); for (const candidate of symbols) if (candidate.kind === "function" || candidate.kind === "method") callables.set(candidate.name, [...(callables.get(candidate.name) ?? []), candidate]); const visit = (node: ASTNode): void => { if (isFunction(node)) { const name = functionName(node); if (name !== undefined) { const symbol = (callables.get(name) ?? []).filter((candidate) => sameLocation(candidate.location, node.location)); records.set(node, { name, parameters: [], returns: [], ...(symbol.length === 1 && symbol[0] !== undefined ? { symbolId: symbol[0].id } : {}) }); } } for (const child of node.children) visit(child); }; visit(root); return records; }
+/**
+ * Every function node with the symbol a call names it by, so its parameters and returns get a summary (XB-01):
+ * - a named function or method: the function or method symbol of that name at its position;
+ * - an arrow function or function expression (`const f = (x) => …`, `const f = function g() {…}`): the one function
+ *   or method symbol at its position, whatever its own name;
+ * - a function assigned as an export (`exports.f = function …`, `module.exports.f = …`, `module.exports = …`): the
+ *   one export symbol of that name (or the default export) at the assignment.
+ * A function without a name of its own keeps an empty record name, so it is never resolved by name.
+ */
+function collectFunctions(root: ASTNode, symbols: readonly CodeSymbol[]): Map<ASTNode, FunctionRecord> {
+  const records = new Map<ASTNode, FunctionRecord>();
+  const callables = symbols.filter((candidate) => candidate.kind === "function" || candidate.kind === "method");
+  const exportSymbols = symbols.filter((candidate) => candidate.kind === "export");
+  const only = (found: readonly CodeSymbol[]): string | undefined => (found.length === 1 ? found[0]?.id : undefined);
+  const exportTarget = (node: ASTNode, parent: ASTNode | undefined): string | undefined => {
+    if (parent?.type !== "AssignmentExpression" || node.role !== "right" || parent.attributes.operator !== "=") return undefined;
+    const path = memberPath(parent.children.find((child) => child.role === "left"));
+    const atAssignment = exportSymbols.filter((candidate) => sameLocation(candidate.location, parent.location));
+    if (path === "module.exports") return only(atAssignment.filter((candidate) => candidate.defaultExport === true));
+    const name = path?.startsWith("exports.") ? path.slice("exports.".length) : path?.startsWith("module.exports.") ? path.slice("module.exports.".length) : undefined;
+    return name === undefined || name.includes(".") ? undefined : only(atAssignment.filter((candidate) => candidate.name === name));
+  };
+  const visit = (node: ASTNode, parent: ASTNode | undefined): void => {
+    if (isFunction(node)) {
+      const name = functionName(node);
+      const atNode = callables.filter((candidate) => sameLocation(candidate.location, node.location));
+      const symbolId = (name === undefined ? undefined : only(atNode.filter((candidate) => candidate.name === name)))
+        ?? (name === undefined || node.type === "FunctionExpression" ? only(atNode) : undefined)
+        ?? exportTarget(node, parent);
+      if (name !== undefined || symbolId !== undefined) records.set(node, { name: name ?? "", parameters: [], returns: [], ...(symbolId === undefined ? {} : { symbolId }) });
+    }
+    for (const child of node.children) visit(child, node);
+  };
+  visit(root, undefined);
+  return records;
+}
 function resolveFunction(name: string | undefined, functions: ReadonlyMap<string, FunctionRecord>): FunctionRecord | undefined { if (name === undefined) return undefined; const direct = functions.get(name); if (direct !== undefined) return direct; const property = name.split(".").at(-1); return property === undefined ? undefined : functions.get(property); }
 function bindingOwner(scope: Scope | undefined, name: string): Scope | undefined {
   for (let current = scope; current !== undefined; current = current.parent) {
