@@ -55,10 +55,10 @@ Audit by Shahzaib Hassan on `fdc37f3` (`audits/2026-11-10-blind-audit-b/AUDIT-RE
 
 | ID | Severity | Finding | State |
 |---|---|---|---|
-| XB-01 | High | Arrow functions and function expressions get no data-flow summary, so taint stops at them | In progress (branch fix/xb01-anonymous-function-summaries) |
+| XB-01 | High | Arrow functions and function expressions get no data-flow summary, so taint stops at them | **Fixed** #319 (`e527165`): facts-lost-explained (owner OK), 541 lost = call result now flows into the arrow/function-expression return value; ~47k data-flow facts gained, Ghost +26 taint (real flow through a SHA-256 arrow helper in tools/gx). Caller label (calls inside arrows labelled `module`) left for its own PR |
 | XB-02 | Medium | `#imports` and package self-references are EXTERNAL with no module edge | Open (with B3) |
 | XB-03 | Medium | A global, built-in prototype or package patched through an alias, or by same-file `Object.assign`, stays EXTERNAL | Open |
-| XB-04 | Medium | C1 matches the returned name by string: block shadow or destructuring gives a false RESOLVED | Open |
+| XB-04 | Medium | C1 matches the returned name by string: block shadow or destructuring gives a false RESOLVED | In progress (branch fix/xb04-factory-bindings): also catches catch-parameter shadow and for-of rebind |
 | XB-05 | Low | C2: an `Object.prototype` name called before its assignment resolves to the later method | Open |
 | XB-06 | Low | `async` or generator factory resolves `make().m()` | Open |
 | XB-07 | Low | `Object.assign(this, opts)` in a constructor function: prototype method still RESOLVED | Open |
