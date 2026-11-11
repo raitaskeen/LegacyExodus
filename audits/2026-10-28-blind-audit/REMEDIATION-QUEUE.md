@@ -45,7 +45,7 @@ off; Fact Diff and Scale Gate are now required checks on main; #195 closed; #111
 | B1b | EXTERNAL standard globals and CommonJS require | **Merged** #311 (`410509f`) |
 | B1c | EXTERNAL aliases of globals and built-in methods on literal values | **Merged** #314 (`d2aa6aa`): src EXTERNAL 24.9% -> 33.3%, 0 lost on 9 corpora |
 | A2b | Coverage split: source files vs test files | **Merged** #313 (`7470e0e`) |
-| C | Receiver tracking, see PHASE-C-DESIGN.md | C1 **Merged** #312 (`7ea08c4`): Fastify oracle recall 7.1% -> 34.3% (CI), 0 contradictions. C2 + C2b **Merged** #315 (`fdc37f3`): prototypes, `Object.create(P)`, ES5 inheritance; 0 lost on 11 corpora, mongoose +132 resolved; Ghost 190.6 s vs 206.1 s. Next C3: `merge-descriptors` / `Object.assign` copies (Express `createApplication`: `mixin(app, proto, false)`, first source wins; ~900 exercised sites) |
+| C | Receiver tracking, see PHASE-C-DESIGN.md | C1 **Merged** #312 (`7ea08c4`): Fastify oracle recall 7.1% -> 34.3% (CI), 0 contradictions. C2 + C2b **Merged** #315 (`fdc37f3`): prototypes, `Object.create(P)`, ES5 inheritance; 0 lost on 11 corpora, mongoose +132 resolved; Ghost 190.6 s vs 206.1 s. C3 **Merged** #316 (`3039c44`): CommonJS export objects, own-alias writes, factory copies, re-export hop; Express oracle recall 29.4% -> 49.3%, 0 contradictions; facts-lost-explained (owner OK): Ghost 216 = 148 dfg refinements + 68 unused exports now called; review fix c68564a (plain module.exports read). Next: B2 (TS compiled to CommonJS), B3, C4-C6 |
 | D-H | See the plan | Queued |
 
 ## Track 2026-11-09: cross-file audit findings (XA-01 to XA-08)
