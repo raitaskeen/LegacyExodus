@@ -32,11 +32,60 @@ export interface FactoryFact {
    * not resolved. A call inside a function is assumed to run after the module has loaded.
    */
   readonly readyAt?: { readonly line: number; readonly column: number };
+  /**
+   * Phase C3b: the factory copies properties onto the object it returns, in this order (see CopyFact). Set only when
+   * every copy's source has known names; `literalNames` are the object's own keys before the copies, `function` says
+   * the object is a function (own `length`, `name`, `prototype`), and `writtenHere` are the names the factory's file
+   * writes by name, which no copy may be trusted for.
+   */
+  readonly copies?: readonly CopyFact[];
+  readonly literalNames?: readonly string[];
+  readonly function?: true;
+  readonly writtenHere?: readonly string[];
 }
+
+/**
+ * Phase C3b: one copy of own properties onto a factory's object, `mergeDescriptors(o, source, overwrite)` (the
+ * `merge-descriptors` package; `overwrite` defaults to true, and false keeps a property `o` already has) or
+ * `Object.assign(o, source)` (overwrites). The source is a repository module's exports object (C3a facts give its
+ * names) or a known built-in prototype.
+ */
+export interface CopyFact {
+  readonly overwrite: boolean;
+  readonly module?: { readonly importer: string; readonly specifier: string };
+  readonly external?: { readonly module: string; readonly member: string };
+}
+
+/**
+ * Own property names of built-in prototypes a copy may take from (Node 18 and later). An assumption about the runtime,
+ * stated in Current Implementation.
+ */
+const KNOWN_PROTOTYPES: Readonly<Record<string, ReadonlySet<string>>> = {
+  "events:EventEmitter.prototype": new Set(["constructor", "_events", "_eventsCount", "_maxListeners", "setMaxListeners", "getMaxListeners", "emit",
+    "addListener", "on", "prependListener", "once", "prependOnceListener", "removeListener", "off", "removeAllListeners", "listeners", "rawListeners",
+    "listenerCount", "eventNames"]),
+};
+
+/** Own properties every function has: a copy that does not overwrite leaves them alone. */
+const FUNCTION_OWN = new Set(["length", "name", "prototype", "arguments", "caller"]);
 
 export interface FactoryFile {
   readonly filePath: string;
   readonly factories: readonly FactoryFact[];
+  /**
+   * Phase C3a: functions the file's exports object holds by name, when `module.exports` is one object literal or an
+   * object the file names and fills (`var app = exports = module.exports = {}; app.use = function …`). Name to symbol.
+   */
+  readonly exportMembers?: readonly (readonly [string, string])[];
+  /** Phase C3b: every name the exports object holds (functions or not), when the file builds it plainly. */
+  readonly exportNames?: readonly string[];
+  /**
+   * Phase C3b: `module.exports = require("./x")`, the file's only write of `module.exports`: a call through this file's
+   * default export reaches x's default export. The ids are this file's default export symbols.
+   */
+  readonly reexportsDefault?: { readonly exportIds: readonly string[]; readonly specifier: string };
+  /** Phase C3b: the factory ids that are this file's one default export (`module.exports = createApplication`). */
+  readonly defaultFactoryIds?: readonly string[];
 }
 
 const FUNCTION_TYPES = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ObjectMethod", "ClassMethod", "ClassPrivateMethod"]);
@@ -117,12 +166,15 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
     let reassigned = false;
     walkAll(body, (inner) => { if (inner.type === "AssignmentExpression" && nameOf(role(inner, "left")) === objectName) reassigned = true; });
     const literal = declarators.length === 1 ? role(declarators[0]!, "init") : undefined;
-    if (reassigned || literal?.type !== "ObjectExpression") return;
+    const isFunction = literal?.type === "FunctionExpression" || literal?.type === "ArrowFunctionExpression";
+    if (reassigned || (literal?.type !== "ObjectExpression" && !isFunction)) return;
     if (literal.children.some((child) => child.type === "SpreadElement")) return;
+    const copies = isFunction || literal.type === "ObjectExpression" ? collectCopies(body, objectName, symbols, filePath) : [];
+    if (copies === undefined) return;
 
     const seen = new Map<string, number>();
     const methods = new Map<string, string>();
-    for (const property of literal.children) {
+    for (const property of isFunction ? [] : literal.children) {
       const name = keyName(property);
       if (name === undefined) continue;
       seen.set(name, (seen.get(name) ?? 0) + 1);
@@ -141,12 +193,242 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
       if (target !== undefined) methods.set(name, target.id);
     }
     const kept = [...methods].filter(([name]) => seen.get(name) === 1 && !writtenHere.has(name)).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
-    if (kept.length === 0) return;
+    if (kept.length === 0 && copies.length === 0) return;
     const ids = [functionSymbol.id, ...symbols.filter((symbol) => symbol.kind === "export" && symbol.moduleSpecifier === undefined && symbol.sourceSymbolName === functionSymbol.name).map((symbol) => symbol.id)];
-    factories.push({ ids: [...new Set(ids)].sort(), methods: kept });
+    factories.push({
+      ids: [...new Set(ids)].sort(),
+      methods: kept,
+      ...(copies.length === 0 ? {} : {
+        copies,
+        literalNames: [...seen.keys()].sort(),
+        writtenHere: [...writtenHere].sort(),
+        ...(isFunction ? { function: true as const } : {}),
+      }),
+    });
   });
   factories.push(...collectConstructors(ast, symbols, byStart));
-  return { filePath, factories };
+  const { members: exportMembers, names: exportNames } = collectExportMembers(ast, symbols);
+  // C3b: the file's one default export, when it is a factory, or a re-export of another file's default.
+  const defaults = symbols.filter((symbol) => symbol.kind === "export" && symbol.defaultExport);
+  let moduleExportsWrites = 0;
+  walkAll(ast.root, (node) => { if (node.type === "AssignmentExpression" && isModuleExports(role(node, "left"))) moduleExportsWrites++; });
+  const single = defaults.length === 1 && moduleExportsWrites === 1 ? defaults[0] : undefined;
+  const defaultFactoryIds = single === undefined ? [] : factories.filter((factory) => factory.constructed !== true && factory.ids.includes(single.id)).flatMap((factory) => factory.ids);
+  let reexportsDefault: { exportIds: string[]; specifier: string } | undefined;
+  if (single !== undefined) {
+    for (const statement of ast.root.children) {
+      const expression = statement.type === "ExpressionStatement" ? role(statement, "expression") : undefined;
+      const right = expression?.type === "AssignmentExpression" && isModuleExports(role(expression, "left")) ? role(expression, "right") : undefined;
+      if (right?.type !== "CallExpression" || pathOf(role(right, "callee"))?.join(".") !== "require") continue;
+      const argument = callArguments(right)[0];
+      const specifier = argument?.type === "StringLiteral" && typeof argument.attributes.value === "string" ? argument.attributes.value : undefined;
+      if (specifier !== undefined && /^\.\.?(\/|$)/.test(specifier) && !symbols.some((symbol) => symbol.name === "require" && symbol.kind !== "export")) {
+        reexportsDefault = { exportIds: [single.id], specifier };
+      }
+    }
+  }
+  return {
+    filePath,
+    factories,
+    ...(exportMembers.length === 0 ? {} : { exportMembers }),
+    ...(exportNames === undefined ? {} : { exportNames }),
+    ...(reexportsDefault === undefined ? {} : { reexportsDefault }),
+    ...(defaultFactoryIds.length === 0 ? {} : { defaultFactoryIds }),
+  };
+}
+
+/**
+ * Phase C3b: the copies onto `objectName` that the factory body makes as its own top-level statements, in order. A copy
+ * elsewhere in the body (inside a branch or a nested function) or from a source whose names are not known makes the
+ * result unknown (`undefined`).
+ */
+function collectCopies(body: ASTNode, objectName: string, symbols: readonly CodeSymbol[], filePath: string): CopyFact[] | undefined {
+  const isCopyCall = (call: ASTNode): "merge" | "assign" | undefined => {
+    const callee = role(call, "callee");
+    if (callee?.type === "Identifier") {
+      const binding = moduleImport(nameOf(callee) ?? "", symbols);
+      return binding?.moduleSpecifier === "merge-descriptors" && binding.sourceSymbolName === undefined ? "merge" : undefined;
+    }
+    return pathOf(callee)?.join(".") === "Object.assign" && !symbols.some((symbol) => symbol.name === "Object") ? "assign" : undefined;
+  };
+  const targetsObject = (call: ASTNode): boolean => {
+    const first = callArguments(call)[0];
+    return first?.type === "Identifier" && nameOf(first) === objectName;
+  };
+  const topLevel = new Set<ASTNode>();
+  for (const statement of body.children) {
+    const expression = statement.type === "ExpressionStatement" ? role(statement, "expression") : undefined;
+    if (expression?.type === "CallExpression") topLevel.add(expression);
+  }
+  let stray = false;
+  walkAll(body, (node) => { if (node.type === "CallExpression" && !topLevel.has(node) && isCopyCall(node) !== undefined && targetsObject(node)) stray = true; });
+  if (stray) return undefined;
+
+  const copies: CopyFact[] = [];
+  for (const call of topLevel) {
+    const kind = isCopyCall(call);
+    if (kind === undefined || !targetsObject(call)) continue;
+    const args = callArguments(call);
+    const sources = kind === "merge" ? args.slice(1, 2) : args.slice(1);
+    let overwrite = true;
+    if (kind === "merge" && args.length === 3) {
+      const flag = args[2]!;
+      if (flag.type !== "BooleanLiteral" || typeof flag.attributes.value !== "boolean") return undefined;
+      overwrite = flag.attributes.value;
+    }
+    if (kind === "merge" && (args.length < 2 || args.length > 3)) return undefined;
+    for (const source of sources) {
+      const fact = copySource(source, symbols, filePath, overwrite);
+      if (fact === undefined) return undefined;
+      copies.push(fact);
+    }
+  }
+  return copies;
+}
+
+/** A copy source with known names: `require("./x")`'s exports, or `EventEmitter.prototype` from `events`. */
+function copySource(source: ASTNode, symbols: readonly CodeSymbol[], filePath: string, overwrite: boolean): CopyFact | undefined {
+  if (source.type === "Identifier") {
+    const binding = moduleImport(nameOf(source) ?? "", symbols);
+    const specifier = binding?.moduleSpecifier;
+    if (specifier === undefined || !/^\.\.?\//.test(specifier) || binding!.sourceSymbolName !== undefined) return undefined;
+    return { overwrite, module: { importer: filePath, specifier } };
+  }
+  const owner = prototypeOwner(source);
+  const binding = owner === undefined ? undefined : moduleImport(owner, symbols);
+  if (binding?.moduleSpecifier === "events" && (binding.sourceSymbolName === "EventEmitter" || binding.sourceSymbolName === undefined)) {
+    return { overwrite, external: { module: "events", member: "EventEmitter.prototype" } };
+  }
+  return undefined;
+}
+
+function isModuleExports(node: ASTNode | undefined): boolean {
+  return pathOf(node)?.join(".") === "module.exports";
+}
+
+/** The members of `module.exports = { … }`, or `undefined` when the literal could hide or replace one. */
+function literalMembers(literal: ASTNode): Map<string, ASTNode> | undefined {
+  const members = new Map<string, ASTNode>();
+  const seen = new Map<string, number>();
+  for (const property of literal.children) {
+    // A spread may supply or replace any name.
+    if (property.type !== "ObjectProperty" && property.type !== "ObjectMethod") return undefined;
+    const name = keyName(property);
+    if (name === undefined) {
+      if (property.attributes.computed === true) return undefined;
+      continue;
+    }
+    seen.set(name, (seen.get(name) ?? 0) + 1);
+    if (property.type === "ObjectMethod" && property.attributes.kind !== "method") continue;
+    members.set(name, property);
+  }
+  for (const [name, count] of seen) if (count > 1) members.delete(name);
+  return members;
+}
+
+/**
+ * Phase C3a: what a `require` of this file returns, by member name, when the file builds its exports object in one of
+ * two plain ways, at the top of the file:
+ * - `module.exports = { use: function …, init: init }`, the only write of `module.exports`, with no spread or computed
+ *   key; a member is a function expression, a method, or a function declared at the top of the file and never
+ *   reassigned;
+ * - `var app = exports = module.exports = {}` (or `const app = module.exports` with no write of `module.exports`), `app`
+ *   never reassigned, then `app.use = function …` statements.
+ * A name written by name anywhere else in the file (on any object), or passed as a literal key to
+ * `Object.defineProperty`, is left out; so is everything when the exports object or its alias is passed to a call. A
+ * computed write (`app[method] = …`) is assumed not to produce the name, as for C1.
+ */
+function collectExportMembers(ast: ASTResult, symbols: readonly CodeSymbol[]): { readonly members: (readonly [string, string])[]; readonly names?: string[] } {
+  if (symbols.some((symbol) => (symbol.name === "module" || symbol.name === "exports") && symbol.kind !== "export" && symbol.kind !== "import")) return { members: [] };
+  let moduleExportsWrites = 0;
+  const writes = new Map<string, number>();
+  const reassigned = new Set<string>();
+  const passed = new Set<string>();
+  walkAll(ast.root, (node) => {
+    if (node.type === "AssignmentExpression") {
+      const left = role(node, "left");
+      if (isModuleExports(left)) moduleExportsWrites++;
+      if (left?.type === "Identifier" && nameOf(left) !== undefined) reassigned.add(nameOf(left)!);
+      if ((left?.type === "MemberExpression" || left?.type === "OptionalMemberExpression") && left.attributes.computed !== true) {
+        const name = nameOf(role(left, "property"));
+        if (name !== undefined) writes.set(name, (writes.get(name) ?? 0) + 1);
+      }
+    }
+    if (node.type === "CallExpression" || node.type === "NewExpression" || node.type === "OptionalCallExpression") {
+      const literal = literalKeyWrite(node);
+      if (literal !== undefined) writes.set(literal, (writes.get(literal) ?? 0) + 1);
+      for (const argument of callArguments(node)) {
+        if (isModuleExports(argument)) passed.add("module.exports");
+        else if (argument.type === "Identifier" && nameOf(argument) !== undefined) passed.add(nameOf(argument)!);
+      }
+    }
+  });
+  if (passed.has("module.exports") || passed.has("exports")) return { members: [] };
+  // C3b: every name the exports object may hold. A superset is safe: a copy that seems to bring a name it does not
+  // only leaves calls unresolved; a missing name could not be.
+  let names: Set<string> | undefined;
+
+  const topFunctions = new Map<string, CodeSymbol>();
+  for (const symbol of symbols) if (symbol.kind === "function" && symbol.scopeId === "scope:module" && !reassigned.has(symbol.name)) topFunctions.set(symbol.name, symbol);
+  const isFunctionValue = (value: ASTNode | undefined): boolean =>
+    value?.type === "FunctionExpression" || value?.type === "ArrowFunctionExpression" || (value?.type === "Identifier" && topFunctions.has(nameOf(value) ?? ""));
+  const result: [string, string][] = [];
+
+  for (const statement of ast.root.children) {
+    // Form 1: `module.exports = { … }`.
+    const expression = statement.type === "ExpressionStatement" ? role(statement, "expression") : undefined;
+    if (expression?.type === "AssignmentExpression" && expression.attributes.operator === "=" && isModuleExports(role(expression, "left"))
+      && role(expression, "right")?.type === "ObjectExpression" && moduleExportsWrites === 1) {
+      const complete = literalMembers(role(expression, "right")!);
+      if (complete !== undefined) {
+        names = new Set(writes.keys());
+        for (const property of role(expression, "right")!.children) { const key = keyName(property); if (key !== undefined) names.add(key); }
+      }
+      const members = complete ?? new Map<string, ASTNode>();
+      for (const [name, property] of members) {
+        if ((writes.get(name) ?? 0) > 0) continue;
+        const value = property.type === "ObjectMethod" ? property : role(property, "value") ?? (property.attributes.shorthand === true ? role(property, "key") : undefined);
+        if (property.type !== "ObjectMethod" && !isFunctionValue(value)) continue;
+        const exported = symbols.filter((symbol) => symbol.kind === "export" && !symbol.defaultExport && symbol.name === name && startKey(symbol.location) === startKey(property.location));
+        if (exported.length === 1) result.push([name, exported[0]!.id]);
+      }
+    }
+  }
+
+  // Form 2: an alias of the exports object, filled by top-level statements.
+  for (const statement of ast.root.children) {
+    if (statement.type !== "VariableDeclaration") continue;
+    const declarators = statement.children.filter((child) => child.type === "VariableDeclarator");
+    if (declarators.length !== 1) continue;
+    const alias = nameOf(role(declarators[0]!, "id"));
+    let init = role(declarators[0]!, "init");
+    if (alias === undefined || init === undefined || reassigned.has(alias) || passed.has(alias)) continue;
+    let viaWrite = false;
+    // `exports = module.exports = {}`: walk the assignment chain to its innermost value.
+    while (init?.type === "AssignmentExpression" && init.attributes.operator === "=") {
+      const left = role(init, "left");
+      if (isModuleExports(left)) viaWrite = true;
+      else if (!(left?.type === "Identifier" && nameOf(left) === "exports")) { init = undefined; break; }
+      init = role(init, "right");
+    }
+    const fresh = viaWrite && moduleExportsWrites === 1 && init?.type === "ObjectExpression" && init.children.length === 0;
+    const direct = !viaWrite && isModuleExports(init) && moduleExportsWrites === 0;
+    if (!fresh && !direct) continue;
+    names = new Set(writes.keys());
+    for (const inner of ast.root.children) {
+      const write = inner.type === "ExpressionStatement" ? role(inner, "expression") : undefined;
+      const left = write?.type === "AssignmentExpression" && write.attributes.operator === "=" ? role(write, "left") : undefined;
+      if (left?.type !== "MemberExpression" || left.attributes.computed === true || nameOf(role(left, "object")) !== alias) continue;
+      const name = nameOf(role(left, "property"));
+      if (name === undefined || writes.get(name) !== 1 || !isFunctionValue(role(write!, "right"))) continue;
+      const method = symbols.filter((symbol) => symbol.name === name && symbol.containerName === alias && (symbol.kind === "method" || symbol.kind === "variable") && symbol.scopeId === "scope:module");
+      if (method.length === 1) result.push([name, method[0]!.id]);
+    }
+  }
+  return {
+    members: result.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)),
+    ...(names === undefined ? {} : { names: [...names].sort() }),
+  };
 }
 
 /** `F.prototype` for a plain identifier `F`, or undefined. */
@@ -366,36 +648,130 @@ function knownParent(parent: string, symbols: readonly CodeSymbol[], disqualifie
   return declared.length === 1 && declared[0]!.kind === "function" && declared[0]!.scopeId === "scope:module";
 }
 
-/** The run's factories, looked up by the symbol a factory call resolves to. */
 interface FactoryEntry {
   readonly filePath: string;
   readonly methods: ReadonlyMap<string, string>;
   readonly readyAt?: { readonly line: number; readonly column: number };
+  readonly copies?: readonly CopyFact[];
+  readonly literalNames?: ReadonlySet<string>;
+  readonly function?: true;
+  readonly writtenHere?: ReadonlySet<string>;
 }
 
+/** Where a factory's object gets a name from, once its copies are replayed (C3b). */
+type Provider =
+  | { readonly kind: "own" }
+  | { readonly kind: "module"; readonly filePath: string }
+  | { readonly kind: "external"; readonly module: string; readonly member: string }
+  | { readonly kind: "unknown" };
+
+/** The run's factories, looked up by the symbol a factory call resolves to, and plainly built exports objects. */
 export class FactoryIndex {
   private readonly methodsById = new Map<string, FactoryEntry>();
   private readonly prototypeById = new Map<string, FactoryEntry>();
+  private readonly exportMembersByFile = new Map<string, ReadonlyMap<string, string>>();
+  private readonly exportNamesByFile = new Map<string, ReadonlySet<string>>();
 
   /**
    * @param writtenElsewhere - whether a file other than `filePath` writes a property of that name on an object other
    *   than `this` and its own exports. The factory's own file was checked when its facts were collected.
+   * @param resolveModule - the file a module specifier names from an importing file (C3b copies), when known.
    */
-  public constructor(files: Iterable<FactoryFile>, private readonly writtenElsewhere: (name: string, filePath: string) => boolean) {
+  public constructor(
+    files: Iterable<FactoryFile>,
+    private readonly writtenElsewhere: (name: string, filePath: string) => boolean,
+    private readonly resolveModule: (importer: string, specifier: string) => string | undefined = () => undefined,
+  ) {
     for (const file of files) {
+      if (file.exportMembers !== undefined) this.exportMembersByFile.set(file.filePath, new Map(file.exportMembers));
+      if (file.exportNames !== undefined) this.exportNamesByFile.set(file.filePath, new Set(file.exportNames));
       for (const factory of file.factories) {
-        const entry = { filePath: file.filePath, methods: new Map(factory.methods), ...(factory.readyAt === undefined ? {} : { readyAt: factory.readyAt }) };
+        const entry: FactoryEntry = {
+          filePath: file.filePath,
+          methods: new Map(factory.methods),
+          ...(factory.readyAt === undefined ? {} : { readyAt: factory.readyAt }),
+          ...(factory.copies === undefined ? {} : {
+            copies: factory.copies,
+            literalNames: new Set(factory.literalNames ?? []),
+            writtenHere: new Set(factory.writtenHere ?? []),
+            ...(factory.function === true ? { function: true as const } : {}),
+          }),
+        };
         for (const id of factory.ids) (factory.constructed === true ? this.prototypeById : this.methodsById).set(id, entry);
       }
+      const defaultEntry = file.defaultFactoryIds?.[0] === undefined ? undefined : this.methodsById.get(file.defaultFactoryIds[0]);
+      if (defaultEntry !== undefined) this.methodsById.set(`default:${file.filePath}`, defaultEntry);
+      for (const id of file.reexportsDefault?.exportIds ?? []) this.reexports.set(id, { importer: file.filePath, specifier: file.reexportsDefault!.specifier });
     }
+  }
+
+  private readonly reexports = new Map<string, { readonly importer: string; readonly specifier: string }>();
+
+  /** A factory by the symbol its call resolved to, through `module.exports = require("./x")` re-exports (C3b). */
+  private factoryEntry(producerId: string): FactoryEntry | undefined {
+    let id = producerId;
+    for (let hop = 0; hop < 8; hop++) {
+      const entry = this.methodsById.get(id);
+      if (entry !== undefined) return entry;
+      const link = this.reexports.get(id);
+      const target = link === undefined ? undefined : this.resolveModule(link.importer, link.specifier);
+      if (target === undefined) return undefined;
+      id = `default:${target}`;
+    }
+    return undefined;
+  }
+
+  /** C3a: the function `require(filePath).name` reaches, when that file builds its exports object plainly. */
+  public exportMemberOf(filePath: string, name: string): string | undefined {
+    const target = this.exportMembersByFile.get(filePath)?.get(name);
+    return target === undefined || this.writtenElsewhere(name, filePath) ? undefined : target;
+  }
+
+  /**
+   * C3b: replays a factory's copies in order. The object starts with its own literal keys (or a function's own
+   * properties); a copy takes a name its source holds when it overwrites, or when the object has no such name yet.
+   */
+  private provider(entry: FactoryEntry, name: string): Provider | undefined {
+    if (entry.writtenHere?.has(name) === true) return { kind: "unknown" };
+    let current: Provider | undefined = entry.literalNames?.has(name) === true || (entry.function === true && FUNCTION_OWN.has(name)) ? { kind: "own" } : undefined;
+    for (const copy of entry.copies ?? []) {
+      let source: Provider;
+      let names: ReadonlySet<string> | undefined;
+      if (copy.module !== undefined) {
+        const filePath = this.resolveModule(copy.module.importer, copy.module.specifier);
+        names = filePath === undefined ? undefined : this.exportNamesByFile.get(filePath);
+        source = { kind: "module", filePath: filePath ?? "" };
+      } else {
+        const key = `${copy.external!.module}:${copy.external!.member}`;
+        names = KNOWN_PROTOTYPES[key];
+        source = { kind: "external", module: copy.external!.module, member: copy.external!.member };
+      }
+      if (names === undefined) return { kind: "unknown" };
+      if (names.has(name) && (copy.overwrite || current === undefined)) current = source;
+    }
+    return current;
+  }
+
+  /** C3b: the built-in a factory's object holds at `name`, copied from a known prototype such as `EventEmitter`'s. */
+  public externalOf(producerId: string, name: string): { readonly module: string; readonly member: string } | undefined {
+    const entry = this.factoryEntry(producerId);
+    if (entry?.copies === undefined) return undefined;
+    const provider = this.provider(entry, name);
+    if (provider?.kind !== "external" || this.writtenElsewhere(name, entry.filePath)) return undefined;
+    return { module: provider.module, member: `${provider.member}.${name}` };
   }
 
   /**
    * The function the object made by a call resolved to `producerId` holds at `name`: a factory's returned literal for
-   * `F()` (C1), a constructor's prototype for `new F()` (C2).
+   * `F()` (C1) or what its copies bring (C3b), a constructor's prototype for `new F()` (C2).
    */
   public methodOf(producerId: string, name: string, constructed = false, topLevelCall?: { readonly filePath: string; readonly line: number; readonly column: number }): string | undefined {
-    const entry = (constructed ? this.prototypeById : this.methodsById).get(producerId);
+    const entry = constructed ? this.prototypeById.get(producerId) : this.factoryEntry(producerId);
+    if (entry?.copies !== undefined) {
+      const provider = this.provider(entry, name);
+      if (provider?.kind === "module") return this.exportMemberOf(provider.filePath, name);
+      if (provider?.kind !== "own") return undefined;
+    }
     const target = entry?.methods.get(name);
     if (target === undefined || this.writtenElsewhere(name, entry!.filePath)) return undefined;
     // C2b: a top-level call of the constructor's own file that starts before its methods are all assigned.

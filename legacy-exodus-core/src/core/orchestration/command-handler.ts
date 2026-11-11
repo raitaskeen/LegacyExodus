@@ -555,7 +555,7 @@ export class AnalyzeProjectHandler {
         for (const path of collectGlobalWrites(ast)) globalWrites.add(path);
         const classFacts = collectClassHierarchyFacts(ast, table);
         const factoryFacts = collectFactoryFacts(ast, table);
-        if (factoryFacts.factories.length > 0) factoryFiles.push(factoryFacts);
+        if (factoryFacts.factories.length > 0 || factoryFacts.exportMembers !== undefined || factoryFacts.exportNames !== undefined || factoryFacts.reexportsDefault !== undefined) factoryFiles.push(factoryFacts);
         for (const name of classFacts.borrowedNames) borrowedNames.add(name);
         if (classFacts.classes.length > 0) classHierarchyFiles.push({ ...classFacts, borrowedNames: [] });
         else if (classFacts.foreignWrittenNames.length > 0) {
@@ -625,7 +625,11 @@ export class AnalyzeProjectHandler {
         [...classHierarchyFiles, { filePath: "", classes: [], writtenNames: [], foreignWrittenNames: [], borrowedNames: [...borrowedNames] }],
         (importId) => importTargetFile.get(importId),
       );
-      const factoryIndex = new FactoryIndex(factoryFiles, (name, filePath) => classHierarchy.isWrittenOutside(name, filePath));
+      const factoryIndex = new FactoryIndex(
+        factoryFiles,
+        (name, filePath) => classHierarchy.isWrittenOutside(name, filePath),
+        (importer, specifier) => { const resolved = resolver.resolve(importer, specifier, discovery.files).resolvedPath; return resolved === null ? undefined : canonicalizePath(resolved); },
+      );
 
       const callGraphBuilder = new DeterministicCallGraphBuilder(resolver);
       callGraphBuilder.usePackageWrites(packageWrites);
