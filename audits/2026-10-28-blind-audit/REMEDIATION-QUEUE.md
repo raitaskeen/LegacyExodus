@@ -45,6 +45,7 @@ off; Fact Diff and Scale Gate are now required checks on main; #195 closed; #111
 | B1b | EXTERNAL standard globals and CommonJS require | **Merged** #311 (`410509f`) |
 | B1c | EXTERNAL aliases of globals and built-in methods on literal values | **Merged** #314 (`d2aa6aa`): src EXTERNAL 24.9% -> 33.3%, 0 lost on 9 corpora |
 | A2b | Coverage split: source files vs test files | **Merged** #313 (`7470e0e`) |
+| B2 | `require` in TypeScript compiled to CommonJS (nearest tsconfig) | **Merged** #318 (`781e1d5`): Ghost 967 upgraded, 0 lost; module-load 1,060 -> 93; 0 change on 10 other corpora |
 | C | Receiver tracking, see PHASE-C-DESIGN.md | C1 **Merged** #312 (`7ea08c4`): Fastify oracle recall 7.1% -> 34.3% (CI), 0 contradictions. C2 + C2b **Merged** #315 (`fdc37f3`): prototypes, `Object.create(P)`, ES5 inheritance; 0 lost on 11 corpora, mongoose +132 resolved; Ghost 190.6 s vs 206.1 s. C3 **Merged** #316 (`3039c44`): CommonJS export objects, own-alias writes, factory copies, re-export hop; Express oracle recall 29.4% -> 49.3%, 0 contradictions; facts-lost-explained (owner OK): Ghost 216 = 148 dfg refinements + 68 unused exports now called; review fix c68564a (plain module.exports read). Next: B2 (TS compiled to CommonJS), B3, C4-C6 |
 | D-H | See the plan | Queued |
 
@@ -54,7 +55,7 @@ Audit by Shahzaib Hassan on `fdc37f3` (`audits/2026-11-10-blind-audit-b/AUDIT-RE
 
 | ID | Severity | Finding | State |
 |---|---|---|---|
-| XB-01 | High | Arrow functions and function expressions get no data-flow summary, so taint stops at them | Open (next after B2) |
+| XB-01 | High | Arrow functions and function expressions get no data-flow summary, so taint stops at them | In progress (branch fix/xb01-anonymous-function-summaries) |
 | XB-02 | Medium | `#imports` and package self-references are EXTERNAL with no module edge | Open (with B3) |
 | XB-03 | Medium | A global, built-in prototype or package patched through an alias, or by same-file `Object.assign`, stays EXTERNAL | Open |
 | XB-04 | Medium | C1 matches the returned name by string: block shadow or destructuring gives a false RESOLVED | Open |
