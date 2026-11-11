@@ -227,10 +227,18 @@ function isFreshValue(node: ASTNode | undefined): boolean {
  */
 function ownExportAliases(root: ASTNode): Set<string> {
   const reassigned = new Set<string>();
+  // Whether `module.exports` is ever replaced by a value not made here (`module.exports = require("./x")`): a plain
+  // read of it (`const api = module.exports`) may then hold another module's object.
+  let exportsMaybeForeign = false;
   const walk = (node: ASTNode): void => {
     if (node.type === "AssignmentExpression") {
       const left = node.children.find((child) => child.role === "left");
       if (left?.type === "Identifier" && nameOf(left) !== undefined) reassigned.add(nameOf(left)!);
+      if (isModuleExportsNode(left)) {
+        let right = node.children.find((child) => child.role === "right");
+        while (right?.type === "AssignmentExpression" && right.attributes.operator === "=") right = right.children.find((child) => child.role === "right");
+        if (!isFreshValue(right)) exportsMaybeForeign = true;
+      }
     }
     for (const child of node.children) walk(child);
   };
@@ -245,7 +253,7 @@ function ownExportAliases(root: ASTNode): Set<string> {
       const name = id?.type === "Identifier" ? nameOf(id) : undefined;
       let value = declarators[0]!.children.find((child) => child.role === "init");
       if (name === undefined || reassigned.has(name)) continue;
-      if (isModuleExportsNode(value)) { aliases.add(name); continue; }
+      if (isModuleExportsNode(value)) { if (!exportsMaybeForeign) aliases.add(name); continue; }
       let toExports = false;
       while (value?.type === "AssignmentExpression" && value.attributes.operator === "=") {
         const left = value.children.find((child) => child.role === "left");
