@@ -48,6 +48,22 @@ off; Fact Diff and Scale Gate are now required checks on main; #195 closed; #111
 | C | Receiver tracking, see PHASE-C-DESIGN.md | C1 **Merged** #312 (`7ea08c4`): Fastify oracle recall 7.1% -> 34.3% (CI), 0 contradictions. C2 + C2b **Merged** #315 (`fdc37f3`): prototypes, `Object.create(P)`, ES5 inheritance; 0 lost on 11 corpora, mongoose +132 resolved; Ghost 190.6 s vs 206.1 s. C3 **Merged** #316 (`3039c44`): CommonJS export objects, own-alias writes, factory copies, re-export hop; Express oracle recall 29.4% -> 49.3%, 0 contradictions; facts-lost-explained (owner OK): Ghost 216 = 148 dfg refinements + 68 unused exports now called; review fix c68564a (plain module.exports read). Next: B2 (TS compiled to CommonJS), B3, C4-C6 |
 | D-H | See the plan | Queued |
 
+## Track 2026-11-11: cross-file audit B findings (XB-01 to XB-09)
+
+Audit by Shahzaib Hassan on `fdc37f3` (`audits/2026-11-10-blind-audit-b/AUDIT-REPORT.md`, ~70). XB-01 to XB-08 reproduced on `3039c44` (2026-11-11) with Node as ground truth. Order: B2, then XB-01, XB-04, XB-02 with B3, XB-03, XB-05 to XB-08, then C4 to C6.
+
+| ID | Severity | Finding | State |
+|---|---|---|---|
+| XB-01 | High | Arrow functions and function expressions get no data-flow summary, so taint stops at them | Open (next after B2) |
+| XB-02 | Medium | `#imports` and package self-references are EXTERNAL with no module edge | Open (with B3) |
+| XB-03 | Medium | A global, built-in prototype or package patched through an alias, or by same-file `Object.assign`, stays EXTERNAL | Open |
+| XB-04 | Medium | C1 matches the returned name by string: block shadow or destructuring gives a false RESOLVED | Open |
+| XB-05 | Low | C2: an `Object.prototype` name called before its assignment resolves to the later method | Open |
+| XB-06 | Low | `async` or generator factory resolves `make().m()` | Open |
+| XB-07 | Low | `Object.assign(this, opts)` in a constructor function: prototype method still RESOLVED | Open |
+| XB-08 | Info | ESM directory import resolves through `main`; Node throws | Open (wording) |
+| XB-09 | Info | CI blocked by Actions billing | Closed: running again since 2026-11-10 17:19; Copilot review rule removed from rulesets and drafts skip CI (#317, `df5e290`) |
+
 ## Track 2026-11-09: cross-file audit findings (XA-01 to XA-08)
 
 | ID | Severity | Finding | State |
