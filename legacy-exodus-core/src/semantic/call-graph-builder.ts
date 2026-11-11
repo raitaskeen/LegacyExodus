@@ -17,6 +17,8 @@ export class DeterministicCallGraphBuilder {
   private packageWrites: ReadonlySet<string> = new Set();
   /** Standard-global paths some file of the run writes (`console.log`, `JSON`, `process.*`): never EXTERNAL (ADR-012). */
   private globalWrites: ReadonlySet<string> = new Set();
+  /** TypeScript files whose `import` syntax compiles to `require` (B2): `require` is the wrapper's own there too. */
+  private compiledCommonJs: ReadonlySet<string> = new Set();
 
   /** @param resolver - the run's resolver (tsconfig aliases, workspace packages), shared with the dependency graph. */
   public constructor(public readonly resolver: ModuleResolver = new ModuleResolver()) {}
@@ -29,6 +31,11 @@ export class DeterministicCallGraphBuilder {
   /** The standard-global paths the run's files write (see collectGlobalWrites); set before any file is built. */
   public useGlobalWrites(paths: ReadonlySet<string>): void {
     this.globalWrites = paths;
+  }
+
+  /** TypeScript files compiled to CommonJS (see loadCompiledCommonJsFiles); set before any file is built. */
+  public useCompiledCommonJs(paths: ReadonlySet<string>): void {
+    this.compiledCommonJs = paths;
   }
 
   public build(astResults: readonly ASTResult[], symbolTables: readonly SymbolTable[], dependencyGraph: DependencyGraph): { readonly calls: readonly SemanticCall[]; readonly references: readonly SymbolReference[] } {
@@ -92,8 +99,10 @@ export class DeterministicCallGraphBuilder {
     const boundCallees = new Set<ASTNode>();
     const table = tablesByPath.get(canonicalizePath(ast.metadata.sourcePath));
     const fileSymbols = createFileSymbolIndex(table, ast, unstableExportIds);
-    // `require` is the module wrapper's own binding only in CommonJS: never in .mjs/.mts or a file with ESM syntax.
-    commonJsFiles.set(fileSymbols, !/\.m[jt]s$/i.test(ast.metadata.sourcePath) && !(table?.moduleReferences ?? []).some((reference) => reference.form.startsWith("esm")));
+    // `require` is the module wrapper's own binding only in CommonJS: never in .mjs/.mts, nor in a file with ESM
+    // syntax unless the compiler turns that file into CommonJS (B2).
+    commonJsFiles.set(fileSymbols, !/\.m[jt]s$/i.test(ast.metadata.sourcePath)
+      && (this.compiledCommonJs.has(canonicalizePath(ast.metadata.sourcePath)) || !(table?.moduleReferences ?? []).some((reference) => reference.form.startsWith("esm"))));
     factKeyers.set(fileSymbols, new FactKeyer(ast.metadata.sourcePath, ast.root, fileSymbols.ownerSymbols));
     this.visit(ast.root, ast, initialContext, tablesByPath, importsByFile, targetByImportId, calls, references, boundCallees, fileSymbols, undefined, false);
   }
