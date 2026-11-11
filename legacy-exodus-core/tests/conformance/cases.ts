@@ -1009,6 +1009,32 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // XB-04 (audit B): the factory's returned name must be its one top-level binding, never rebound. In Node:
+    // block() returns the module `o` ("module-o"), swap() the argument ("swapped"), caught() the thrown value,
+    // looped() the last array element; nested() returns its own literal ("nested") from inside a block.
+    id: "factory-bindings",
+    files: {
+      "a.js": [
+        "const o = { run() { return \"module-o\"; } };",
+        "function block() { if (true) { const o = { run() { return \"block-o\"; } }; void o; } return o; }",
+        "function swap(other) { let o = { run() { return \"literal\"; } }; [o] = [other]; return o; }",
+        "function caught() { const o = { run() { return \"literal\"; } }; try { throw { run() { return \"thrown\"; } }; } catch (o) { return o; } }",
+        "function looped(xs) { let o = { run() { return \"literal\"; } }; for (o of xs) {} return o; }",
+        "function nested() { const p = { run() { return \"nested\"; } }; if (true) { return p; } return p; }",
+        "const b = block(); const s = swap({ run() { return \"swapped\"; } }); const c = caught(); const l = looped([{ run() { return \"last\"; } }]); const n = nested();",
+        "b.run(); s.run(); c.run(); l.run(); n.run();",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "xb04:block-shadow-unresolved", category: "calls", has: /^a\.js@8:\d+\|module\|b\.run\|UNRESOLVED\|/ },
+      { id: "xb04:destructuring-swap-unresolved", category: "calls", has: /^a\.js@8:\d+\|module\|s\.run\|UNRESOLVED\|/ },
+      { id: "xb04:catch-shadow-unresolved", category: "calls", has: /^a\.js@8:\d+\|module\|c\.run\|UNRESOLVED\|/ },
+      { id: "xb04:for-of-rebind-unresolved", category: "calls", has: /^a\.js@8:\d+\|module\|l\.run\|UNRESOLVED\|/ },
+      { id: "xb04:return-in-block-resolves", category: "calls", has: /^a\.js@8:\d+\|module\|n\.run\|RESOLVED\|variable:run@6:\d+@a\.js/ },
+    ],
+  },
+  {
     // Phase C2: an instance of a constructor function reaches the method its prototype is given by name, and
     // `Object.create(P)` reaches P's method. Each control breaks one condition: the constructor returns an object,
     // inherits (passed to a call), has its prototype replaced, the instance gets its own method, another file writes the
