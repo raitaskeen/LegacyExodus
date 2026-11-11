@@ -890,6 +890,43 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // Phase B2: a TypeScript file with `import` syntax that the compiler turns into CommonJS still has the wrapper's
+    // `require`. The nearest tsconfig.json decides: `module` commonjs, or a Node setting outside a `"type": "module"`
+    // package (`.cts` always), looked up through relative `extends` only.
+    id: "compiled-commonjs",
+    files: {
+      "cjs/tsconfig.json": "{\n  // tsc --init\n  \"compilerOptions\": { \"module\": \"CommonJS\", },\n}\n",
+      "cjs/a.ts": "import fs from \"fs\";\nrequire(\"x\");\n",
+      "cjs/sub/b.ts": "import fs from \"fs\";\nrequire(\"x\");\n",
+      "cjs/c.mts": "import fs from \"fs\";\nrequire(\"x\");\n",
+      "cjs/d.js": "import fs from \"fs\";\nrequire(\"x\");\n",
+      "esm/tsconfig.json": "{ \"compilerOptions\": { \"module\": \"ESNext\" } }\n",
+      "esm/a.ts": "import fs from \"fs\";\nrequire(\"x\");\n",
+      "ext/tsconfig.json": "{ \"extends\": \"../cjs/tsconfig.json\", \"compilerOptions\": { \"strict\": true } }\n",
+      "ext/a.ts": "import fs from \"fs\";\nrequire(\"x\");\n",
+      "pkgext/tsconfig.json": "{ \"extends\": \"@scope/tsconfig\" }\n",
+      "pkgext/a.ts": "import fs from \"fs\";\nrequire(\"x\");\n",
+      "node/tsconfig.json": "{ \"compilerOptions\": { \"module\": \"NodeNext\" } }\n",
+      "node/package.json": "{ \"type\": \"module\" }\n",
+      "node/a.ts": "import fs from \"fs\";\nrequire(\"x\");\n",
+      "node/b.cts": "import fs from \"fs\";\nrequire(\"x\");\n",
+      "node/cjs/package.json": "{ \"type\": \"commonjs\" }\n",
+      "node/cjs/a.ts": "import fs from \"fs\";\nrequire(\"x\");\n",
+    },
+    expectations: [
+      { id: "cjs-ts:module-commonjs", check: (directory) => external(directory, "cjs/a.ts", 2) === "commonjs:require" },
+      { id: "cjs-ts:nearest-config-above", check: (directory) => external(directory, "cjs/sub/b.ts", 2) === "commonjs:require" },
+      { id: "cjs-ts:relative-extends", check: (directory) => external(directory, "ext/a.ts", 2) === "commonjs:require" },
+      { id: "cjs-ts:nodenext-cts", check: (directory) => external(directory, "node/b.cts", 2) === "commonjs:require" },
+      { id: "cjs-ts:nodenext-commonjs-package", check: (directory) => external(directory, "node/cjs/a.ts", 2) === "commonjs:require" },
+      { id: "cjs-ts:mts-unresolved", category: "calls", has: /^cjs\/c\.mts@2:\d+\|module\|require\|UNRESOLVED\|/ },
+      { id: "cjs-ts:javascript-unresolved", category: "calls", has: /^cjs\/d\.js@2:\d+\|module\|require\|UNRESOLVED\|/ },
+      { id: "cjs-ts:esnext-unresolved", category: "calls", has: /^esm\/a\.ts@2:\d+\|module\|require\|UNRESOLVED\|/ },
+      { id: "cjs-ts:package-extends-unresolved", category: "calls", has: /^pkgext\/a\.ts@2:\d+\|module\|require\|UNRESOLVED\|/ },
+      { id: "cjs-ts:nodenext-module-package-unresolved", category: "calls", has: /^node\/a\.ts@2:\d+\|module\|require\|UNRESOLVED\|/ },
+    ],
+  },
+  {
     // Phase C1: a method of the object literal a repository factory returns. In Node, `app.get("/x")` returns "get /x" and
     // `app.ready()` returns "patched ready" (the factory's own file replaces it).
     id: "factory-objects",

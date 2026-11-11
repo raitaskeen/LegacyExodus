@@ -12,5 +12,6 @@ export { dependencyGraphNodes, DeterministicDependencyGraphBuilder } from "./dep
 export { ModuleResolver, canonicalizePath } from "./module-resolver";
 export type { KnownPathLookup, ModuleResolutionOptions, ResolvedImport, WorkspacePackage } from "./module-resolver";
 export { findPackageEntryFiles, loadDirectoryMains, loadWorkspacePackages } from "./workspace-loader";
+export { loadCompiledCommonJsFiles } from "./module-format";
 export { loadTsConfigResolution, parseJsonc } from "./tsconfig-loader";
 export type { JsoncResult, TsConfigDiagnostic, TsConfigDiagnosticCode, TsConfigResolution } from "./tsconfig-loader";

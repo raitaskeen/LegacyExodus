@@ -20,7 +20,7 @@ import type {
 import { createDomainEvent, type DomainEvent } from "@core/events/domain-event";
 import { validateProjectDiscovery, type FileArtifact } from "@contracts/discovery";
 import { DiscoveryEngine, DiscoveryValidator, type DiscoveryResult } from "@discovery/index";
-import { dependencyGraphNodes, DeterministicDependencyGraphBuilder, ModuleResolver, canonicalizePath, dependencyGraphNodeSchema, findPackageEntryFiles, loadDirectoryMains, loadTsConfigResolution, loadWorkspacePackages, validateCurrentDependencyGraph, type TsConfigDiagnostic } from "@graph/index";
+import { dependencyGraphNodes, DeterministicDependencyGraphBuilder, ModuleResolver, canonicalizePath, dependencyGraphNodeSchema, findPackageEntryFiles, loadCompiledCommonJsFiles, loadDirectoryMains, loadTsConfigResolution, loadWorkspacePackages, validateCurrentDependencyGraph, type TsConfigDiagnostic } from "@graph/index";
 import { DeterministicControlFlowGraphBuilder, DeterministicDataFlowGraphBuilder, DeterministicFlowAnalysisEngine, createProvenCallTargets, type ConnectionContext, type ControlFlowGraph, type DataFlowGraphBody } from "@flow/index";
 import { buildKnowledgeGraphOnDisk } from "@knowledge/index";
 import { rmSync } from "node:fs";
@@ -634,6 +634,7 @@ export class AnalyzeProjectHandler {
       const callGraphBuilder = new DeterministicCallGraphBuilder(resolver);
       callGraphBuilder.usePackageWrites(packageWrites);
       callGraphBuilder.useGlobalWrites(globalWrites);
+      callGraphBuilder.useCompiledCommonJs(await loadCompiledCommonJsFiles(discovery.projectPath, discovery.files));
       const controlFlowBuilder = new DeterministicControlFlowGraphBuilder();
       const dataFlowBuilder = new DeterministicDataFlowGraphBuilder();
 
