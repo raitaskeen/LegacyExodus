@@ -91,6 +91,14 @@ const taintSnippets: Readonly<Record<string, { readonly code: string; readonly r
   "audit-getter": { runtime: "flow", code: `const o = { get p() { return req.body; } }; res.send(o.p);` },
   "audit-control-only": { runtime: "none", code: `res.send(req.body.length > 3 ? "ok" : "no");` },
   "audit-reassigned": { runtime: "none", code: `let v = req.body; v = "safe"; res.send(v);` },
+  // XB-01 (audit B): arrow functions and function expressions carry their parameters and returns like declarations.
+  "xb01-arrow-helper": { runtime: "flow", code: `const send = (v) => res.send(v); send(req.body);` },
+  "xb01-arrow-block-helper": { runtime: "flow", code: `const send = (v) => { res.send(v); }; send(req.body);` },
+  "xb01-function-expression-helper": { runtime: "flow", code: `const send = function (v) { res.send(v); }; send(req.body);` },
+  "xb01-named-function-expression": { runtime: "flow", code: `const send = function inner(v) { res.send(v); }; send(req.body);` },
+  "xb01-arrow-return": { runtime: "flow", code: `const id = (v) => v; res.send(id(req.body));` },
+  "xb01-arrow-ignores-argument": { runtime: "none", code: `const send = (v) => res.send("safe"); send(req.body);` },
+  "xb01-arrow-returns-constant": { runtime: "none", code: `const clean = (v) => "safe"; res.send(clean(req.body));` },
 };
 
 const taintCases: readonly ConformanceCase[] = Object.entries(taintSnippets).map(([id, snippet]) => ({
@@ -924,6 +932,35 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "cjs-ts:esnext-unresolved", category: "calls", has: /^esm\/a\.ts@2:\d+\|module\|require\|UNRESOLVED\|/ },
       { id: "cjs-ts:package-extends-unresolved", category: "calls", has: /^pkgext\/a\.ts@2:\d+\|module\|require\|UNRESOLVED\|/ },
       { id: "cjs-ts:nodenext-module-package-unresolved", category: "calls", has: /^node\/a\.ts@2:\d+\|module\|require\|UNRESOLVED\|/ },
+    ],
+  },
+  {
+    // XB-01 (audit B): a function assigned as an export carries its parameters to the sink, whether it is
+    // `exports.f = function …`, `module.exports.f = (…) => …` or `module.exports = function …`. In Node each route
+    // passes the query value to execSync; `safe` ignores its argument.
+    id: "export-function-summaries",
+    files: {
+      "lib.js": "const cp = require(\"child_process\");\nexports.run = function (cmd) { return cp.execSync(cmd); };\nexports.safe = function (cmd) { return cp.execSync(\"ls\"); };\n",
+      "mod.js": "const cp = require(\"child_process\");\nmodule.exports.go = (cmd) => cp.execSync(cmd);\n",
+      "def.js": "const cp = require(\"child_process\");\nmodule.exports = function (cmd) { return cp.execSync(cmd); };\n",
+      "app.js": [
+        "const express = require(\"express\");",
+        "const lib = require(\"./lib\");",
+        "const mod = require(\"./mod\");",
+        "const def = require(\"./def\");",
+        "const app = express();",
+        "app.get(\"/a\", (req, res) => { lib.run(req.query.a); res.end(); });",
+        "app.get(\"/b\", (req, res) => { mod.go(req.query.b); res.end(); });",
+        "app.get(\"/c\", (req, res) => { def(req.query.c); res.end(); });",
+        "app.get(\"/d\", (req, res) => { lib.safe(req.query.d); res.end(); });",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "xb01:exports-function-expression", category: "taint", has: /^lib\.js\|.*via=\[cmd:parameter@lib\.js\]\|sink=#[0-9a-z]+:child_process\.execSync\|/ },
+      { id: "xb01:module-exports-member-arrow", category: "taint", has: /^mod\.js\|.*sink=#[0-9a-z]+:child_process\.execSync\|/ },
+      { id: "xb01:module-exports-default-function", category: "taint", has: /^def\.js\|.*sink=#[0-9a-z]+:child_process\.execSync\|/ },
+      { id: "xb01:ignored-argument-no-flow", check: (directory) => taintKeys(directory).some((key) => key.includes("source:req.query.a@")) && !taintKeys(directory).some((key) => key.includes("source:req.query.d@")) },
     ],
   },
   {
