@@ -220,7 +220,11 @@ describe("Repository Governance & GitHub Automation Hardening", () => {
     // Lost facts fail the job (NA-05) unless the owner labels the PR `facts-lost-explained`.
     expect(diff).toContain("contains(github.event.pull_request.labels.*.name, 'facts-lost-explained') && ' ' || '--fail-on-loss'");
     const pullRequest = (Bun.YAML.parse(readFileSync(join(REPO_ROOT, ".github/workflows/ci.yml"), "utf-8")) as { on: { pull_request: { types?: readonly string[] } } }).on.pull_request;
-    expect(pullRequest.types).toEqual(["opened", "synchronize", "reopened", "labeled", "unlabeled"]);
+    expect(pullRequest.types).toEqual(["opened", "synchronize", "reopened", "ready_for_review", "labeled", "unlabeled"]);
+    // Draft pull requests run no job (Actions minutes); marking one ready for review runs them all.
+    for (const [jobId, job] of Object.entries(workflow.jobs)) {
+      expect(job.if, `${jobId} must skip draft pull requests`).toContain("!github.event.pull_request.draft");
+    }
     // The summary is published even when lost facts fail the diff step.
     const publish = steps.find((step) => step.run?.includes("fact-diff.md") && step.run.includes("$GITHUB_STEP_SUMMARY"));
     expect((publish as { if?: string } | undefined)?.if).toBe("always()");
