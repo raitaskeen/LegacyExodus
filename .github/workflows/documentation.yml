@@ -11,6 +11,7 @@ on:
       - '.agents/**'
       - '.github/**'
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'docs/**'
       - '*.md'
@@ -27,6 +28,7 @@ permissions:
 jobs:
   lint-docs:
     name: Documentation Hygiene & Integrity
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
