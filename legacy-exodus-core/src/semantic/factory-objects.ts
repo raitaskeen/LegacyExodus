@@ -161,10 +161,27 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
     });
     if (bareReturn || returned.size !== 1) return;
     const objectName = [...returned][0]!;
+    // XB-04: the returned name must have exactly one binding in the factory (parameters, nested blocks, `catch`,
+    // loops and nested function or class names all count), a declarator that is a statement of the body itself,
+    // so every `return` reads it; and no write anywhere may rebind it, destructuring and loops included.
     const declarators: ASTNode[] = [];
-    walkOwn(body, (inner) => { if (inner.type === "VariableDeclarator" && nameOf(role(inner, "id")) === objectName) declarators.push(inner); });
-    let reassigned = false;
-    walkAll(body, (inner) => { if (inner.type === "AssignmentExpression" && nameOf(role(inner, "left")) === objectName) reassigned = true; });
+    let bindings = node.children.filter((child) => child.role === "params").flatMap(patternNames).filter((name) => name === objectName).length;
+    walkOwn(body, (inner) => {
+      if (inner.type === "VariableDeclarator" && patternNames(role(inner, "id")).includes(objectName)) {
+        bindings++;
+        if (nameOf(role(inner, "id")) === objectName) declarators.push(inner);
+      }
+      if (inner.type === "CatchClause" && patternNames(role(inner, "param")).includes(objectName)) bindings++;
+      if (inner.type === "ClassDeclaration" && nameOf(role(inner, "id")) === objectName) bindings++;
+      for (const child of inner.children) if (child.type === "FunctionDeclaration" && nameOf(role(child, "id")) === objectName) bindings++;
+    });
+    const topLevel = declarators.length === 1 && body.children.some((statement) => statement.type === "VariableDeclaration" && statement.children.includes(declarators[0]!));
+    let reassigned = bindings !== 1 || !topLevel;
+    walkAll(body, (inner) => {
+      if (inner.type === "AssignmentExpression" && patternNames(role(inner, "left")).includes(objectName)) reassigned = true;
+      if ((inner.type === "ForOfStatement" || inner.type === "ForInStatement") && patternNames(role(inner, "left")).includes(objectName)) reassigned = true;
+      if (inner.type === "UpdateExpression" && nameOf(role(inner, "argument")) === objectName) reassigned = true;
+    });
     const literal = declarators.length === 1 ? role(declarators[0]!, "init") : undefined;
     const isFunction = literal?.type === "FunctionExpression" || literal?.type === "ArrowFunctionExpression";
     if (reassigned || (literal?.type !== "ObjectExpression" && !isFunction)) return;
@@ -554,6 +571,17 @@ function collectConstructors(ast: ASTResult, symbols: readonly CodeSymbol[], byS
     found.push({ ids: [...new Set(ids)].sort(), methods, constructed: true, ...(readyAt === undefined ? {} : { readyAt }) });
   }
   return found;
+}
+
+/** The names a binding or assignment pattern binds: `o`, `[o]`, `{ p: o }`, `{ o = 1 }`, `...o`. Member targets bind none. */
+function patternNames(node: ASTNode | undefined): string[] {
+  if (node === undefined) return [];
+  if (node.type === "Identifier") { const name = nameOf(node); return name === undefined ? [] : [name]; }
+  if (node.type === "ObjectPattern") return node.children.flatMap((child) => child.type === "ObjectProperty" ? patternNames(role(child, "value")) : child.type === "RestElement" ? patternNames(role(child, "argument")) : []);
+  if (node.type === "ArrayPattern") return node.children.flatMap(patternNames);
+  if (node.type === "AssignmentPattern") return patternNames(role(node, "left"));
+  if (node.type === "RestElement") return patternNames(role(node, "argument"));
+  return [];
 }
 
 /** A member path rooted at an identifier (`util.inherits`), or undefined. */
