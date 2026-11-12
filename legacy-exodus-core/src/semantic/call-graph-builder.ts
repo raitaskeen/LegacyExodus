@@ -812,6 +812,17 @@ export function collectForeignExportWrites(ast: ASTResult, table: SymbolTable | 
     for (const child of node.children) visit(child);
   };
   visit(ast.root);
+  // XB-03: a package written through an alias or by reflection (`const p = path; p.join = …`). A specifier naming a
+  // file keeps the direct writes above only.
+  const packageImports = new Map<string, ValueRoot>();
+  for (const symbol of table?.symbols ?? []) {
+    if (symbol.kind !== "import" || typeof symbol.moduleSpecifier !== "string" || isRelativeSpecifier(symbol.moduleSpecifier)) continue;
+    const whole = symbol.defaultExport || symbol.sourceSymbolName === "*";
+    packageImports.set(symbol.name, { specifier: symbol.moduleSpecifier, path: whole ? [] : [symbol.sourceSymbolName ?? symbol.name] });
+  }
+  for (const write of aliasedWrites(ast.root, packageImports)) {
+    if (write.specifier !== undefined && !isRelativeSpecifier(write.specifier) && write.path.length > 0) writes.push({ importerPath, specifier: write.specifier, name: write.path[0]! });
+  }
   return writes;
 }
 
@@ -2496,7 +2507,120 @@ export function collectGlobalWrites(ast: ASTResult): readonly string[] {
     for (const child of node.children) visit(child);
   };
   visit(ast.root);
+  for (const write of aliasedWrites(ast.root, new Map())) {
+    if (write.specifier === undefined && write.path.length > 0 && STANDARD_GLOBALS.has(write.path[0]!)) paths.add(write.path.join("."));
+  }
   return [...paths].sort(compareCodePoints);
+}
+
+/** A value's origin: a path from the global object (`specifier` undefined) or from a package's module value. */
+interface ValueRoot { readonly specifier?: string; readonly path: readonly string[] }
+
+/** The reflective calls that write properties of their first argument. */
+const PROPERTY_WRITERS: ReadonlySet<string> = new Set(["Object.assign", "Object.defineProperty", "Object.defineProperties", "Reflect.defineProperty", "Reflect.set"]);
+
+/**
+ * XB-03: the paths a file writes through a name other than the root, or by reflection, each from its root and cut
+ * after a computed member (`*`):
+ * - through an alias: `const c = console; c.log = …` writes `console.log`, `var AP = Array.prototype; AP.includes = …`
+ *   writes `Array.prototype.includes`, `const p = path; p.join = …` writes the package's `join`. An alias is a name
+ *   declared with such a value, followed through chains, and never assigned anywhere in the file;
+ * - by `Object.assign(t, { k })`, `Object.defineProperties(t, { k })`, `Object.defineProperty(t, "k", …)`,
+ *   `Reflect.defineProperty` or `Reflect.set` on such a target, aliased or not: each literal key, or `t.*` when a key
+ *   is not known.
+ * Names are matched in the whole file, whatever their scope, which only over-approximates: a write recorded wrongly
+ * can only keep a call UNRESOLVED. `moduleImports` maps import names to their package value.
+ */
+function aliasedWrites(root: ASTNode, moduleImports: ReadonlyMap<string, ValueRoot>): readonly ValueRoot[] {
+  const declared = new Map<string, ASTNode[]>();
+  const assigned = new Set<string>();
+  const assignments: ASTNode[] = [];
+  const calls: ASTNode[] = [];
+  const collect = (node: ASTNode): void => {
+    if (node.type === "VariableDeclarator") {
+      const id = node.children.find((child) => child.role === "id");
+      const init = node.children.find((child) => child.role === "init");
+      const name = id?.type === "Identifier" ? identifier(id) : undefined;
+      if (name !== undefined && init !== undefined) declared.set(name, [...(declared.get(name) ?? []), init]);
+    }
+    if (node.type === "AssignmentExpression") {
+      const left = node.children.find((child) => child.role === "left");
+      if (left?.type === "MemberExpression" || left?.type === "OptionalMemberExpression") assignments.push(left);
+      else for (const name of extractBoundNames(left)) assigned.add(name);
+    }
+    if (node.type === "UpdateExpression") for (const name of extractBoundNames(node.children.find((child) => child.role === "argument"))) assigned.add(name);
+    if (node.type === "ForInStatement" || node.type === "ForOfStatement") {
+      const left = node.children.find((child) => child.role === "left");
+      if (left?.type !== "VariableDeclaration") for (const name of extractBoundNames(left)) assigned.add(name);
+    }
+    if (node.type === "CallExpression" || node.type === "OptionalCallExpression") calls.push(node);
+    for (const child of node.children) collect(child);
+  };
+  collect(root);
+
+  const aliases = new Map<string, ValueRoot[]>();
+  const rootsOf = (node: ASTNode | undefined): ValueRoot[] => {
+    if (node === undefined) return [];
+    if (node.type === "Identifier") {
+      const name = identifier(node);
+      if (name === undefined) return [];
+      const roots = [...(aliases.get(name) ?? [])];
+      const imported = moduleImports.get(name);
+      if (imported !== undefined) roots.push(imported);
+      if (GLOBAL_OBJECTS.has(name)) roots.push({ path: [] });
+      if (STANDARD_GLOBALS.has(name)) roots.push({ path: [name] });
+      return roots;
+    }
+    if (node.type === "CallExpression") {
+      const specifier = requiredSpecifier(node);
+      return specifier === undefined ? [] : [{ specifier, path: [] }];
+    }
+    if (node.type !== "MemberExpression" && node.type !== "OptionalMemberExpression") return [];
+    const property = node.children.find((child) => child.role === "property");
+    const name = node.attributes.computed === true ? staticPropertyKey(property) ?? "*" : identifier(property) ?? "*";
+    return rootsOf(node.children.find((child) => child.role === "object")).map((base) => ({ ...base, path: [...base.path, name] }));
+  };
+  const key = (value: ValueRoot): string => `${value.specifier ?? ""}\u0000${value.path.join(".")}`;
+  // Follow alias chains (`var a = Array; var p = a.prototype`) until no alias gains a root. A name declared from
+  // itself (`var a = console; var a = a.x`) gains one root per round, so chains are followed at most ten deep.
+  for (let changed = true, round = 0; changed && round < 10; round++) {
+    changed = false;
+    for (const [name, inits] of declared) {
+      if (assigned.has(name)) continue;
+      const known = new Set((aliases.get(name) ?? []).map(key));
+      const found = inits.flatMap((init) => rootsOf(init)).filter((value) => !known.has(key(value)) && (known.add(key(value)), true));
+      if (found.length > 0) { aliases.set(name, [...(aliases.get(name) ?? []), ...found]); changed = true; }
+    }
+  }
+
+  const writes: ValueRoot[] = [];
+  const add = (target: ASTNode | undefined, member: string): void => {
+    for (const base of rootsOf(target)) {
+      const path = [...base.path, member];
+      const cut = path.indexOf("*");
+      writes.push({ ...base, path: cut < 0 ? path : path.slice(0, cut + 1) });
+    }
+  };
+  const addKeys = (target: ASTNode | undefined, source: ASTNode | undefined): void => {
+    if (source?.type !== "ObjectExpression") { add(target, "*"); return; }
+    for (const property of source.children) {
+      add(target, property.type === "ObjectProperty" || property.type === "ObjectMethod" ? propertyKeyName(property) ?? "*" : "*");
+    }
+  };
+  for (const left of assignments) {
+    const property = left.children.find((child) => child.role === "property");
+    add(left.children.find((child) => child.role === "object"), left.attributes.computed === true ? staticPropertyKey(property) ?? "*" : identifier(property) ?? "*");
+  }
+  for (const call of calls) {
+    const writer = memberPathOf(call.children.find((child) => child.role === "callee"))?.join(".");
+    if (writer === undefined || !PROPERTY_WRITERS.has(writer)) continue;
+    const args = call.children.filter((child) => child.role === "arguments");
+    if (args.some((arg) => arg.type === "SpreadElement")) { add(args[0], "*"); continue; }
+    if (writer === "Object.assign") for (const source of args.slice(1)) addKeys(args[0], source);
+    else if (writer === "Object.defineProperties") addKeys(args[0], args[1]);
+    else add(args[0], staticPropertyKey(args[1]) ?? "*");
+  }
+  return writes;
 }
 
 /**
