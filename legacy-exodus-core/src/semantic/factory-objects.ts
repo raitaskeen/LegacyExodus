@@ -27,11 +27,13 @@ export interface FactoryFact {
    */
   readonly constructed?: true;
   /**
-   * Phase C2b: where the constructor has a parent, the end of its last top-level prototype method write. Before it, a
-   * call could reach the parent's method of the same name, so a top-level call of the same file that starts earlier is
-   * not resolved. A call inside a function is assumed to run after the module has loaded.
+   * Phase C2b: the end of the constructor's last top-level prototype method write. Before it, a call could reach the
+   * parent's method of the same name, so a top-level call of the same file that starts earlier is not resolved. Without
+   * a parent (`parentLinked` unset) this applies only to the names `Object.prototype` holds (XB-05). A call inside a
+   * function is assumed to run after the module has loaded.
    */
   readonly readyAt?: { readonly line: number; readonly column: number };
+  readonly parentLinked?: true;
   /**
    * Phase C3b: the factory copies properties onto the object it returns, in this order (see CopyFact). Set only when
    * every copy's source has known names; `literalNames` are the object's own keys before the copies, `function` says
@@ -65,6 +67,18 @@ const KNOWN_PROTOTYPES: Readonly<Record<string, ReadonlySet<string>>> = {
     "addListener", "on", "prependListener", "once", "prependOnceListener", "removeListener", "off", "removeAllListeners", "listeners", "rawListeners",
     "listenerCount", "eventNames"]),
 };
+
+/**
+ * XB-05: the names every plain object inherits from `Object.prototype` (Node 18 and later). Before `F.prototype.toString`
+ * is assigned, `new F().toString()` runs `Object.prototype.toString` instead of throwing.
+ */
+const OBJECT_PROTOTYPE_NAMES = new Set(["constructor", "toString", "toLocaleString", "valueOf", "hasOwnProperty", "isPrototypeOf",
+  "propertyIsEnumerable", "__proto__", "__defineGetter__", "__defineSetter__", "__lookupGetter__", "__lookupSetter__"]);
+
+/** XB-06: an async function or a generator returns a Promise or an iterator, never its object, and is no constructor. */
+function plainFunction(node: ASTNode): boolean {
+  return node.attributes.async !== true && node.attributes.generator !== true;
+}
 
 /** Own properties every function has: a copy that does not overwrite leaves them alone. */
 const FUNCTION_OWN = new Set(["length", "name", "prototype", "arguments", "caller"]);
@@ -146,7 +160,7 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
 
   const factories: FactoryFact[] = [];
   walkAll(ast.root, (node) => {
-    if (node.type !== "FunctionDeclaration") return;
+    if (node.type !== "FunctionDeclaration" || !plainFunction(node)) return;
     const functionSymbol = (byStart.get(startKey(node.location) ?? "") ?? []).find((symbol) => symbol.kind === "function");
     const body = role(node, "body");
     if (functionSymbol === undefined || body === undefined) return;
@@ -457,11 +471,13 @@ function prototypeOwner(node: ASTNode | undefined): string | undefined {
 
 /**
  * Phase C2: constructor functions declared in the file and the methods their prototype is given by name,
- * `F.prototype.m = function …` (or a function's name). A fresh `F.prototype` holds only `constructor`, so a call on an
- * instance before the assignment runs throws rather than reaching another function; this is why `F` is never passed to a
- * call and its prototype never replaced, except through one recognised parent link (C2b, parentLink), where a top-level
- * call before the methods are assigned stays unresolved instead. A method name written by name anywhere else in the
- * file, on any object, is left out, as for C1.
+ * `F.prototype.m = function …` (or a function's name). A fresh `F.prototype` holds only `constructor` and inherits
+ * `Object.prototype`, so a call on an instance before the assignment runs throws rather than reaching another function,
+ * unless `m` is one of Object.prototype's names (XB-05); this is why `F` is never passed to a call and its prototype never
+ * replaced, except through one recognised parent link (C2b, parentLink). With a parent link, or for an Object.prototype
+ * name, a top-level call before the methods are assigned stays unresolved instead. A method name written by name
+ * anywhere else in the file, on any object, is left out, as for C1; so is every method of a constructor that copies
+ * unknown names onto `this` (XB-07, copiesOntoThis). An async function or a generator is never a constructor (XB-06).
  */
 function collectConstructors(ast: ASTResult, symbols: readonly CodeSymbol[], byStart: ReadonlyMap<string, CodeSymbol[]>): FactoryFact[] {
   const writes = new Map<string, number>();
@@ -537,7 +553,9 @@ function collectConstructors(ast: ASTResult, symbols: readonly CodeSymbol[], byS
     if (node.type !== "FunctionDeclaration") continue;
     const functionSymbol = (byStart.get(startKey(node.location) ?? "") ?? []).find((symbol) => symbol.kind === "function");
     const body = role(node, "body");
-    if (functionSymbol === undefined || body === undefined || disqualified.has(functionSymbol.name)) continue;
+    if (functionSymbol === undefined || body === undefined || disqualified.has(functionSymbol.name) || !plainFunction(node)) continue;
+    // XB-07: a body that may give the instance an own property of any name (`Object.assign(this, opts)`).
+    if (copiesOntoThis(body)) continue;
     // C2b: at most one parent link, before every method, to a parent whose constructor cannot give the instance an own
     // method this file does not see (a package, a standard error, or a constructor declared here).
     const linked = links.get(functionSymbol.name) ?? [];
@@ -567,10 +585,37 @@ function collectConstructors(ast: ASTResult, symbols: readonly CodeSymbol[], byS
     if (methods.length === 0) continue;
     methods.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
     const ids = [functionSymbol.id, ...symbols.filter((symbol) => symbol.kind === "export" && symbol.moduleSpecifier === undefined && symbol.sourceSymbolName === functionSymbol.name).map((symbol) => symbol.id)];
-    const readyAt = link === undefined ? undefined : lastMethodEnd.get(functionSymbol.name);
-    found.push({ ids: [...new Set(ids)].sort(), methods, constructed: true, ...(readyAt === undefined ? {} : { readyAt }) });
+    const readyAt = lastMethodEnd.get(functionSymbol.name);
+    found.push({
+      ids: [...new Set(ids)].sort(), methods, constructed: true,
+      ...(readyAt === undefined ? {} : { readyAt }),
+      ...(link === undefined ? {} : { parentLinked: true as const }),
+    });
   }
   return found;
+}
+
+/**
+ * XB-07: whether a constructor body may write own properties of unknown names onto `this`: `Object.assign(this, …)`,
+ * `Object.defineProperties(this, …)`, `Object.defineProperty(this, key, …)` (or `Reflect.defineProperty`) with a key that
+ * is not a string literal, or a computed write `this[key] = …`. A literal-key write is a write of that name, counted
+ * with the file's other writes. Nested functions are searched too: an arrow function shares `this`.
+ */
+function copiesOntoThis(body: ASTNode): boolean {
+  let copies = false;
+  walkAll(body, (node) => {
+    if (node.type === "CallExpression" && callArguments(node)[0]?.type === "ThisExpression") {
+      const path = pathOf(role(node, "callee"))?.join(".");
+      if (path === "Object.assign" || path === "Object.defineProperties") copies = true;
+      if ((path === "Object.defineProperty" || path === "Reflect.defineProperty") && literalKeyWrite(node) === undefined) copies = true;
+    }
+    if (node.type === "AssignmentExpression") {
+      const left = role(node, "left");
+      if ((left?.type === "MemberExpression" || left?.type === "OptionalMemberExpression") && left.attributes.computed === true
+        && role(left, "object")?.type === "ThisExpression") copies = true;
+    }
+  });
+  return copies;
 }
 
 /** The names a binding or assignment pattern binds: `o`, `[o]`, `{ p: o }`, `{ o = 1 }`, `...o`. Member targets bind none. */
@@ -680,6 +725,7 @@ interface FactoryEntry {
   readonly filePath: string;
   readonly methods: ReadonlyMap<string, string>;
   readonly readyAt?: { readonly line: number; readonly column: number };
+  readonly parentLinked?: true;
   readonly copies?: readonly CopyFact[];
   readonly literalNames?: ReadonlySet<string>;
   readonly function?: true;
@@ -718,6 +764,7 @@ export class FactoryIndex {
           filePath: file.filePath,
           methods: new Map(factory.methods),
           ...(factory.readyAt === undefined ? {} : { readyAt: factory.readyAt }),
+          ...(factory.parentLinked === true ? { parentLinked: true as const } : {}),
           ...(factory.copies === undefined ? {} : {
             copies: factory.copies,
             literalNames: new Set(factory.literalNames ?? []),
@@ -802,8 +849,9 @@ export class FactoryIndex {
     }
     const target = entry?.methods.get(name);
     if (target === undefined || this.writtenElsewhere(name, entry!.filePath)) return undefined;
-    // C2b: a top-level call of the constructor's own file that starts before its methods are all assigned.
-    const ready = entry!.readyAt;
+    // C2b: a top-level call of the constructor's own file that starts before its methods are all assigned, when the
+    // name could then reach a parent's method, or Object.prototype's (XB-05).
+    const ready = entry!.parentLinked === true || OBJECT_PROTOTYPE_NAMES.has(name) ? entry!.readyAt : undefined;
     if (ready !== undefined && topLevelCall !== undefined && topLevelCall.filePath === entry!.filePath
       && (topLevelCall.line < ready.line || (topLevelCall.line === ready.line && topLevelCall.column < ready.column))) return undefined;
     return target;

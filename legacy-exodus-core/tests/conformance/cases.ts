@@ -1112,6 +1112,71 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // XB-05, XB-06, XB-07 (audit B). In Node: `early.toString()` runs Object.prototype.toString ("[object Object]"),
+    // `late.toString()` the assigned one; `a.run()`, `g.walk()`, `h.fly()` and `new Spin()` throw (a Promise, an
+    // iterator, an async iterator has no such method; a generator is not a constructor); `p.swim()` returns "swim";
+    // `j.step()`, `k.go()` and `d.hop()` run the instance's own function ("own"); `pt.norm()` the prototype's.
+    id: "factory-prototype-rules",
+    files: {
+      "objproto.js": [
+        "function F() {}",
+        "const early = new F();",
+        "early.toString();",
+        "F.prototype.toString = function toString() { return \"F.toString\"; };",
+        "const late = new F();",
+        "late.toString();",
+        "",
+      ].join("\n"),
+      "kinds.js": [
+        "async function make() { const o = { run() { return \"literal\"; } }; return o; }",
+        "function* gen() { const o = { walk() { return \"literal\"; } }; return o; }",
+        "async function* agen() { const o = { fly() { return \"literal\"; } }; return o; }",
+        "function plain() { const o = { swim() { return \"swim\"; } }; return o; }",
+        "function* Spin() {}",
+        "Spin.prototype.wake = function wake() { return \"wake\"; };",
+        "const a = make(); const g = gen(); const h = agen(); const p = plain();",
+        "try { a.run(); } catch (e) {}",
+        "try { g.walk(); } catch (e) {}",
+        "try { h.fly(); } catch (e) {}",
+        "p.swim();",
+        "try { const spin = new Spin(); spin.wake(); } catch (e) {}",
+        "",
+      ].join("\n"),
+      "assign.js": [
+        "function Job(opts) { Object.assign(this, opts); }",
+        "Job.prototype.step = function step() { return \"prototype\"; };",
+        "const j = new Job({ step() { return \"own\"; } });",
+        "j.step();",
+        "function Keyed(key) { this[key] = function () { return \"own\"; }; }",
+        "Keyed.prototype.go = function go() { return \"prototype\"; };",
+        "const k = new Keyed(\"go\");",
+        "k.go();",
+        "function Defined(key) { Object.defineProperty(this, key, { value: () => \"own\" }); }",
+        "Defined.prototype.hop = function hop() { return \"prototype\"; };",
+        "const d = new Defined(\"hop\");",
+        "d.hop();",
+        "function Point(x) { this.x = x; this.y = 1; }",
+        "Point.prototype.norm = function norm() { return \"norm\"; };",
+        "const pt = new Point(1);",
+        "pt.norm();",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "xb05:object-prototype-name-before-assignment-unresolved", category: "calls", has: /^objproto\.js@3:\d+\|module\|early\.toString\|UNRESOLVED\|/ },
+      { id: "xb05:object-prototype-name-after-assignment-resolves", category: "calls", has: /^objproto\.js@6:\d+\|module\|late\.toString\|RESOLVED\|method:toString@4:\d+@objproto\.js/ },
+      { id: "xb06:async-factory-unresolved", category: "calls", has: /^kinds\.js@8:\d+\|module\|a\.run\|UNRESOLVED\|/ },
+      { id: "xb06:generator-factory-unresolved", category: "calls", has: /^kinds\.js@9:\d+\|module\|g\.walk\|UNRESOLVED\|/ },
+      { id: "xb06:async-generator-factory-unresolved", category: "calls", has: /^kinds\.js@10:\d+\|module\|h\.fly\|UNRESOLVED\|/ },
+      { id: "xb06:plain-factory-resolves", category: "calls", has: /^kinds\.js@11:\d+\|module\|p\.swim\|RESOLVED\|variable:swim@4:\d+@kinds\.js/ },
+      { id: "xb06:generator-constructor-unresolved", category: "calls", has: /^kinds\.js@12:\d+\|module\|spin\.wake\|UNRESOLVED\|/ },
+      { id: "xb07:object-assign-this-unresolved", category: "calls", has: /^assign\.js@4:\d+\|module\|j\.step\|UNRESOLVED\|/ },
+      { id: "xb07:computed-this-write-unresolved", category: "calls", has: /^assign\.js@8:\d+\|module\|k\.go\|UNRESOLVED\|/ },
+      { id: "xb07:define-property-this-unresolved", category: "calls", has: /^assign\.js@12:\d+\|module\|d\.hop\|UNRESOLVED\|/ },
+      { id: "xb07:literal-this-writes-resolves", category: "calls", has: /^assign\.js@16:\d+\|module\|pt\.norm\|RESOLVED\|method:norm@14:\d+@assign\.js/ },
+    ],
+  },
+  {
     // Phase C2b: a constructor that inherits, through `Object.create(X.prototype)`, `util.inherits` or
     // `Object.setPrototypeOf`, still reaches its own prototype's methods when the link comes first and the parent cannot
     // give the instance an own method unseen (a package, a standard error, a constructor of this file).
