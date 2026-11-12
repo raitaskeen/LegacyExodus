@@ -22,6 +22,15 @@ export interface ModuleResolutionOptions {
   readonly packages?: Readonly<Record<string, WorkspacePackage>>;
   /** `package.json` `main` by project-relative POSIX directory (`.` for the root), see loadDirectoryMains. */
   readonly directoryMains?: Readonly<Record<string, string>>;
+  /** Every `package.json` by project-relative POSIX directory, for `#imports` and self-references (XB-02, see loadPackageScopes). */
+  readonly scopes?: Readonly<Record<string, PackageScope>>;
+}
+
+/** The fields of one `package.json` that let its own files load it: by name through `exports`, and `#` imports. */
+export interface PackageScope {
+  readonly name?: string;
+  readonly exports?: unknown;
+  readonly imports?: unknown;
 }
 
 /** A workspace package: its project-relative POSIX root and the manifest fields naming its entry points. */
@@ -63,8 +72,13 @@ export class ModuleResolver {
     const rawNormalizedSpecifier = moduleSpecifier.replaceAll("\\", "/");
     const importerIsTypeScript = TYPESCRIPT_IMPORTER.test(normalizedImporter);
 
+    if (rawNormalizedSpecifier.startsWith("#")) {
+      const resolvedPath = this.resolvePackageImport(normalizedImporter, rawNormalizedSpecifier, knownPaths, importerIsTypeScript);
+      return immutable({ importerPath, moduleSpecifier, resolvedPath });
+    }
     if (!rawNormalizedSpecifier.startsWith(".")) {
-      const resolvedPath = this.resolveNonRelative(rawNormalizedSpecifier, knownPaths, importerIsTypeScript);
+      const resolvedPath = this.resolveNonRelative(rawNormalizedSpecifier, knownPaths, importerIsTypeScript)
+        ?? this.resolveSelfReference(normalizedImporter, rawNormalizedSpecifier, knownPaths, importerIsTypeScript);
       return immutable({ importerPath, moduleSpecifier, resolvedPath });
     }
 
@@ -167,37 +181,85 @@ export class ModuleResolver {
     const name = scoped ? `${segments[0]}/${segments[1]}` : segments[0]!;
     const workspacePackage = Object.hasOwn(packages, name) ? packages[name] : undefined;
     if (workspacePackage === undefined) return null;
-    const root = canonicalizePath(workspacePackage.root);
     const subpath = specifier === name ? "." : `./${specifier.slice(name.length + 1)}`;
-    const located = (target: string): string | null => {
-      const relative = target.startsWith("./") || target.startsWith("../") ? target : `./${target}`;
-      const path = canonicalizePath(posix.join(root, relative));
-      if (path !== root && !path.startsWith(`${root}/`)) return null;
-      return firstKnown(candidatesFor(path, importerIsTypeScript), knownPaths);
-    };
-    // A target in build output that is not in the repository (`dist/x.js`, `build/x.cjs`) is compiled from the
-    // package's own `src/x`; analysis wants that source. Only an existing file is accepted.
-    const file = (target: string): string | null => {
-      const direct = located(target);
-      if (direct !== null) return direct;
-      const built = /^(?:\.\/)?(?:dist|build|lib|es|esm|cjs|out)\/(.+?)(?:\.(?:umd|cjs|esm|es|min))*\.(?:d\.ts|[cm]?js)$/.exec(target);
-      return built === null ? null : located(`./src/${built[1]}`);
-    };
-
-    if (workspacePackage.exports !== undefined && workspacePackage.exports !== null) {
-      const match = matchExports(workspacePackage.exports, subpath);
-      if (match === undefined) return null;
-      // A root export only to a bundle (`dist/name.umd.js`) has no same-named source; the package's entry is src/index.
-      return resolveExportTarget(match.target, match.captured, file) ?? (subpath === "." && match.target !== null ? located("./src/index") : null);
-    }
-    if (subpath !== ".") return file(subpath);
-    for (const field of [workspacePackage.source, workspacePackage.module, workspacePackage.main]) {
-      if (typeof field !== "string" || field.length === 0) continue;
-      const resolved = file(field);
-      if (resolved !== null) return resolved;
-    }
-    return located("./index") ?? located("./src/index");
+    return packageEntry(canonicalizePath(workspacePackage.root), workspacePackage, subpath, knownPaths, importerIsTypeScript);
   }
+
+  /** The nearest `package.json` at or above the importer's directory, as Node finds a package scope. */
+  private nearestScope(importerPath: string): { readonly root: string; readonly scope: PackageScope } | undefined {
+    const scopes = this.options.scopes;
+    // Scope keys are project-relative; an absolute importer would otherwise end at the root manifest.
+    if (scopes === undefined || isAbsoluteLike(importerPath)) return undefined;
+    for (let directory = posix.dirname(importerPath); ; directory = posix.dirname(directory)) {
+      const key = directory === "" ? "." : directory;
+      if (Object.hasOwn(scopes, key)) return { root: key, scope: scopes[key]! };
+      if (key === ".") return undefined;
+    }
+  }
+
+  /**
+   * `#name` (XB-02): the nearest `package.json` `imports` map, as Node resolves it. A target must be a `./` path
+   * inside that package and an existing file; a target naming another package, or no match, stays unresolved.
+   */
+  private resolvePackageImport(importerPath: string, specifier: string, knownPaths: ReadonlySet<string>, importerIsTypeScript: boolean): string | null {
+    const nearest = this.nearestScope(importerPath);
+    if (nearest?.scope.imports === undefined) return null;
+    const match = matchSubpathMap(nearest.scope.imports as Record<string, unknown>, specifier);
+    if (match === undefined) return null;
+    return resolveExportTarget(match.target, match.captured, (target) => packageFile(nearest.root, target, knownPaths, importerIsTypeScript));
+  }
+
+  /**
+   * A package loading itself by its own name (XB-02): `pkg` or `pkg/sub` from a file whose nearest `package.json`
+   * is named `pkg` and has `exports` (Node allows a self-reference only then), resolved through those `exports`.
+   */
+  private resolveSelfReference(importerPath: string, specifier: string, knownPaths: ReadonlySet<string>, importerIsTypeScript: boolean): string | null {
+    const nearest = this.nearestScope(importerPath);
+    const name = nearest?.scope.name;
+    if (nearest === undefined || name === undefined || nearest.scope.exports === undefined) return null;
+    if (specifier !== name && !specifier.startsWith(`${name}/`)) return null;
+    const subpath = specifier === name ? "." : `./${specifier.slice(name.length + 1)}`;
+    return packageEntry(nearest.root, { root: nearest.root, exports: nearest.scope.exports }, subpath, knownPaths, importerIsTypeScript);
+  }
+}
+
+/** A `./` or bare path inside a package root, as an existing file; a path that leaves the root is refused. */
+function packageFile(root: string, target: string, knownPaths: ReadonlySet<string>, importerIsTypeScript: boolean): string | null {
+  const relative = target.startsWith("./") || target.startsWith("../") ? target : `./${target}`;
+  const path = canonicalizePath(posix.join(root, relative));
+  const inside = root === "." ? path !== ".." && !path.startsWith("../") : path === root || path.startsWith(`${root}/`);
+  return inside ? firstKnown(candidatesFor(path, importerIsTypeScript), knownPaths) : null;
+}
+
+/**
+ * A package's file for `subpath`. With an `exports` map the subpath must be exported, and a conditional target is
+ * tried in SOURCE_FIRST_CONDITIONS order; without one, the root is `source`, `module`, then `main`, then the
+ * package's index. Only existing files inside the package root are accepted.
+ */
+function packageEntry(root: string, entry: WorkspacePackage, subpath: string, knownPaths: ReadonlySet<string>, importerIsTypeScript: boolean): string | null {
+  const located = (target: string): string | null => packageFile(root, target, knownPaths, importerIsTypeScript);
+  // A target in build output that is not in the repository (`dist/x.js`, `build/x.cjs`) is compiled from the
+  // package's own `src/x`; analysis wants that source. Only an existing file is accepted.
+  const file = (target: string): string | null => {
+    const direct = located(target);
+    if (direct !== null) return direct;
+    const built = /^(?:\.\/)?(?:dist|build|lib|es|esm|cjs|out)\/(.+?)(?:\.(?:umd|cjs|esm|es|min))*\.(?:d\.ts|[cm]?js)$/.exec(target);
+    return built === null ? null : located(`./src/${built[1]}`);
+  };
+
+  if (entry.exports !== undefined && entry.exports !== null) {
+    const match = matchExports(entry.exports, subpath);
+    if (match === undefined) return null;
+    // A root export only to a bundle (`dist/name.umd.js`) has no same-named source; the package's entry is src/index.
+    return resolveExportTarget(match.target, match.captured, file) ?? (subpath === "." && match.target !== null ? located("./src/index") : null);
+  }
+  if (subpath !== ".") return file(subpath);
+  for (const field of [entry.source, entry.module, entry.main]) {
+    if (typeof field !== "string" || field.length === 0) continue;
+    const resolved = file(field);
+    if (resolved !== null) return resolved;
+  }
+  return located("./index") ?? located("./src/index");
 }
 
 /** Conditions tried for a conditional export: the source first, since analysis wants code, not build output. */
@@ -207,7 +269,11 @@ const SOURCE_FIRST_CONDITIONS = ["source", "import", "require", "node", "default
 function matchExports(exports: unknown, subpath: string): { readonly target: unknown; readonly captured: string | undefined } | undefined {
   const isSubpathMap = typeof exports === "object" && exports !== null && !Array.isArray(exports)
     && Object.keys(exports).some((key) => key.startsWith("."));
-  const map = isSubpathMap ? exports as Record<string, unknown> : { ".": exports };
+  return matchSubpathMap(isSubpathMap ? exports as Record<string, unknown> : { ".": exports }, subpath);
+}
+
+/** The target a subpath map (`exports` keys or `imports` `#` keys) gives `key`: exact, else the longest-prefix wildcard. */
+function matchSubpathMap(map: Readonly<Record<string, unknown>>, subpath: string): { readonly target: unknown; readonly captured: string | undefined } | undefined {
   if (Object.hasOwn(map, subpath)) return { target: map[subpath], captured: undefined };
   let best: { target: unknown; captured: string } | undefined;
   let bestPrefix = -1;

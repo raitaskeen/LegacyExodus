@@ -868,6 +868,43 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // XB-02 (audit B): `#imports` and a package's self-reference load repository files, as in Node (24): main.js
+    // prints "util.f internal.g node tools.t". Controls, which Node rejects with MODULE_NOT_FOUND: sub/ has its own
+    // package.json without `imports` (the nearest manifest decides), and noexp has no `exports`, so it cannot name itself.
+    id: "package-imports",
+    files: {
+      "package.json": "{ \"name\": \"selfpkg\", \"exports\": { \".\": \"./src/index.js\", \"./tools\": \"./src/tools.js\" }, \"imports\": { \"#util\": \"./src/util.js\", \"#internal/*\": \"./src/internal/*.js\", \"#cond\": { \"node\": \"./src/cond-node.js\", \"default\": \"./src/cond-default.js\" } } }\n",
+      "src/util.js": "exports.f = () => \"util.f\";\n",
+      "src/internal/deep.js": "exports.g = () => \"internal.g\";\n",
+      "src/cond-node.js": "exports.c = () => \"node\";\n",
+      "src/cond-default.js": "exports.c = () => \"default\";\n",
+      "src/tools.js": "exports.t = () => \"tools.t\";\n",
+      "src/index.js": "exports.i = () => \"index.i\";\n",
+      "main.js": [
+        "const util = require(\"#util\");",
+        "const deep = require(\"#internal/deep\");",
+        "const cond = require(\"#cond\");",
+        "const tools = require(\"selfpkg/tools\");",
+        "console.log(util.f(), deep.g(), cond.c(), tools.t());",
+        "",
+      ].join("\n"),
+      "sub/package.json": "{ \"name\": \"inner\" }\n",
+      "sub/a.js": "let r;\ntry { const u = require(\"#util\"); r = u.f(); } catch (e) { r = e.code; }\nconsole.log(\"sub:\", r);\n",
+      "noexp/package.json": "{ \"name\": \"noexp\" }\n",
+      "noexp/x.js": "exports.x = () => \"x\";\n",
+      "noexp/use.js": "let r;\ntry { const n = require(\"noexp/x\"); r = n.x(); } catch (e) { r = e.code; }\nconsole.log(\"noexp:\", r);\n",
+    },
+    expectations: [
+      { id: "xb02:hash-import", category: "calls", has: /^main\.js@5:\d+\|module\|util\.f\|RESOLVED\|export:f@1:0@src\/util\.js$/ },
+      { id: "xb02:hash-import-wildcard", category: "calls", has: /^main\.js@5:\d+\|module\|deep\.g\|RESOLVED\|export:g@1:0@src\/internal\/deep\.js$/ },
+      { id: "xb02:hash-import-condition", category: "calls", has: /^main\.js@5:\d+\|module\|cond\.c\|RESOLVED\|export:c@1:0@src\/cond-node\.js$/ },
+      { id: "xb02:self-reference", category: "calls", has: /^main\.js@5:\d+\|module\|tools\.t\|RESOLVED\|export:t@1:0@src\/tools\.js$/ },
+      { id: "xb02:hash-import-edge", category: "module-edges", has: /^main\.js -> src\/util\.js\|#util\|/ },
+      { id: "xb02:nearest-manifest-without-imports", category: "calls", has: /^sub\/a\.js@2:\d+\|module\|u\.f\|UNRESOLVED\|/ },
+      { id: "xb02:self-reference-needs-exports", category: "calls", has: /^noexp\/use\.js@2:\d+\|module\|n\.x\|UNRESOLVED\|/ },
+    ],
+  },
+  {
     // ADR-012, Phase B1b: a call on an unbound standard global is EXTERNAL unless some file writes that path; a test
     // runner's globals stay UNRESOLVED; `require` is EXTERNAL only in CommonJS.
     id: "external-globals",
