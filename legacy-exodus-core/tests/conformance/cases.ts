@@ -935,6 +935,61 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // XB-03 (audit B): a patch made through a never-reassigned alias of a global, a built-in prototype or a package
+    // import, or by `Object.assign` / literal-key `Object.defineProperty` on one, is a write to that path. In Node the
+    // repository's function runs for each positive (`repo-includes:1 repo-join repo-parse repo-max 0`, `[repo logger] x`; `path.format` still gives `x`).
+    // Controls stay EXTERNAL: an alias only read (`ArrayProto.slice.call`), an alias reassigned before the write, and
+    // members the patches do not touch.
+    id: "external-alias-patches",
+    files: {
+      "alias.js": "const c = console;\nc.log = function () { process.stdout.write(\"[repo logger] \" + [...arguments].join(\" \") + \"\\n\"); };\n",
+      "poly.js": "var ArrayProto = Array.prototype;\nArrayProto.includes = function (x) { return \"repo-includes:\" + x; };\nArrayProto.slice.call([1]);\n",
+      "pkg.js": "const path = require(\"path\");\nconst p = path;\np.join = function () { return \"repo-join\"; };\nObject.defineProperty(p.format, \"tag\", { value: \"repo-tag\" });\n",
+      "fn.js": "function install() { const d = Date; d.now = function () { return 0; }; }\ninstall();\n",
+      "reassign.js": "var w = console;\nw = { warn: null };\nw.warn = function () { return \"repo-warn\"; };\n",
+      "main.js": [
+        "require(\"./alias\");",
+        "require(\"./poly\");",
+        "require(\"./pkg\");",
+        "require(\"./fn\");",
+        "require(\"./reassign\");",
+        "const path = require(\"path\");",
+        "const xs = [1, 2];",
+        "Object.assign(JSON, { parse: function () { return \"repo-parse\"; } });",
+        "Object.defineProperty(Math, \"max\", { value: function () { return \"repo-max\"; } });",
+        "const a = xs.includes(1);",
+        "const b = path.join(\"a\", \"b\");",
+        "const c = JSON.parse(\"1\");",
+        "const d = Math.max(1, 2);",
+        "const e = Date.now();",
+        "console.warn(a, b, c, d, e);",
+        "const f = xs.slice(0);",
+        "const g = path.basename(\"a/b\");",
+        "const h = JSON.stringify(1);",
+        "const i = Math.min(1, 2);",
+        "console.error(f.join(\"+\"), g, h, i);",
+        "console.log(\"x\");",
+        "const k = path.format({ base: \"x\" });",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "alias-patch:prototype-alias-unresolved", category: "calls", has: /^main\.js@10:\d+\|module\|xs\.includes\|UNRESOLVED\|/ },
+      { id: "alias-patch:package-alias-unresolved", category: "calls", has: /^main\.js@11:\d+\|module\|path\.join\|UNRESOLVED\|/ },
+      { id: "alias-patch:object-assign-unresolved", category: "calls", has: /^main\.js@12:\d+\|module\|JSON\.parse\|UNRESOLVED\|/ },
+      { id: "alias-patch:define-property-unresolved", category: "calls", has: /^main\.js@13:\d+\|module\|Math\.max\|UNRESOLVED\|/ },
+      { id: "alias-patch:alias-in-function-unresolved", category: "calls", has: /^main\.js@14:\d+\|module\|Date\.now\|UNRESOLVED\|/ },
+      { id: "alias-patch:global-alias-unresolved", category: "calls", has: /^main\.js@21:\d+\|module\|console\.log\|UNRESOLVED\|/ },
+      { id: "alias-patch:reassigned-alias-external", check: (directory) => external(directory, "main.js", 15) === "global:console.warn" },
+      { id: "alias-patch:read-only-alias-external", check: (directory) => external(directory, "main.js", 16) === "global:Array.prototype.slice" },
+      { id: "alias-patch:package-other-member-external", check: (directory) => external(directory, "main.js", 17) === "path:basename" },
+      { id: "alias-patch:assign-other-member-external", check: (directory) => external(directory, "main.js", 18) === "global:JSON.stringify" },
+      { id: "alias-patch:define-other-member-external", check: (directory) => external(directory, "main.js", 19) === "global:Math.min" },
+      // A property added to `path.format` itself leaves the call `path.format()` running the package's code.
+      { id: "alias-patch:deeper-package-write-external", check: (directory) => external(directory, "main.js", 22) === "path:format" },
+    ],
+  },
+  {
     // Phase B2: a TypeScript file with `import` syntax that the compiler turns into CommonJS still has the wrapper's
     // `require`. The nearest tsconfig.json decides: `module` commonjs, or a Node setting outside a `"type": "module"`
     // package (`.cts` always), looked up through relative `extends` only.

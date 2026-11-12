@@ -779,8 +779,11 @@ export function collectUnstableExportIds(ast: ASTResult, table: SymbolTable | un
   }).map((symbol) => symbol.id);
 }
 
-/** A property written on another module's value, as one file sees it (OR-01). `*` is a computed name. */
-export interface ForeignExportWrite { readonly importerPath: string; readonly specifier: string; readonly name: string }
+/**
+ * A property written on another module's value, as one file sees it (OR-01). `*` is a computed name. `member` is the
+ * whole written path when it is known to be deeper (`ObjectId.prototype._id`), ending at a computed member (XB-03).
+ */
+export interface ForeignExportWrite { readonly importerPath: string; readonly specifier: string; readonly name: string; readonly member?: string }
 
 /**
  * Writes this file makes to another module's exports: `require("./x").name = …`, or `x.name = …` where `x` is an
@@ -812,6 +815,17 @@ export function collectForeignExportWrites(ast: ASTResult, table: SymbolTable | 
     for (const child of node.children) visit(child);
   };
   visit(ast.root);
+  // XB-03: a package written through an alias or by reflection (`const p = path; p.join = …`). A specifier naming a
+  // file keeps the direct writes above only.
+  const packageImports = new Map<string, ValueRoot>();
+  for (const symbol of table?.symbols ?? []) {
+    if (symbol.kind !== "import" || typeof symbol.moduleSpecifier !== "string" || isRelativeSpecifier(symbol.moduleSpecifier)) continue;
+    const whole = symbol.defaultExport || symbol.sourceSymbolName === "*";
+    packageImports.set(symbol.name, { specifier: symbol.moduleSpecifier, path: whole ? [] : [symbol.sourceSymbolName ?? symbol.name] });
+  }
+  for (const write of aliasedWrites(ast.root, packageImports)) {
+    if (write.specifier !== undefined && !isRelativeSpecifier(write.specifier) && write.path.length > 0) writes.push({ importerPath, specifier: write.specifier, name: write.path[0]!, member: write.path.join(".") });
+  }
   return writes;
 }
 
@@ -2442,7 +2456,7 @@ function externalTarget(imported: CodeSymbol | undefined, calleeName: string, in
   const whole = source === "*" || (binding.defaultExport && source === undefined);
   const path = [...(whole ? [] : [source ?? binding.name]), ...(imported !== undefined ? [] : pieces.slice(1))];
   const member = path.length === 0 ? "default" : path.join(".");
-  if (packageWrites.has(`${module}\u0000${path[0] ?? "default"}`) || packageWrites.has(`${module}\u0000*`)) return undefined;
+  if (!packagePathUnwritten(module, path.length === 0 ? ["default"] : path, packageWrites)) return undefined;
   return { module, member };
 }
 
@@ -2496,7 +2510,120 @@ export function collectGlobalWrites(ast: ASTResult): readonly string[] {
     for (const child of node.children) visit(child);
   };
   visit(ast.root);
+  for (const write of aliasedWrites(ast.root, new Map())) {
+    if (write.specifier === undefined && write.path.length > 0 && STANDARD_GLOBALS.has(write.path[0]!)) paths.add(write.path.join("."));
+  }
   return [...paths].sort(compareCodePoints);
+}
+
+/** A value's origin: a path from the global object (`specifier` undefined) or from a package's module value. */
+interface ValueRoot { readonly specifier?: string; readonly path: readonly string[] }
+
+/** The reflective calls that write properties of their first argument. */
+const PROPERTY_WRITERS: ReadonlySet<string> = new Set(["Object.assign", "Object.defineProperty", "Object.defineProperties", "Reflect.defineProperty", "Reflect.set"]);
+
+/**
+ * XB-03: the paths a file writes through a name other than the root, or by reflection, each from its root and cut
+ * after a computed member (`*`):
+ * - through an alias: `const c = console; c.log = …` writes `console.log`, `var AP = Array.prototype; AP.includes = …`
+ *   writes `Array.prototype.includes`, `const p = path; p.join = …` writes the package's `join`. An alias is a name
+ *   declared with such a value, followed through chains, and never assigned anywhere in the file;
+ * - by `Object.assign(t, { k })`, `Object.defineProperties(t, { k })`, `Object.defineProperty(t, "k", …)`,
+ *   `Reflect.defineProperty` or `Reflect.set` on such a target, aliased or not: each literal key, or `t.*` when a key
+ *   is not known.
+ * Names are matched in the whole file, whatever their scope, which only over-approximates: a write recorded wrongly
+ * can only keep a call UNRESOLVED. `moduleImports` maps import names to their package value.
+ */
+function aliasedWrites(root: ASTNode, moduleImports: ReadonlyMap<string, ValueRoot>): readonly ValueRoot[] {
+  const declared = new Map<string, ASTNode[]>();
+  const assigned = new Set<string>();
+  const assignments: ASTNode[] = [];
+  const calls: ASTNode[] = [];
+  const collect = (node: ASTNode): void => {
+    if (node.type === "VariableDeclarator") {
+      const id = node.children.find((child) => child.role === "id");
+      const init = node.children.find((child) => child.role === "init");
+      const name = id?.type === "Identifier" ? identifier(id) : undefined;
+      if (name !== undefined && init !== undefined) declared.set(name, [...(declared.get(name) ?? []), init]);
+    }
+    if (node.type === "AssignmentExpression") {
+      const left = node.children.find((child) => child.role === "left");
+      if (left?.type === "MemberExpression" || left?.type === "OptionalMemberExpression") assignments.push(left);
+      else for (const name of extractBoundNames(left)) assigned.add(name);
+    }
+    if (node.type === "UpdateExpression") for (const name of extractBoundNames(node.children.find((child) => child.role === "argument"))) assigned.add(name);
+    if (node.type === "ForInStatement" || node.type === "ForOfStatement") {
+      const left = node.children.find((child) => child.role === "left");
+      if (left?.type !== "VariableDeclaration") for (const name of extractBoundNames(left)) assigned.add(name);
+    }
+    if (node.type === "CallExpression" || node.type === "OptionalCallExpression") calls.push(node);
+    for (const child of node.children) collect(child);
+  };
+  collect(root);
+
+  const aliases = new Map<string, ValueRoot[]>();
+  const rootsOf = (node: ASTNode | undefined): ValueRoot[] => {
+    if (node === undefined) return [];
+    if (node.type === "Identifier") {
+      const name = identifier(node);
+      if (name === undefined) return [];
+      const roots = [...(aliases.get(name) ?? [])];
+      const imported = moduleImports.get(name);
+      if (imported !== undefined) roots.push(imported);
+      if (GLOBAL_OBJECTS.has(name)) roots.push({ path: [] });
+      if (STANDARD_GLOBALS.has(name)) roots.push({ path: [name] });
+      return roots;
+    }
+    if (node.type === "CallExpression") {
+      const specifier = requiredSpecifier(node);
+      return specifier === undefined ? [] : [{ specifier, path: [] }];
+    }
+    if (node.type !== "MemberExpression" && node.type !== "OptionalMemberExpression") return [];
+    const property = node.children.find((child) => child.role === "property");
+    const name = node.attributes.computed === true ? staticPropertyKey(property) ?? "*" : identifier(property) ?? "*";
+    return rootsOf(node.children.find((child) => child.role === "object")).map((base) => ({ ...base, path: [...base.path, name] }));
+  };
+  const key = (value: ValueRoot): string => `${value.specifier ?? ""}\u0000${value.path.join(".")}`;
+  // Follow alias chains (`var a = Array; var p = a.prototype`) until no alias gains a root. A name declared from
+  // itself (`var a = console; var a = a.x`) gains one root per round, so chains are followed at most ten deep.
+  for (let changed = true, round = 0; changed && round < 10; round++) {
+    changed = false;
+    for (const [name, inits] of declared) {
+      if (assigned.has(name)) continue;
+      const known = new Set((aliases.get(name) ?? []).map(key));
+      const found = inits.flatMap((init) => rootsOf(init)).filter((value) => !known.has(key(value)) && (known.add(key(value)), true));
+      if (found.length > 0) { aliases.set(name, [...(aliases.get(name) ?? []), ...found]); changed = true; }
+    }
+  }
+
+  const writes: ValueRoot[] = [];
+  const add = (target: ASTNode | undefined, member: string): void => {
+    for (const base of rootsOf(target)) {
+      const path = [...base.path, member];
+      const cut = path.indexOf("*");
+      writes.push({ ...base, path: cut < 0 ? path : path.slice(0, cut + 1) });
+    }
+  };
+  const addKeys = (target: ASTNode | undefined, source: ASTNode | undefined): void => {
+    if (source?.type !== "ObjectExpression") { add(target, "*"); return; }
+    for (const property of source.children) {
+      add(target, property.type === "ObjectProperty" || property.type === "ObjectMethod" ? propertyKeyName(property) ?? "*" : "*");
+    }
+  };
+  for (const left of assignments) {
+    const property = left.children.find((child) => child.role === "property");
+    add(left.children.find((child) => child.role === "object"), left.attributes.computed === true ? staticPropertyKey(property) ?? "*" : identifier(property) ?? "*");
+  }
+  for (const call of calls) {
+    const writer = memberPathOf(call.children.find((child) => child.role === "callee"))?.join(".");
+    if (writer === undefined || !PROPERTY_WRITERS.has(writer)) continue;
+    const args = call.children.filter((child) => child.role === "arguments");
+    if (args.some((arg) => arg.type === "SpreadElement")) { add(args[0], "*"); continue; }
+    if (writer === "Object.assign") for (const source of args.slice(1)) addKeys(args[0], source);
+    else if (writer === "Object.defineProperties") addKeys(args[0], args[1]);
+    else add(args[0], staticPropertyKey(args[1]) ?? "*");
+  }
+  return writes;
 }
 
 /**
@@ -2627,15 +2754,29 @@ function packageName(specifier: string): string {
 
 /**
  * The package members a run's files write (`require("fs").readFileSync = …`, `fs.readFileSync = …` through an import):
- * keys `module\u0000member`, `*` for a computed member. A specifier that resolves to a repository file is not a package.
+ * keys `module\u0000member`, `*` for a computed member, the member being the whole written path when known
+ * (`ObjectId.prototype._id`). A specifier that resolves to a repository file is not a package.
  */
 export function packageWriteKeys(writes: readonly ForeignExportWrite[], resolveFile: (importerPath: string, specifier: string) => string | undefined): ReadonlySet<string> {
   const keys = new Set<string>();
   for (const write of writes) {
     if (isRelativeSpecifier(write.specifier) || resolveFile(write.importerPath, write.specifier) !== undefined) continue;
-    keys.add(`${packageName(write.specifier)}\u0000${write.name}`);
+    keys.add(`${packageName(write.specifier)}\u0000${write.member ?? write.name}`);
   }
   return keys;
+}
+
+/**
+ * Whether no file of the run writes member `path` of package `module` or a part of it (see packageWriteKeys), as for
+ * globals: `x.a = …` and `x.a.*` block `x.a.b()`, while `x.a.prototype.c = …` leaves the call `x.a()` alone.
+ */
+function packagePathUnwritten(module: string, path: readonly string[], packageWrites: ReadonlySet<string>): boolean {
+  if (packageWrites.has(`${module}\u0000*`)) return false;
+  for (let length = 1; length <= path.length; length++) {
+    const prefix = path.slice(0, length).join(".");
+    if (packageWrites.has(`${module}\u0000${prefix}`) || packageWrites.has(`${module}\u0000${prefix}.*`)) return false;
+  }
+  return true;
 }
 
 /** A specifier naming a file (`./x`, `../x`, `/x`) rather than a package; an unknown one counts as a file. */
