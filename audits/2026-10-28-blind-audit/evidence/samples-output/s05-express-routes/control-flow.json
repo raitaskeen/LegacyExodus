@@ -1,0 +1,251 @@
+{
+  "projectId": "9988916d-f59e-464e-a753-1d63b6276106",
+  "analysisRunId": "842db048-7827-45eb-aac9-0312949b7742",
+  "graphs": [
+    {
+      "id": "6ce96e08242342e529b8c4cbbe823f1eaeb2eafa3d3edc0597fa8863e04c9ff7",
+      "filePath": "app.js",
+      "scopeName": "module",
+      "state": "RESOLVED",
+      "entryBlockId": "a96f187ef7915a2d09735dfdd5f4692b0c331b16e5107fd98ad3477ac030a0aa",
+      "exitBlockId": "6375cf1e4bdc1e6490c6bc08f31bf0302151775bf6b8473750614f2890dfc46d",
+      "blocks": [
+        {
+          "id": "6375cf1e4bdc1e6490c6bc08f31bf0302151775bf6b8473750614f2890dfc46d",
+          "statements": [],
+          "predecessorIds": [
+            "a96f187ef7915a2d09735dfdd5f4692b0c331b16e5107fd98ad3477ac030a0aa"
+          ],
+          "successorIds": []
+        },
+        {
+          "id": "a96f187ef7915a2d09735dfdd5f4692b0c331b16e5107fd98ad3477ac030a0aa",
+          "statements": [
+            {
+              "id": "ab92a15533628c3657aa759368182f82c5224c151faff3564285b0d523db2623",
+              "type": "VariableDeclaration",
+              "location": {
+                "line": 1,
+                "column": 0
+              }
+            },
+            {
+              "id": "f6434d1a1cc41b85ea3fbdbe41b40e1829b6f0e23d581c45d7865c0f199eff1f",
+              "type": "VariableDeclaration",
+              "location": {
+                "line": 2,
+                "column": 0
+              }
+            },
+            {
+              "id": "c65602707315670daa3b1fd40e7e712362ce34cbb6fe8deeaeefd1741ba6f6cf",
+              "type": "VariableDeclaration",
+              "location": {
+                "line": 3,
+                "column": 0
+              }
+            },
+            {
+              "id": "cd3bda5264ada5327d8448839566c7ae841f8fa67063335d09341a7f7d072cd0",
+              "type": "ExpressionStatement",
+              "location": {
+                "line": 6,
+                "column": 0
+              }
+            },
+            {
+              "id": "b2d0858bd6ebfcd863bfbf91d08098f021a01c863dd50f083f82efe8eadcb45f",
+              "type": "ExpressionStatement",
+              "location": {
+                "line": 7,
+                "column": 0
+              }
+            },
+            {
+              "id": "3998f1db7b65640b9c0e9cc6dd9d10c38188402cba53d87bcf6f082ff24c6bc2",
+              "type": "ExpressionStatement",
+              "location": {
+                "line": 8,
+                "column": 0
+              }
+            },
+            {
+              "id": "0783d0cd833ab90569f88b3c72ed0d505d5adc074fec42394087fe2dbbe137f5",
+              "type": "ExpressionStatement",
+              "location": {
+                "line": 9,
+                "column": 0
+              }
+            },
+            {
+              "id": "af3a4c82e1724d79d4fe6911790f2ff67147b3fcc2ca01e11d5160d44e57d192",
+              "type": "ExpressionStatement",
+              "location": {
+                "line": 10,
+                "column": 0
+              }
+            },
+            {
+              "id": "e9bd3b6c20fa4c76f49d171e260c80e437dd8d99d074d58110a72a56a46d06dd",
+              "type": "ExpressionStatement",
+              "location": {
+                "line": 11,
+                "column": 0
+              }
+            },
+            {
+              "id": "828127440ee4f2bd7d10f04299fafbc37f1c2afb146e1030fe7a88b74ced67ff",
+              "type": "ExpressionStatement",
+              "location": {
+                "line": 12,
+                "column": 0
+              }
+            },
+            {
+              "id": "c03697a635e6cc27e779d50d9464ac5aaa92553c803ec128acb4e75d6b6c4b54",
+              "type": "ExpressionStatement",
+              "location": {
+                "line": 13,
+                "column": 0
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "6375cf1e4bdc1e6490c6bc08f31bf0302151775bf6b8473750614f2890dfc46d"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "7355f6101bdefac3f06756f593758d9a72ac85043aa0cf2d06406bee5e6fc489",
+          "fromBlockId": "a96f187ef7915a2d09735dfdd5f4692b0c331b16e5107fd98ad3477ac030a0aa",
+          "toBlockId": "6375cf1e4bdc1e6490c6bc08f31bf0302151775bf6b8473750614f2890dfc46d",
+          "kind": "next"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "6375cf1e4bdc1e6490c6bc08f31bf0302151775bf6b8473750614f2890dfc46d",
+          "immediateDominatorId": "a96f187ef7915a2d09735dfdd5f4692b0c331b16e5107fd98ad3477ac030a0aa"
+        },
+        {
+          "blockId": "a96f187ef7915a2d09735dfdd5f4692b0c331b16e5107fd98ad3477ac030a0aa"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    },
+    {
+      "id": "80c0c7dd64eb20cd7f1773de299241d6e38c18b34eb23cf8511de66d512e655c",
+      "filePath": "app.js",
+      "scopeName": "auth@4:0",
+      "state": "RESOLVED",
+      "entryBlockId": "eb4ab35b08a7b70e7e268aebc93a791927d5fe4e03da2c8b3cc832d6ac3b8233",
+      "exitBlockId": "201303e422316ce07f13e75a1f5e81f9e1f431a8befd480e27dcdcfe31fee37a",
+      "blocks": [
+        {
+          "id": "201303e422316ce07f13e75a1f5e81f9e1f431a8befd480e27dcdcfe31fee37a",
+          "statements": [],
+          "predecessorIds": [
+            "eb4ab35b08a7b70e7e268aebc93a791927d5fe4e03da2c8b3cc832d6ac3b8233"
+          ],
+          "successorIds": []
+        },
+        {
+          "id": "eb4ab35b08a7b70e7e268aebc93a791927d5fe4e03da2c8b3cc832d6ac3b8233",
+          "statements": [
+            {
+              "id": "651bc2871646019e9743671ec93606a8c5603cae7d3aa5656706ae571006bd84",
+              "type": "ExpressionStatement",
+              "location": {
+                "line": 4,
+                "column": 32
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "201303e422316ce07f13e75a1f5e81f9e1f431a8befd480e27dcdcfe31fee37a"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "982dbd9bfc446772bde9c71f6202e8536e8028a8386970c02dd1ddd887bc7703",
+          "fromBlockId": "eb4ab35b08a7b70e7e268aebc93a791927d5fe4e03da2c8b3cc832d6ac3b8233",
+          "toBlockId": "201303e422316ce07f13e75a1f5e81f9e1f431a8befd480e27dcdcfe31fee37a",
+          "kind": "next"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "201303e422316ce07f13e75a1f5e81f9e1f431a8befd480e27dcdcfe31fee37a",
+          "immediateDominatorId": "eb4ab35b08a7b70e7e268aebc93a791927d5fe4e03da2c8b3cc832d6ac3b8233"
+        },
+        {
+          "blockId": "eb4ab35b08a7b70e7e268aebc93a791927d5fe4e03da2c8b3cc832d6ac3b8233"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    },
+    {
+      "id": "d16805bc799f04e33234fab24281ebafbad4f6ef055f3768b9e0da99c5710b35",
+      "filePath": "app.js",
+      "scopeName": "handler@5:0",
+      "state": "RESOLVED",
+      "entryBlockId": "1652f823f64f78670422883f8a8b826ecde33346dab9facca5a6ffee8e6c177c",
+      "exitBlockId": "770e8000c9d3e00c4c1c1a0e2e1a988f11b84f218469d529f6c042c01d77c9e5",
+      "blocks": [
+        {
+          "id": "1652f823f64f78670422883f8a8b826ecde33346dab9facca5a6ffee8e6c177c",
+          "statements": [
+            {
+              "id": "2c6e4707fc624d4d091e42e91dd82e17152127c1aba7cf2df28679a8c2e24dce",
+              "type": "ExpressionStatement",
+              "location": {
+                "line": 5,
+                "column": 29
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "770e8000c9d3e00c4c1c1a0e2e1a988f11b84f218469d529f6c042c01d77c9e5"
+          ]
+        },
+        {
+          "id": "770e8000c9d3e00c4c1c1a0e2e1a988f11b84f218469d529f6c042c01d77c9e5",
+          "statements": [],
+          "predecessorIds": [
+            "1652f823f64f78670422883f8a8b826ecde33346dab9facca5a6ffee8e6c177c"
+          ],
+          "successorIds": []
+        }
+      ],
+      "edges": [
+        {
+          "id": "42826c66a7eae8f373f3d08d6f9dd469fc813ee687864a583e91fad4357c8f09",
+          "fromBlockId": "1652f823f64f78670422883f8a8b826ecde33346dab9facca5a6ffee8e6c177c",
+          "toBlockId": "770e8000c9d3e00c4c1c1a0e2e1a988f11b84f218469d529f6c042c01d77c9e5",
+          "kind": "next"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "1652f823f64f78670422883f8a8b826ecde33346dab9facca5a6ffee8e6c177c"
+        },
+        {
+          "blockId": "770e8000c9d3e00c4c1c1a0e2e1a988f11b84f218469d529f6c042c01d77c9e5",
+          "immediateDominatorId": "1652f823f64f78670422883f8a8b826ecde33346dab9facca5a6ffee8e6c177c"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    }
+  ]
+}

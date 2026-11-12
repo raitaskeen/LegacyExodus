@@ -1,0 +1,130 @@
+{
+  "calls": [
+    {
+      "id": "0a4c65e921af4cd1fef0d7216b4040199b2d073ae393fb02d4addaaeffe116c5",
+      "sourceFilePath": "main.js",
+      "callerName": "load",
+      "calleeName": "m.lazy",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 1,
+        "column": 74
+      }
+    },
+    {
+      "id": "b9f9fa5478a9d5e1c62c279df2d2c3e26e5092366318f066907513d502e68159",
+      "sourceFilePath": "cjs.js",
+      "callerName": "exports",
+      "calleeName": "require",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 2,
+        "column": 23
+      }
+    }
+  ],
+  "references": [
+    {
+      "id": "32f97196f2052ac30030a57ab4e58bd56e4eb8bcbb1477807fda77bc887d8169",
+      "filePath": "cjs.js",
+      "name": "name",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "6fbca76aa4b6a40ca3eaadf193f923259fd07a7383c674e43d919978df0afc4b"
+    },
+    {
+      "id": "3ed2c691db4ee12baa12b00211685b27ee9e56f9364f08ad6bf31a601d89baa8",
+      "filePath": "main.js",
+      "name": "m.lazy",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "afd7a44c106339e6f76b97fccd100850658ae4d6e69c62c45b11172c10b87e1d",
+      "filePath": "cjs.js",
+      "name": "require",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "f8651f87bc5c2729d6822bcd530ac94085503c181f93934fad286b99007e5f00",
+      "filePath": "main.js",
+      "name": "m",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "16328a1e93a004036f840bad1a2783be82e9cbd2e456c1f35928a1890311d95d"
+    }
+  ],
+  "scopes": [
+    {
+      "id": "409bdd76e194ddbdf7ba2857f4439d1b0c7e21dbcf556301349a32d53df81f37",
+      "filePath": "cjs.js",
+      "name": "module",
+      "declaredSymbols": [
+        "default",
+        "name"
+      ],
+      "referencedNames": [
+        "name",
+        "require"
+      ]
+    },
+    {
+      "id": "b5628bc4a4617d69c7497e196b76727edbf2404af97803af385f5719b3447ca3",
+      "filePath": "lib.js",
+      "name": "module",
+      "declaredSymbols": [
+        "lazy"
+      ],
+      "referencedNames": []
+    },
+    {
+      "id": "ba117877875d6cf90e58bc32693f914d709acd96ae3055f15e6a3640fd59ced3",
+      "filePath": "main.js",
+      "name": "module",
+      "declaredSymbols": [
+        "load",
+        "m"
+      ],
+      "referencedNames": [
+        "m",
+        "m.lazy"
+      ]
+    }
+  ],
+  "deadCode": [],
+  "unusedImports": [],
+  "unusedExports": [
+    {
+      "symbolId": "cab75585f8ee3ab52a8b97eb6bcff849bd8400023da1f6acd3c77bb88134dc1d",
+      "filePath": "cjs.js",
+      "name": "default",
+      "reason": "unused-export",
+      "state": "INFERRED"
+    },
+    {
+      "symbolId": "fec2808b3a8e953b3d6318da6537af80d5889d50df01e4cf51b3918f6efd4f62",
+      "filePath": "lib.js",
+      "name": "lazy",
+      "reason": "unused-export",
+      "state": "INFERRED"
+    },
+    {
+      "symbolId": "5889d6eb90ede7d7db0c248f33e08a74b037a3f3ceeec9118f38cca27615a07c",
+      "filePath": "main.js",
+      "name": "load",
+      "reason": "unused-export",
+      "state": "INFERRED"
+    }
+  ],
+  "entryPoints": [
+    {
+      "filePath": "main.js",
+      "reason": "conventional-file"
+    }
+  ],
+  "routes": [],
+  "middlewareChains": [],
+  "projectId": "d91e6ef4-bcfb-4129-b9c1-4467d01e2708",
+  "analysisRunId": "d4c1012f-407d-4985-8d83-41d73319e886"
+}

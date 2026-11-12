@@ -1,0 +1,267 @@
+{
+  "projectId": "9988916d-f59e-464e-a753-1d63b6276106",
+  "analysisRunId": "842db048-7827-45eb-aac9-0312949b7742",
+  "graphs": [
+    {
+      "id": "46f1a48e66d9430a002464c9300f2aee0bfd2d57ab06f1cd28616a2a91494d6b",
+      "filePath": "app.js",
+      "state": "INFERRED",
+      "definitions": [
+        {
+          "id": "10c35e6f268d83fc7e0f361d9e87c5332eb398ec4edb3fd23e8dcf8f43a55661",
+          "filePath": "app.js",
+          "name": "req",
+          "kind": "parameter"
+        },
+        {
+          "id": "1e8c790a1cef621ac004a1f048ebe31d17b3845f4fc30d7227b198e12b62c08e",
+          "filePath": "app.js",
+          "name": "app",
+          "kind": "declaration"
+        },
+        {
+          "id": "364b3e7c65f55038f9af088ee8a856d51b6abf908ba8f18739eee8d16d94391a",
+          "filePath": "app.js",
+          "name": "res",
+          "kind": "parameter"
+        },
+        {
+          "id": "6e20241c0a01238ec4d95845d6bc74b782852e8649df35b79719862d2b238454",
+          "filePath": "app.js",
+          "name": "req",
+          "kind": "parameter"
+        },
+        {
+          "id": "7bd25926aa7d6547ecdbb224436691d3ceb66e6d2ce40b903a55bea9d7ea2a2c",
+          "filePath": "app.js",
+          "name": "handler",
+          "kind": "declaration"
+        },
+        {
+          "id": "a0dc5629cd9fd20885c418908a352c0b46be94b718ae3c5ecc8c398e8f8a19ca",
+          "filePath": "app.js",
+          "name": "res",
+          "kind": "parameter"
+        },
+        {
+          "id": "a370996c35d630535fd7f6b6bd92ae574625194f3c67fff45de3b8d82587ab3e",
+          "filePath": "app.js",
+          "name": "next",
+          "kind": "parameter"
+        },
+        {
+          "id": "a43363662046ded621aa419019ece97758ed6b7fc29fed401937075045afb6a9",
+          "filePath": "app.js",
+          "name": "express",
+          "kind": "declaration"
+        },
+        {
+          "id": "da93d70a08093aaf3f901aff80a7050e6cec33d48d50800d42ee402721844a25",
+          "filePath": "app.js",
+          "name": "admin",
+          "kind": "declaration"
+        },
+        {
+          "id": "e95a509dbe441b057d4679c743706b7ff7336d94c6a256f39a21bc7b6b27df66",
+          "filePath": "app.js",
+          "name": "auth",
+          "kind": "declaration"
+        }
+      ],
+      "uses": [
+        {
+          "id": "431242241184c90e8588445c681ad0b0cc41689bd8834f0fc73d8c97084a905f",
+          "filePath": "app.js",
+          "name": "handler",
+          "definitionId": "7bd25926aa7d6547ecdbb224436691d3ceb66e6d2ce40b903a55bea9d7ea2a2c"
+        },
+        {
+          "id": "5fa3c83043d1156eac54da00df7c1556ac69ebd8eabb3ee286b1def4c44379d6",
+          "filePath": "app.js",
+          "name": "auth",
+          "definitionId": "e95a509dbe441b057d4679c743706b7ff7336d94c6a256f39a21bc7b6b27df66"
+        },
+        {
+          "id": "7016a73be3725f015882b04943be12b4d17cf6eadc66ad6cd4d74b91ae071c33",
+          "filePath": "app.js",
+          "name": "handler",
+          "definitionId": "7bd25926aa7d6547ecdbb224436691d3ceb66e6d2ce40b903a55bea9d7ea2a2c"
+        },
+        {
+          "id": "bbc1163169d98854adebdf368f124f1c2dd19d0f83bed366fab6e5ecde62e229",
+          "filePath": "app.js",
+          "name": "auth",
+          "definitionId": "e95a509dbe441b057d4679c743706b7ff7336d94c6a256f39a21bc7b6b27df66"
+        },
+        {
+          "id": "e69e7f5ecfec257b6144447128a07d18394ec981fae9848154d1e88a531b770c",
+          "filePath": "app.js",
+          "name": "admin",
+          "definitionId": "da93d70a08093aaf3f901aff80a7050e6cec33d48d50800d42ee402721844a25"
+        },
+        {
+          "id": "faac052da15948c7b911503c7384d963b2b2faf6faa9b7fdcd5b4a1356dd2d9f",
+          "filePath": "app.js",
+          "name": "handler",
+          "definitionId": "7bd25926aa7d6547ecdbb224436691d3ceb66e6d2ce40b903a55bea9d7ea2a2c"
+        }
+      ],
+      "defUseChains": [
+        {
+          "definitionId": "10c35e6f268d83fc7e0f361d9e87c5332eb398ec4edb3fd23e8dcf8f43a55661",
+          "useIds": []
+        },
+        {
+          "definitionId": "1e8c790a1cef621ac004a1f048ebe31d17b3845f4fc30d7227b198e12b62c08e",
+          "useIds": []
+        },
+        {
+          "definitionId": "364b3e7c65f55038f9af088ee8a856d51b6abf908ba8f18739eee8d16d94391a",
+          "useIds": []
+        },
+        {
+          "definitionId": "6e20241c0a01238ec4d95845d6bc74b782852e8649df35b79719862d2b238454",
+          "useIds": []
+        },
+        {
+          "definitionId": "7bd25926aa7d6547ecdbb224436691d3ceb66e6d2ce40b903a55bea9d7ea2a2c",
+          "useIds": [
+            "431242241184c90e8588445c681ad0b0cc41689bd8834f0fc73d8c97084a905f",
+            "7016a73be3725f015882b04943be12b4d17cf6eadc66ad6cd4d74b91ae071c33",
+            "faac052da15948c7b911503c7384d963b2b2faf6faa9b7fdcd5b4a1356dd2d9f"
+          ]
+        },
+        {
+          "definitionId": "a0dc5629cd9fd20885c418908a352c0b46be94b718ae3c5ecc8c398e8f8a19ca",
+          "useIds": []
+        },
+        {
+          "definitionId": "a370996c35d630535fd7f6b6bd92ae574625194f3c67fff45de3b8d82587ab3e",
+          "useIds": []
+        },
+        {
+          "definitionId": "a43363662046ded621aa419019ece97758ed6b7fc29fed401937075045afb6a9",
+          "useIds": []
+        },
+        {
+          "definitionId": "da93d70a08093aaf3f901aff80a7050e6cec33d48d50800d42ee402721844a25",
+          "useIds": [
+            "e69e7f5ecfec257b6144447128a07d18394ec981fae9848154d1e88a531b770c"
+          ]
+        },
+        {
+          "definitionId": "e95a509dbe441b057d4679c743706b7ff7336d94c6a256f39a21bc7b6b27df66",
+          "useIds": [
+            "5fa3c83043d1156eac54da00df7c1556ac69ebd8eabb3ee286b1def4c44379d6",
+            "bbc1163169d98854adebdf368f124f1c2dd19d0f83bed366fab6e5ecde62e229"
+          ]
+        }
+      ],
+      "lifetimes": [
+        {
+          "name": "req",
+          "filePath": "app.js",
+          "declarationId": "10c35e6f268d83fc7e0f361d9e87c5332eb398ec4edb3fd23e8dcf8f43a55661",
+          "useIds": []
+        },
+        {
+          "name": "app",
+          "filePath": "app.js",
+          "declarationId": "1e8c790a1cef621ac004a1f048ebe31d17b3845f4fc30d7227b198e12b62c08e",
+          "useIds": []
+        },
+        {
+          "name": "res",
+          "filePath": "app.js",
+          "declarationId": "364b3e7c65f55038f9af088ee8a856d51b6abf908ba8f18739eee8d16d94391a",
+          "useIds": []
+        },
+        {
+          "name": "req",
+          "filePath": "app.js",
+          "declarationId": "6e20241c0a01238ec4d95845d6bc74b782852e8649df35b79719862d2b238454",
+          "useIds": []
+        },
+        {
+          "name": "handler",
+          "filePath": "app.js",
+          "declarationId": "7bd25926aa7d6547ecdbb224436691d3ceb66e6d2ce40b903a55bea9d7ea2a2c",
+          "useIds": [
+            "431242241184c90e8588445c681ad0b0cc41689bd8834f0fc73d8c97084a905f",
+            "7016a73be3725f015882b04943be12b4d17cf6eadc66ad6cd4d74b91ae071c33",
+            "faac052da15948c7b911503c7384d963b2b2faf6faa9b7fdcd5b4a1356dd2d9f"
+          ]
+        },
+        {
+          "name": "res",
+          "filePath": "app.js",
+          "declarationId": "a0dc5629cd9fd20885c418908a352c0b46be94b718ae3c5ecc8c398e8f8a19ca",
+          "useIds": []
+        },
+        {
+          "name": "next",
+          "filePath": "app.js",
+          "declarationId": "a370996c35d630535fd7f6b6bd92ae574625194f3c67fff45de3b8d82587ab3e",
+          "useIds": []
+        },
+        {
+          "name": "express",
+          "filePath": "app.js",
+          "declarationId": "a43363662046ded621aa419019ece97758ed6b7fc29fed401937075045afb6a9",
+          "useIds": []
+        },
+        {
+          "name": "admin",
+          "filePath": "app.js",
+          "declarationId": "da93d70a08093aaf3f901aff80a7050e6cec33d48d50800d42ee402721844a25",
+          "useIds": [
+            "e69e7f5ecfec257b6144447128a07d18394ec981fae9848154d1e88a531b770c"
+          ]
+        },
+        {
+          "name": "auth",
+          "filePath": "app.js",
+          "declarationId": "e95a509dbe441b057d4679c743706b7ff7336d94c6a256f39a21bc7b6b27df66",
+          "useIds": [
+            "5fa3c83043d1156eac54da00df7c1556ac69ebd8eabb3ee286b1def4c44379d6",
+            "bbc1163169d98854adebdf368f124f1c2dd19d0f83bed366fab6e5ecde62e229"
+          ]
+        }
+      ],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [
+        {
+          "symbolId": "dcd707e9ca5fda638eb0a035c12d17595c04f047478b2abdd9c60e3a3482dd41",
+          "filePath": "app.js",
+          "parameterDefinitionIds": [
+            [
+              "6e20241c0a01238ec4d95845d6bc74b782852e8649df35b79719862d2b238454"
+            ],
+            [
+              "364b3e7c65f55038f9af088ee8a856d51b6abf908ba8f18739eee8d16d94391a"
+            ],
+            [
+              "a370996c35d630535fd7f6b6bd92ae574625194f3c67fff45de3b8d82587ab3e"
+            ]
+          ],
+          "returnDefinitionIds": []
+        },
+        {
+          "symbolId": "f8c6e3468b65becdcdfb044399155c187ddeb7461ddf0b91d692823490dd1eab",
+          "filePath": "app.js",
+          "parameterDefinitionIds": [
+            [
+              "10c35e6f268d83fc7e0f361d9e87c5332eb398ec4edb3fd23e8dcf8f43a55661"
+            ],
+            [
+              "a0dc5629cd9fd20885c418908a352c0b46be94b718ae3c5ecc8c398e8f8a19ca"
+            ]
+          ],
+          "returnDefinitionIds": []
+        }
+      ],
+      "callBindings": []
+    }
+  ]
+}

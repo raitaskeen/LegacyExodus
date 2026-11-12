@@ -1,0 +1,36 @@
+Console output of evidence/probes/stage-timer.ts, captured 2026-10-28 on Windows 11, Bun 1.4.4,
+run from the c694d64 worktree's legacy-exodus-core directory. The perf-run.ts n=4000 measurement
+was running concurrently, so absolute numbers carry contention; the ratios are the evidence.
+
+n=500
+  parse        63 ms
+  symbols      184 ms
+  dependency   19 ms
+  call-graph   87 ms
+  cfg          55 ms
+  dfg          363 ms
+  calls=1000 resolved=1000 symbols=2016
+n=1000
+  parse        101 ms
+  symbols      326 ms
+  dependency   14 ms
+  call-graph   201 ms
+  cfg          87 ms
+  dfg          1942 ms
+  calls=2000 resolved=2000 symbols=4016
+n=2000
+  parse        170 ms
+  symbols      566 ms
+  dependency   23 ms
+  call-graph   567 ms
+  cfg          250 ms
+  dfg          28589 ms
+  calls=4000 resolved=4000 symbols=8016
+n=2000noif   (same file with every `if (...) { acc = acc + c; }` replaced by `acc = acc + c;`)
+  parse        206 ms
+  symbols      624 ms
+  dependency   40 ms
+  call-graph   539 ms
+  cfg          162 ms
+  dfg          6163 ms
+  calls=4000 resolved=4000 symbols=8016

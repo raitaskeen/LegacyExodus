@@ -1,0 +1,27 @@
+[
+  {
+    "path": "_x.js",
+    "language": "javascript",
+    "fileKind": "source"
+  },
+  {
+    "path": "a.js",
+    "language": "javascript",
+    "fileKind": "source"
+  },
+  {
+    "path": "ä.js",
+    "language": "javascript",
+    "fileKind": "source"
+  },
+  {
+    "path": "B.js",
+    "language": "javascript",
+    "fileKind": "source"
+  },
+  {
+    "path": "Z.js",
+    "language": "javascript",
+    "fileKind": "source"
+  }
+]

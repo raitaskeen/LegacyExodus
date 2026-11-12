@@ -1,0 +1,27 @@
+[
+  {
+    "path": "src/a.ts",
+    "language": "typescript",
+    "fileKind": "source"
+  },
+  {
+    "path": "src/b.ts",
+    "language": "typescript",
+    "fileKind": "source"
+  },
+  {
+    "path": "src/c.ts",
+    "language": "typescript",
+    "fileKind": "source"
+  },
+  {
+    "path": "src/d.ts",
+    "language": "typescript",
+    "fileKind": "source"
+  },
+  {
+    "path": "tsconfig.json",
+    "language": "json",
+    "fileKind": "configuration"
+  }
+]

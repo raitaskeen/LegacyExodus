@@ -1,0 +1,189 @@
+{
+  "projectId": "81f62af1-7820-4e3d-85c3-40ec268559f1",
+  "analysisRunId": "35ce8d21-e8a0-49ea-acc2-72426e588c7b",
+  "graphs": [
+    {
+      "id": "3b2f1bf4f4f74a05a0a75f5d410764c9d555d1beef1896c1bc15e586b89841ae",
+      "filePath": "x.js",
+      "scopeName": "module",
+      "state": "RESOLVED",
+      "entryBlockId": "3f10cc8fe5586ede7bbfec3ededbec31c3914cefd7d66ace6b6031cd8e107858",
+      "exitBlockId": "28b7aa07ef796c7539c0b5c6f11c976ad26d9e6d88e7f520936a36b2493f1809",
+      "blocks": [
+        {
+          "id": "28b7aa07ef796c7539c0b5c6f11c976ad26d9e6d88e7f520936a36b2493f1809",
+          "statements": [],
+          "predecessorIds": [
+            "3f10cc8fe5586ede7bbfec3ededbec31c3914cefd7d66ace6b6031cd8e107858"
+          ],
+          "successorIds": []
+        },
+        {
+          "id": "3f10cc8fe5586ede7bbfec3ededbec31c3914cefd7d66ace6b6031cd8e107858",
+          "statements": [
+            {
+              "id": "9c3e0e08b5c188e4cf14dba0378ec3967c05260ee649fadf4d8890fb99e9ecf4",
+              "type": "ClassDeclaration",
+              "location": {
+                "line": 1,
+                "column": 0
+              }
+            },
+            {
+              "id": "1adecce3b1ab309876e6c0d46fbe5e88cc6a38e620da1da2e967f5c147cbd7e1",
+              "type": "ExportNamedDeclaration",
+              "location": {
+                "line": 2,
+                "column": 0
+              }
+            },
+            {
+              "id": "e1abed0d23c3b0be95d7ee4009d8d3269797b8e8ecbc4210a2d5fe82000fc2af",
+              "type": "ExpressionStatement",
+              "location": {
+                "line": 3,
+                "column": 0
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "28b7aa07ef796c7539c0b5c6f11c976ad26d9e6d88e7f520936a36b2493f1809"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "10e86e1002615b9e32524cf1d08439ea8114d2a778be67332108b6efd83808b7",
+          "fromBlockId": "3f10cc8fe5586ede7bbfec3ededbec31c3914cefd7d66ace6b6031cd8e107858",
+          "toBlockId": "28b7aa07ef796c7539c0b5c6f11c976ad26d9e6d88e7f520936a36b2493f1809",
+          "kind": "next"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "28b7aa07ef796c7539c0b5c6f11c976ad26d9e6d88e7f520936a36b2493f1809",
+          "immediateDominatorId": "3f10cc8fe5586ede7bbfec3ededbec31c3914cefd7d66ace6b6031cd8e107858"
+        },
+        {
+          "blockId": "3f10cc8fe5586ede7bbfec3ededbec31c3914cefd7d66ace6b6031cd8e107858"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    },
+    {
+      "id": "8ae3a7b7681a8cfa807b0d9ccb1d141eac5f68bfa222d4026045ac0239ce660b",
+      "filePath": "x.js",
+      "scopeName": "n@2:29",
+      "state": "RESOLVED",
+      "entryBlockId": "6e41071e05f269137a258bc107f79ea38ae85762926a14bfb02c9858c499431a",
+      "exitBlockId": "1c20876fe52aa37316621c3dcad9551f2fcecfc489c161aff696d1b345bd0faf",
+      "blocks": [
+        {
+          "id": "1c20876fe52aa37316621c3dcad9551f2fcecfc489c161aff696d1b345bd0faf",
+          "statements": [],
+          "predecessorIds": [
+            "6e41071e05f269137a258bc107f79ea38ae85762926a14bfb02c9858c499431a"
+          ],
+          "successorIds": []
+        },
+        {
+          "id": "6e41071e05f269137a258bc107f79ea38ae85762926a14bfb02c9858c499431a",
+          "statements": [
+            {
+              "id": "a4a2b14ea8eef6108374a373a16f8ff894ae73f63058ea6efdfb088869c3ffbd",
+              "type": "ReturnStatement",
+              "location": {
+                "line": 2,
+                "column": 35
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "1c20876fe52aa37316621c3dcad9551f2fcecfc489c161aff696d1b345bd0faf"
+          ],
+          "terminator": "ReturnStatement"
+        }
+      ],
+      "edges": [
+        {
+          "id": "7dc375e5c506b785369b47655df891620d4840a3ad5294fe45a6cd9b046ec671",
+          "fromBlockId": "6e41071e05f269137a258bc107f79ea38ae85762926a14bfb02c9858c499431a",
+          "toBlockId": "1c20876fe52aa37316621c3dcad9551f2fcecfc489c161aff696d1b345bd0faf",
+          "kind": "return"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "1c20876fe52aa37316621c3dcad9551f2fcecfc489c161aff696d1b345bd0faf",
+          "immediateDominatorId": "6e41071e05f269137a258bc107f79ea38ae85762926a14bfb02c9858c499431a"
+        },
+        {
+          "blockId": "6e41071e05f269137a258bc107f79ea38ae85762926a14bfb02c9858c499431a"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    },
+    {
+      "id": "9cf3fcd627c84c57cfdc9bdc2e67f68a00e3239978e697113f46154797e632d6",
+      "filePath": "x.js",
+      "scopeName": "m@1:14",
+      "state": "RESOLVED",
+      "entryBlockId": "ff2acd9257a9d6fe397a942b6396371b06751a92122631b0aff1a99d7a3f99ea",
+      "exitBlockId": "53072d62ebeb4d1da9d4ceaa0af8bbdec858ed215002f21019f0c4f32a93ecbb",
+      "blocks": [
+        {
+          "id": "53072d62ebeb4d1da9d4ceaa0af8bbdec858ed215002f21019f0c4f32a93ecbb",
+          "statements": [],
+          "predecessorIds": [
+            "ff2acd9257a9d6fe397a942b6396371b06751a92122631b0aff1a99d7a3f99ea"
+          ],
+          "successorIds": []
+        },
+        {
+          "id": "ff2acd9257a9d6fe397a942b6396371b06751a92122631b0aff1a99d7a3f99ea",
+          "statements": [
+            {
+              "id": "83dceb320b5f15daba86cc28e43cdab9af74203b0047a5f4f554e3c757e787aa",
+              "type": "ReturnStatement",
+              "location": {
+                "line": 1,
+                "column": 20
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "53072d62ebeb4d1da9d4ceaa0af8bbdec858ed215002f21019f0c4f32a93ecbb"
+          ],
+          "terminator": "ReturnStatement"
+        }
+      ],
+      "edges": [
+        {
+          "id": "4d3b16a49c70dec3953a9f3adebbe0f296497c6df5b7f523855565781cb86b5d",
+          "fromBlockId": "ff2acd9257a9d6fe397a942b6396371b06751a92122631b0aff1a99d7a3f99ea",
+          "toBlockId": "53072d62ebeb4d1da9d4ceaa0af8bbdec858ed215002f21019f0c4f32a93ecbb",
+          "kind": "return"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "53072d62ebeb4d1da9d4ceaa0af8bbdec858ed215002f21019f0c4f32a93ecbb",
+          "immediateDominatorId": "ff2acd9257a9d6fe397a942b6396371b06751a92122631b0aff1a99d7a3f99ea"
+        },
+        {
+          "blockId": "ff2acd9257a9d6fe397a942b6396371b06751a92122631b0aff1a99d7a3f99ea"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    }
+  ]
+}

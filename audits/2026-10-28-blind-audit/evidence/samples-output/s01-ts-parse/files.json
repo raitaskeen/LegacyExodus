@@ -1,0 +1,44 @@
+[
+  {
+    "id": "c5afcfe0dca3a9fef2864ba2d4a65081035437635d752ad1df3920b5a19bb843",
+    "path": "dist/bundle.min.js",
+    "language": "javascript",
+    "fileKind": "source",
+    "size": 57
+  },
+  {
+    "id": "02e5f7b2b10761799b05aab997376851d522090dd71e14642890a91aad92d2b3",
+    "path": "src/cast.ts",
+    "language": "typescript",
+    "fileKind": "source",
+    "size": 70
+  },
+  {
+    "id": "bd077cc3f2ffa4a5b3c2496f6ace42a5f14b075e4ca6467392b74a8acfd8d2f5",
+    "path": "src/generic-arrow.ts",
+    "language": "typescript",
+    "fileKind": "source",
+    "size": 37
+  },
+  {
+    "id": "0b639d519825543a718724bb20be00b4f51a4325352beb75b09f50166bbf5fa7",
+    "path": "src/ok.ts",
+    "language": "typescript",
+    "fileKind": "source",
+    "size": 48
+  },
+  {
+    "id": "c180f4d7db6c54c7e4ccf7fde202a5c5b89238545f541654253ed3f88b597e05",
+    "path": "src/ok.tsx",
+    "language": "typescript",
+    "fileKind": "source",
+    "size": 41
+  },
+  {
+    "id": "0e52c40e3f73bfa8408022ee8ed4ab5872162e23a86087fabeca885766188f19",
+    "path": "src/top-await.mts",
+    "language": "typescript",
+    "fileKind": "source",
+    "size": 47
+  }
+]

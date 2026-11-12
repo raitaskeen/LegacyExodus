@@ -1,0 +1,143 @@
+{
+  "calls": [
+    {
+      "id": "06d1fcb799b3204f97912ffb186c390a82b02eb219bf58e2b6e65d4522232004",
+      "sourceFilePath": "src/top-await.mts",
+      "callerName": "module",
+      "calleeName": "console.log",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 2,
+        "column": 0
+      }
+    },
+    {
+      "id": "82554ee184eedb7de7067243a54a18d9cfeb3473b83238122b2603ffc2f3c239",
+      "sourceFilePath": "src/top-await.mts",
+      "callerName": "module",
+      "calleeName": "Promise.resolve",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 1,
+        "column": 6
+      }
+    }
+  ],
+  "references": [
+    {
+      "id": "3121f09230334e1ea36c7dd4628b4f3fa06a856d879c8683df6cc7c2545811a5",
+      "filePath": "dist/bundle.min.js",
+      "name": "b",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "5bf546cba91c2772cb41dfd7d83eb9ef667860d7e52d005d1b10dec3494c2c30"
+    },
+    {
+      "id": "4432356f614112c9281e545b77604148f95344eb9754f740769a26ae3305a560",
+      "filePath": "dist/bundle.min.js",
+      "name": "a",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "3eab7ee724bcaf75a8edb4d1e1d80037cd011b510d98a67780535bce85816c02"
+    },
+    {
+      "id": "4b16bdd398e1fb4a418ee406ed1025a72efa01a7a9cbca1b81b9c59303c11bb6",
+      "filePath": "src/ok.ts",
+      "name": "x",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "1f1b4cacf85b57e834c217ea7db85261102cd149b738f940ec42f9623dc6fc87"
+    },
+    {
+      "id": "9ef659b1654a6a771e378d9239ef94f29ee1f56dc7b6440c249e08b844f87901",
+      "filePath": "src/top-await.mts",
+      "name": "Promise.resolve",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "d7eb30207434a61c474d696682efed6d7e1eaf20f5d9dc98b6a163ffa1dd95af",
+      "filePath": "src/top-await.mts",
+      "name": "console.log",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    }
+  ],
+  "scopes": [
+    {
+      "id": "2db5bcf9674e4eabdaae77c37c1f2a464c1328d3512b3bf41947dc0360aefe3c",
+      "filePath": "src/top-await.mts",
+      "name": "module",
+      "declaredSymbols": [],
+      "referencedNames": [
+        "Promise.resolve",
+        "console.log"
+      ]
+    },
+    {
+      "id": "4d2e539127a9fdcc84a2187de511146c28b8d47a46576124e9ae51567c9d06b2",
+      "filePath": "src/ok.tsx",
+      "name": "module",
+      "declaredSymbols": [
+        "View"
+      ],
+      "referencedNames": []
+    },
+    {
+      "id": "76d87f5c2014cd0423f0dce4da103f3fdcf29e6ad0861577e48e7f3dc064ceb2",
+      "filePath": "src/ok.ts",
+      "name": "module",
+      "declaredSymbols": [
+        "ok",
+        "x"
+      ],
+      "referencedNames": [
+        "x"
+      ]
+    },
+    {
+      "id": "7e559c65b094dcdb1c78d361ac0e2d7828ddf6384aa330394230253052d11c5f",
+      "filePath": "dist/bundle.min.js",
+      "name": "module",
+      "declaredSymbols": [
+        "a",
+        "b"
+      ],
+      "referencedNames": [
+        "a",
+        "b"
+      ]
+    }
+  ],
+  "deadCode": [
+    {
+      "symbolId": "39d6c7f7f27f09d1d1b481a06c61f304955a7e876273410ca955c67309c378ce",
+      "filePath": "dist/bundle.min.js",
+      "name": "b",
+      "reason": "unreferenced-local-symbol",
+      "state": "INFERRED"
+    }
+  ],
+  "unusedImports": [],
+  "unusedExports": [
+    {
+      "symbolId": "1d56f3e349b1a1d9237e52ada5e3176d154eafba0c1175f1f63b490362caf415",
+      "filePath": "src/ok.ts",
+      "name": "ok",
+      "reason": "unused-export",
+      "state": "INFERRED"
+    },
+    {
+      "symbolId": "f0c9a0aebb86907165e6d29e64573f73f4eec55fa063ee6668054ad7bd62c2b7",
+      "filePath": "src/ok.tsx",
+      "name": "View",
+      "reason": "unused-export",
+      "state": "INFERRED"
+    }
+  ],
+  "entryPoints": [],
+  "routes": [],
+  "middlewareChains": [],
+  "projectId": "3e507ced-934f-48fd-9be2-568448d16e1f",
+  "analysisRunId": "ada53b84-474b-4181-8030-1ebe7dfe521e"
+}

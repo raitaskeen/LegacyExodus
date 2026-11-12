@@ -1,0 +1,67 @@
+{
+  "projectId": "9988916d-f59e-464e-a753-1d63b6276106",
+  "analysisRunId": "842db048-7827-45eb-aac9-0312949b7742",
+  "nodes": [
+    {
+      "id": "symbol:0a74c95166723f39a46a95c1c423a191c07820254b464e05ba47fc164cda5593",
+      "filePath": "app.js",
+      "symbolId": "0a74c95166723f39a46a95c1c423a191c07820254b464e05ba47fc164cda5593"
+    },
+    {
+      "id": "symbol:0fc4b48c61f7ea2bc228c12183f610bab54f0361ebc0972fae2aae93c8fb51be",
+      "filePath": "app.js",
+      "symbolId": "0fc4b48c61f7ea2bc228c12183f610bab54f0361ebc0972fae2aae93c8fb51be"
+    },
+    {
+      "id": "symbol:10454bc2578fd6807856efe0186b6bad6565e3bca83081fa89dbe1348e853e55",
+      "filePath": "app.js",
+      "symbolId": "10454bc2578fd6807856efe0186b6bad6565e3bca83081fa89dbe1348e853e55"
+    },
+    {
+      "id": "symbol:240f04a368010bb9ba29c6d8caa8d56c24f0a16ad211d8ca79892a025834d40e",
+      "filePath": "app.js",
+      "symbolId": "240f04a368010bb9ba29c6d8caa8d56c24f0a16ad211d8ca79892a025834d40e"
+    },
+    {
+      "id": "symbol:56f4bf3c6f20177791c12d974757ec78e50186f4a8d78337cf3954f8cc5d1602",
+      "filePath": "app.js",
+      "symbolId": "56f4bf3c6f20177791c12d974757ec78e50186f4a8d78337cf3954f8cc5d1602"
+    },
+    {
+      "id": "symbol:6a706d4d3d26f5669766b98a66d73e746fe68d18b1b38efff57bb1fd559b6713",
+      "filePath": "app.js",
+      "symbolId": "6a706d4d3d26f5669766b98a66d73e746fe68d18b1b38efff57bb1fd559b6713"
+    },
+    {
+      "id": "symbol:ab0e61d4f625be779c17b32b464d2d41feadf9e1779d911d85d563a794db6798",
+      "filePath": "app.js",
+      "symbolId": "ab0e61d4f625be779c17b32b464d2d41feadf9e1779d911d85d563a794db6798"
+    },
+    {
+      "id": "symbol:b987caf3601cef5d58cf97cdbc6bf1386e8a3b89a967872b69cc78266b06c546",
+      "filePath": "app.js",
+      "symbolId": "b987caf3601cef5d58cf97cdbc6bf1386e8a3b89a967872b69cc78266b06c546"
+    },
+    {
+      "id": "symbol:d0084b8bedac0db76f23abb0661d655e4e970b98d935cda7ee57add8b7ccb17b",
+      "filePath": "app.js",
+      "symbolId": "d0084b8bedac0db76f23abb0661d655e4e970b98d935cda7ee57add8b7ccb17b"
+    },
+    {
+      "id": "symbol:dcd707e9ca5fda638eb0a035c12d17595c04f047478b2abdd9c60e3a3482dd41",
+      "filePath": "app.js",
+      "symbolId": "dcd707e9ca5fda638eb0a035c12d17595c04f047478b2abdd9c60e3a3482dd41"
+    },
+    {
+      "id": "symbol:f8c6e3468b65becdcdfb044399155c187ddeb7461ddf0b91d692823490dd1eab",
+      "filePath": "app.js",
+      "symbolId": "f8c6e3468b65becdcdfb044399155c187ddeb7461ddf0b91d692823490dd1eab"
+    }
+  ],
+  "edges": [],
+  "cycles": [],
+  "moduleGraph": {
+    "contract": "f07-import-relations-v1",
+    "edges": []
+  }
+}

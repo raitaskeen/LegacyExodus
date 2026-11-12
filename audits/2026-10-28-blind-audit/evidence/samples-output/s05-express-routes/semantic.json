@@ -1,0 +1,560 @@
+{
+  "calls": [
+    {
+      "id": "0dddb67f52666864de964eb34f9dd528673134d504e78b937fd08556165a556a",
+      "sourceFilePath": "app.js",
+      "callerName": "module",
+      "calleeName": "app.use",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 12,
+        "column": 0
+      }
+    },
+    {
+      "id": "4e6e3db7e39c15f8fd4060c2cac7b51549dbeb0d8099ea3ef8a0540c1a162ba6",
+      "sourceFilePath": "app.js",
+      "callerName": "module",
+      "calleeName": "admin.get",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 8,
+        "column": 0
+      }
+    },
+    {
+      "id": "5a7e0da55472683cfe3fca2cc7903985b1c6b62fe6a52ffd5e5c05d45fab9280",
+      "sourceFilePath": "app.js",
+      "callerName": "module",
+      "calleeName": "app.get",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 11,
+        "column": 0
+      }
+    },
+    {
+      "id": "5afbb9f22cbd100d3b09589a38f684c3c266725280a70e6d191312c83cb3e3be",
+      "sourceFilePath": "app.js",
+      "callerName": "module",
+      "calleeName": "express",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 2,
+        "column": 12
+      }
+    },
+    {
+      "id": "5fb79eb6100978701b91358824419059dae5934a8cc407f8d785349989563d2e",
+      "sourceFilePath": "app.js",
+      "callerName": "module",
+      "calleeName": "express.Router",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 3,
+        "column": 14
+      }
+    },
+    {
+      "id": "75f8add72cc7e0cd75830a540dc22c78e8a2b06a7160c0ab422c55c281ac3110",
+      "sourceFilePath": "app.js",
+      "callerName": "module",
+      "calleeName": "admin.use",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 6,
+        "column": 0
+      }
+    },
+    {
+      "id": "94a7f7f64dc77b3ec82a9e1a1f27a4dc1f84d8a821f9463db0ac8d8b03c9f6ea",
+      "sourceFilePath": "app.js",
+      "callerName": "module",
+      "calleeName": "require",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 1,
+        "column": 16
+      }
+    },
+    {
+      "id": "9a02d341bdba2522713b318e28b291ec740f4b75a97121ff7ac1705081998048",
+      "sourceFilePath": "app.js",
+      "callerName": "handler",
+      "calleeName": "res.send",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 5,
+        "column": 29
+      }
+    },
+    {
+      "id": "ba7a23e844769d92802cf69a532909c289266f2bfbe5a530f303116f4e3b28cc",
+      "sourceFilePath": "app.js",
+      "callerName": "module",
+      "calleeName": "app.get",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 10,
+        "column": 0
+      }
+    },
+    {
+      "id": "c0bb4fcbd7db85c7d4ad67b83ca938db7867ab9814516556224e16115c97a642",
+      "sourceFilePath": "app.js",
+      "callerName": "module",
+      "calleeName": "app.get",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 7,
+        "column": 0
+      }
+    },
+    {
+      "id": "c8d23452db07d151e5dae61a89b506b85e332e7415f020e1fc8b2b75a7d7a79e",
+      "sourceFilePath": "app.js",
+      "callerName": "module",
+      "calleeName": "app.listen",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 13,
+        "column": 0
+      }
+    },
+    {
+      "id": "db40c123c3e9bda9a75f1e2053fa01ab38d094930966d47245a58989ecbe6ce5",
+      "sourceFilePath": "app.js",
+      "callerName": "module",
+      "calleeName": "app.use",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 9,
+        "column": 0
+      }
+    },
+    {
+      "id": "ed60b1e39c27f54df40a8da9a0dd0f6b76b4081271b2f6ed35e05455dd63058c",
+      "sourceFilePath": "app.js",
+      "callerName": "auth",
+      "calleeName": "next",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 4,
+        "column": 32
+      }
+    },
+    {
+      "id": "f1ad90e9e0d602401d02423fbf954ae4c7e2741d027ef243b3855468717f1f4d",
+      "sourceFilePath": "app.js",
+      "callerName": "module",
+      "calleeName": "express.json",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 9,
+        "column": 8
+      }
+    }
+  ],
+  "references": [
+    {
+      "id": "045d4adac1fac64ae3085c921ecc9d2f1a8903c9ab2b73c6c9d4e0a6ec0d1f62",
+      "filePath": "app.js",
+      "name": "auth",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "dcd707e9ca5fda638eb0a035c12d17595c04f047478b2abdd9c60e3a3482dd41"
+    },
+    {
+      "id": "07dffda91837e2d92f86dd166b66e440981c8478a470cc8f3831d9fbad7df9a5",
+      "filePath": "app.js",
+      "name": "express",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "0f1acb731b25a8f6e8dc38813672898ea72871d22966c67ff4b5334ba0b15512",
+      "filePath": "app.js",
+      "name": "next",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "0a74c95166723f39a46a95c1c423a191c07820254b464e05ba47fc164cda5593"
+    },
+    {
+      "id": "1763a464ebf920a980fd0e1f7842cb85b445cd44d94254cc1b3a3d4efd85b4d9",
+      "filePath": "app.js",
+      "name": "app",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "10454bc2578fd6807856efe0186b6bad6565e3bca83081fa89dbe1348e853e55"
+    },
+    {
+      "id": "1df3c31fc498ead0e17436078487edf0c53d2aa0d384e9ba60307a0d6e36ee53",
+      "filePath": "app.js",
+      "name": "express.json",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "2da2cf80da26b6f8153f91ed0118dbeb23014a1c4bb10a92e167dd1e9b897a40",
+      "filePath": "app.js",
+      "name": "admin.get",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "31efff6d7a50e7def9bebd73f0b424207f408e48e86c64618dccddde50792562",
+      "filePath": "app.js",
+      "name": "handler",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "f8c6e3468b65becdcdfb044399155c187ddeb7461ddf0b91d692823490dd1eab"
+    },
+    {
+      "id": "37e66d58df1a2ab4edb32bb0587be29901f32febe9890268b5d804c7574c97cf",
+      "filePath": "app.js",
+      "name": "admin",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "240f04a368010bb9ba29c6d8caa8d56c24f0a16ad211d8ca79892a025834d40e"
+    },
+    {
+      "id": "45490e05082a1ca9a9db51306493c07c828e2633d978110df13be190a3421754",
+      "filePath": "app.js",
+      "name": "handler",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "f8c6e3468b65becdcdfb044399155c187ddeb7461ddf0b91d692823490dd1eab"
+    },
+    {
+      "id": "46e2ec8a55872406ba877aa2acb668e35d2cd513137caf8c4fa3698613ceacb2",
+      "filePath": "app.js",
+      "name": "auth",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "dcd707e9ca5fda638eb0a035c12d17595c04f047478b2abdd9c60e3a3482dd41"
+    },
+    {
+      "id": "47003850ecdb4a27fd96a381a1ba70f37b037244edb6f02aee66ac8ae3760852",
+      "filePath": "app.js",
+      "name": "express",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "56f4bf3c6f20177791c12d974757ec78e50186f4a8d78337cf3954f8cc5d1602"
+    },
+    {
+      "id": "527f3573de2931fa344bc446f979fa50bede4b85899a7abaf54e6278a0eea9c5",
+      "filePath": "app.js",
+      "name": "handler",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "f8c6e3468b65becdcdfb044399155c187ddeb7461ddf0b91d692823490dd1eab"
+    },
+    {
+      "id": "5ac0c9af0b66d27e5487d0fede5b37efb18288b881bdaf2be1616cdd06ce3e5a",
+      "filePath": "app.js",
+      "name": "app",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "10454bc2578fd6807856efe0186b6bad6565e3bca83081fa89dbe1348e853e55"
+    },
+    {
+      "id": "5e3fd5f9b93756326392b9fa62191d52aa0c12fb0db1b8f597fd1e305964968d",
+      "filePath": "app.js",
+      "name": "res.send",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "63cd81f595262060d4073df1a430b5c914b661c20eca92c5818b58ad09394646",
+      "filePath": "app.js",
+      "name": "app.use",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "670bd051b37022c02b7e63caec5457807967a4d7558b9e6305d346829122953a",
+      "filePath": "app.js",
+      "name": "express",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "d0084b8bedac0db76f23abb0661d655e4e970b98d935cda7ee57add8b7ccb17b"
+    },
+    {
+      "id": "6db7105639a98f4a8f113003ac780c6e7f395341d8e28df276edc3bafbc06f0a",
+      "filePath": "app.js",
+      "name": "express",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "d0084b8bedac0db76f23abb0661d655e4e970b98d935cda7ee57add8b7ccb17b"
+    },
+    {
+      "id": "706678b9ef4925789db1c0c46b15f262cc26e6633d0a91eff57eb56ca6a973b9",
+      "filePath": "app.js",
+      "name": "admin",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "240f04a368010bb9ba29c6d8caa8d56c24f0a16ad211d8ca79892a025834d40e"
+    },
+    {
+      "id": "71197f952ee0c35f5b594946329b8ae20825b05e2cab5068948f8cb443891c7c",
+      "filePath": "app.js",
+      "name": "app.get",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "74e20864de81d327f5f95293c1a3b46f3d014d9f75a05ff921aef9c7a148a639",
+      "filePath": "app.js",
+      "name": "express",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "56f4bf3c6f20177791c12d974757ec78e50186f4a8d78337cf3954f8cc5d1602"
+    },
+    {
+      "id": "76c8c25b5dd3414a14b1935e182743e564942376173b2d15c5791755601a8704",
+      "filePath": "app.js",
+      "name": "express",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "d0084b8bedac0db76f23abb0661d655e4e970b98d935cda7ee57add8b7ccb17b"
+    },
+    {
+      "id": "77cf5b7b46500b754d212d66f9e98a81b396a06b200f315215a4eab0af3d0913",
+      "filePath": "app.js",
+      "name": "app.listen",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "81a19960dca868da9add905c7e0f6271bd1c0b24d47b36f490c043ac591c1ac0",
+      "filePath": "app.js",
+      "name": "require",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "82f9b4d1da717c0542eceac1da084a0a656cf58b481562aae7fc5eee8e2629e3",
+      "filePath": "app.js",
+      "name": "admin.use",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "8d6f25356df643d11b0a9f40aad35c92b56e501b7b42c41c84b78dadfebd675a",
+      "filePath": "app.js",
+      "name": "next",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "a0c4e09873947d6d2289afb77fcec380cf7c9e13b3e277a1903b6dc980cad4b9",
+      "filePath": "app.js",
+      "name": "admin",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "240f04a368010bb9ba29c6d8caa8d56c24f0a16ad211d8ca79892a025834d40e"
+    },
+    {
+      "id": "ac64d65f5f7bbc248965518f0bbd9123e6b7a8a531bc183e576f1e870f5f70cc",
+      "filePath": "app.js",
+      "name": "app.get",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "b0b2c97822411421dfbe407412fefde7f8d249f4f7f761bba5cc0c1db3b21c74",
+      "filePath": "app.js",
+      "name": "app",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "10454bc2578fd6807856efe0186b6bad6565e3bca83081fa89dbe1348e853e55"
+    },
+    {
+      "id": "b20b8698d7541b3ee24506a975f5c36ae9c79491f8e23f7106be977f7ad035c7",
+      "filePath": "app.js",
+      "name": "app.use",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "c147df212a2b9724b1a0afe3fc023178b56e36abe170ad3289a037d07254a233",
+      "filePath": "app.js",
+      "name": "express.Router",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "cd88411c95efbfae571c5aaa5f6f3c36560774dfab43c5e5c72fe90e35ba0ad7",
+      "filePath": "app.js",
+      "name": "express",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "56f4bf3c6f20177791c12d974757ec78e50186f4a8d78337cf3954f8cc5d1602"
+    },
+    {
+      "id": "e0fbc3db3e7cb34540184023ca10927d059eccc1f2834653463103f991681244",
+      "filePath": "app.js",
+      "name": "app",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "10454bc2578fd6807856efe0186b6bad6565e3bca83081fa89dbe1348e853e55"
+    },
+    {
+      "id": "e8c92fb2220508c2960e9e50d3d554aae28195dd07307774fbec281e1abbef5c",
+      "filePath": "app.js",
+      "name": "res",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "6a706d4d3d26f5669766b98a66d73e746fe68d18b1b38efff57bb1fd559b6713"
+    },
+    {
+      "id": "f60f06696d176d1fa8f1c46bf8bef6a73397502e64f039fcb48e8bb03974346d",
+      "filePath": "app.js",
+      "name": "app",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "10454bc2578fd6807856efe0186b6bad6565e3bca83081fa89dbe1348e853e55"
+    },
+    {
+      "id": "f9200995f105568a3cd6cc0fb52ccbc208bf3f4f4bd2e4c20c21d7af09eb6d39",
+      "filePath": "app.js",
+      "name": "app.get",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "fd53cd66d02877d084cdead43051a37371acf79880f5d0f1b8d5f5f7ffaf2d35",
+      "filePath": "app.js",
+      "name": "app",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "10454bc2578fd6807856efe0186b6bad6565e3bca83081fa89dbe1348e853e55"
+    }
+  ],
+  "scopes": [
+    {
+      "id": "628f4719fb373387820e3cd42259da22aa6b2e02ca411e7c39f3f6cd94109eff",
+      "filePath": "app.js",
+      "name": "module",
+      "declaredSymbols": [
+        "admin",
+        "app",
+        "auth",
+        "express",
+        "handler",
+        "next",
+        "req",
+        "res"
+      ],
+      "referencedNames": [
+        "admin",
+        "admin.get",
+        "admin.use",
+        "app",
+        "app.get",
+        "app.listen",
+        "app.use",
+        "auth",
+        "express",
+        "express.Router",
+        "express.json",
+        "handler",
+        "next",
+        "require",
+        "res",
+        "res.send"
+      ]
+    }
+  ],
+  "deadCode": [
+    {
+      "symbolId": "ab0e61d4f625be779c17b32b464d2d41feadf9e1779d911d85d563a794db6798",
+      "filePath": "app.js",
+      "name": "req",
+      "reason": "unreferenced-local-symbol",
+      "state": "INFERRED"
+    },
+    {
+      "symbolId": "b987caf3601cef5d58cf97cdbc6bf1386e8a3b89a967872b69cc78266b06c546",
+      "filePath": "app.js",
+      "name": "req",
+      "reason": "unreferenced-local-symbol",
+      "state": "INFERRED"
+    },
+    {
+      "symbolId": "0fc4b48c61f7ea2bc228c12183f610bab54f0361ebc0972fae2aae93c8fb51be",
+      "filePath": "app.js",
+      "name": "res",
+      "reason": "unreferenced-local-symbol",
+      "state": "INFERRED"
+    }
+  ],
+  "unusedImports": [],
+  "unusedExports": [],
+  "entryPoints": [
+    {
+      "filePath": "app.js",
+      "reason": "conventional-file"
+    },
+    {
+      "filePath": "app.js",
+      "reason": "http-listener"
+    }
+  ],
+  "routes": [
+    {
+      "id": "170d46c5a79ecf236fcbeb56fcddc7ae283fbff262692ce03bcdbaf4ad09d53c",
+      "filePath": "app.js",
+      "method": "GET",
+      "path": "/x",
+      "handlerName": "auth",
+      "middleware": [
+        "auth"
+      ],
+      "state": "CONFIRMED"
+    },
+    {
+      "id": "1a6e4040845b1c09ba728fc75b912f561547902b9928ea8a603547d9b1cd0bb5",
+      "filePath": "app.js",
+      "method": "GET",
+      "path": "/public",
+      "handlerName": "handler",
+      "middleware": [
+        "auth"
+      ],
+      "state": "CONFIRMED"
+    },
+    {
+      "id": "4cc9b905328d2d4d9e7a87e4b9d449ca38de20210d1f3771609fbbdfed8f16aa",
+      "filePath": "app.js",
+      "method": "GET",
+      "path": "env",
+      "middleware": [
+        "auth"
+      ],
+      "state": "CONFIRMED"
+    },
+    {
+      "id": "84183bc87970adbbc2cb7eebb4987b123763f3cb47f9f839b9e6796d344a469a",
+      "filePath": "app.js",
+      "method": "GET",
+      "path": "/secret",
+      "handlerName": "handler",
+      "middleware": [
+        "auth"
+      ],
+      "state": "CONFIRMED"
+    }
+  ],
+  "middlewareChains": [
+    {
+      "filePath": "app.js",
+      "middleware": [
+        "admin",
+        "auth"
+      ]
+    }
+  ],
+  "projectId": "9988916d-f59e-464e-a753-1d63b6276106",
+  "analysisRunId": "842db048-7827-45eb-aac9-0312949b7742"
+}

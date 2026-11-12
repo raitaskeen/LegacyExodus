@@ -1,0 +1,158 @@
+{
+  "projectId": "eea416b8-723b-4c5e-b13e-3c0b7760d414",
+  "analysisRunId": "de1753ae-460a-4b76-be5d-a7929bc3b60f",
+  "nodes": [
+    {
+      "id": "file:_x.js",
+      "kind": "file",
+      "name": "_x.js",
+      "filePath": "_x.js"
+    },
+    {
+      "id": "file:a.js",
+      "kind": "file",
+      "name": "a.js",
+      "filePath": "a.js"
+    },
+    {
+      "id": "file:ä.js",
+      "kind": "file",
+      "name": "ä.js",
+      "filePath": "ä.js"
+    },
+    {
+      "id": "file:B.js",
+      "kind": "file",
+      "name": "B.js",
+      "filePath": "B.js"
+    },
+    {
+      "id": "file:Z.js",
+      "kind": "file",
+      "name": "Z.js",
+      "filePath": "Z.js"
+    },
+    {
+      "id": "symbol:1502468d0b803609c4fe2dd3d39849c8388bcf09b748567f6cfab4289ae96b76",
+      "kind": "symbol",
+      "name": "a",
+      "filePath": "a.js"
+    },
+    {
+      "id": "symbol:26fcf3c9f314d8534e7cfdd065e90c528d9d8ec46b025306dbb0798fed6c871b",
+      "kind": "symbol",
+      "name": "x",
+      "filePath": "_x.js"
+    },
+    {
+      "id": "symbol:46dbd6f0880242593d6893bcb20c2ac5b2c65cd4f926d5c3181d0e436ade449e",
+      "kind": "symbol",
+      "name": "x",
+      "filePath": "_x.js"
+    },
+    {
+      "id": "symbol:5537e01b8351cf4d254a545f1ef1475164e5d6f6e75f4f14da65f691ae3810df",
+      "kind": "symbol",
+      "name": "a",
+      "filePath": "a.js"
+    },
+    {
+      "id": "symbol:60c807e472fd6f400ff295332c0e9548c09774cc5593fa34d8859fee026e9e36",
+      "kind": "symbol",
+      "name": "b",
+      "filePath": "B.js"
+    },
+    {
+      "id": "symbol:940765f9d2f198d4e078f2e25f15c5cf5c9b0ad399da31ba61735a3079727d55",
+      "kind": "symbol",
+      "name": "b",
+      "filePath": "B.js"
+    },
+    {
+      "id": "symbol:b87d3181ad00665e0e6472536c460311a340de86709ff24865a1c2807ec2a27f",
+      "kind": "symbol",
+      "name": "ae",
+      "filePath": "ä.js"
+    },
+    {
+      "id": "symbol:bd05e8995751432deb582042631d7d7d3e92e35d5e86f7359e660ec48e9664cd",
+      "kind": "symbol",
+      "name": "z",
+      "filePath": "Z.js"
+    },
+    {
+      "id": "symbol:c1014560e23da5b8c370321db9900849d599d88845c3004c922251abd67dafd3",
+      "kind": "symbol",
+      "name": "ae",
+      "filePath": "ä.js"
+    },
+    {
+      "id": "symbol:f7e2ea262c8ffdaaec708d7943d73725834821892431988ca44bbbc3d8242ce9",
+      "kind": "symbol",
+      "name": "z",
+      "filePath": "Z.js"
+    }
+  ],
+  "edges": [
+    {
+      "id": "008acdf88025315748763a0704fb662f0624a03bdc09c36adbfe49eb1b453925",
+      "from": "file:_x.js",
+      "to": "symbol:46dbd6f0880242593d6893bcb20c2ac5b2c65cd4f926d5c3181d0e436ade449e",
+      "relationship": "contains"
+    },
+    {
+      "id": "53b9bb173caecd8362615955c763793f25456951b953e2d2d41a76d9046fb8cf",
+      "from": "file:a.js",
+      "to": "symbol:5537e01b8351cf4d254a545f1ef1475164e5d6f6e75f4f14da65f691ae3810df",
+      "relationship": "contains"
+    },
+    {
+      "id": "6f90bcfe4cae651b66087f70691d22fe6fe3261652663dbaa6bf6bcc8e6b3871",
+      "from": "file:Z.js",
+      "to": "symbol:bd05e8995751432deb582042631d7d7d3e92e35d5e86f7359e660ec48e9664cd",
+      "relationship": "contains"
+    },
+    {
+      "id": "7a5852d4bb75929348bcb86ff8523d0a558f86c4acf8ce5e6117fe105c0b3153",
+      "from": "file:_x.js",
+      "to": "symbol:26fcf3c9f314d8534e7cfdd065e90c528d9d8ec46b025306dbb0798fed6c871b",
+      "relationship": "contains"
+    },
+    {
+      "id": "80ffa3244c9eabbf8f36ef97d38662d1d40553ac87653964485a41f2eed759cd",
+      "from": "file:ä.js",
+      "to": "symbol:c1014560e23da5b8c370321db9900849d599d88845c3004c922251abd67dafd3",
+      "relationship": "contains"
+    },
+    {
+      "id": "865e0db0d6ab0a8d0e956d3775f5103aba624cf7efc35df1213dca42b3a10826",
+      "from": "file:B.js",
+      "to": "symbol:60c807e472fd6f400ff295332c0e9548c09774cc5593fa34d8859fee026e9e36",
+      "relationship": "contains"
+    },
+    {
+      "id": "8c33a933acc3d52fab2712176058005de1e29fb7b97956c152d5b2e226858736",
+      "from": "file:a.js",
+      "to": "symbol:1502468d0b803609c4fe2dd3d39849c8388bcf09b748567f6cfab4289ae96b76",
+      "relationship": "contains"
+    },
+    {
+      "id": "98e3148e3414807d8a46de0e85abe83586657fe0662201d11c0371d375a1d8c7",
+      "from": "file:B.js",
+      "to": "symbol:940765f9d2f198d4e078f2e25f15c5cf5c9b0ad399da31ba61735a3079727d55",
+      "relationship": "contains"
+    },
+    {
+      "id": "ced1c2d088676c27d05aa03ef58093d08df501c8f5b09f2494646a3ba6070413",
+      "from": "file:Z.js",
+      "to": "symbol:f7e2ea262c8ffdaaec708d7943d73725834821892431988ca44bbbc3d8242ce9",
+      "relationship": "contains"
+    },
+    {
+      "id": "d8071ffacc59aab397e13a5c97bd09d374e8750aec95d5747aac1b24d1cd829a",
+      "from": "file:ä.js",
+      "to": "symbol:b87d3181ad00665e0e6472536c460311a340de86709ff24865a1c2807ec2a27f",
+      "relationship": "contains"
+    }
+  ]
+}

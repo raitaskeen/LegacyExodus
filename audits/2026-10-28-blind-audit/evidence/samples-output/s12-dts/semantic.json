@@ -1,0 +1,60 @@
+{
+  "calls": [
+    {
+      "id": "10bbae7e665c0bbd26acb6bce3dfc04d6fb44ad4dfa8e2ab9928db9fda0fd48d",
+      "sourceFilePath": "use.ts",
+      "callerName": "module",
+      "calleeName": "f",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 2,
+        "column": 0
+      }
+    }
+  ],
+  "references": [
+    {
+      "id": "8bc0b559f70577b45271f4509d5287f447932f06d99a2171f87903ffd65c557d",
+      "filePath": "use.ts",
+      "name": "f",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "e8eba35841c9117b0467057e715c141d941b0c2b1db380d719d0b65ff36e587e",
+      "filePath": "use.ts",
+      "name": "f",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "2165cee90672111a3532ca43b483fa7619803520b872cff9b6b8d9378d094201"
+    }
+  ],
+  "scopes": [
+    {
+      "id": "3ab6546bf965cedb18caaa091f3da5676a4d64aa73d86756ee661dcb56b97ea6",
+      "filePath": "use.ts",
+      "name": "module",
+      "declaredSymbols": [
+        "f"
+      ],
+      "referencedNames": [
+        "f"
+      ]
+    },
+    {
+      "id": "d158ef354b411e708d052e278eccfc033a5ce9ecf9cdbc995e38cf71485facc0",
+      "filePath": "types.d.ts",
+      "name": "module",
+      "declaredSymbols": [],
+      "referencedNames": []
+    }
+  ],
+  "deadCode": [],
+  "unusedImports": [],
+  "unusedExports": [],
+  "entryPoints": [],
+  "routes": [],
+  "middlewareChains": [],
+  "projectId": "fbe55fa0-8f7a-4627-9995-3ad125acac60",
+  "analysisRunId": "21c9d7be-24d2-465a-9b77-554eaffb2a1c"
+}

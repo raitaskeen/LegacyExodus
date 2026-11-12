@@ -1,0 +1,74 @@
+{
+  "projectId": "81f62af1-7820-4e3d-85c3-40ec268559f1",
+  "analysisRunId": "35ce8d21-e8a0-49ea-acc2-72426e588c7b",
+  "nodes": [
+    {
+      "id": "file:x.js",
+      "kind": "file",
+      "name": "x.js",
+      "filePath": "x.js"
+    },
+    {
+      "id": "symbol:3628ff01c6900b9b40a89b2e4bc116cf9cec49df19e648859a388f92f3f0aad0",
+      "kind": "symbol",
+      "name": "n",
+      "filePath": "x.js"
+    },
+    {
+      "id": "symbol:b16960ec0b2da2f231db66759f80c230242cf8a82a9745ec7b7b4421fd533a18",
+      "kind": "symbol",
+      "name": "Inner",
+      "filePath": "x.js"
+    },
+    {
+      "id": "symbol:d6e80fdaeb8c8c63123e9f62a208db65cd3ae5e4c51176aa09cb72e61e5ea0be",
+      "kind": "symbol",
+      "name": "Inner",
+      "filePath": "x.js"
+    },
+    {
+      "id": "symbol:ddd6bfc2888f1c54086ae718187c4598648749a7860a3b1c738648624a921a8f",
+      "kind": "symbol",
+      "name": "Outer",
+      "filePath": "x.js"
+    },
+    {
+      "id": "symbol:ecde191bb89194291ec66bb8322e1aba12dcbc6ac19626f27f7382badbd2dcec",
+      "kind": "symbol",
+      "name": "m",
+      "filePath": "x.js"
+    }
+  ],
+  "edges": [
+    {
+      "id": "17a08a525bf9739511bf8c6ebc9acbe8b8a18ee6d82805be028eea84c819aa0b",
+      "from": "file:x.js",
+      "to": "symbol:ddd6bfc2888f1c54086ae718187c4598648749a7860a3b1c738648624a921a8f",
+      "relationship": "contains"
+    },
+    {
+      "id": "900f598ca75e12d641ccfcd1fb67f8927ddc92403f22844569a2f8dfc8df8844",
+      "from": "file:x.js",
+      "to": "symbol:ecde191bb89194291ec66bb8322e1aba12dcbc6ac19626f27f7382badbd2dcec",
+      "relationship": "contains"
+    },
+    {
+      "id": "d7b6086cb5d0e54f1b21ae87944578f31967bd4f7f735f308037c8c9e2a682c3",
+      "from": "file:x.js",
+      "to": "symbol:d6e80fdaeb8c8c63123e9f62a208db65cd3ae5e4c51176aa09cb72e61e5ea0be",
+      "relationship": "contains"
+    },
+    {
+      "id": "f07a7cb567a74175e0aab386f1f9b0bcd67c7f4cc8d7e9c204c0f0994cfded28",
+      "from": "file:x.js",
+      "to": "symbol:3628ff01c6900b9b40a89b2e4bc116cf9cec49df19e648859a388f92f3f0aad0",
+      "relationship": "contains"
+    },
+    {
+      "id": "f9da87fb0e6290853aa1c48b40ca6157225f3fa2abb5245b8a445fb87a3e5a0f",
+      "from": "file:x.js",
+      "to": "symbol:b16960ec0b2da2f231db66759f80c230242cf8a82a9745ec7b7b4421fd533a18",
+      "relationship": "contains"
+    }
+  ]
+}

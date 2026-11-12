@@ -1,0 +1,155 @@
+{
+  "calls": [
+    {
+      "id": "2329d65ea4078726485545d4870005906611b667cb22eb633d48b700a8f320e1",
+      "sourceFilePath": "lib.js",
+      "callerName": "module",
+      "calleeName": "Object.defineProperty",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 2,
+        "column": 0
+      }
+    },
+    {
+      "id": "334ea21b885363d6072262f9a4cc42e6edd4f39f312dc6dd35d6a8a5ddd44357",
+      "sourceFilePath": "main.js",
+      "callerName": "module",
+      "calleeName": "lib_1.hello",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 4,
+        "column": 0
+      }
+    },
+    {
+      "id": "a707b1eac4398e9bec159efc1a82ea2378a165e606eb28e39dea3b8308e8b610",
+      "sourceFilePath": "main.js",
+      "callerName": "module",
+      "calleeName": "require",
+      "resolutionState": "UNRESOLVED",
+      "location": {
+        "line": 2,
+        "column": 14
+      }
+    }
+  ],
+  "references": [
+    {
+      "id": "24717d39ac1a9eab2888af65c310f40f8bd26297b2c2079497310c1be742d32a",
+      "filePath": "main.js",
+      "name": "lib_1",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "4de00da3c5fd27da67f60b39e00e6e6045e29344069c4f99425f375a421b71e1"
+    },
+    {
+      "id": "4773f554a07175e8c25938edfda145846004546aa9304cc5903e593749a36b1c",
+      "filePath": "main.js",
+      "name": "lib_1",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "beba15762ea01b4ff90ad0f5b34b8d0a2571ff2a1a4478c8c42595ed25f8602e"
+    },
+    {
+      "id": "923b2328cf8bf2cbd22538301b45db22afb9b22a2dd63015267a1f5f0cfad3b0",
+      "filePath": "lib.js",
+      "name": "Object.defineProperty",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "9e6cca7f2a3f5dccdd0a73a489c58ecc1a6a205e1eeb3d19f8c082600517bba4",
+      "filePath": "lib.js",
+      "name": "hello",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "16467f517265fccd06758d4b9a2d367fa4cf0bbaee989bc37de6ece1f1ec1046"
+    },
+    {
+      "id": "a479c84ec1b97013ce3b36a7b333ecc52490e712af2d487180a005c82ae38ca2",
+      "filePath": "main.js",
+      "name": "lib_1",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "4de00da3c5fd27da67f60b39e00e6e6045e29344069c4f99425f375a421b71e1"
+    },
+    {
+      "id": "da8ef794e2bc2a2f8cba7275b0afdc120fcc7fac2a1133531f3739b7ec3b0139",
+      "filePath": "main.js",
+      "name": "lib_1",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "beba15762ea01b4ff90ad0f5b34b8d0a2571ff2a1a4478c8c42595ed25f8602e"
+    },
+    {
+      "id": "dd1d9ab50d6a638a3d73e61e998cde7cbcff75b04f74cc426d9a95fb325e78af",
+      "filePath": "main.js",
+      "name": "lib_1.hello",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    },
+    {
+      "id": "f7530fa473277bc5c11aee171aa80bc20f136edbe543b0dd2035227dec93aa27",
+      "filePath": "main.js",
+      "name": "require",
+      "kind": "call",
+      "resolutionState": "UNRESOLVED"
+    }
+  ],
+  "scopes": [
+    {
+      "id": "b5628bc4a4617d69c7497e196b76727edbf2404af97803af385f5719b3447ca3",
+      "filePath": "lib.js",
+      "name": "module",
+      "declaredSymbols": [
+        "hello"
+      ],
+      "referencedNames": [
+        "Object.defineProperty",
+        "hello"
+      ]
+    },
+    {
+      "id": "ba117877875d6cf90e58bc32693f914d709acd96ae3055f15e6a3640fd59ced3",
+      "filePath": "main.js",
+      "name": "module",
+      "declaredSymbols": [
+        "lib_1"
+      ],
+      "referencedNames": [
+        "lib_1",
+        "lib_1.hello",
+        "require"
+      ]
+    }
+  ],
+  "deadCode": [],
+  "unusedImports": [],
+  "unusedExports": [
+    {
+      "symbolId": "01fbc294d59d3c1820dc6aa40139cfeaad64e3f5191f908a24e4c8522862199b",
+      "filePath": "lib.js",
+      "name": "hello",
+      "reason": "unused-export",
+      "state": "INFERRED"
+    },
+    {
+      "symbolId": "96438121dec3205ec94b8247d60bba5b83ad54a27be677247d0bb531c2fe1100",
+      "filePath": "lib.js",
+      "name": "hello",
+      "reason": "unused-export",
+      "state": "INFERRED"
+    }
+  ],
+  "entryPoints": [
+    {
+      "filePath": "main.js",
+      "reason": "conventional-file"
+    }
+  ],
+  "routes": [],
+  "middlewareChains": [],
+  "projectId": "f96bfad7-43fd-4df6-bfb5-7adc757206a8",
+  "analysisRunId": "fbef25e8-3120-41b8-ae46-e3ea5dddee77"
+}

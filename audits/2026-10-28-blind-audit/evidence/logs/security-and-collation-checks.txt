@@ -1,0 +1,19 @@
+Captured 2026-10-28, Windows 11, Bun 1.4.4, baseline c694d64.
+
+1. Planted git.exe in the analyzed repository (sample s13-planted-git)
+   Setup: C:\Windows\System32\whoami.exe copied to <sample>\git.exe; <sample>\index.js; analyze --refresh.
+   The engine calls spawnSync("git", ["rev-parse","HEAD"], { cwd: <sample>, shell: false }).
+   If the planted binary ran, manifest.repository would carry a commitSha equal to whoami output
+   (the local account name, redacted here) because the exit status is 0.
+   Result: manifest.repository = { name, path, sourceDigest } with no commitSha; no artifact contains the
+   whoami output. The planted binary was not executed (Bun resolves git from PATH). VERIFIED for this
+   environment only.
+
+2. Collation tie (BA-16)
+   bun -e "console.log('\u00e4.js'.localeCompare('a\u0308.js'), '\u00e4.js' === 'a\u0308.js')"
+   Output: NFC vs NFD localeCompare = 0 ; strict equal = false
+
+3. Engine self-analysis without tsconfig.json (corpus/engine-src, src/ only)
+   calls 5889, resolved 1153 (19.6%), imports 722, imports with export edge 128, module edges 150,
+   deadCode 353 (variable 334, method 19), unusedImports 3, unusedExports 312.
+   With tsconfig.json: see engine-self-with-tsconfig.json.

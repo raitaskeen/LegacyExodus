@@ -1,0 +1,22 @@
+{
+  "analysisDisposition": {
+    "contract": "r01-analysis-disposition-v1",
+    "files": [
+      {
+        "fileId": "41cfcbd44b15f7af4520bcbd71dd7a4f4456fea85d8c412cfd80226a3a87d4d0",
+        "path": "x.js",
+        "kind": "analyzed",
+        "symbolCount": 5
+      }
+    ]
+  },
+  "projectName": "s08-class-expression",
+  "fileCount": 1,
+  "dependencyCount": 0,
+  "frameworkCount": 0,
+  "languages": [
+    "javascript"
+  ],
+  "enumerationFailureCount": 0,
+  "discoveryComplete": true
+}

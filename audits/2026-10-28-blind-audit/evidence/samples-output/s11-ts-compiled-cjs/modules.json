@@ -1,0 +1,12 @@
+[
+  {
+    "path": "lib.js",
+    "language": "javascript",
+    "fileKind": "source"
+  },
+  {
+    "path": "main.js",
+    "language": "javascript",
+    "fileKind": "source"
+  }
+]

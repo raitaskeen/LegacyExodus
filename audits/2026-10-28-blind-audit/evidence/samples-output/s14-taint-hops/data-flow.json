@@ -1,0 +1,576 @@
+{
+  "projectId": "14869e1c-8c6a-4949-a201-f83134ac1efb",
+  "analysisRunId": "b04ab568-6791-4115-9e93-409f33c9f7c2",
+  "graphs": [
+    {
+      "id": "46f1a48e66d9430a002464c9300f2aee0bfd2d57ab06f1cd28616a2a91494d6b",
+      "filePath": "app.js",
+      "state": "INFERRED",
+      "definitions": [
+        {
+          "id": "3e6935e4bd557667253a4353f1d35ba269cf53a2702ca6f60025e7f151de0453",
+          "filePath": "app.js",
+          "name": "res",
+          "kind": "parameter"
+        },
+        {
+          "id": "44504b3ff438f31ec5453b871e78cb96a8b80031e0e990c9e5f81575be487015",
+          "filePath": "app.js",
+          "name": "v",
+          "kind": "declaration"
+        },
+        {
+          "id": "553e83ece04f4dc9a80b3689f99f87c73318771e5d2c034b99fc7491a63a5843",
+          "filePath": "app.js",
+          "name": "res",
+          "kind": "parameter"
+        },
+        {
+          "id": "59a296460adf12923f21f72a0e91dde82351d8c2892b21ef9a3276491b768d6f",
+          "filePath": "app.js",
+          "name": "req",
+          "kind": "parameter"
+        },
+        {
+          "id": "5b04bb9f903aecc82e11858442afd02b925269acdac7b71c869a0b0d73c20aa2",
+          "filePath": "app.js",
+          "name": "res",
+          "kind": "parameter"
+        },
+        {
+          "id": "77feaa5d63a4fe573f9f00cdf79824d2b2838f5d1911536732e7839e99a922c8",
+          "filePath": "app.js",
+          "name": "app",
+          "kind": "declaration"
+        },
+        {
+          "id": "a41bca55aa48e4b0bacfa22bd81bed52a8e7b8f355f22b62e0eb8b12d9b8b182",
+          "filePath": "app.js",
+          "name": "v",
+          "kind": "declaration"
+        },
+        {
+          "id": "b677d64160b8fc9bcd9da9c81865fd00a4f7e3699935126b7fb5bdb5a1f7d188",
+          "filePath": "app.js",
+          "name": "req",
+          "kind": "parameter"
+        },
+        {
+          "id": "cadb48fe0ea09e8ffefd1f2dd4106c4a2739ea414063db406a111a382b3ed74a",
+          "filePath": "app.js",
+          "name": "req",
+          "kind": "parameter"
+        },
+        {
+          "id": "f2adc4740dff55363aed81c419ffec561697f2377e849e1faeebc7d67d948639",
+          "filePath": "app.js",
+          "name": "req",
+          "kind": "parameter"
+        },
+        {
+          "id": "f6555b807434812e2615d8822aad32ff228d661adcb3bf5ecb427bb4bad74f09",
+          "filePath": "app.js",
+          "name": "v",
+          "kind": "declaration"
+        },
+        {
+          "id": "f833ec1eb864a4d0ef9a860cad01dad4411536d6ae9db9029526fe306b8616fb",
+          "filePath": "app.js",
+          "name": "res",
+          "kind": "parameter"
+        }
+      ],
+      "uses": [
+        {
+          "id": "0218fdf4726406410c0dfdfcdfbb11f27c2253981f521be932268fb36456fdbf",
+          "filePath": "app.js",
+          "name": "res",
+          "definitionId": "3e6935e4bd557667253a4353f1d35ba269cf53a2702ca6f60025e7f151de0453"
+        },
+        {
+          "id": "2a8242d4892b994cde823030a795a1181f1d039b5f439d666ab97c01702d58af",
+          "filePath": "app.js",
+          "name": "v",
+          "definitionId": "f6555b807434812e2615d8822aad32ff228d661adcb3bf5ecb427bb4bad74f09"
+        },
+        {
+          "id": "355639bfdedbfc56b52e864719a7f908698234d43b42ea9365bccacbcb949660",
+          "filePath": "app.js",
+          "name": "v",
+          "definitionId": "44504b3ff438f31ec5453b871e78cb96a8b80031e0e990c9e5f81575be487015"
+        },
+        {
+          "id": "4779f14c639825f2b670f768830a180f40040f8cf36d8cb998d7bd2d839eb8b6",
+          "filePath": "app.js",
+          "name": "express"
+        },
+        {
+          "id": "5d6a5ee713f11e8c15d85c88f7066d1ea8d040ebcf806b1ed626ef6beb98dde6",
+          "filePath": "app.js",
+          "name": "req.body"
+        },
+        {
+          "id": "69db56da47c02a4b88cf92bccb6cc9bc0e2f64c5492a03eeb36584ae465e1f35",
+          "filePath": "app.js",
+          "name": "req",
+          "definitionId": "cadb48fe0ea09e8ffefd1f2dd4106c4a2739ea414063db406a111a382b3ed74a"
+        },
+        {
+          "id": "764e715c701906113c54c64decb382ca24c12f37fe10b1f9ad9806bed9460a45",
+          "filePath": "app.js",
+          "name": "req",
+          "definitionId": "59a296460adf12923f21f72a0e91dde82351d8c2892b21ef9a3276491b768d6f"
+        },
+        {
+          "id": "861eb528feeb01bbae5b15b26553c8515a3f4d925dff0ee8956cb1b2e8a47726",
+          "filePath": "app.js",
+          "name": "req",
+          "definitionId": "f2adc4740dff55363aed81c419ffec561697f2377e849e1faeebc7d67d948639"
+        },
+        {
+          "id": "89569d859686671a535c3480d6d8380f78edf2778f840cdef5eed11640336064",
+          "filePath": "app.js",
+          "name": "v",
+          "definitionId": "a41bca55aa48e4b0bacfa22bd81bed52a8e7b8f355f22b62e0eb8b12d9b8b182"
+        },
+        {
+          "id": "904839ad19433b23577125dc4ea007ddadfa22e6989c8a847b3773e6b54fff79",
+          "filePath": "app.js",
+          "name": "req.body"
+        },
+        {
+          "id": "a6147e0bf9838c884b59cd94b12917e84d7c7947227a3b890aeba4350dc4d240",
+          "filePath": "app.js",
+          "name": "pass"
+        },
+        {
+          "id": "a6147e0bf9838c884b59cd94b12917e84d7c7947227a3b890aeba4350dc4d240",
+          "filePath": "app.js",
+          "name": "pass"
+        },
+        {
+          "id": "b4311a1cc3287c42e22f86818b0ee53f69ac241660185ea8c9fcc1f37daf39df",
+          "filePath": "app.js",
+          "name": "reply"
+        },
+        {
+          "id": "b4311a1cc3287c42e22f86818b0ee53f69ac241660185ea8c9fcc1f37daf39df",
+          "filePath": "app.js",
+          "name": "reply"
+        },
+        {
+          "id": "c4e345a273701c8aaff5c1c918a3d78e5daa3a4180f6faa201e83691ff28e0eb",
+          "filePath": "app.js",
+          "name": "req",
+          "definitionId": "b677d64160b8fc9bcd9da9c81865fd00a4f7e3699935126b7fb5bdb5a1f7d188"
+        },
+        {
+          "id": "d71e3020bdc8b8a1ec8e5885f366fd004e28987a7b1cfed39380287ccbb43ca3",
+          "filePath": "app.js",
+          "name": "req.body"
+        },
+        {
+          "id": "e33abfd3bdbdf21952ec391c33245b89642530fc6af7143dc6f0d25b7b23f4d3",
+          "filePath": "app.js",
+          "name": "req.body"
+        }
+      ],
+      "defUseChains": [
+        {
+          "definitionId": "3e6935e4bd557667253a4353f1d35ba269cf53a2702ca6f60025e7f151de0453",
+          "useIds": [
+            "0218fdf4726406410c0dfdfcdfbb11f27c2253981f521be932268fb36456fdbf"
+          ]
+        },
+        {
+          "definitionId": "44504b3ff438f31ec5453b871e78cb96a8b80031e0e990c9e5f81575be487015",
+          "useIds": [
+            "355639bfdedbfc56b52e864719a7f908698234d43b42ea9365bccacbcb949660"
+          ]
+        },
+        {
+          "definitionId": "553e83ece04f4dc9a80b3689f99f87c73318771e5d2c034b99fc7491a63a5843",
+          "useIds": []
+        },
+        {
+          "definitionId": "59a296460adf12923f21f72a0e91dde82351d8c2892b21ef9a3276491b768d6f",
+          "useIds": [
+            "764e715c701906113c54c64decb382ca24c12f37fe10b1f9ad9806bed9460a45"
+          ]
+        },
+        {
+          "definitionId": "5b04bb9f903aecc82e11858442afd02b925269acdac7b71c869a0b0d73c20aa2",
+          "useIds": []
+        },
+        {
+          "definitionId": "77feaa5d63a4fe573f9f00cdf79824d2b2838f5d1911536732e7839e99a922c8",
+          "useIds": []
+        },
+        {
+          "definitionId": "a41bca55aa48e4b0bacfa22bd81bed52a8e7b8f355f22b62e0eb8b12d9b8b182",
+          "useIds": [
+            "89569d859686671a535c3480d6d8380f78edf2778f840cdef5eed11640336064"
+          ]
+        },
+        {
+          "definitionId": "b677d64160b8fc9bcd9da9c81865fd00a4f7e3699935126b7fb5bdb5a1f7d188",
+          "useIds": [
+            "c4e345a273701c8aaff5c1c918a3d78e5daa3a4180f6faa201e83691ff28e0eb"
+          ]
+        },
+        {
+          "definitionId": "cadb48fe0ea09e8ffefd1f2dd4106c4a2739ea414063db406a111a382b3ed74a",
+          "useIds": [
+            "69db56da47c02a4b88cf92bccb6cc9bc0e2f64c5492a03eeb36584ae465e1f35"
+          ]
+        },
+        {
+          "definitionId": "f2adc4740dff55363aed81c419ffec561697f2377e849e1faeebc7d67d948639",
+          "useIds": [
+            "861eb528feeb01bbae5b15b26553c8515a3f4d925dff0ee8956cb1b2e8a47726"
+          ]
+        },
+        {
+          "definitionId": "f6555b807434812e2615d8822aad32ff228d661adcb3bf5ecb427bb4bad74f09",
+          "useIds": [
+            "2a8242d4892b994cde823030a795a1181f1d039b5f439d666ab97c01702d58af"
+          ]
+        },
+        {
+          "definitionId": "f833ec1eb864a4d0ef9a860cad01dad4411536d6ae9db9029526fe306b8616fb",
+          "useIds": []
+        }
+      ],
+      "lifetimes": [
+        {
+          "name": "res",
+          "filePath": "app.js",
+          "declarationId": "3e6935e4bd557667253a4353f1d35ba269cf53a2702ca6f60025e7f151de0453",
+          "useIds": [
+            "0218fdf4726406410c0dfdfcdfbb11f27c2253981f521be932268fb36456fdbf"
+          ]
+        },
+        {
+          "name": "v",
+          "filePath": "app.js",
+          "declarationId": "44504b3ff438f31ec5453b871e78cb96a8b80031e0e990c9e5f81575be487015",
+          "useIds": [
+            "355639bfdedbfc56b52e864719a7f908698234d43b42ea9365bccacbcb949660"
+          ]
+        },
+        {
+          "name": "res",
+          "filePath": "app.js",
+          "declarationId": "553e83ece04f4dc9a80b3689f99f87c73318771e5d2c034b99fc7491a63a5843",
+          "useIds": []
+        },
+        {
+          "name": "req",
+          "filePath": "app.js",
+          "declarationId": "59a296460adf12923f21f72a0e91dde82351d8c2892b21ef9a3276491b768d6f",
+          "useIds": [
+            "764e715c701906113c54c64decb382ca24c12f37fe10b1f9ad9806bed9460a45"
+          ]
+        },
+        {
+          "name": "res",
+          "filePath": "app.js",
+          "declarationId": "5b04bb9f903aecc82e11858442afd02b925269acdac7b71c869a0b0d73c20aa2",
+          "useIds": []
+        },
+        {
+          "name": "app",
+          "filePath": "app.js",
+          "declarationId": "77feaa5d63a4fe573f9f00cdf79824d2b2838f5d1911536732e7839e99a922c8",
+          "useIds": []
+        },
+        {
+          "name": "v",
+          "filePath": "app.js",
+          "declarationId": "a41bca55aa48e4b0bacfa22bd81bed52a8e7b8f355f22b62e0eb8b12d9b8b182",
+          "useIds": [
+            "89569d859686671a535c3480d6d8380f78edf2778f840cdef5eed11640336064"
+          ]
+        },
+        {
+          "name": "req",
+          "filePath": "app.js",
+          "declarationId": "b677d64160b8fc9bcd9da9c81865fd00a4f7e3699935126b7fb5bdb5a1f7d188",
+          "useIds": [
+            "c4e345a273701c8aaff5c1c918a3d78e5daa3a4180f6faa201e83691ff28e0eb"
+          ]
+        },
+        {
+          "name": "req",
+          "filePath": "app.js",
+          "declarationId": "cadb48fe0ea09e8ffefd1f2dd4106c4a2739ea414063db406a111a382b3ed74a",
+          "useIds": [
+            "69db56da47c02a4b88cf92bccb6cc9bc0e2f64c5492a03eeb36584ae465e1f35"
+          ]
+        },
+        {
+          "name": "req",
+          "filePath": "app.js",
+          "declarationId": "f2adc4740dff55363aed81c419ffec561697f2377e849e1faeebc7d67d948639",
+          "useIds": [
+            "861eb528feeb01bbae5b15b26553c8515a3f4d925dff0ee8956cb1b2e8a47726"
+          ]
+        },
+        {
+          "name": "v",
+          "filePath": "app.js",
+          "declarationId": "f6555b807434812e2615d8822aad32ff228d661adcb3bf5ecb427bb4bad74f09",
+          "useIds": [
+            "2a8242d4892b994cde823030a795a1181f1d039b5f439d666ab97c01702d58af"
+          ]
+        },
+        {
+          "name": "res",
+          "filePath": "app.js",
+          "declarationId": "f833ec1eb864a4d0ef9a860cad01dad4411536d6ae9db9029526fe306b8616fb",
+          "useIds": []
+        }
+      ],
+      "taintFlows": [
+        {
+          "sourceId": "afe8f982c2f1d75bb707fe10fd7155d9ab4c71d4be27a18308f4120299003843",
+          "sinkId": "f76a376ef36079cef5bc840025093e53b688fdd9915b2b3e6f2b1eb15b3d8f57",
+          "path": [
+            "afe8f982c2f1d75bb707fe10fd7155d9ab4c71d4be27a18308f4120299003843",
+            "a41bca55aa48e4b0bacfa22bd81bed52a8e7b8f355f22b62e0eb8b12d9b8b182",
+            "res.send"
+          ],
+          "state": "CONFIRMED"
+        }
+      ],
+      "interproceduralFlows": [
+        {
+          "id": "065f807dcd898f3da7dc351c5712bf77798539d97a345fe6e0c38a8c4968d2cf",
+          "callId": "f50e125cb57a991c3f8b7783869f34d649dd9b8387cd4cd4f7669cef4dca0d94",
+          "kind": "argument-to-parameter",
+          "sourceDefinitionId": "3e6935e4bd557667253a4353f1d35ba269cf53a2702ca6f60025e7f151de0453",
+          "targetDefinitionId": "6f95f0bdc295332b69a00805f567fccd6a2450be90460e3c1781a19bcd44fcde"
+        },
+        {
+          "id": "483f9abe85bd1f3798b38ff2f0e15bed5e1ed954c9ab788cc733a7c9b813f829",
+          "callId": "165447c59e5c8f74a1e9289c66acbe1d788687c53920f0146d6b6c7536e68136",
+          "kind": "argument-to-parameter",
+          "sourceDefinitionId": "f2adc4740dff55363aed81c419ffec561697f2377e849e1faeebc7d67d948639",
+          "targetDefinitionId": "65d2e0bdf7c67c95130d1a1666f3e2503cc0eeb25561b51f516698e5120af348"
+        },
+        {
+          "id": "539acbc036cabfab614eb4b3603a85ac87bd02bafccee52658d1acb876e8bd39",
+          "callId": "f50e125cb57a991c3f8b7783869f34d649dd9b8387cd4cd4f7669cef4dca0d94",
+          "kind": "argument-to-parameter",
+          "sourceDefinitionId": "44504b3ff438f31ec5453b871e78cb96a8b80031e0e990c9e5f81575be487015",
+          "targetDefinitionId": "2fe4699dff85353c965789335662b507d5559a20a3117fc1770cc9d1198d9d22"
+        },
+        {
+          "id": "fd8bfa1a821b13ef59c6ab5d206338cd23c5ba70c26b152b58043c8d4bf8111c",
+          "callId": "165447c59e5c8f74a1e9289c66acbe1d788687c53920f0146d6b6c7536e68136",
+          "kind": "return-to-receiver",
+          "sourceDefinitionId": "a698f36d9733f8c7e23fae4d159c4da652824a0672b4e2e6ae04f557d0e140a8",
+          "targetDefinitionId": "f6555b807434812e2615d8822aad32ff228d661adcb3bf5ecb427bb4bad74f09"
+        }
+      ],
+      "functionSummaries": [],
+      "callBindings": [
+        {
+          "callId": "165447c59e5c8f74a1e9289c66acbe1d788687c53920f0146d6b6c7536e68136",
+          "targetSymbolId": "c1466d683c0ef8e9b0aaae4bba8a983ab1c329143e7988937c951bb223326e46",
+          "argumentDefinitionIds": [
+            "f2adc4740dff55363aed81c419ffec561697f2377e849e1faeebc7d67d948639"
+          ],
+          "receiverDefinitionId": "f6555b807434812e2615d8822aad32ff228d661adcb3bf5ecb427bb4bad74f09"
+        },
+        {
+          "callId": "f50e125cb57a991c3f8b7783869f34d649dd9b8387cd4cd4f7669cef4dca0d94",
+          "targetSymbolId": "eca3f12486b4d8877432f93b0443fadaf75afe3553451b533dea9849fc3226ce",
+          "argumentDefinitionIds": [
+            "3e6935e4bd557667253a4353f1d35ba269cf53a2702ca6f60025e7f151de0453",
+            "44504b3ff438f31ec5453b871e78cb96a8b80031e0e990c9e5f81575be487015"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "c7653fb8cadcda0ca3d09a711dc82acada13b15cac345625b8956627ee09ef0f",
+      "filePath": "helpers.js",
+      "state": "INFERRED",
+      "definitions": [
+        {
+          "id": "2287063def72da466669e0977e0ca8ba9bf72087a49eed94b7441464459a8f82",
+          "filePath": "helpers.js",
+          "name": "pass",
+          "kind": "declaration"
+        },
+        {
+          "id": "2b3e1d746e03205b4f081d77ef68c789658a3cecd2a3ddd9b0ea5a25dd8ab280",
+          "filePath": "helpers.js",
+          "name": "reply",
+          "kind": "declaration"
+        },
+        {
+          "id": "2fe4699dff85353c965789335662b507d5559a20a3117fc1770cc9d1198d9d22",
+          "filePath": "helpers.js",
+          "name": "value",
+          "kind": "parameter"
+        },
+        {
+          "id": "65d2e0bdf7c67c95130d1a1666f3e2503cc0eeb25561b51f516698e5120af348",
+          "filePath": "helpers.js",
+          "name": "value",
+          "kind": "parameter"
+        },
+        {
+          "id": "6f95f0bdc295332b69a00805f567fccd6a2450be90460e3c1781a19bcd44fcde",
+          "filePath": "helpers.js",
+          "name": "res",
+          "kind": "parameter"
+        },
+        {
+          "id": "a698f36d9733f8c7e23fae4d159c4da652824a0672b4e2e6ae04f557d0e140a8",
+          "filePath": "helpers.js",
+          "name": "pass:return",
+          "kind": "return"
+        }
+      ],
+      "uses": [
+        {
+          "id": "4b30eb6d369a3eab2d329a954ffad1e792f13f86bd5499b8e0934d877da77001",
+          "filePath": "helpers.js",
+          "name": "value",
+          "definitionId": "2fe4699dff85353c965789335662b507d5559a20a3117fc1770cc9d1198d9d22"
+        },
+        {
+          "id": "6e2e9656d640f4d27b1596f1243e4ff2bf559b3d0685abb49c5eede06206778e",
+          "filePath": "helpers.js",
+          "name": "value",
+          "definitionId": "65d2e0bdf7c67c95130d1a1666f3e2503cc0eeb25561b51f516698e5120af348"
+        }
+      ],
+      "defUseChains": [
+        {
+          "definitionId": "2287063def72da466669e0977e0ca8ba9bf72087a49eed94b7441464459a8f82",
+          "useIds": []
+        },
+        {
+          "definitionId": "2b3e1d746e03205b4f081d77ef68c789658a3cecd2a3ddd9b0ea5a25dd8ab280",
+          "useIds": []
+        },
+        {
+          "definitionId": "2fe4699dff85353c965789335662b507d5559a20a3117fc1770cc9d1198d9d22",
+          "useIds": [
+            "4b30eb6d369a3eab2d329a954ffad1e792f13f86bd5499b8e0934d877da77001"
+          ]
+        },
+        {
+          "definitionId": "65d2e0bdf7c67c95130d1a1666f3e2503cc0eeb25561b51f516698e5120af348",
+          "useIds": [
+            "6e2e9656d640f4d27b1596f1243e4ff2bf559b3d0685abb49c5eede06206778e"
+          ]
+        },
+        {
+          "definitionId": "6f95f0bdc295332b69a00805f567fccd6a2450be90460e3c1781a19bcd44fcde",
+          "useIds": []
+        },
+        {
+          "definitionId": "a698f36d9733f8c7e23fae4d159c4da652824a0672b4e2e6ae04f557d0e140a8",
+          "useIds": []
+        }
+      ],
+      "lifetimes": [
+        {
+          "name": "pass",
+          "filePath": "helpers.js",
+          "declarationId": "2287063def72da466669e0977e0ca8ba9bf72087a49eed94b7441464459a8f82",
+          "useIds": []
+        },
+        {
+          "name": "reply",
+          "filePath": "helpers.js",
+          "declarationId": "2b3e1d746e03205b4f081d77ef68c789658a3cecd2a3ddd9b0ea5a25dd8ab280",
+          "useIds": []
+        },
+        {
+          "name": "value",
+          "filePath": "helpers.js",
+          "declarationId": "2fe4699dff85353c965789335662b507d5559a20a3117fc1770cc9d1198d9d22",
+          "useIds": [
+            "4b30eb6d369a3eab2d329a954ffad1e792f13f86bd5499b8e0934d877da77001"
+          ]
+        },
+        {
+          "name": "value",
+          "filePath": "helpers.js",
+          "declarationId": "65d2e0bdf7c67c95130d1a1666f3e2503cc0eeb25561b51f516698e5120af348",
+          "useIds": [
+            "6e2e9656d640f4d27b1596f1243e4ff2bf559b3d0685abb49c5eede06206778e"
+          ]
+        },
+        {
+          "name": "res",
+          "filePath": "helpers.js",
+          "declarationId": "6f95f0bdc295332b69a00805f567fccd6a2450be90460e3c1781a19bcd44fcde",
+          "useIds": []
+        },
+        {
+          "name": "pass:return",
+          "filePath": "helpers.js",
+          "declarationId": "a698f36d9733f8c7e23fae4d159c4da652824a0672b4e2e6ae04f557d0e140a8",
+          "useIds": []
+        }
+      ],
+      "taintFlows": [
+        {
+          "sourceId": "8f79b7e6cee6f99e2e780d9336abff91a6204c18f34f3f9d75d5f68c6a51b48d",
+          "sinkId": "524698b832a9076ce10910131d384e03f894e4ad0bef759d5d139adfb53dc431",
+          "path": [
+            "8f79b7e6cee6f99e2e780d9336abff91a6204c18f34f3f9d75d5f68c6a51b48d",
+            "44504b3ff438f31ec5453b871e78cb96a8b80031e0e990c9e5f81575be487015",
+            "2fe4699dff85353c965789335662b507d5559a20a3117fc1770cc9d1198d9d22",
+            "res.send"
+          ],
+          "state": "CONFIRMED"
+        }
+      ],
+      "interproceduralFlows": [
+        {
+          "id": "467ec7a343e54d0d9906a2c482db1404d31f06567619d37164061ea509b9a30b",
+          "callId": "f651f82a4040db6d4223214a647dfefe0ab64aa7c9ce69e4f48723a65684fd3b",
+          "kind": "return-value",
+          "sourceDefinitionId": "65d2e0bdf7c67c95130d1a1666f3e2503cc0eeb25561b51f516698e5120af348",
+          "targetDefinitionId": "a698f36d9733f8c7e23fae4d159c4da652824a0672b4e2e6ae04f557d0e140a8"
+        }
+      ],
+      "functionSummaries": [
+        {
+          "symbolId": "19544806fc7d6bb072953bb193de840d0ef86ea1eee4f4d1a11720df5b66b86f",
+          "filePath": "helpers.js",
+          "parameterDefinitionIds": [
+            [
+              "65d2e0bdf7c67c95130d1a1666f3e2503cc0eeb25561b51f516698e5120af348"
+            ]
+          ],
+          "returnDefinitionIds": [
+            "a698f36d9733f8c7e23fae4d159c4da652824a0672b4e2e6ae04f557d0e140a8"
+          ]
+        },
+        {
+          "symbolId": "52fac28a5b4df35a3c7614985ab35f6b5fbad27966351186822574205a983b68",
+          "filePath": "helpers.js",
+          "parameterDefinitionIds": [
+            [
+              "6f95f0bdc295332b69a00805f567fccd6a2450be90460e3c1781a19bcd44fcde"
+            ],
+            [
+              "2fe4699dff85353c965789335662b507d5559a20a3117fc1770cc9d1198d9d22"
+            ]
+          ],
+          "returnDefinitionIds": []
+        }
+      ],
+      "callBindings": []
+    }
+  ]
+}

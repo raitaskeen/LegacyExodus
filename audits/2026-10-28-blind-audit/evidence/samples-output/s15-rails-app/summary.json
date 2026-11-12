@@ -1,0 +1,15 @@
+{
+  "analysisDisposition": {
+    "contract": "r01-analysis-disposition-v1",
+    "files": []
+  },
+  "projectName": "s15-rails-app",
+  "fileCount": 4,
+  "dependencyCount": 0,
+  "frameworkCount": 2,
+  "languages": [
+    "ruby"
+  ],
+  "enumerationFailureCount": 0,
+  "discoveryComplete": true
+}

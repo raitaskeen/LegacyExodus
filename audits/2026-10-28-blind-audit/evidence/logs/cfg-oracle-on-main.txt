@@ -1,0 +1,26 @@
+﻿== main-c694d64
+p01_switch_continue: blocks=11 loops=1 deadLoops=0 exc=[] ok
+p02_labelled_finally: blocks=16 loops=2 deadLoops=0 exc=[] PROBLEMS: duplicate statement ids
+p03_forever_break: blocks=8 loops=1 deadLoops=0 exc=[] ok
+p04_forever_update: blocks=6 loops=1 deadLoops=0 exc=[] ok
+p05_test_false: blocks=6 loops=0 deadLoops=0 exc=[] ok
+p06_while_true_return: blocks=8 loops=1 deadLoops=0 exc=[] ok
+p07_forof_throwing_right: blocks=8 loops=1 deadLoops=0 exc=[[CallExpression@36]#3->[ExpressionStatement@65]#5 ; [ExpressionStatement@43]#7->[ExpressionStatement@65]#5] ok
+p08_forin_member_left: blocks=8 loops=1 deadLoops=0 exc=[[ExpressionStatement@44]#1->[ExpressionStatement@65]#7 ; [ForInStatement@25]#5->[ExpressionStatement@65]#7] ok
+p09_update_throws: blocks=9 loops=1 deadLoops=0 exc=[[ExpressionStatement@51]#4->[ExpressionStatement@72]#7 ; [AssignmentExpression@38]#2->[ExpressionStatement@72]#7] ok
+p10_labelled_clause_throws: blocks=9 loops=1 deadLoops=0 exc=[[ExpressionStatement@59]#4->[ExpressionStatement@80]#0] ok
+p11_loop_first_in_try: blocks=8 loops=1 deadLoops=0 exc=[[ExpressionStatement@34]#1->[ExpressionStatement@55]#6 ; [WhileStatement@21]#3->[ExpressionStatement@55]#6] ok
+p12_nested_forever: blocks=9 loops=2 deadLoops=0 exc=[] PROBLEMS: spurious reachable loop at [ForStatement@23]#6
+p13_do_for_mix: blocks=22 loops=4 deadLoops=0 exc=[] ok
+p14_body_ends_continue: blocks=7 loops=1 deadLoops=0 exc=[] ok
+p15_unbraced_body: blocks=9 loops=1 deadLoops=0 exc=[] ok
+p16_continue_in_finally: blocks=12 loops=1 deadLoops=0 exc=[] ok
+p17_multi_init: blocks=6 loops=1 deadLoops=0 exc=[] ok
+p18_switch_in_inner: blocks=14 loops=2 deadLoops=0 exc=[] ok
+p19_labelled_block_break: blocks=7 loops=1 deadLoops=0 exc=[] PROBLEMS: spurious reachable loop at [ForStatement@19]#0
+p20_unreachable_loop: blocks=8 loops=1 deadLoops=1 exc=[] ok
+p21_for_await: blocks=8 loops=1 deadLoops=0 exc=[] ok
+p22_return_in_body: blocks=7 loops=1 deadLoops=0 exc=[] PROBLEMS: spurious reachable loop at [ForStatement@15]#0
+p23_while_after_stmt: blocks=5 loops=1 deadLoops=0 exc=[] ok
+p24_nested_continue_both: blocks=16 loops=2 deadLoops=0 exc=[] ok
+p25_loop_in_catch_finally: blocks=16 loops=2 deadLoops=0 exc=[[ExpressionStatement@21]#9->[VariableDeclaration@45]#2] ok

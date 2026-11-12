@@ -1,0 +1,77 @@
+﻿
+=== s02 TS declarations: symbols, edges, unused imports
+ src/defs.ts export f (exported)
+ src/defs.ts function f (exported)
+ src/defs.ts export Base (exported)
+ src/defs.ts class Base (exported)
+ src/use.ts import Color
+ src/use.ts import Dir
+ src/use.ts import NS
+ src/use.ts import Base
+ src/use.ts import Shape
+ src/use.ts import Id
+ src/use.ts variable s
+ src/use.ts variable i
+ src/use.ts export Impl (exported)
+ src/use.ts class Impl (exported)
+ src/use.ts method run (exported)
+ import->export edges: [ "import:Base@src/use.ts -> export:Base@src/defs.ts" ]
+ module edges: [ "src/use.ts -> src/defs.ts (./defs)", "src/use.ts -> src/defs.ts (./defs)" ]
+ unusedImports: []
+
+=== s03 TS resolution: module edges
+ src/d.ts -> src/a.ts (./a)
+ calls: [ "src/b.ts:hello=UNRESOLVED", "src/d.ts:hello=RESOLVED", "src/c.ts:hello=UNRESOLVED" ]
+
+=== s04 JSX: references, unused imports, dead code
+ references: [ "src/Card.tsx:identifier:Button=RESOLVED", "src/App.jsx:identifier:Button=RESOLVED" ]
+ unusedImports: [ "src/Card.tsx:React" ]
+ unusedExports: [ "src/App.jsx:default", "src/Button.jsx:Unused", "src/Card.tsx:Card" ]
+ deadCode: []
+
+=== s05 Express routes and middleware
+ GET /x handler=auth middleware=[auth] state=CONFIRMED
+ GET /public handler=handler middleware=[auth] state=CONFIRMED
+ GET env handler=- middleware=[auth] state=CONFIRMED
+ GET /secret handler=handler middleware=[auth] state=CONFIRMED
+ chains: [{"filePath":"app.js","middleware":["admin","auth"]}]
+ entryPoints: [{"filePath":"app.js","reason":"conventional-file"},{"filePath":"app.js","reason":"http-listener"}]
+
+=== s06 taint flows (per sink line)
+ INFERRED path=4 sink=res.send
+ CONFIRMED path=3 sink=res.send
+ CONFIRMED path=3 sink=res.send
+ total flows: 3
+
+=== s07 namespace import edge
+ import:lib@main.js -> export:a@lib.js
+ calls: [ "lib.b=RESOLVED->export:b@lib.js" ]
+ unusedExports: [ "lib.js:b" ]
+
+=== s08 class expression methods
+ class Outer container=-
+ method m container=Outer
+ export Inner container=-
+ variable Inner container=-
+ method n container=-
+
+=== s09 dynamic import / computed require
+ unusedExports: [ "cjs.js:default", "lib.js:lazy", "main.js:load" ]
+
+=== s10 file order in files.json
+  _x.js | a.js | ä.js | B.js | Z.js
+  codepoint order: B.js | Z.js | _x.js | a.js | ä.js
+
+=== s11 TS-compiled CommonJS
+ lib.js export hello
+ lib.js variable hello
+ lib.js function hello
+ lib.js export hello
+ lib.js variable hello
+ main.js variable lib_1
+ main.js import lib_1
+ calls: [ "Object.defineProperty=UNRESOLVED", "lib_1.hello=UNRESOLVED", "require=UNRESOLVED" ]
+
+=== s12 .d.ts ambient declarations
+ use.ts import f
+ deadCode: []

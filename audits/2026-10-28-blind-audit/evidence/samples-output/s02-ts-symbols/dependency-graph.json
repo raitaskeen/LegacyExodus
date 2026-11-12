@@ -1,0 +1,123 @@
+{
+  "projectId": "6c528306-ecfe-4061-8df9-56dffc05f876",
+  "analysisRunId": "41dfe04c-813d-4a36-a291-4640c86332ea",
+  "nodes": [
+    {
+      "id": "symbol:240bec2b96c771e8cd4d30a87c518bd3f1d3eb181088917c1ba843a9891992bd",
+      "filePath": "src/use.ts",
+      "symbolId": "240bec2b96c771e8cd4d30a87c518bd3f1d3eb181088917c1ba843a9891992bd"
+    },
+    {
+      "id": "symbol:2a3a4e2481aa91a707c68ed6b13d24697cd2f35bbdf1e72d32db2bdbe3ba3e47",
+      "filePath": "src/use.ts",
+      "symbolId": "2a3a4e2481aa91a707c68ed6b13d24697cd2f35bbdf1e72d32db2bdbe3ba3e47"
+    },
+    {
+      "id": "symbol:3f6c37f19796ca3ed095e192365f8b53f4425d0b3098075bd1561f005531a4ca",
+      "filePath": "src/use.ts",
+      "symbolId": "3f6c37f19796ca3ed095e192365f8b53f4425d0b3098075bd1561f005531a4ca"
+    },
+    {
+      "id": "symbol:40e6cbf551b3b86841790b53ef922d75c4327fc857c978659dc0291937b01c2e",
+      "filePath": "src/defs.ts",
+      "symbolId": "40e6cbf551b3b86841790b53ef922d75c4327fc857c978659dc0291937b01c2e"
+    },
+    {
+      "id": "symbol:4d5c054a746e175c734495b85f42a74ac8c3d16744be9bfc3a728446f17cf619",
+      "filePath": "src/defs.ts",
+      "symbolId": "4d5c054a746e175c734495b85f42a74ac8c3d16744be9bfc3a728446f17cf619"
+    },
+    {
+      "id": "symbol:5d59595ecfea1ceaabf3535c328483796bdb9eba8d10235e219e1b553a57b653",
+      "filePath": "src/use.ts",
+      "symbolId": "5d59595ecfea1ceaabf3535c328483796bdb9eba8d10235e219e1b553a57b653"
+    },
+    {
+      "id": "symbol:77751d35fd93bc4b3d0d6e73f3d7f316af5ef11df56c64c65209fda47c582898",
+      "filePath": "src/use.ts",
+      "symbolId": "77751d35fd93bc4b3d0d6e73f3d7f316af5ef11df56c64c65209fda47c582898"
+    },
+    {
+      "id": "symbol:ab2a51b5e5ab4b95c0c62e01b7d6dd11fc551b4be21a7778ce5afabe17a8d024",
+      "filePath": "src/defs.ts",
+      "symbolId": "ab2a51b5e5ab4b95c0c62e01b7d6dd11fc551b4be21a7778ce5afabe17a8d024"
+    },
+    {
+      "id": "symbol:ae485ad35961eb420e9a79251cb62bab2f6e1716282d63c14f6bba0c87cc6871",
+      "filePath": "src/use.ts",
+      "symbolId": "ae485ad35961eb420e9a79251cb62bab2f6e1716282d63c14f6bba0c87cc6871"
+    },
+    {
+      "id": "symbol:c03f261690f6440a82b5f366cdbb07c691ac74c1e28bd1d12bea13d31c2289d3",
+      "filePath": "src/use.ts",
+      "symbolId": "c03f261690f6440a82b5f366cdbb07c691ac74c1e28bd1d12bea13d31c2289d3"
+    },
+    {
+      "id": "symbol:ceeee4260050edb5623c24ed4c607438eb507cd24c9f30a068796dfa95157d48",
+      "filePath": "src/use.ts",
+      "symbolId": "ceeee4260050edb5623c24ed4c607438eb507cd24c9f30a068796dfa95157d48"
+    },
+    {
+      "id": "symbol:d2af0a0e7814049aeb385dfa1708acad3e8d943fd0ea18d0ee93731ccb6c55c1",
+      "filePath": "src/defs.ts",
+      "symbolId": "d2af0a0e7814049aeb385dfa1708acad3e8d943fd0ea18d0ee93731ccb6c55c1"
+    },
+    {
+      "id": "symbol:e313d1fb5bcf97782b09ce0317159bfb7b00b36fc834de99e851fc09060ee5c9",
+      "filePath": "src/use.ts",
+      "symbolId": "e313d1fb5bcf97782b09ce0317159bfb7b00b36fc834de99e851fc09060ee5c9"
+    },
+    {
+      "id": "symbol:f3765d7acbd376d20df22b3f56d76f2ff983f4db1d662d840cb48a21d50db75c",
+      "filePath": "src/use.ts",
+      "symbolId": "f3765d7acbd376d20df22b3f56d76f2ff983f4db1d662d840cb48a21d50db75c"
+    },
+    {
+      "id": "symbol:f8cc5d8f696b8a49773866580de334a592d7e72497140f98b4be37fd09210567",
+      "filePath": "src/use.ts",
+      "symbolId": "f8cc5d8f696b8a49773866580de334a592d7e72497140f98b4be37fd09210567"
+    }
+  ],
+  "edges": [
+    {
+      "id": "5962ba7cb1d0d81271095a22733966181fb33858a723e8925582db2c3a1d9e9b",
+      "sourceFilePath": "src/use.ts",
+      "targetFilePath": "src/defs.ts",
+      "importSymbolId": "ceeee4260050edb5623c24ed4c607438eb507cd24c9f30a068796dfa95157d48",
+      "targetExportSymbolId": "40e6cbf551b3b86841790b53ef922d75c4327fc857c978659dc0291937b01c2e",
+      "moduleSpecifier": "./defs"
+    }
+  ],
+  "cycles": [],
+  "moduleGraph": {
+    "contract": "f07-import-relations-v1",
+    "edges": [
+      {
+        "id": "7373f1f2b2c62c9122d3010731a3fad5bf4344817c4552057b7b667fdb30a558",
+        "sourceFilePath": "src/use.ts",
+        "targetFilePath": "src/defs.ts",
+        "moduleSpecifier": "./defs",
+        "sourceAnchor": {
+          "kind": "offset",
+          "start": 47,
+          "end": 87
+        },
+        "form": "esm-binding",
+        "sourcePhase": "type"
+      },
+      {
+        "id": "eb86bf99da4663daf0972b4371a40e949437e59c6a75f67b949251d2e88e35f1",
+        "sourceFilePath": "src/use.ts",
+        "targetFilePath": "src/defs.ts",
+        "moduleSpecifier": "./defs",
+        "sourceAnchor": {
+          "kind": "offset",
+          "start": 0,
+          "end": 46
+        },
+        "form": "esm-binding",
+        "sourcePhase": "value"
+      }
+    ]
+  }
+}

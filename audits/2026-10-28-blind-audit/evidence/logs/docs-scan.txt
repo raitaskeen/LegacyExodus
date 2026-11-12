@@ -1,0 +1,473 @@
+﻿DOCS 282
+.agents/README.md	46	2026-09-23
+.agents/context/ENGINE.md	73	2026-09-23
+.agents/core/KERNEL.md	101	2026-09-23
+.agents/protocols/LIFECYCLE.md	102	2026-09-23
+.agents/protocols/ROLES.md	51	2026-09-23
+.agents/skills/legacyexodus-architecture-design/SKILL.md	54	2026-09-23
+.agents/skills/legacyexodus-code-audit/SKILL.md	54	2026-09-23
+.agents/skills/legacyexodus-docs-audit/SKILL.md	59	2026-09-23
+.agents/skills/legacyexodus-forensic-remediation/SKILL.md	58	2026-09-23
+.agents/skills/legacyexodus-git-governance/SKILL.md	90	2026-09-23
+.agents/skills/legacyexodus-performance-audit/SKILL.md	65	2026-09-23
+.agents/skills/legacyexodus-red-team-review/SKILL.md	66	2026-09-23
+.agents/skills/legacyexodus-test-verification/SKILL.md	77	2026-10-28
+.agents/templates/REPORTS.md	65	2026-09-23
+.github/ISSUE_TEMPLATE/architecture_proposal.md	26	2026-08-27
+.github/ISSUE_TEMPLATE/audit_finding.md	38	2026-08-27
+.github/ISSUE_TEMPLATE/bug_report.md	39	2026-08-08
+.github/ISSUE_TEMPLATE/custom.md	11	2026-08-08
+.github/ISSUE_TEMPLATE/feature_request.md	21	2026-08-08
+.github/copilot-instructions.md	303	2026-09-01
+.github/pull_request_template.md	61	2026-10-28
+AGENTS.md	6	2026-09-23
+CHANGELOG.md	231	2026-10-28
+CODE_OF_CONDUCT.md	66	2026-08-24
+CONTRIBUTING.md	67	2026-10-28
+GOVERNANCE.md	122	2026-09-16
+README.md	144	2026-09-22
+ROADMAP.md	61	2026-09-03
+SECURITY.md	37	2026-09-22
+SUPPORT.md	121	2026-08-24
+docs/AI_CONTEXT.md	62	2026-09-16
+docs/CURRENT_IMPLEMENTATION.md	83	2026-09-22
+docs/DOCUMENTATION_MAP.md	145	2026-09-16
+docs/DOCUMENTATION_RULES.md	460	2026-09-10
+docs/GLOSSARY.md	1812	2026-08-06
+docs/LEGACYEXODUS.md	12	2026-09-10
+docs/PROJECT_CONTEXT.md	77	2026-09-16
+docs/README.md	44	2026-09-10
+docs/adr/ADR-001-project-state-architecture.md	38	2026-09-10
+docs/adr/ADR-002-event-system-governance.md	40	2026-09-12
+docs/adr/ADR-003-plugin-system.md	35	2026-09-10
+docs/adr/ADR-004-ai-gateway.md	34	2026-08-24
+docs/adr/ADR-005-storage-strategy.md	45	2026-09-10
+docs/adr/ADR-006-security-model.md	46	2026-10-28
+docs/adr/ADR-007-migration-pipeline.md	36	2026-08-24
+docs/api/README.md	1	2026-08-06
+docs/api/ai-agent-api.md	1	2026-08-06
+docs/api/command-contracts.md	71	2026-09-03
+docs/api/event-contracts.md	83	2026-09-12
+docs/api/plugin-api.md	68	2026-08-24
+docs/api/query-contracts.md	1	2026-08-06
+docs/architecture/README.md	125	2026-09-16
+docs/architecture/ai-architecture.md	324	2026-09-10
+docs/architecture/communication-patterns.md	217	2026-09-16
+docs/architecture/component-map.md	58	2026-09-10
+docs/architecture/components/ai-gateway.md	106	2026-09-10
+docs/architecture/components/compiler-service.md	97	2026-09-10
+docs/architecture/components/discovery-service.md	88	2026-09-22
+docs/architecture/components/governance-engine.md	111	2026-09-10
+docs/architecture/components/graph-service.md	98	2026-09-22
+docs/architecture/components/knowledge-service.md	84	2026-09-22
+docs/architecture/components/orchestrator.md	301	2026-09-16
+docs/architecture/components/parser-service.md	92	2026-09-22
+docs/architecture/components/storage-service.md	131	2026-09-22
+docs/architecture/data-flow.md	46	2026-09-10
+docs/architecture/deployment-model.md	235	2026-09-10
+docs/architecture/failure-recovery.md	381	2026-08-06
+docs/architecture/plugin-architecture.md	416	2026-09-22
+docs/architecture/runtime-architecture.md	57	2026-09-12
+docs/architecture/scalability-plan.md	273	2026-09-10
+docs/architecture/security-architecture.md	155	2026-08-20
+docs/architecture/stages/nolara-struct-architecture.md	1	2026-08-06
+docs/architecture/stages/pipeline-orchestration.md	1	2026-08-06
+docs/architecture/stages/vymos-gate-architecture.md	1	2026-08-06
+docs/architecture/stages/vyrix-scout-architecture.md	1	2026-08-06
+docs/architecture/stages/zelvox-forge-architecture.md	1	2026-08-06
+docs/architecture/system-overview.md	67	2026-09-10
+docs/architecture/technology-stack.md	53	2026-09-16
+docs/community/CODE_OF_CONDUCT.md	16	2026-08-24
+docs/community/community-guide.md	1	2026-08-06
+docs/community/roadmap.md	1	2026-08-06
+docs/decisions/ai-decisions.md	1	2026-08-06
+docs/decisions/architecture-decisions.md	1	2026-08-06
+docs/decisions/database-decisions.md	1	2026-08-06
+docs/decisions/runtime-decisions.md	1	2026-08-06
+docs/decisions/technology-decisions.md	1	2026-08-06
+docs/development/ci-cd-strategy.md	1	2026-08-05
+docs/development/cli/commands.md	189	2026-10-28
+docs/development/cli/configuration.md	95	2026-09-22
+docs/development/cli/plugins.md	1	2026-08-06
+docs/development/cli/troubleshooting.md	67	2026-09-22
+docs/development/coding-standards.md	65	2026-08-24
+docs/development/contribution-guide.md	113	2026-10-28
+docs/development/development-guide.md	65	2026-08-24
+docs/development/environment-setup.md	95	2026-09-10
+docs/development/git-workflow.md	1	2026-08-05
+docs/development/local-development.md	105	2026-10-28
+docs/development/release-process.md	1	2026-08-05
+docs/development/roadmap.md	1	2026-08-05
+docs/development/testing-strategy.md	57	2026-10-28
+docs/development/testing/ai-evaluation.md	1	2026-08-06
+docs/development/testing/compiler-testing.md	1	2026-08-06
+docs/development/testing/integration-testing.md	49	2026-08-24
+docs/development/testing/migration-testing.md	1	2026-08-06
+docs/development/testing/unit-testing.md	87	2026-09-10
+docs/domain/aggregate-lifecycle.md	1	2026-08-06
+docs/domain/aggregates.md	1	2026-08-05
+docs/domain/bounded-context-map.md	1	2026-08-06
+docs/domain/bounded-contexts.md	1	2026-08-05
+docs/domain/business-rule-model.md	1	2026-08-06
+docs/domain/dependency-model.md	1	2026-08-06
+docs/domain/domain-events.md	1	2026-08-05
+docs/domain/domain-invariants.md	1	2026-08-06
+docs/domain/domain-model.md	1	2026-08-05
+docs/domain/domain-rules.md	1	2026-08-06
+docs/domain/entities.md	1	2026-08-05
+docs/domain/knowledge-graph.md	1	2026-08-06
+docs/domain/state-model.md	1	2026-08-06
+docs/domain/symbol-model.md	138	2026-09-22
+docs/domain/ubiquitous-language.md	1	2026-08-05
+docs/domain/value-objects.md	1	2026-08-05
+docs/domain/workflows.md	1	2026-08-05
+docs/governance/AGENT_OPERATING_MODEL.md	420	2026-09-22
+docs/governance/PERMANENT_CHARTER.md	354	2026-09-06
+docs/guides/architecture-guide.md	1	2026-08-06
+docs/guides/contributor-guide.md	1	2026-08-06
+docs/guides/developer-guide.md	1	2026-08-06
+docs/guides/writing-documentation.md	1	2026-08-06
+docs/implementation/ai-agent-system.md	1	2026-08-06
+docs/implementation/cli-design.md	93	2026-09-22
+docs/implementation/compiler-integration.md	1	2026-08-06
+docs/implementation/core-engine.md	38	2026-09-10
+docs/implementation/event-system.md	50	2026-09-12
+docs/implementation/knowledge-graph.md	52	2026-09-10
+docs/implementation/parser-strategy.md	53	2026-09-10
+docs/implementation/plugin-system.md	1	2026-08-06
+docs/implementation/project-state-model.md	42	2026-08-24
+docs/implementation/storage-layer.md	200	2026-09-22
+docs/integrations/README.md	1	2026-08-06
+docs/integrations/ai-providers/README.md	1	2026-08-06
+docs/integrations/ai-providers/anthropic.md	1	2026-08-06
+docs/integrations/ai-providers/local-models.md	1	2026-08-06
+docs/integrations/ai-providers/openai.md	1	2026-08-06
+docs/integrations/databases/mongodb.md	1	2026-08-06
+docs/integrations/databases/mysql.md	1	2026-08-06
+docs/integrations/databases/postgresql.md	1	2026-08-06
+docs/integrations/languages/javascript.md	1	2026-08-06
+docs/integrations/languages/php.md	1	2026-08-06
+docs/integrations/languages/rust.md	1	2026-08-06
+docs/integrations/languages/typescript.md	1	2026-08-06
+docs/operations/README.md	1	2026-08-06
+docs/operations/deployment/deployment-model.md	1	2026-08-06
+docs/operations/deployment/environment-strategy.md	1	2026-08-06
+docs/operations/incident-response/failure-handling.md	1	2026-08-06
+docs/operations/incident-response/recovery-process.md	1	2026-08-06
+docs/operations/monitoring/logging-strategy.md	1	2026-08-06
+docs/operations/monitoring/metrics.md	1	2026-08-06
+docs/operations/monitoring/observability.md	1	2026-08-06
+docs/pipeline/nolara-struct/README.md	1	2026-08-06
+docs/pipeline/nolara-struct/graph-generation.md	1	2026-08-06
+docs/pipeline/nolara-struct/knowledge-model.md	1	2026-08-06
+docs/pipeline/pipeline-overview.md	39	2026-09-10
+docs/pipeline/vymos-gate/README.md	1	2026-08-06
+docs/pipeline/vymos-gate/approval-system.md	1	2026-08-06
+docs/pipeline/vymos-gate/validation-model.md	1	2026-08-06
+docs/pipeline/vyrix-scout/README.md	1	2026-08-06
+docs/pipeline/vyrix-scout/data-output.md	1	2026-08-06
+docs/pipeline/vyrix-scout/discovery-model.md	1	2026-08-06
+docs/pipeline/zelvox-forge/README.md	1	2026-08-06
+docs/pipeline/zelvox-forge/agent-workflow.md	1	2026-08-06
+docs/pipeline/zelvox-forge/generation-model.md	1	2026-08-06
+docs/product/competitive-positioning.md	1	2026-08-06
+docs/product/enterprise-value.md	1	2026-08-06
+docs/product/feature-overview.md	1	2026-08-06
+docs/product/problem-statement.md	1	2026-08-06
+docs/product/solution-overview.md	1	2026-08-06
+docs/product/success-metrics.md	1	2026-08-06
+docs/product/target-users.md	1	2026-08-06
+docs/product/use-cases.md	1	2026-08-06
+docs/product/vision.md	1	2026-08-06
+docs/research/ai-model-evaluation.md	1	2026-08-05
+docs/research/competitor-analysis.md	1	2026-08-05
+docs/research/competitors.md	1	2026-08-05
+docs/research/experiments.md	1	2026-08-05
+docs/research/market-analysis.md	1	2026-08-05
+docs/research/parser-research.md	1	2026-08-05
+docs/research/research-papers.md	1	2026-08-05
+docs/research/rust-migration-research.md	1	2026-08-05
+docs/research/technology-evaluation.md	1	2026-08-05
+docs/reviews/ai-review.md	1	2026-08-05
+docs/reviews/architecture-decision-log.md	1	2026-08-05
+docs/reviews/architecture-review.md	1	2026-08-05
+docs/reviews/dependency-review.md	1	2026-08-05
+docs/reviews/performance-review.md	1	2026-08-05
+docs/reviews/security-review.md	1	2026-08-05
+docs/reviews/technology-review.md	1	2026-08-05
+docs/security/ai-safety/agent-isolation.md	1	2026-08-06
+docs/security/ai-safety/model-risk-management.md	1	2026-08-06
+docs/security/ai-safety/prompt-injection-defense.md	1	2026-08-06
+docs/security/ai-security.md	1	2026-08-05
+docs/security/compliance-model.md	1	2026-08-05
+docs/security/compliance/audit-model.md	1	2026-08-06
+docs/security/compliance/data-classification.md	1	2026-08-06
+docs/security/compliance/enterprise-requirements.md	1	2026-08-06
+docs/security/data-protection.md	1	2026-08-05
+docs/security/governance-model.md	1	2026-08-05
+docs/security/sandbox-strategy.md	1	2026-08-05
+docs/security/secret-management.md	1	2026-08-05
+docs/security/security-principles.md	37	2026-09-22
+docs/security/threat-model.md	1	2026-08-05
+docs/templates/adr-template.md	1	2026-08-05
+docs/templates/architecture-review-template.md	1	2026-08-05
+docs/templates/bug-report-template.md	1	2026-08-05
+docs/templates/design-review-template.md	1	2026-08-05
+docs/templates/feature-request-template.md	1	2026-08-05
+docs/templates/security-review-template.md	1	2026-08-05
+legacy-exodus-core/benchmarks/.cache/express/Charter.md	93	
+legacy-exodus-core/benchmarks/.cache/express/Code-Of-Conduct.md	140	
+legacy-exodus-core/benchmarks/.cache/express/Collaborator-Guide.md	52	
+legacy-exodus-core/benchmarks/.cache/express/Contributing.md	210	
+legacy-exodus-core/benchmarks/.cache/express/History.md	3657	
+legacy-exodus-core/benchmarks/.cache/express/Readme-Guide.md	126	
+legacy-exodus-core/benchmarks/.cache/express/Readme.md	261	
+legacy-exodus-core/benchmarks/.cache/express/Release-Process.md	200	
+legacy-exodus-core/benchmarks/.cache/express/Security.md	57	
+legacy-exodus-core/benchmarks/.cache/express/Triager-Guide.md	71	
+legacy-exodus-core/benchmarks/.cache/express/benchmarks/README.md	35	
+legacy-exodus-core/benchmarks/.cache/express/examples/README.md	30	
+legacy-exodus-core/benchmarks/.cache/express/examples/markdown/views/index.md	4	
+legacy-exodus-core/benchmarks/.cache/fastify/CODE_OF_CONDUCT.md	4	
+legacy-exodus-core/benchmarks/.cache/fastify/CONTRIBUTING.md	165	
+legacy-exodus-core/benchmarks/.cache/fastify/EXPENSE_POLICY.md	106	
+legacy-exodus-core/benchmarks/.cache/fastify/GOVERNANCE.md	4	
+legacy-exodus-core/benchmarks/.cache/fastify/PROJECT_CHARTER.md	127	
+legacy-exodus-core/benchmarks/.cache/fastify/README.md	420	
+legacy-exodus-core/benchmarks/.cache/fastify/SECURITY.md	4	
+legacy-exodus-core/benchmarks/.cache/fastify/SPONSORS.md	24	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Benchmarking.md	61	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Contributing.md	195	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Database.md	322	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Delay-Accepting-Requests.md	606	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Detecting-When-Clients-Abort.md	173	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Ecosystem.md	751	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Fluent-Schema.md	127	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Getting-Started.md	621	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Index.md	44	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Migration-Guide-V3.md	288	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Migration-Guide-V4.md	271	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Migration-Guide-V5.md	723	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Plugins-Guide.md	521	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Prototype-Poisoning.md	384	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Recommendations.md	354	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Serverless.md	587	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Style-Guide.md	247	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Testing.md	482	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Write-Plugin.md	104	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Write-Type-Provider.md	35	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/ContentTypeParser.md	256	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Decorators.md	567	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Encapsulation.md	191	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md	371	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/HTTP2.md	95	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Hooks.md	901	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Index.md	74	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/LTS.md	87	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Lifecycle.md	84	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Logging.md	261	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Middleware.md	78	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Plugins.md	237	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Principles.md	74	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Reply.md	980	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Request.md	280	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Routes.md	794	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Server.md	2052	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Type-Providers.md	257	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/TypeScript.md	1591	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Validation-and-Serialization.md	991	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Warnings.md	58	
+legacy-exodus-core/benchmarks/.cache/fastify/docs/index.md	25	
+legacy-exodus-core/benchmarks/.cache/fastify/test/bundler/README.md	30	
+legacy-exodus-core/benchmarks/BENCHMARK_REPORT.md	136	2026-08-24
+legacy-exodus-core/benchmarks/golden/README.md	25	2026-08-22
+
+BROKEN 166
+legacy-exodus-core/benchmarks/.cache/express/Readme-Guide.md -> #examples (missing anchor)
+legacy-exodus-core/benchmarks/.cache/express/Readme.md -> #Installation (missing anchor)
+legacy-exodus-core/benchmarks/.cache/express/Readme.md -> #Features (missing anchor)
+legacy-exodus-core/benchmarks/.cache/express/Readme.md -> #docs--community (missing anchor)
+legacy-exodus-core/benchmarks/.cache/express/Readme.md -> #Quick-Start (missing anchor)
+legacy-exodus-core/benchmarks/.cache/express/Readme.md -> #Running-Tests (missing anchor)
+legacy-exodus-core/benchmarks/.cache/express/Readme.md -> #Philosophy (missing anchor)
+legacy-exodus-core/benchmarks/.cache/express/Readme.md -> #Examples (missing anchor)
+legacy-exodus-core/benchmarks/.cache/express/Readme.md -> #Contributing (missing anchor)
+legacy-exodus-core/benchmarks/.cache/express/Readme.md -> #tc-technical-committee (missing anchor)
+legacy-exodus-core/benchmarks/.cache/express/Readme.md -> #triagers (missing anchor)
+legacy-exodus-core/benchmarks/.cache/express/Readme.md -> #license (missing anchor)
+legacy-exodus-core/benchmarks/.cache/express/Security.md -> #reporting-a-bug (missing anchor)
+legacy-exodus-core/benchmarks/.cache/express/Security.md -> #disclosure-policy (missing anchor)
+legacy-exodus-core/benchmarks/.cache/express/Security.md -> #comments-on-this-policy (missing anchor)
+legacy-exodus-core/benchmarks/.cache/express/Security.md -> #reporting-a-bug (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/README.md -> ./docs/Guides/Ecosystem.md#core (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/README.md -> ./docs/Guides/Ecosystem.md#community (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Ecosystem.md -> #core (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Ecosystem.md -> #community (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Ecosystem.md -> #core (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Ecosystem.md -> #community (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Ecosystem.md -> #community-tools (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Migration-Guide-V3.md -> ../Reference/Server.md#factory-connection-timeout (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Migration-Guide-V3.md -> ../Reference/Server.md#factory-keep-alive-timeout (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Migration-Guide-V3.md -> ../Reference/Plugins.md#async-await (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Plugins-Guide.md -> #distribution (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Recommendations.md -> #capacity (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Recommendations.md -> #multiple (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Style-Guide.md -> www.websitename.com (missing file)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/ContentTypeParser.md -> ./Server.md#factory-body-limit (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Decorators.md -> #decorate-request (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Decorators.md -> #decorate (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Decorators.md -> #decorate-reply (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Decorators.md -> #decorate (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_not_found (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_options_not_obj (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_qsp_not_fn (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_schema_controller_bucket_opt_not_fn (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_schema_error_formatter_not_fn (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_ajv_custom_options_opt_not_obj (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_ajv_custom_options_opt_not_arr (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_ctp_already_present (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_ctp_invalid_type (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_ctp_empty_type (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_ctp_invalid_handler (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_ctp_invalid_parse_type (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_ctp_body_too_large (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_ctp_invalid_media_type (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_ctp_invalid_content_length (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_ctp_empty_json_body (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_ctp_instance_already_started (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_instance_already_listening (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_dec_already_present (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_dec_dependency_invalid_type (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_dec_missing_dependency (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_dec_after_start (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_dec_reference_type (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_dec_undeclared (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_hook_invalid_type (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_hook_invalid_handler (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_hook_invalid_async_handler (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_hook_not_supported (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_missing_middleware (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_hook_timeout (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_log_invalid_destination (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_log_invalid_logger (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_log_invalid_logger_instance (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_log_invalid_logger_config (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_log_logger_and_logger_instance_provided (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_rep_invalid_payload_type (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_rep_response_body_consumed (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_rep_readable_stream_locked (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_rep_already_sent (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_rep_sent_value (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_send_inside_onerr (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_send_undefined_err (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_bad_status_code (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_bad_trailer_name (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_bad_trailer_value (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_failed_error_serialization (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_missing_serialization_fn (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_missing_contenttype_serialization_fn (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_req_invalid_validation_invocation (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_sch_missing_id (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_sch_already_present (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_sch_content_missing_schema (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_sch_duplicate (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_sch_validation_build (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_sch_serialization_build (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_sch_response_schema_not_nested_2xx (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_init_opts_invalid (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_force_close_connections_idle_not_available (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_duplicated_route (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_bad_url (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_async_constraint (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_invalid_url (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_route_options_not_obj (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_route_duplicated_handler (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_route_handler_not_fn (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_route_missing_handler (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_route_method_invalid (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_route_method_not_supported (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_route_body_validation_schema_not_supported (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_route_body_limit_option_not_int (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_route_rewrite_not_str (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_reopened_close_server (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_reopened_server (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_plugin_version_mismatch (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_plugin_callback_not_fn (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_plugin_not_valid (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_root_plg_booted (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_parent_plugin_booted (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_plugin_timeout (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_plugin_not_present_in_instance (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_plugin_invalid_async_handler (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_validation (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_listen_options_invalid (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Errors.md -> #fst_err_error_handler_not_fn (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Index.md -> #reference-toc (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Logging.md -> ./Server.md#factory-request-id-header (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Plugins.md -> ./Routes.md#fastify-plugin (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Reply.md -> #redirectdest--code (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Reply.md -> #getserializationfunctionschema--httpstatus (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Reply.md -> #compileserializationschemaschema-httpstatus (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Reply.md -> #serializeinputdata-schema--httpstatus-httpstatus (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Reply.md -> ./Server.md#set-not-found-handler (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Reply.md -> #compileserializationschema (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Reply.md -> #compileserializationschema (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Reply.md -> #send (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Request.md -> ./Server.md#factory-trust-proxy (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Request.md -> ./Server.md#factory-trust-proxy (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Request.md -> ./Routes.md#routes-config (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Request.md -> ./Routes.md#routes-config (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Request.md -> #getvalidationfunction (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Request.md -> #compilevalidationschema (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Request.md -> #validate (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Request.md -> #compileValidationSchema (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Request.md -> ./Server.md#schema-controller (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Request.md -> #compileValidationSchema (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Routes.md -> ./Hooks.md#route-hooks (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Routes.md -> ./Validation-and-Serialization.md#schema-validator (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Routes.md -> ./Validation-and-Serialization.md#schema-serializer (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Server.md -> #factory-http2 (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Server.md -> #factory-https (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Server.md -> #factory-http2 (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Server.md -> ./Errors.md#fst_err_ctp_body_too_large (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Server.md -> ./Logging.md#logging-request-id (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Server.md -> ./Validation-and-Serialization.md#schema-validator (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Server.md -> ./Hooks.md#on-close (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Server.md -> #factory-return-503-on-closing (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Server.md -> ./Validation-and-Serialization.md#schema-validator (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Server.md -> ./Validation-and-Serialization.md#schema-serializer (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Server.md -> #set-reply-serializer (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Server.md -> #add-schema (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Server.md -> #add-schema (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Server.md -> ./Validation-and-Serialization.md#schema-validator (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Server.md -> ./Validation-and-Serialization.md#schema-serializer (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Server.md -> ./Hooks.md#route-hooks (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Server.md -> ./Hooks.md#route-hooks (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Server.md -> ./Reply.md#call-not-found (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Server.md -> #set-not-found-handler (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Validation-and-Serialization.md -> ./Server.md#schema-controller (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Validation-and-Serialization.md -> ./Server.md#factory-ajv (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Warnings.md -> #FSTWRN001 (missing anchor)
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Warnings.md -> #FSTWRN002 (missing anchor)
+
+CLAIMS 20
+CHANGELOG.md:16: - `legacy-exodus verify` reads the audit's JSON result, cross-checks its counts and reports the real passed/total (8/8) instead of a hard-coded "10/10"; unreada
+CHANGELOG.md:82: - **Empirical Baseline Scaling:** Expanded full test suite to **800/800 passing tests across 92 test files** (8,536 assertions, 0 failures), maintaining 10/10 b
+CHANGELOG.md:95: - **Empirical Baseline Scaling:** Expanded full test suite to **759/759 passing tests across 92 test files** (8,222 assertions, 0 failures), maintaining 10/10 b
+CHANGELOG.md:107: - **Empirical Baseline Scaling:** Expanded full test suite to 660/660 passing tests across 87 test files (7,281 assertions, 0 failures), maintaining 10/10 bench
+CHANGELOG.md:121: - **Test Suite & Empirical Baseline Scaling:** Expanded full test suite to 613/613 passing tests across 82 test files (4,328 assertions, 0 failures), with 10/10
+CHANGELOG.md:146: - **Express Semantic Fidelity Hardening — Prototype Symbols & Dynamic Call Resolution (P1.7A):** Hardened prototype and property-assignment symbol granularity (
+CHANGELOG.md:154: - **Automated Benchmarking Harness (Phase 3A/3B):** Whole-repository benchmarking suite across Tier-1 (`cookie-parser`, `debug`, `ms`, `express-session`), Tier-
+README.md:78: | Core integration truth | `origin/core-foundation` at `204f123ac374c3fefa4ccc0f4d5decb80a1e9b9f` |
+README.md:79: | Main promotion truth | `origin/main` at `6f88ec57d8275c6a367018d3106b537a26cbc2d1` |
+ROADMAP.md:32: | **P1.7C** | Pre-Claude Audit Evidence Integrity & Semantic Correctness Hardening | **`COMPLETED`** | Fixed open-world fidelity metric semantics (`UNVERIFIED_S
+ROADMAP.md:33: | **P1.7D** | Controlled Forensic Weakness Discovery & Remediation | **`COMPLETED`** | Fixed destructuring pattern binding extraction (`FINDING-SYM-04`), defaul
+ROADMAP.md:35: | **P1.9** | CLI Foundation, Command Discovery & Verification Hardening | **`COMPLETED`** | Implemented unified CLI theme engine (`classic`, `aurora`, `mono`), 
+ROADMAP.md:36: | **P1.10** | Security, Lifecycle, Storage & Flow Hardening | **`COMPLETED`** | Hardened discovery freshness verification (`REUSE-01`), restored analysis record
+ROADMAP.md:44: | **DOC-01** | Enterprise Documentation Foundation & Reality Synchronization | **`COMPLETED`** | Synchronize README, ROADMAP, CHANGELOG, GOVERNANCE, and docs wi
+docs/CURRENT_IMPLEMENTATION.md:5: **Synchronized against core integration truth:** `origin/core-foundation` at `204f123ac374c3fefa4ccc0f4d5decb80a1e9b9f`
+docs/CURRENT_IMPLEMENTATION.md:7: **Main promotion boundary:** `origin/main` at `6f88ec57d8275c6a367018d3106b537a26cbc2d1`
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Contributing.md:75: https://github.com/github/opensource.guide/blob/2868efbf0c14aec821909c19e210c3603a4a7805/CONTRIBUTING.md#style-guide
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Contributing.md:137: 93c2f0fbf16c5a4b10e4d5f89737d9c2c25488a3
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Guides/Serverless.md:433: docs](https://github.com/knative/docs/blob/2d654d1fd6311750cc57187a86253c52f273d924/docs/serving/samples/hello-world/helloworld-nodejs/Dockerfile).
+legacy-exodus-core/benchmarks/.cache/fastify/docs/Reference/Hooks.md:367: [test/hooks-async.js](https://github.com/fastify/fastify/blob/94ea67ef2d8dce8a955d510cd9081aabd036fa85/test/hooks-async.js#L269-L275).

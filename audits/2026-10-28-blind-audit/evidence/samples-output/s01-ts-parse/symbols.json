@@ -1,0 +1,253 @@
+[
+  {
+    "id": "3eab7ee724bcaf75a8edb4d1e1d80037cd011b510d98a67780535bce85816c02",
+    "kind": "variable",
+    "name": "a",
+    "filePath": "dist/bundle.min.js",
+    "language": "javascript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "declarationKind": "var",
+    "value": 1,
+    "scopeId": "scope:FunctionExpression:1:1",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 16
+      },
+      "end": {
+        "line": 1,
+        "column": 19
+      }
+    }
+  },
+  {
+    "id": "5bf546cba91c2772cb41dfd7d83eb9ef667860d7e52d005d1b10dec3494c2c30",
+    "kind": "function",
+    "name": "b",
+    "filePath": "dist/bundle.min.js",
+    "language": "javascript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:BlockStatement:1:11",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 20
+      },
+      "end": {
+        "line": 1,
+        "column": 42
+      }
+    }
+  },
+  {
+    "id": "39d6c7f7f27f09d1d1b481a06c61f304955a7e876273410ca955c67309c378ce",
+    "kind": "variable",
+    "name": "b",
+    "filePath": "dist/bundle.min.js",
+    "language": "javascript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "sourceSymbolName": "b",
+    "scopeId": "scope:BlockStatement:1:11",
+    "containerName": "window",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 42
+      },
+      "end": {
+        "line": 1,
+        "column": 50
+      }
+    }
+  },
+  {
+    "id": "1d56f3e349b1a1d9237e52ada5e3176d154eafba0c1175f1f63b490362caf415",
+    "kind": "export",
+    "name": "ok",
+    "filePath": "src/ok.ts",
+    "language": "typescript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 0
+      },
+      "end": {
+        "line": 1,
+        "column": 47
+      }
+    }
+  },
+  {
+    "id": "d605eef2ac45b96651af2394b13d4edfab261854a454c949a26ca4ed73aab09e",
+    "kind": "variable",
+    "name": "ok",
+    "filePath": "src/ok.ts",
+    "language": "typescript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "declarationKind": "const",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 13
+      },
+      "end": {
+        "line": 1,
+        "column": 46
+      }
+    }
+  },
+  {
+    "id": "b5b0459b0f6a807f2fec4ca6f8edc73717279e3e2cac05daabfc87bd550ccc8d",
+    "kind": "function",
+    "name": "ok",
+    "filePath": "src/ok.ts",
+    "language": "typescript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [
+      "x"
+    ],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 18
+      },
+      "end": {
+        "line": 1,
+        "column": 46
+      }
+    }
+  },
+  {
+    "id": "1f1b4cacf85b57e834c217ea7db85261102cd149b738f940ec42f9623dc6fc87",
+    "kind": "variable",
+    "name": "x",
+    "filePath": "src/ok.ts",
+    "language": "typescript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "declarationKind": "param",
+    "scopeId": "scope:ArrowFunctionExpression:1:18",
+    "containerName": "ok",
+    "containerId": "b5b0459b0f6a807f2fec4ca6f8edc73717279e3e2cac05daabfc87bd550ccc8d",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 19
+      },
+      "end": {
+        "line": 1,
+        "column": 28
+      }
+    }
+  },
+  {
+    "id": "f0c9a0aebb86907165e6d29e64573f73f4eec55fa063ee6668054ad7bd62c2b7",
+    "kind": "export",
+    "name": "View",
+    "filePath": "src/ok.tsx",
+    "language": "typescript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 0
+      },
+      "end": {
+        "line": 1,
+        "column": 40
+      }
+    }
+  },
+  {
+    "id": "ddd371f3beb1784158a249bd411d51121ea05eb5fcb25d5fd6c929e6562a1f87",
+    "kind": "variable",
+    "name": "View",
+    "filePath": "src/ok.tsx",
+    "language": "typescript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "declarationKind": "const",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 13
+      },
+      "end": {
+        "line": 1,
+        "column": 39
+      }
+    }
+  },
+  {
+    "id": "18e6711a17566ff742aad811309151940cdf49994a13cdbf8f864a66a052c352",
+    "kind": "function",
+    "name": "View",
+    "filePath": "src/ok.tsx",
+    "language": "typescript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 20
+      },
+      "end": {
+        "line": 1,
+        "column": 39
+      }
+    }
+  }
+]
