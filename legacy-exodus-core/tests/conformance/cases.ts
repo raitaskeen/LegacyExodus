@@ -1127,6 +1127,61 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // Phase C1b: a factory literal's property takes its function from a member of a repository module, from a property
+    // of another factory's result, or from a top-level write on the object in the factory's body (the last one wins).
+    // In Node a.js prints "add listen stop ready late swapped again-swapped param-helper add ready". Controls: a reassigned
+    // import (swap), a reassigned destructured binding (again), a parameter shadowing a module function (helper), two
+    // levels of members (deep), and a write that is not a top-level statement of the factory (guarded).
+    id: "factory-references",
+    files: {
+      "dec.js": "function add() { return \"add\"; }\nfunction other() { return \"other\"; }\nmodule.exports = { add, other, helpers: { add } };\n",
+      "server.js": "function listen() { return \"listen\"; }\nfunction createServer() { const s = { listen }; return s; }\nmodule.exports = { createServer };\n",
+      // A factory returning its literal directly, exported by `module.exports.name = f` (Fastify's lib/server.js).
+      // In Node b.js prints "serve other"; createEither has two returns, so its result is not one literal.
+      "direct.js": "function serve() { return \"serve\"; }\nfunction other() { return \"other\"; }\nfunction createDirect() { return { serve }; }\nfunction createEither(flag) { if (flag) { return { serve }; } return { serve: other }; }\nmodule.exports.createDirect = createDirect;\nmodule.exports.createEither = createEither;\n",
+      "b.js": "const { createDirect, createEither } = require(\"./direct\");\nfunction build() {\n  const { serve } = createDirect();\n  const { serve: either } = createEither(false);\n  const o = { serve, either };\n  return o;\n}\nconst b = build();\nconsole.log(b.serve(), b.either());\n",
+      "a.js": [
+        "const decorator = require(\"./dec\");",
+        "let swapped = require(\"./dec\");",
+        "swapped = { add() { return \"swapped\"; } };",
+        "const { createServer } = require(\"./server\");",
+        "function ready() { return \"ready\"; }",
+        "function late() { return \"late\"; }",
+        "function helper() { return \"module-helper\"; }",
+        "function localServer() { const s = { stop() { return \"stop\"; } }; return s; }",
+        "function make(helper) {",
+        "  const { listen } = createServer();",
+        "  const { stop } = localServer();",
+        "  let { listen: again } = createServer();",
+        "  again = () => \"again-swapped\";",
+        "  const o = { decorate: decorator.add, listen, stop, ready: null, twice: null, swap: swapped.add, again, helper, deep: decorator.helpers.add, guarded: null };",
+        "  o.ready = ready;",
+        "  o.twice = ready;",
+        "  o.twice = late;",
+        "  if (true) { o.guarded = ready; }",
+        "  return o;",
+        "}",
+        "const app = make(() => \"param-helper\");",
+        "console.log([app.decorate(), app.listen(), app.stop(), app.ready(), app.twice(), app.swap(), app.again(), app.helper(), app.deep(), app.guarded()].join(\" \"));",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "c1b:module-member", category: "calls", has: /^a\.js@22:\d+\|module\|app\.decorate\|RESOLVED\|export:add@3:\d+@dec\.js$/ },
+      { id: "c1b:imported-factory-result", category: "calls", has: /^a\.js@22:\d+\|module\|app\.listen\|RESOLVED\|function:listen@1:0@server\.js$/ },
+      { id: "c1b:local-factory-result", category: "calls", has: /^a\.js@22:\d+\|module\|app\.stop\|RESOLVED\|variable:stop@8:\d+@a\.js$/ },
+      { id: "c1b:body-write-replaces-literal", category: "calls", has: /^a\.js@22:\d+\|module\|app\.ready\|RESOLVED\|function:ready@5:0@a\.js$/ },
+      { id: "c1b:last-body-write-wins", category: "calls", has: /^a\.js@22:\d+\|module\|app\.twice\|RESOLVED\|function:late@6:0@a\.js$/ },
+      { id: "c1b:reassigned-import-unresolved", category: "calls", has: /^a\.js@22:\d+\|module\|app\.swap\|UNRESOLVED\|/ },
+      { id: "c1b:reassigned-binding-unresolved", category: "calls", has: /^a\.js@22:\d+\|module\|app\.again\|UNRESOLVED\|/ },
+      { id: "c1b:shadowing-parameter-unresolved", category: "calls", has: /^a\.js@22:\d+\|module\|app\.helper\|UNRESOLVED\|/ },
+      { id: "c1b:two-level-member-unresolved", category: "calls", has: /^a\.js@22:\d+\|module\|app\.deep\|UNRESOLVED\|/ },
+      { id: "c1b:nested-body-write-unresolved", category: "calls", has: /^a\.js@22:\d+\|module\|app\.guarded\|UNRESOLVED\|/ },
+      { id: "c1b:direct-literal-named-export", category: "calls", has: /^b\.js@9:\d+\|module\|b\.serve\|RESOLVED\|function:serve@1:0@direct\.js$/ },
+      { id: "c1b:two-returns-unresolved", category: "calls", has: /^b\.js@9:\d+\|module\|b\.either\|UNRESOLVED\|/ },
+    ],
+  },
+  {
     // Phase C2: an instance of a constructor function reaches the method its prototype is given by name, and
     // `Object.create(P)` reaches P's method. Each control breaks one condition: the constructor returns an object,
     // inherits (passed to a call), has its prototype replaced, the instance gets its own method, another file writes the
