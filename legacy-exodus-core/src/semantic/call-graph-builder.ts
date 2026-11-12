@@ -779,8 +779,11 @@ export function collectUnstableExportIds(ast: ASTResult, table: SymbolTable | un
   }).map((symbol) => symbol.id);
 }
 
-/** A property written on another module's value, as one file sees it (OR-01). `*` is a computed name. */
-export interface ForeignExportWrite { readonly importerPath: string; readonly specifier: string; readonly name: string }
+/**
+ * A property written on another module's value, as one file sees it (OR-01). `*` is a computed name. `member` is the
+ * whole written path when it is known to be deeper (`ObjectId.prototype._id`), ending at a computed member (XB-03).
+ */
+export interface ForeignExportWrite { readonly importerPath: string; readonly specifier: string; readonly name: string; readonly member?: string }
 
 /**
  * Writes this file makes to another module's exports: `require("./x").name = …`, or `x.name = …` where `x` is an
@@ -821,7 +824,7 @@ export function collectForeignExportWrites(ast: ASTResult, table: SymbolTable | 
     packageImports.set(symbol.name, { specifier: symbol.moduleSpecifier, path: whole ? [] : [symbol.sourceSymbolName ?? symbol.name] });
   }
   for (const write of aliasedWrites(ast.root, packageImports)) {
-    if (write.specifier !== undefined && !isRelativeSpecifier(write.specifier) && write.path.length > 0) writes.push({ importerPath, specifier: write.specifier, name: write.path[0]! });
+    if (write.specifier !== undefined && !isRelativeSpecifier(write.specifier) && write.path.length > 0) writes.push({ importerPath, specifier: write.specifier, name: write.path[0]!, member: write.path.join(".") });
   }
   return writes;
 }
@@ -2453,7 +2456,7 @@ function externalTarget(imported: CodeSymbol | undefined, calleeName: string, in
   const whole = source === "*" || (binding.defaultExport && source === undefined);
   const path = [...(whole ? [] : [source ?? binding.name]), ...(imported !== undefined ? [] : pieces.slice(1))];
   const member = path.length === 0 ? "default" : path.join(".");
-  if (packageWrites.has(`${module}\u0000${path[0] ?? "default"}`) || packageWrites.has(`${module}\u0000*`)) return undefined;
+  if (!packagePathUnwritten(module, path.length === 0 ? ["default"] : path, packageWrites)) return undefined;
   return { module, member };
 }
 
@@ -2751,15 +2754,29 @@ function packageName(specifier: string): string {
 
 /**
  * The package members a run's files write (`require("fs").readFileSync = …`, `fs.readFileSync = …` through an import):
- * keys `module\u0000member`, `*` for a computed member. A specifier that resolves to a repository file is not a package.
+ * keys `module\u0000member`, `*` for a computed member, the member being the whole written path when known
+ * (`ObjectId.prototype._id`). A specifier that resolves to a repository file is not a package.
  */
 export function packageWriteKeys(writes: readonly ForeignExportWrite[], resolveFile: (importerPath: string, specifier: string) => string | undefined): ReadonlySet<string> {
   const keys = new Set<string>();
   for (const write of writes) {
     if (isRelativeSpecifier(write.specifier) || resolveFile(write.importerPath, write.specifier) !== undefined) continue;
-    keys.add(`${packageName(write.specifier)}\u0000${write.name}`);
+    keys.add(`${packageName(write.specifier)}\u0000${write.member ?? write.name}`);
   }
   return keys;
+}
+
+/**
+ * Whether no file of the run writes member `path` of package `module` or a part of it (see packageWriteKeys), as for
+ * globals: `x.a = …` and `x.a.*` block `x.a.b()`, while `x.a.prototype.c = …` leaves the call `x.a()` alone.
+ */
+function packagePathUnwritten(module: string, path: readonly string[], packageWrites: ReadonlySet<string>): boolean {
+  if (packageWrites.has(`${module}\u0000*`)) return false;
+  for (let length = 1; length <= path.length; length++) {
+    const prefix = path.slice(0, length).join(".");
+    if (packageWrites.has(`${module}\u0000${prefix}`) || packageWrites.has(`${module}\u0000${prefix}.*`)) return false;
+  }
+  return true;
 }
 
 /** A specifier naming a file (`./x`, `../x`, `/x`) rather than a package; an unknown one counts as a file. */

@@ -900,14 +900,14 @@ export const conformanceCases: readonly ConformanceCase[] = [
   {
     // XB-03 (audit B): a patch made through a never-reassigned alias of a global, a built-in prototype or a package
     // import, or by `Object.assign` / literal-key `Object.defineProperty` on one, is a write to that path. In Node the
-    // repository's function runs for each positive (`repo-includes:1 repo-join repo-parse repo-max 0`, `[repo logger] x`).
+    // repository's function runs for each positive (`repo-includes:1 repo-join repo-parse repo-max 0`, `[repo logger] x`; `path.format` still gives `x`).
     // Controls stay EXTERNAL: an alias only read (`ArrayProto.slice.call`), an alias reassigned before the write, and
     // members the patches do not touch.
     id: "external-alias-patches",
     files: {
       "alias.js": "const c = console;\nc.log = function () { process.stdout.write(\"[repo logger] \" + [...arguments].join(\" \") + \"\\n\"); };\n",
       "poly.js": "var ArrayProto = Array.prototype;\nArrayProto.includes = function (x) { return \"repo-includes:\" + x; };\nArrayProto.slice.call([1]);\n",
-      "pkg.js": "const path = require(\"path\");\nconst p = path;\np.join = function () { return \"repo-join\"; };\n",
+      "pkg.js": "const path = require(\"path\");\nconst p = path;\np.join = function () { return \"repo-join\"; };\nObject.defineProperty(p.format, \"tag\", { value: \"repo-tag\" });\n",
       "fn.js": "function install() { const d = Date; d.now = function () { return 0; }; }\ninstall();\n",
       "reassign.js": "var w = console;\nw = { warn: null };\nw.warn = function () { return \"repo-warn\"; };\n",
       "main.js": [
@@ -932,6 +932,7 @@ export const conformanceCases: readonly ConformanceCase[] = [
         "const i = Math.min(1, 2);",
         "console.error(f.join(\"+\"), g, h, i);",
         "console.log(\"x\");",
+        "const k = path.format({ base: \"x\" });",
         "",
       ].join("\n"),
     },
@@ -947,6 +948,8 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "alias-patch:package-other-member-external", check: (directory) => external(directory, "main.js", 17) === "path:basename" },
       { id: "alias-patch:assign-other-member-external", check: (directory) => external(directory, "main.js", 18) === "global:JSON.stringify" },
       { id: "alias-patch:define-other-member-external", check: (directory) => external(directory, "main.js", 19) === "global:Math.min" },
+      // A property added to `path.format` itself leaves the call `path.format()` running the package's code.
+      { id: "alias-patch:deeper-package-write-external", check: (directory) => external(directory, "main.js", 22) === "path:format" },
     ],
   },
   {
