@@ -56,12 +56,12 @@ Audit by Shahzaib Hassan on `fdc37f3` (`audits/2026-11-10-blind-audit-b/AUDIT-RE
 | ID | Severity | Finding | State |
 |---|---|---|---|
 | XB-01 | High | Arrow functions and function expressions get no data-flow summary, so taint stops at them | **Fixed** #319 (`e527165`): facts-lost-explained (owner OK), 541 lost = call result now flows into the arrow/function-expression return value; ~47k data-flow facts gained, Ghost +26 taint (real flow through a SHA-256 arrow helper in tools/gx). Caller label (calls inside arrows labelled `module`) left for its own PR |
-| XB-02 | Medium | `#imports` and package self-references are EXTERNAL with no module edge | In progress (branch fix/xb02-package-imports) |
-| XB-03 | Medium | A global, built-in prototype or package patched through an alias, or by same-file `Object.assign`, stays EXTERNAL | Open |
+| XB-02 | Medium | `#imports` and package self-references are EXTERNAL with no module edge | **Fixed** #322 (`006febf`): `#imports` via nearest package.json, self-reference via own `exports`; 0 lost/0 gained on 11 corpora |
+| XB-03 | Medium | A global, built-in prototype or package patched through an alias, or by same-file `Object.assign`, stays EXTERNAL | In progress (side session xb03-alias-patches) |
 | XB-04 | Medium | C1 matches the returned name by string: block shadow or destructuring gives a false RESOLVED | **Fixed** #320 (`16894d5`): also catches catch-parameter shadow and for-of rebind; 0 lost/0 gained on 11 corpora |
-| XB-05 | Low | C2: an `Object.prototype` name called before its assignment resolves to the later method | Open |
-| XB-06 | Low | `async` or generator factory resolves `make().m()` | Open |
-| XB-07 | Low | `Object.assign(this, opts)` in a constructor function: prototype method still RESOLVED | Open |
+| XB-05 | Low | C2: an `Object.prototype` name called before its assignment resolves to the later method | Draft #321 (side session, with XB-06, XB-07) |
+| XB-06 | Low | `async` or generator factory resolves `make().m()` | Draft #321 |
+| XB-07 | Low | `Object.assign(this, opts)` in a constructor function: prototype method still RESOLVED | Draft #321 |
 | XB-08 | Info | ESM directory import resolves through `main`; Node throws | Open (wording) |
 | XB-09 | Info | CI blocked by Actions billing | Closed: repo made public 2026-11-12 (free Actions minutes); running again since 2026-11-10 17:19; Copilot review rule removed from rulesets and drafts skip CI (#317, `df5e290`) |
 
