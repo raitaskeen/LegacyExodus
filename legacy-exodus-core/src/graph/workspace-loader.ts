@@ -3,7 +3,7 @@ import { join, posix } from "node:path";
 
 import type { FileArtifact } from "@contracts/discovery";
 
-import { canonicalizePath, type WorkspacePackage } from "./module-resolver";
+import { canonicalizePath, type PackageScope, type WorkspacePackage } from "./module-resolver";
 import { immutable } from "@shared/immutability";
 
 /**
@@ -20,6 +20,29 @@ export async function loadDirectoryMains(projectPath: string, files: readonly Fi
     if (typeof manifest?.main === "string" && manifest.main.length > 0) mains[canonicalizePath(posix.dirname(path))] = manifest.main;
   }
   return immutable(mains);
+}
+
+/**
+ * Every `package.json` discovery found, by its project-relative POSIX directory (`.` for the root), with the fields
+ * Node uses to load a package from inside itself (XB-02): `name` and `exports` for a self-reference
+ * (`require("pkg/sub")` within pkg), `imports` for `#` specifiers. Manifests with none of them, or unreadable, are
+ * skipped.
+ */
+export async function loadPackageScopes(projectPath: string, files: readonly FileArtifact[]): Promise<Readonly<Record<string, PackageScope>>> {
+  const scopes: Record<string, PackageScope> = {};
+  const manifests = files.map((file) => canonicalizePath(file.path)).filter((path) => posix.basename(path) === "package.json").sort();
+  for (const path of manifests) {
+    const manifest = await readJson(join(projectPath, path));
+    if (manifest === undefined) continue;
+    const scope: PackageScope = {
+      ...(typeof manifest.name === "string" && manifest.name.length > 0 ? { name: manifest.name } : {}),
+      ...(manifest.exports === undefined || manifest.exports === null ? {} : { exports: manifest.exports }),
+      ...(typeof manifest.imports === "object" && manifest.imports !== null && !Array.isArray(manifest.imports) ? { imports: manifest.imports } : {}),
+    };
+    // Recorded even when empty: the nearest manifest decides, so one without `imports` hides an outer one's.
+    scopes[canonicalizePath(posix.dirname(path))] = scope;
+  }
+  return immutable(scopes);
 }
 
 /**

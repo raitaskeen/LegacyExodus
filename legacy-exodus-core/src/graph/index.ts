@@ -10,8 +10,8 @@ export type {
 export { dependencyGraphNodeSchema, validateDependencyGraph, validateCurrentDependencyGraph, moduleDependencyLayerSchema } from "./dependency-graph-contracts";
 export { dependencyGraphNodes, DeterministicDependencyGraphBuilder } from "./dependency-graph-builder";
 export { ModuleResolver, canonicalizePath } from "./module-resolver";
-export type { KnownPathLookup, ModuleResolutionOptions, ResolvedImport, WorkspacePackage } from "./module-resolver";
-export { findPackageEntryFiles, loadDirectoryMains, loadWorkspacePackages } from "./workspace-loader";
+export type { KnownPathLookup, ModuleResolutionOptions, PackageScope, ResolvedImport, WorkspacePackage } from "./module-resolver";
+export { findPackageEntryFiles, loadDirectoryMains, loadPackageScopes, loadWorkspacePackages } from "./workspace-loader";
 export { loadCompiledCommonJsFiles } from "./module-format";
 export { loadTsConfigResolution, parseJsonc } from "./tsconfig-loader";
 export type { JsoncResult, TsConfigDiagnostic, TsConfigDiagnosticCode, TsConfigResolution } from "./tsconfig-loader";
