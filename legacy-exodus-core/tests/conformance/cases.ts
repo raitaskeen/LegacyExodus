@@ -997,6 +997,36 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // RT-M6 with build output (Ghost's shapes): `import` and `require` name build files the repository does not hold, and
+    // `source` names the file they are compiled from. A way that reaches no repository file does not count, so each
+    // import resolves to the one file the other ways reach. fw's `source` names `render.ts` while the file is
+    // `render.tsx`, which only the `dist` targets reach through the build-output mapping. With the build files added,
+    // Node (24) loads `build/esm/visibility.js`, `dist/test/render.js` and `build/locale-data.json` for these
+    // specifiers: the `./test/*` wildcard exports `fw/test/render`.
+    id: "export-build-output",
+    files: {
+      "package.json": JSON.stringify({ name: "root", private: true, workspaces: ["packages/*"] }) + "\n",
+      "packages/kg/package.json": JSON.stringify({ name: "kg", exports: { "./visibility": { source: "./src/visibility.ts", types: "./build/esm/visibility.d.ts", import: "./build/esm/visibility.js", require: "./build/cjs/visibility.js" } } }) + "\n",
+      "packages/kg/src/visibility.ts": "export function buildDefaultVisibility(): string { return \"visibility\"; }\n",
+      "packages/fw/package.json": JSON.stringify({ name: "fw", type: "module", exports: { "./test/*": { source: "./src/test/*.ts", types: "./types/test/*.d.ts", import: "./dist/test/*.js", require: "./dist/test/*.cjs" } } }) + "\n",
+      "packages/fw/src/test/render.tsx": "export function renderStandaloneApp(): string { return \"render\"; }\n",
+      "packages/i18n/package.json": JSON.stringify({ name: "i18n", type: "module", exports: { "./locale-data.json": { source: "./src/locale-data.json", types: "./src/locale-data.json", default: "./build/locale-data.json" } } }) + "\n",
+      "packages/i18n/src/locale-data.json": "[\"en\"]\n",
+      "app.ts": [
+        "import { buildDefaultVisibility } from \"kg/visibility\";",
+        "import { renderStandaloneApp } from \"fw/test/render\";",
+        "import locales from \"i18n/locale-data.json\";",
+        "console.log(buildDefaultVisibility(), renderStandaloneApp(), locales.length);",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "rt-m6:build-output-source-resolves", category: "calls", has: /^app\.ts@4:\d+\|module\|buildDefaultVisibility\|RESOLVED\|export:buildDefaultVisibility@1:0@packages\/kg\/src\/visibility\.ts$/ },
+      { id: "rt-m6:build-output-wildcard-resolves", category: "calls", has: /^app\.ts@4:\d+\|module\|renderStandaloneApp\|RESOLVED\|export:renderStandaloneApp@1:0@packages\/fw\/src\/test\/render\.tsx$/ },
+      { id: "rt-m6:build-output-json-edge", category: "module-edges", has: /^app\.ts -> packages\/i18n\/src\/locale-data\.json\|i18n\/locale-data\.json\|/ },
+    ],
+  },
+  {
     // ADR-012, Phase B1b: a call on an unbound standard global is EXTERNAL unless some file writes that path; a test
     // runner's globals stay UNRESOLVED; `require` is EXTERNAL only in CommonJS.
     id: "external-globals",
