@@ -1182,6 +1182,80 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // Phase C1c: Express's shapes. `var app = module.exports = express()` binds app to the call's result, and a helper
+    // that returns `express()`'s result unchanged (`createApp`) is a factory too, followed through index.js's
+    // re-export. In Node a.js prints "set set set". Control: mixed() passes its object to a call, which could give it
+    // other methods, so m.set stays unresolved.
+    id: "factory-forwarding",
+    files: {
+      "application.js": "var app = exports = module.exports = {};\napp.set = function set() { return \"set\"; };\napp.engine = function engine() { return \"engine\"; };\n",
+      "express.js": "var mixin = require(\"merge-descriptors\");\nvar proto = require(\"./application\");\nexports = module.exports = createApplication;\nfunction createApplication() { var app = function (req, res, next) {}; mixin(app, proto, false); return app; }\n",
+      "index.js": "module.exports = require(\"./express\");\n",
+      "a.js": [
+        "var express = require(\"./index\");",
+        "var app = module.exports = express();",
+        "function createApp() { var app = express(); app.engine(\"md\"); return app; }",
+        "function mixed() { var m = express(); Object.assign({}, m); return m; }",
+        "var made = createApp();",
+        "var m = mixed();",
+        "console.log(app.set(), made.set(), m.set());",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "c1c:assignment-chain", category: "calls", has: /^a\.js@7:\d+\|module\|app\.set\|RESOLVED\|method:set@2:\d+@application\.js$/ },
+      { id: "c1c:forwarding-factory", category: "calls", has: /^a\.js@7:\d+\|module\|made\.set\|RESOLVED\|method:set@2:\d+@application\.js$/ },
+      { id: "c1c:escaping-object-unresolved", category: "calls", has: /^a\.js@7:\d+\|module\|m\.set\|UNRESOLVED\|/ },
+    ],
+  },
+  {
+    // Red team on C1b/C1c: a name a factory (or a function around it) binds itself hides the module import or function
+    // of that name. In Node a.js prints "fake-set fake-add fake-set" and b.js "outer-helper outer-set module-helper":
+    // every call but p.helper runs a parameter, so only p.helper may resolve.
+    id: "factory-shadowing",
+    files: {
+      "application.js": "var app = exports = module.exports = {};\napp.set = function set() { return \"real-set\"; };\n",
+      "lib.js": "var proto = require(\"./application\");\nfunction createApplication() { var app = { set: proto.set }; return app; }\nmodule.exports = { createApplication, add: function add() { return \"real-add\"; } };\n",
+      "a.js": [
+        "const { createApplication } = require(\"./lib\");",
+        "const decorator = require(\"./lib\");",
+        "function createApp(createApplication) { var app = createApplication(); return app; }",
+        "function make(decorator, createApplication) {",
+        "  const { set } = createApplication();",
+        "  const o = { add: decorator.add, set };",
+        "  return o;",
+        "}",
+        "const fake = () => ({ set() { return \"fake-set\"; } });",
+        "const x = createApp(fake);",
+        "const m = make({ add() { return \"fake-add\"; } }, fake);",
+        "console.log(x.set(), m.add(), m.set());",
+        "",
+      ].join("\n"),
+      "b.js": [
+        "function helper() { return \"module-helper\"; }",
+        "const { createApplication } = require(\"./lib\");",
+        "function outer(helper, createApplication) {",
+        "  function inner() { const o = { helper }; return o; }",
+        "  function forward() { var app = createApplication(); return app; }",
+        "  return [inner(), forward()];",
+        "}",
+        "const [i, f] = outer(() => \"outer-helper\", () => ({ set() { return \"outer-set\"; } }));",
+        "function plain() { const o = { helper }; return o; }",
+        "const p = plain();",
+        "console.log(i.helper(), f.set(), p.helper());",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "shadow:forward-callee-parameter-unresolved", category: "calls", has: /^a\.js@12:\d+\|module\|x\.set\|UNRESOLVED\|/ },
+      { id: "shadow:member-object-parameter-unresolved", category: "calls", has: /^a\.js@12:\d+\|module\|m\.add\|UNRESOLVED\|/ },
+      { id: "shadow:destructured-callee-parameter-unresolved", category: "calls", has: /^a\.js@12:\d+\|module\|m\.set\|UNRESOLVED\|/ },
+      { id: "shadow:nested-factory-outer-parameter-unresolved", category: "calls", has: /^b\.js@11:\d+\|module\|i\.helper\|UNRESOLVED\|/ },
+      { id: "shadow:nested-forward-outer-parameter-unresolved", category: "calls", has: /^b\.js@11:\d+\|module\|f\.set\|UNRESOLVED\|/ },
+      { id: "shadow:module-factory-module-function-resolves", category: "calls", has: /^b\.js@11:\d+\|module\|p\.helper\|RESOLVED\|function:helper@1:0@b\.js$/ },
+    ],
+  },
+  {
     // Phase C2: an instance of a constructor function reaches the method its prototype is given by name, and
     // `Object.create(P)` reaches P's method. Each control breaks one condition: the constructor returns an object,
     // inherits (passed to a call), has its prototype replaced, the instance gets its own method, another file writes the

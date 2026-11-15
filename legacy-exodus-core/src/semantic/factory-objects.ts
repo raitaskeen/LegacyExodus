@@ -49,6 +49,11 @@ export interface FactoryFact {
    * (`decorate: decorator.add`) or a property of another factory's result (`const { listen } = createServer()`).
    */
   readonly references?: readonly (readonly [string, MethodReference])[];
+  /**
+   * Phase C1c: the factory returns, unchanged, the object another call makes (`function createApp() { var app =
+   * express(); app.set(…); return app; }`): its result is that call's result. Set alone, with no methods.
+   */
+  readonly forward?: CallSource;
 }
 
 /** Phase C1b: where a factory's property gets its function when it is not a function of the factory's own file. */
@@ -193,6 +198,9 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
     const functionSymbol = (byStart.get(startKey(node.location) ?? "") ?? []).find((symbol) => symbol.kind === "function");
     const body = role(node, "body");
     if (functionSymbol === undefined || body === undefined) return;
+    // Red-team fix: only a module-scope factory sees module-scope names directly; a function around a nested one may
+    // bind them.
+    const atModuleScope = functionSymbol.scopeId === "scope:module";
     const returned = new Set<string>();
     let bareReturn = false;
     const returns: ASTNode[] = [];
@@ -239,6 +247,32 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
     });
     literal = declarators.length === 1 ? role(declarators[0]!, "init") : undefined;
     isFunction = literal?.type === "FunctionExpression" || literal?.type === "ArrowFunctionExpression";
+    // C1c: `var app = express(); …; return app`, the object never passed to a call (`mixin(app, …)` could give it
+    // new methods) nor written by name here; the factory forwards that call's result.
+    const forwarded = assignedValue(literal);
+    if (!reassigned && forwarded?.type === "CallExpression") {
+      // Red-team fix: the callee's name must reach the module scope, so neither the factory nor a function around it
+      // may bind it (`function createApp(express) { var app = express(); … }` calls the parameter).
+      const calleeNode = role(forwarded, "callee");
+      const calleeName = calleeNode?.type === "Identifier" ? nameOf(calleeNode) : undefined;
+      const reachesModule = atModuleScope && calleeName !== undefined && bindingsInFunction(node, body, calleeName) === 0;
+      const source = reachesModule ? callSourceOf(calleeNode, functionsByName, assignedNames, symbols) : undefined;
+      let escapes = false;
+      walkAll(body, (inner) => {
+        if ((inner.type === "CallExpression" || inner.type === "NewExpression") && callArguments(inner).some((argument) => argument.type === "Identifier" && nameOf(argument) === name)) escapes = true;
+        if (inner.type === "AssignmentExpression") {
+          const left = role(inner, "left");
+          if ((left?.type === "MemberExpression" || left?.type === "OptionalMemberExpression") && role(left, "object")?.type === "Identifier" && nameOf(role(left, "object")) === name) escapes = true;
+          if (role(inner, "right")?.type === "Identifier" && nameOf(role(inner, "right")) === name) escapes = true;
+        }
+        if (inner.type === "VariableDeclarator" && inner !== declarators[0] && role(inner, "init")?.type === "Identifier" && nameOf(role(inner, "init")) === name) escapes = true;
+      });
+      if (source !== undefined && !escapes) {
+        const forwardIds = [functionSymbol.id, ...symbols.filter((symbol) => symbol.kind === "export" && symbol.moduleSpecifier === undefined && symbol.sourceSymbolName === functionSymbol.name).map((symbol) => symbol.id)];
+        factories.push({ ids: [...new Set(forwardIds)].sort(), methods: [], forward: source });
+      }
+      return;
+    }
     if (reassigned || (literal?.type !== "ObjectExpression" && !isFunction)) return;
     copies = collectCopies(body, name, symbols, filePath);
     if (copies === undefined) return;
@@ -249,15 +283,10 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
     const methods = new Map<string, string>();
     const references = new Map<string, MethodReference>();
     // C1b: a binding of the factory declared once, by a statement of its body, and never assigned in the file.
-    const bindingsInFactory = (name: string): number => {
-      let count = node.children.filter((child) => child.role === "params").flatMap(patternNames).filter((bound) => bound === name).length;
-      walkOwn(body, (inner) => {
-        if (inner.type === "VariableDeclarator" && patternNames(role(inner, "id")).includes(name)) count++;
-        if (inner.type === "CatchClause" && patternNames(role(inner, "param")).includes(name)) count++;
-        for (const child of inner.children) if ((child.type === "FunctionDeclaration" || child.type === "ClassDeclaration") && nameOf(role(child, "id")) === name) count++;
-      });
-      return count;
-    };
+    const bindingsInFactory = (name: string): number => bindingsInFunction(node, body, name);
+    // Red-team fix: a module-scope import or function is what a name means only when the factory sits at module scope
+    // and does not bind the name itself (a parameter `decorator` hides `const decorator = require(…)`).
+    const meansModuleBinding = (name: string): boolean => atModuleScope && bindingsInFactory(name) === 0;
     const boundOnceInBody = (name: string): boolean => bindingsInFactory(name) === 1 && !assignedNames.has(name);
     // Function declarations in the factory's own scope (not in functions nested inside it), by start position.
     const ownFunctionStarts = new Set<string>();
@@ -270,7 +299,7 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
         const object = role(value, "object");
         const member = nameOf(role(value, "property"));
         const binding = object?.type === "Identifier" ? nameOf(object) : undefined;
-        const imported = binding === undefined || assignedNames.has(binding) ? undefined : moduleImport(binding, symbols);
+        const imported = binding === undefined || assignedNames.has(binding) || !meansModuleBinding(binding) ? undefined : moduleImport(binding, symbols);
         const specifier = imported?.moduleSpecifier;
         const whole = imported !== undefined && (imported.sourceSymbolName === undefined || imported.sourceSymbolName === "*" || imported.defaultExport);
         return member !== undefined && whole && typeof specifier === "string" && /^\.\.?(\/|$)/.test(specifier) ? { kind: "member", specifier, member } : undefined;
@@ -291,7 +320,7 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
         if (member === undefined) continue;
         const callee = role(init, "callee");
         const calleeName = callee?.type === "Identifier" ? nameOf(callee) : undefined;
-        if (calleeName === undefined || assignedNames.has(calleeName)) return undefined;
+        if (calleeName === undefined || assignedNames.has(calleeName) || !meansModuleBinding(calleeName)) return undefined;
         const functions = (functionsByName.get(calleeName) ?? []).filter((symbol) => symbol.scopeId === "scope:module");
         if (functions.length === 1) return { kind: "result", call: { kind: "local", id: functions[0]!.id }, member };
         const imported = functions.length === 0 ? moduleImport(calleeName, symbols) : undefined;
@@ -310,7 +339,9 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
       if (value?.type === "Identifier") {
         // A name the factory binds itself can only be a function declared inside the factory (C1b: scope-aware).
         const bound = bindingsInFactory(nameOf(value) ?? "") > 0;
-        const candidates = (functionsByName.get(nameOf(value) ?? "") ?? []).filter((candidate) => !bound || insideFactory(candidate));
+        // Red-team fix: in a nested factory a name it does not bind may belong to a function around it, so only the
+        // factory's own functions count there.
+        const candidates = (functionsByName.get(nameOf(value) ?? "") ?? []).filter((candidate) => (bound || !atModuleScope) ? insideFactory(candidate) : true);
         if (candidates.length === 1) return bound && !boundOnceInBody(nameOf(value) ?? "") ? {} : { id: candidates[0]!.id };
         if (candidates.length > 1) return {};
       }
@@ -920,6 +951,10 @@ export class FactoryIndex {
       if (file.exportNames !== undefined) this.exportNamesByFile.set(file.filePath, new Set(file.exportNames));
       if (file.namedExports !== undefined) this.namedExportsByFile.set(file.filePath, new Map(file.namedExports));
       for (const factory of file.factories) {
+        if (factory.forward !== undefined) {
+          for (const id of factory.ids) this.forwardsById.set(id, { filePath: file.filePath, source: factory.forward });
+          continue;
+        }
         const entry: FactoryEntry = {
           filePath: file.filePath,
           methods: new Map(factory.methods),
@@ -937,24 +972,45 @@ export class FactoryIndex {
       }
       const defaultEntry = file.defaultFactoryIds?.[0] === undefined ? undefined : this.methodsById.get(file.defaultFactoryIds[0]);
       if (defaultEntry !== undefined) this.methodsById.set(`default:${file.filePath}`, defaultEntry);
-      for (const id of file.reexportsDefault?.exportIds ?? []) this.reexports.set(id, { importer: file.filePath, specifier: file.reexportsDefault!.specifier });
+      const defaultForward = file.defaultFactoryIds?.[0] === undefined ? undefined : this.forwardsById.get(file.defaultFactoryIds[0]);
+      if (defaultForward !== undefined) this.forwardsById.set(`default:${file.filePath}`, defaultForward);
+      if (file.reexportsDefault !== undefined) {
+        const link = { importer: file.filePath, specifier: file.reexportsDefault.specifier };
+        for (const id of file.reexportsDefault.exportIds) this.reexports.set(id, link);
+        // C1c: `require("./index")()` names the file's default; follow its re-export the same way.
+        this.reexports.set(`default:${file.filePath}`, link);
+      }
     }
   }
 
   private readonly reexports = new Map<string, { readonly importer: string; readonly specifier: string }>();
+  private readonly forwardsById = new Map<string, { readonly filePath: string; readonly source: CallSource }>();
 
-  /** A factory by the symbol its call resolved to, through `module.exports = require("./x")` re-exports (C3b). */
+  /**
+   * A factory by the symbol its call resolved to, through `module.exports = require("./x")` re-exports (C3b) and
+   * factories that forward another call's result (C1c), at most 8 hops.
+   */
   private factoryEntry(producerId: string): FactoryEntry | undefined {
-    let id = producerId;
-    for (let hop = 0; hop < 8; hop++) {
+    let id: string | undefined = producerId;
+    for (let hop = 0; hop < 8 && id !== undefined; hop++) {
       const entry = this.methodsById.get(id);
       if (entry !== undefined) return entry;
+      const forward = this.forwardsById.get(id);
+      if (forward !== undefined) { id = this.producerOf(forward.filePath, forward.source); continue; }
       const link = this.reexports.get(id);
       const target = link === undefined ? undefined : this.resolveModule(link.importer, link.specifier);
       if (target === undefined) return undefined;
       id = `default:${target}`;
     }
     return undefined;
+  }
+
+  /** The symbol a call reaches (C1b, C1c): a local function, a module's named export, or `default:<file>` for the module itself. */
+  private producerOf(filePath: string, source: CallSource): string | undefined {
+    if (source.kind === "local") return source.id;
+    const target = this.resolveModule(filePath, source.specifier);
+    if (target === undefined) return undefined;
+    return source.member === undefined ? `default:${target}` : this.exportMemberOf(target, source.member) ?? this.namedExportOf(target, source.member);
   }
 
   /** C1b: the function `require(filePath).name` reaches through a plain named export (`module.exports.name = f`). */
@@ -1035,13 +1091,41 @@ export class FactoryIndex {
       const target = this.resolveModule(filePath, reference.specifier);
       return target === undefined ? undefined : this.exportMemberOf(target, reference.member) ?? this.namedExportOf(target, reference.member);
     }
-    const call = reference.call;
-    let producer: string | undefined;
-    if (call.kind === "local") producer = call.id;
-    else {
-      const target = this.resolveModule(filePath, call.specifier);
-      producer = target === undefined ? undefined : call.member === undefined ? `default:${target}` : this.exportMemberOf(target, call.member) ?? this.namedExportOf(target, call.member);
-    }
+    const producer = this.producerOf(filePath, reference.call);
     return producer === undefined ? undefined : this.methodOf(producer, reference.member, false, undefined, hops + 1);
   }
+}
+
+/** Phase C1c: the value an initialiser gives its binding, through an assignment chain (`var app = module.exports = f()`). */
+function assignedValue(node: ASTNode | undefined): ASTNode | undefined {
+  let value = node;
+  for (let depth = 0; depth < 8 && value?.type === "AssignmentExpression" && value.attributes.operator === "="; depth++) value = role(value, "right");
+  return value;
+}
+
+/**
+ * Phase C1c: the function a call's callee names, when the file proves it: one of its module-scope functions, or a
+ * repository module it imports (a named member, or the module itself), the binding never assigned.
+ */
+function callSourceOf(callee: ASTNode | undefined, functionsByName: ReadonlyMap<string, readonly CodeSymbol[]>, assignedNames: ReadonlySet<string>, symbols: readonly CodeSymbol[]): CallSource | undefined {
+  const calleeName = callee?.type === "Identifier" ? nameOf(callee) : undefined;
+  if (calleeName === undefined || assignedNames.has(calleeName)) return undefined;
+  const functions = (functionsByName.get(calleeName) ?? []).filter((symbol) => symbol.scopeId === "scope:module");
+  if (functions.length === 1) return { kind: "local", id: functions[0]!.id };
+  const imported = functions.length === 0 ? moduleImport(calleeName, symbols) : undefined;
+  const specifier = imported?.moduleSpecifier;
+  if (imported === undefined || typeof specifier !== "string" || !/^\.\.?(\/|$)/.test(specifier)) return undefined;
+  const named = imported.sourceSymbolName !== undefined && imported.sourceSymbolName !== "*" && !imported.defaultExport;
+  return { kind: "import", specifier, ...(named ? { member: imported.sourceSymbolName! } : {}) };
+}
+
+/** How many bindings a function gives `name` in its own scope: parameters, declarations, `catch`, functions and classes. */
+function bindingsInFunction(fn: ASTNode, body: ASTNode, name: string): number {
+  let count = fn.children.filter((child) => child.role === "params").flatMap(patternNames).filter((bound) => bound === name).length;
+  walkOwn(body, (inner) => {
+    if (inner.type === "VariableDeclarator" && patternNames(role(inner, "id")).includes(name)) count++;
+    if (inner.type === "CatchClause" && patternNames(role(inner, "param")).includes(name)) count++;
+    for (const child of inner.children) if ((child.type === "FunctionDeclaration" || child.type === "ClassDeclaration") && nameOf(role(child, "id")) === name) count++;
+  });
+  return count;
 }
