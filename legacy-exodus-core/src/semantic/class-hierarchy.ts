@@ -119,7 +119,8 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
   };
 
   // C3: top-level writes on an alias of this file's own exports object are writes on that object.
-  const exportAliases = ownExportAliases(ast.root);
+  const ownExports = ownExportsOf(ast.root);
+  const exportAliases = ownExports.aliases;
   const topLevelAssignments = new Set<ASTNode>();
   for (const statement of ast.root.children) {
     const expression = statement.type === "ExpressionStatement" ? statement.children.find((child) => child.role === "expression") : undefined;
@@ -155,7 +156,7 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
       if (parent?.type === "AssignmentExpression" && role === "left") {
         written.add(name ?? COMPUTED);
         const object = node.children.find((child) => child.role === "object");
-        if (name !== undefined && !isOwnObject(object) && !isOwnAlias(object, parent)) foreignWritten.add(name);
+        if (name !== undefined && !isOwnObject(object, ownExports) && !isOwnAlias(object, parent)) foreignWritten.add(name);
       }
       else if (!called && !tagged && parent?.type !== "UpdateExpression"
         && !(parent?.type === "UnaryExpression" && parent.attributes.operator === "delete")) {
@@ -220,29 +221,102 @@ function isFreshValue(node: ASTNode | undefined): boolean {
 }
 
 /**
+ * Which names of a file hold its own exports object, an object made in that file, so that a write on them cannot
+ * replace a method of another module's value (C3, RT-M3).
+ */
+interface OwnExports {
+  /** Top-level aliases of the exports object (see ownExportsOf). */
+  readonly aliases: ReadonlySet<string>;
+  /** Whether `exports` is the CommonJS wrapper's binding, never declared in the file and only assigned values made here. */
+  readonly exportsOwn: boolean;
+  /** Whether `module` is the wrapper's binding, never declared in the file, and `module.exports` is only assigned values made here. */
+  readonly moduleExportsOwn: boolean;
+}
+
+/**
  * Phase C3: names that hold this file's own exports object, declared at the top of the file and never reassigned:
  * `var app = exports = module.exports = {}`, `var proto = module.exports = function …`, `const api = module.exports`, or
  * `var res = Object.create(…); … module.exports = res`. The value must be made here (isFreshValue), so the alias can
  * never be another module's object.
+ *
+ * RT-M3: `exports` and `module.exports` themselves are own only while every value assigned to them is made here: a
+ * fresh value, a top-level function or class declared once and never reassigned (`exports = module.exports =
+ * createApplication`), or a top-level name holding a fresh value. `module.exports = require("./x")` or
+ * `exports = other` makes them another module's object; a parameter or variable named `exports` or `module` (in any
+ * scope, which only over-approximates) may hold anything.
  */
-function ownExportAliases(root: ASTNode): Set<string> {
+function ownExportsOf(root: ASTNode): OwnExports {
   const reassigned = new Set<string>();
-  // Whether `module.exports` is ever replaced by a value not made here (`module.exports = require("./x")`): a plain
-  // read of it (`const api = module.exports`) may then hold another module's object.
-  let exportsMaybeForeign = false;
+  // How many declarations bind each name, in any scope: a parameter, variable, function, class, catch or import.
+  const declarations = new Map<string, number>();
+  const declare = (name: string | undefined): void => {
+    if (name !== undefined) declarations.set(name, (declarations.get(name) ?? 0) + 1);
+  };
+  // The values stored in `exports` and in `module.exports`; undefined stands for one not known (`exports ||= x`, `[exports] = …`).
+  const exportsValues: Array<ASTNode | undefined> = [];
+  const moduleExportsValues: Array<ASTNode | undefined> = [];
+  const assignTargets = (target: ASTNode | undefined): void => {
+    for (const name of boundNames(target)) {
+      reassigned.add(name);
+      if (name === "exports") exportsValues.push(undefined);
+    }
+  };
   const walk = (node: ASTNode): void => {
     if (node.type === "AssignmentExpression") {
       const left = node.children.find((child) => child.role === "left");
-      if (left?.type === "Identifier" && nameOf(left) !== undefined) reassigned.add(nameOf(left)!);
-      if (isModuleExportsNode(left)) {
-        let right = node.children.find((child) => child.role === "right");
-        while (right?.type === "AssignmentExpression" && right.attributes.operator === "=") right = right.children.find((child) => child.role === "right");
-        if (!isFreshValue(right)) exportsMaybeForeign = true;
+      let value = node.attributes.operator === "=" ? node.children.find((child) => child.role === "right") : undefined;
+      while (value?.type === "AssignmentExpression" && value.attributes.operator === "=") value = value.children.find((child) => child.role === "right");
+      if (left?.type === "Identifier" && nameOf(left) === "exports") {
+        reassigned.add("exports");
+        exportsValues.push(value);
+      } else {
+        assignTargets(left);
       }
+      if (isModuleExportsNode(left)) moduleExportsValues.push(value);
+    }
+    if (node.type === "ForInStatement" || node.type === "ForOfStatement") {
+      const left = node.children.find((child) => child.role === "left");
+      if (left?.type !== "VariableDeclaration") assignTargets(left);
+    }
+    if (node.type === "UpdateExpression") assignTargets(node.children.find((child) => child.role === "argument"));
+    if (node.type === "VariableDeclarator") for (const name of boundNames(node.children.find((child) => child.role === "id"))) declare(name);
+    if (node.type === "CatchClause") for (const name of boundNames(node.children.find((child) => child.role === "param"))) declare(name);
+    if (["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ObjectMethod", "ClassMethod", "ClassPrivateMethod"].includes(node.type)) {
+      for (const param of node.children.filter((child) => child.role === "param" || child.role === "params")) for (const name of boundNames(param)) declare(name);
+    }
+    if (["FunctionDeclaration", "FunctionExpression", "ClassDeclaration", "ClassExpression"].includes(node.type)) {
+      const id = node.children.find((child) => child.role === "id");
+      if (id !== undefined) declare(nameOf(id));
+    }
+    if (["ImportSpecifier", "ImportDefaultSpecifier", "ImportNamespaceSpecifier"].includes(node.type)) {
+      const local = node.children.find((child) => child.role === "local");
+      if (local !== undefined) declare(nameOf(local));
     }
     for (const child of node.children) walk(child);
   };
   walk(root);
+  // Top-level names whose one declaration makes their value here: a function or class declaration, or a single
+  // declarator with a fresh value (`var res = Object.create(…)`).
+  const ownNames = new Set<string>();
+  for (const statement of root.children) {
+    if (statement.type === "FunctionDeclaration" || statement.type === "ClassDeclaration") {
+      const id = statement.children.find((child) => child.role === "id");
+      const name = id === undefined ? undefined : nameOf(id);
+      if (name !== undefined) ownNames.add(name);
+    }
+    const declarators = statement.type === "VariableDeclaration" ? statement.children.filter((child) => child.type === "VariableDeclarator") : [];
+    const id = declarators.length === 1 ? declarators[0]!.children.find((child) => child.role === "id") : undefined;
+    const name = id?.type === "Identifier" ? nameOf(id) : undefined;
+    if (name !== undefined && isFreshValue(declarators[0]!.children.find((child) => child.role === "init"))) ownNames.add(name);
+  }
+  const ownValue = (value: ASTNode | undefined): boolean => {
+    if (isFreshValue(value)) return true;
+    const name = value?.type === "Identifier" ? nameOf(value) : undefined;
+    return name !== undefined && ownNames.has(name) && declarations.get(name) === 1 && !reassigned.has(name);
+  };
+  const exportsOwn = !declarations.has("exports") && exportsValues.every(ownValue);
+  const moduleExportsOwn = !declarations.has("module") && moduleExportsValues.every(ownValue);
+
   const aliases = new Set<string>();
   const freshDeclared = new Set<string>();
   for (const statement of root.children) {
@@ -253,7 +327,8 @@ function ownExportAliases(root: ASTNode): Set<string> {
       const name = id?.type === "Identifier" ? nameOf(id) : undefined;
       let value = declarators[0]!.children.find((child) => child.role === "init");
       if (name === undefined || reassigned.has(name)) continue;
-      if (isModuleExportsNode(value)) { if (!exportsMaybeForeign) aliases.add(name); continue; }
+      // A plain read of `module.exports` holds another module's object once it may be one (`module.exports = require("./x")`).
+      if (isModuleExportsNode(value)) { if (moduleExportsOwn) aliases.add(name); continue; }
       let toExports = false;
       while (value?.type === "AssignmentExpression" && value.attributes.operator === "=") {
         const left = value.children.find((child) => child.role === "left");
@@ -270,18 +345,51 @@ function ownExportAliases(root: ASTNode): Set<string> {
       if (name !== undefined && freshDeclared.has(name)) aliases.add(name);
     }
   }
-  return aliases;
+  return { aliases, exportsOwn, moduleExportsOwn };
 }
 
-/** `this`, `exports` or `module.exports`: an object a write in this file cannot make another module's instance. */
-function isOwnObject(object: ASTNode | undefined): boolean {
+/** Names a binding pattern or assignment target binds (`a`, `[a, { b }]`, `c = 1`, `...d`); member targets bind none. */
+function boundNames(target: ASTNode | undefined): string[] {
+  if (target === undefined) return [];
+  switch (target.type) {
+    case "Identifier": {
+      const name = nameOf(target);
+      return name === undefined ? [] : [name];
+    }
+    case "AssignmentPattern":
+      return boundNames(target.children.find((child) => child.role === "left"));
+    case "RestElement":
+      return boundNames(target.children.find((child) => child.role === "argument"));
+    case "ObjectPattern":
+      return target.children.flatMap((property) => property.type === "RestElement" ? boundNames(property)
+        : property.type === "ObjectProperty" ? boundNames(property.children.find((child) => child.role === "value") ?? property.children.find((child) => child.role === "key")) : []);
+    case "ArrayPattern":
+      return target.children.flatMap((element) => boundNames(element));
+    case "TSParameterProperty":
+      return boundNames(target.children.find((child) => child.role === "parameter"));
+    case "TSAsExpression":
+    case "TSSatisfiesExpression":
+    case "TSNonNullExpression":
+    case "TSTypeAssertion":
+    case "ParenthesizedExpression":
+      return boundNames(target.children.find((child) => child.role === "expression"));
+    default:
+      return [];
+  }
+}
+
+/**
+ * `this`, or `exports` or `module.exports` while they hold this file's own exports object (RT-M3): an object a write in
+ * this file cannot make another module's instance.
+ */
+function isOwnObject(object: ASTNode | undefined, own: OwnExports): boolean {
   if (object === undefined) return false;
   if (object.type === "ThisExpression") return true;
-  if (object.type === "Identifier") return nameOf(object) === "exports";
+  if (object.type === "Identifier") return nameOf(object) === "exports" && own.exportsOwn;
   if (object.type !== "MemberExpression" || object.attributes.computed === true) return false;
   const base = object.children.find((child) => child.role === "object");
   const property = object.children.find((child) => child.role === "property");
-  return base?.type === "Identifier" && nameOf(base) === "module" && property !== undefined && nameOf(property) === "exports";
+  return base?.type === "Identifier" && nameOf(base) === "module" && property !== undefined && nameOf(property) === "exports" && own.moduleExportsOwn;
 }
 
 /**
