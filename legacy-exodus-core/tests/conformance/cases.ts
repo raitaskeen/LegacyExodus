@@ -1740,6 +1740,66 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "dynamic-scope:clean-file-resolves", category: "calls", has: /^user\.cjs@4:\d+\|module\|m\|RESOLVED\|/ },
     ],
   },
+  {
+    // RT-H1 (red team 2026-11-15): rule 1 (`const c = new C(); c.m()`) and rule 2 (`app.init = function …;
+    // app.init()`) counted writes in the calling file only. Another file that imports the instance or the object can
+    // replace the method by a plain assignment. In Node, main.js prints "patched-m patched-n patched-init K.k run":
+    // the three patched calls run main.js's functions; `kk.k()` and `box.run()` are untouched (main.js writes
+    // `box.other`, another name).
+    id: "cross-file-method-writes",
+    files: {
+      "r1.js": [
+        "class C { m() { return \"C.m\"; } }",
+        "const c = new C();",
+        "function go() { return c.m(); }",
+        "module.exports = { c, go };",
+        "",
+      ].join("\n"),
+      "r1b.js": [
+        "class D { n() { return \"D.n\"; } }",
+        "const d = new D();",
+        "exports.d = d;",
+        "exports.go = function () { return d.n(); };",
+        "",
+      ].join("\n"),
+      "r2.js": [
+        "const app = {};",
+        "app.init = function () { return \"init\"; };",
+        "app.start = function () { return app.init(); };",
+        "module.exports = app;",
+        "",
+      ].join("\n"),
+      "keep.js": [
+        "class K { k() { return \"K.k\"; } }",
+        "const kk = new K();",
+        "function goK() { return kk.k(); }",
+        "const box = {};",
+        "box.run = function () { return \"run\"; };",
+        "box.go = function () { return box.run(); };",
+        "module.exports = { kk, goK, box };",
+        "",
+      ].join("\n"),
+      "main.js": [
+        "const r1 = require(\"./r1\");",
+        "r1.c.m = function () { return \"patched-m\"; };",
+        "const { d, go } = require(\"./r1b\");",
+        "d.n = function () { return \"patched-n\"; };",
+        "const r2 = require(\"./r2\");",
+        "r2.init = function () { return \"patched-init\"; };",
+        "const keep = require(\"./keep\");",
+        "keep.box.other = function () { return \"other\"; };",
+        "console.log(r1.go(), go(), r2.start(), keep.goK(), keep.box.go());",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "rt-h1:instance-method-written-elsewhere-unresolved", category: "calls", has: /^r1\.js@3:\d+\|go\|c\.m\|UNRESOLVED\|/ },
+      { id: "rt-h1:destructured-instance-written-elsewhere-unresolved", category: "calls", has: /^r1b\.js@4:\d+\|go\|d\.n\|UNRESOLVED\|/ },
+      { id: "rt-h1:container-method-written-elsewhere-unresolved", category: "calls", has: /^r2\.js@3:\d+\|start\|app\.init\|UNRESOLVED\|/ },
+      { id: "rt-h1:unwritten-instance-method-resolves", category: "calls", has: /^keep\.js@3:\d+\|goK\|kk\.k\|RESOLVED\|method:k@1:\d+@keep\.js/ },
+      { id: "rt-h1:unwritten-container-method-resolves", category: "calls", has: /^keep\.js@6:\d+\|go\|box\.run\|RESOLVED\|method:run@5:\d+@keep\.js/ },
+    ],
+  },
   ...taintCases,
 ];
 
