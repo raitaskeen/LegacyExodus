@@ -55,9 +55,9 @@ Reports and probes: `audits/2026-11-15-redteam/` (each finding checked under Nod
 
 | ID | Sev | Root cause | Owner | State |
 |---|---|---|---|---|
-| RT-PR-A | — | #328: writes through `module.exports`/`exports` after `var app = module.exports = f()` | main session | Open (blocks #328) |
-| RT-PR-B | — | #328: forwarder escape check sees only the bare name (`init.call(...[app])`, optional calls, aliases) | main session | Open (blocks #328) |
-| RT-PR-C | — | #328: Annex B block function replaces the forwarded callee | main session | Open (blocks #328) |
+| RT-PR-A | — | #328: writes through `module.exports`/`exports` after `var app = module.exports = f()` | main session | Fixed in #328 (not merged); probes now UNRESOLVED, conformance rt-pr-* |
+| RT-PR-B | — | #328: forwarder escape check sees only the bare name (`init.call(...[app])`, optional calls, aliases) | main session | Fixed in #328 (not merged); probes now UNRESOLVED, conformance rt-pr-* |
+| RT-PR-C | — | #328: Annex B block function replaces the forwarded callee | main session | Fixed in #328 (not merged); probes now UNRESOLVED, conformance rt-pr-* |
 | RT-H1 | High | Rules 1 and 2 ignore writes to the method from other files | session write-checks | Open |
 | RT-M1 | Med | Destructuring and `for…of` writes missed by write checks | write-checks (factory part: main) | Open |
 | RT-M2 | Med | String-key bracket writes and `defineProperty(exports, …)` missed | write-checks (factory part: main) | Open |
@@ -65,7 +65,7 @@ Reports and probes: `audits/2026-11-15-redteam/` (each finding checked under Nod
 | RT-M4 | Med | Class instance used as another object's prototype | write-checks | Open |
 | RT-M5 | Med | B1c ignores same-file reflection onto the literal | write-checks | Open |
 | RT-M6 | Med | `#imports`/self-reference conditions: `import` tried before `require` | session resolver | Open |
-| RT-M7 | Med | Factory value matches a same-named function from any scope | main session | Open |
+| RT-M7 | Med | Factory value matches a same-named function from any scope | main session | Fixed in #328 (not merged), case rt-m7-nested-namesake |
 | RT-M8 | Med | `file:` dependency is EXTERNAL though repository code runs | resolver | Open |
 | RT-M9 | Med | Circular `require` gives a stale exports object | design needed | Open |
 | RT-L1 | Low | Factory fall-through returns `undefined` | main session | Open |
@@ -76,6 +76,7 @@ Reports and probes: `audits/2026-11-15-redteam/` (each finding checked under Nod
 | RT-L6 | Low | Class getter replaces an earlier method | write-checks | Open |
 | RT-L7 | Low | Package patched through a repository wrapper module | write-checks | Open |
 | RT-L8 | Low | Annex B block function replaces a C3a shorthand export | design needed | Open |
+| RT-L9 | Low | Annex B block function replaces a factory callee for a direct call (`var b = express(); b.use()`, probe p06 of the PR328 set; on main) | design needed | Open |
 
 ## Track 2026-11-11: cross-file audit B findings (XB-01 to XB-09)
 
