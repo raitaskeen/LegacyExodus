@@ -46,7 +46,7 @@ off; Fact Diff and Scale Gate are now required checks on main; #195 closed; #111
 | B1c | EXTERNAL aliases of globals and built-in methods on literal values | **Merged** #314 (`d2aa6aa`): src EXTERNAL 24.9% -> 33.3%, 0 lost on 9 corpora |
 | A2b | Coverage split: source files vs test files | **Merged** #313 (`7470e0e`) |
 | B2 | `require` in TypeScript compiled to CommonJS (nearest tsconfig) | **Merged** #318 (`781e1d5`): Ghost 967 upgraded, 0 lost; module-load 1,060 -> 93; 0 change on 10 other corpora |
-| C | Receiver tracking, see PHASE-C-DESIGN.md | C1 **Merged** #312 (`7ea08c4`): Fastify oracle recall 7.1% -> 34.3% (CI), 0 contradictions. C2 + C2b **Merged** #315 (`fdc37f3`): prototypes, `Object.create(P)`, ES5 inheritance; 0 lost on 11 corpora, mongoose +132 resolved; Ghost 190.6 s vs 206.1 s. C3 **Merged** #316 (`3039c44`): CommonJS export objects, own-alias writes, factory copies, re-export hop; Express oracle recall 29.4% -> 49.3%, 0 contradictions; facts-lost-explained (owner OK): Ghost 216 = 148 dfg refinements + 68 unused exports now called; review fix c68564a (plain module.exports read). C1b **Merged** #324 (`3d8eea7`): factory literal values from repo-module members, other factories' results, body writes, direct literal returns; Fastify oracle (CI) 2,979 -> 3,469 agree, recall 34.5% -> 40.2%, 0 contradictions; facts-lost-explained (owner OK): 2 Fastify unused exports now called. Next: per the oracle (Express app/router, Fastify `ready`/name rule), C5, C6; B3 folded into D |
+| C | Receiver tracking, see PHASE-C-DESIGN.md | C1 **Merged** #312 (`7ea08c4`): Fastify oracle recall 7.1% -> 34.3% (CI), 0 contradictions. C2 + C2b **Merged** #315 (`fdc37f3`): prototypes, `Object.create(P)`, ES5 inheritance; 0 lost on 11 corpora, mongoose +132 resolved; Ghost 190.6 s vs 206.1 s. C3 **Merged** #316 (`3039c44`): CommonJS export objects, own-alias writes, factory copies, re-export hop; Express oracle recall 29.4% -> 49.3%, 0 contradictions; facts-lost-explained (owner OK): Ghost 216 = 148 dfg refinements + 68 unused exports now called; review fix c68564a (plain module.exports read). C1b **Merged** #324 (`3d8eea7`): factory literal values from repo-module members, other factories' results, body writes, direct literal returns; Fastify oracle (CI) 2,979 -> 3,469 agree, recall 34.5% -> 40.2%, 0 contradictions; facts-lost-explained (owner OK): 2 Fastify unused exports now called. C1c **Merged** #328 (`3ac23eb`): forwarding factories and assignment chains, plus the shadowing fix that also removes 2 C1b false claims; CI oracle Express 1,726 -> 1,822 (52.0%), 0 contradictions. Next: per the oracle (Express app/router, Fastify `ready`/name rule), C5, C6; B3 folded into D |
 | D-H | See the plan | Queued |
 
 ## Track 2026-11-15: red team (RT) on main 3d8eea7 and PR #328
@@ -55,9 +55,9 @@ Reports and probes: `audits/2026-11-15-redteam/` (each finding checked under Nod
 
 | ID | Sev | Root cause | Owner | State |
 |---|---|---|---|---|
-| RT-PR-A | — | #328: writes through `module.exports`/`exports` after `var app = module.exports = f()` | main session | Fixed in #328 (not merged); probes now UNRESOLVED, conformance rt-pr-* |
-| RT-PR-B | — | #328: forwarder escape check sees only the bare name (`init.call(...[app])`, optional calls, aliases) | main session | Fixed in #328 (not merged); probes now UNRESOLVED, conformance rt-pr-* |
-| RT-PR-C | — | #328: Annex B block function replaces the forwarded callee | main session | Fixed in #328 (not merged); probes now UNRESOLVED, conformance rt-pr-* |
+| RT-PR-A | — | #328: writes through `module.exports`/`exports` after `var app = module.exports = f()` | main session | **Fixed** #328 (`3ac23eb`), probes UNRESOLVED, conformance rt-pr-* |
+| RT-PR-B | — | #328: forwarder escape check sees only the bare name (`init.call(...[app])`, optional calls, aliases) | main session | **Fixed** #328 (`3ac23eb`), probes UNRESOLVED, conformance rt-pr-* |
+| RT-PR-C | — | #328: Annex B block function replaces the forwarded callee | main session | **Fixed** #328 (`3ac23eb`), probes UNRESOLVED, conformance rt-pr-* |
 | RT-H1 | High | Rules 1 and 2 ignore writes to the method from other files | session write-checks | Draft #331 (mongoose 2 correct calls lost to the name rule, explained) |
 | RT-M1 | Med | Destructuring and `for…of` writes missed by write checks | write-checks (factory part: main) | Open |
 | RT-M2 | Med | String-key bracket writes and `defineProperty(exports, …)` missed | write-checks (factory part: main) | Open |
@@ -65,7 +65,7 @@ Reports and probes: `audits/2026-11-15-redteam/` (each finding checked under Nod
 | RT-M4 | Med | Class instance used as another object's prototype | write-checks | Open |
 | RT-M5 | Med | B1c ignores same-file reflection onto the literal | write-checks | Open |
 | RT-M6 | Med | `#imports`/self-reference conditions: `import` tried before `require` | session resolver | Open |
-| RT-M7 | Med | Factory value matches a same-named function from any scope | main session | Fixed in #328 (not merged), case rt-m7-nested-namesake |
+| RT-M7 | Med | Factory value matches a same-named function from any scope | main session | **Fixed** #328 (`3ac23eb`), case rt-m7-nested-namesake |
 | RT-M8 | Med | `file:` dependency is EXTERNAL though repository code runs | resolver | Open |
 | RT-M9 | Med | Circular `require` gives a stale exports object | design needed | Open |
 | RT-L1 | Low | Factory fall-through returns `undefined` | main session | Open |
