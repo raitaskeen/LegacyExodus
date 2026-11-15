@@ -688,6 +688,36 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // RT-M2 (red team 2026-11-15), the class hierarchy's part: a member key written as a template literal without
+    // substitutions names the property as a string literal does, but only `o["m"]` was read as `m`. A write
+    // `` lib[`m`] = … `` in another file, or a borrow `` const { [`go`]: f } = lib `` / `` lib[`go`].call(other) ``, was
+    // missed. In Node, main.js prints "patched-template-key other.n other.k Q.q": the first three calls run the patch or
+    // another object's method; main.js writes `` lib4[`other`] ``, so `this.q()` in `check` is untouched.
+    id: "template-literal-keys",
+    files: {
+      "lib.js": "class C { go() { return this.m(); } m() { return \"C.m\"; } }\nmodule.exports = new C();\n",
+      "lib2.js": "class D { go() { return this.n(); } n() { return \"D.n\"; } }\nmodule.exports = new D();\n",
+      "lib3.js": "class E { run() { return this.k(); } k() { return \"E.k\"; } }\nmodule.exports = new E();\n",
+      "lib4.js": "class Q { check() { return this.q(); } q() { return \"Q.q\"; } }\nmodule.exports = new Q();\n",
+      "main.js": [
+        "const lib = require(\"./lib\");",
+        "lib[`m`] = function () { return \"patched-template-key\"; };",
+        "const { [`go`]: borrowed } = require(\"./lib2\");",
+        "const lib3 = require(\"./lib3\");",
+        "const lib4 = require(\"./lib4\");",
+        "lib4[`other`] = 1;",
+        "console.log(lib.go(), borrowed.call({ n() { return \"other.n\"; } }), lib3[`run`].call({ k() { return \"other.k\"; } }), lib4.check());",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "rt-m2:template-key-write-unresolved", category: "calls", has: /^lib\.js@1:\d+\|go\|this\.m\|UNRESOLVED\|/ },
+      { id: "rt-m2:template-key-destructuring-borrow-unresolved", category: "calls", has: /^lib2\.js@1:\d+\|go\|this\.n\|UNRESOLVED\|/ },
+      { id: "rt-m2:template-key-read-borrow-unresolved", category: "calls", has: /^lib3\.js@1:\d+\|run\|this\.k\|UNRESOLVED\|/ },
+      { id: "rt-m2:other-template-key-resolves", category: "calls", has: /^lib4\.js@1:\d+\|check\|this\.q\|RESOLVED\|method:q@1:\d+@lib4\.js/ },
+    ],
+  },
+  {
     // XA-03: another file may replace a method on an exported instance. In Node, after app.js runs,
     // `logger.log("hi")` returns "patched hi".
     id: "this-dispatch-instance-write",

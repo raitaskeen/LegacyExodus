@@ -475,15 +475,26 @@ function newCalleeName(node: ASTNode): string | undefined {
 
 function memberPropertyName(member: ASTNode): string | undefined {
   const property = member.children.find((child) => child.role === "property");
-  if (member.attributes.computed === true) return property?.type === "StringLiteral" && typeof property.attributes.value === "string" ? property.attributes.value : undefined;
+  if (member.attributes.computed === true) return staticKey(property);
   return property === undefined ? undefined : nameOf(property);
+}
+
+/**
+ * A key known without running code (RT-M2): a string or numeric literal, or a template literal without substitutions,
+ * so `` o[`m`] `` and `o["m"]` both name `m`, as they do at run time.
+ */
+function staticKey(node: ASTNode | undefined): string | undefined {
+  if (node?.type === "StringLiteral") return typeof node.attributes.value === "string" ? node.attributes.value : undefined;
+  if (node?.type === "NumericLiteral") return typeof node.attributes.value === "number" ? String(node.attributes.value) : undefined;
+  if (node?.type !== "TemplateLiteral" || node.children.some((child) => child.role === "expressions")) return undefined;
+  const quasi = node.children.find((child) => child.role === "quasis" || child.type === "TemplateElement");
+  return typeof quasi?.attributes.value === "string" ? quasi.attributes.value : undefined;
 }
 
 function keyName(element: ASTNode): string | undefined {
   const key = element.children.find((child) => child.role === "key");
   if (key === undefined) return undefined;
-  if (element.attributes.computed === true) return key.type === "StringLiteral" && typeof key.attributes.value === "string" ? key.attributes.value : undefined;
-  if (key.type === "StringLiteral" && typeof key.attributes.value === "string") return key.attributes.value;
+  if (element.attributes.computed === true || key.type === "StringLiteral" || key.type === "NumericLiteral") return staticKey(key);
   if (key.type === "PrivateName") {
     const id = key.children.find((child) => child.role === "id");
     const inner = id === undefined ? undefined : nameOf(id);
