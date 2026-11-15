@@ -53,7 +53,8 @@ export interface ClassHierarchyFile {
   readonly writtenNames: readonly string[];
   /**
    * Property names the file writes by name on an object that may be another module's instance (XA-03): not `this`
-   * (a class's own writes on `this` are its members) and not the file's own `exports` / `module.exports`.
+   * inside a class element (a class's own writes on `this` are its members; RT-N1: `this` in a plain function or an
+   * object method may be any object, so a write on it counts) and not the file's own `exports` / `module.exports`.
    */
   readonly foreignWrittenNames: readonly string[];
   /** Property names the file reads as a value rather than calling them. */
@@ -62,6 +63,8 @@ export interface ClassHierarchyFile {
 
 const MODULE_SCOPE = "scope:module";
 const COMPUTED = "*";
+/** Class elements whose code runs with `this` bound to an instance or to the class (RT-N1). */
+const classThisElements: ReadonlySet<string> = new Set(["ClassMethod", "ClassPrivateMethod", "ClassProperty", "ClassPrivateProperty", "ClassAccessorProperty", "PropertyDefinition", "StaticBlock"]);
 
 /** One file's contribution, collected while the file's AST and symbol table are at hand. */
 export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | undefined): ClassHierarchyFile {
@@ -131,7 +134,13 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
   // RT-M1: each member expression the file writes, and the node that writes it (see writtenTargets).
   const writers = new Map<ASTNode, ASTNode>();
 
-  const visit = (node: ASTNode, parent: ASTNode | undefined, currentClass: string | undefined): void => {
+  // RT-N1: `thisInClass` tells whether `this` here is bound by a class element (a method, constructor, field or static
+  // block, arrow functions inside them included), so that it is an instance of a class (or the class) of this file. In
+  // a plain function, function expression or object method `this` may be any object: `patch.call(app)`. At the top of
+  // the file `this` is the file's own original exports object (CommonJS) or undefined (an ES module).
+  const visit = (node: ASTNode, parent: ASTNode | undefined, currentClass: string | undefined, thisInClass: boolean): void => {
+    const childThisInClass = parent?.type === "ClassBody" && classThisElements.has(node.type) ? true
+      : ["FunctionDeclaration", "FunctionExpression", "ObjectMethod"].includes(node.type) ? false : thisInClass;
     let classInside = currentClass;
     if (node.type === "ClassDeclaration" || node.type === "ClassExpression") {
       const symbol = node.location === undefined ? undefined : classByStart.get(`${node.location.start.line}:${node.location.start.column}`);
@@ -160,7 +169,8 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
       if (writer !== undefined) {
         written.add(name ?? COMPUTED);
         const object = node.children.find((child) => child.role === "object");
-        if (name !== undefined && !isOwnObject(object, ownExports) && !isOwnAlias(object, writer)) foreignWritten.add(name);
+        const own = object?.type === "ThisExpression" ? thisInClass : isOwnObject(object, ownExports) || isOwnAlias(object, writer);
+        if (name !== undefined && !own) foreignWritten.add(name);
       }
       else if (!called && !tagged && !(parent?.type === "UnaryExpression" && parent.attributes.operator === "delete")) {
         if (name !== undefined) borrowed.add(name);
@@ -184,9 +194,9 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
       const name = nameOf(node);
       if (name !== undefined) valueUses.set(name, (valueUses.get(name) ?? 0) + 1);
     }
-    for (const child of node.children) visit(child, node, classInside);
+    for (const child of node.children) visit(child, node, classInside, childThisInClass);
   };
-  visit(ast.root, undefined, undefined);
+  visit(ast.root, undefined, undefined, true);
   const computedClassNames = new Set<string>();
   for (const name of computedObjectNames) {
     computedClassNames.add(name);
