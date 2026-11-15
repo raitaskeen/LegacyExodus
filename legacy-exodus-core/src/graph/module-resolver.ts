@@ -31,6 +31,12 @@ export interface PackageScope {
   readonly name?: string;
   readonly exports?: unknown;
   readonly imports?: unknown;
+  /**
+   * Every dependency the manifest declares, by name (RT-M8): the project-relative folder of a `file:` or `link:` target
+   * inside the project, which the package manager installs as that folder; null for any other (registry, git, a path
+   * outside the project).
+   */
+  readonly dependencies?: Readonly<Record<string, string | null>>;
 }
 
 /** A workspace package: its project-relative POSIX root and the manifest fields naming its entry points. */
@@ -59,6 +65,7 @@ export function canonicalizePath(path: string): string {
 export class ModuleResolver {
   private readonly fileArtifactCache = new WeakMap<readonly FileArtifact[], ReadonlySet<string>>();
   private readonly setCache = new WeakMap<ReadonlySet<string>, ReadonlySet<string>>();
+  private localDependencyNameSet: ReadonlySet<string> | undefined;
 
   public constructor(private readonly options: ModuleResolutionOptions = {}) {}
 
@@ -78,7 +85,8 @@ export class ModuleResolver {
     }
     if (!rawNormalizedSpecifier.startsWith(".")) {
       const resolvedPath = this.resolveNonRelative(rawNormalizedSpecifier, knownPaths, importerIsTypeScript)
-        ?? this.resolveSelfReference(normalizedImporter, rawNormalizedSpecifier, knownPaths, importerIsTypeScript);
+        ?? this.resolveSelfReference(normalizedImporter, rawNormalizedSpecifier, knownPaths, importerIsTypeScript)
+        ?? this.resolveLocalDependency(normalizedImporter, rawNormalizedSpecifier, knownPaths, importerIsTypeScript);
       return immutable({ importerPath, moduleSpecifier, resolvedPath });
     }
 
@@ -92,18 +100,25 @@ export class ModuleResolver {
 
   /**
    * Whether a non-relative specifier names code of this repository, resolved or not (RT-M6): a `#` import, a workspace
-   * package, or the importer's own package by name when that package has `exports`. Such an import is never a call
-   * into a package from outside, even when no single file can be named for it.
+   * package, the importer's own package by name when that package has `exports`, or a dependency installed from a
+   * folder of the project (RT-M8). Such an import is never a call into a package from outside, even when no single file
+   * can be named for it.
    */
   public namesRepositoryPackage(importerPath: string, moduleSpecifier: string): boolean {
     const specifier = moduleSpecifier.replaceAll("\\", "/");
     if (specifier.startsWith("#")) return true;
     if (specifier.startsWith(".") || specifier.startsWith("/")) return false;
     const packages = this.options.packages;
-    if (packages !== undefined && Object.hasOwn(packages, packageNameOf(specifier))) return true;
-    const nearest = this.nearestScope(canonicalizePath(importerPath));
+    const packageName = packageNameOf(specifier);
+    if (packages !== undefined && Object.hasOwn(packages, packageName)) return true;
+    const importer = canonicalizePath(importerPath);
+    const nearest = this.nearestScope(importer);
     const name = nearest?.scope.name;
-    return name !== undefined && nearest?.scope.exports !== undefined && (specifier === name || specifier.startsWith(`${name}/`));
+    if (name !== undefined && nearest?.scope.exports !== undefined && (specifier === name || specifier.startsWith(`${name}/`))) return true;
+    // The nearest manifest that declares the name decides; with none on the way up, a folder dependency declared
+    // anywhere may still be installed where Node finds it (hoisted), so the name counts as the repository's.
+    const declared = this.declaredDependency(importer, packageName);
+    return declared === undefined ? this.localDependencyNames().has(packageName) : declared !== null;
   }
 
   /**
@@ -197,6 +212,52 @@ export class ModuleResolver {
     if (workspacePackage === undefined) return null;
     const subpath = specifier === name ? "." : `./${specifier.slice(name.length + 1)}`;
     return packageEntry(canonicalizePath(workspacePackage.root), workspacePackage, subpath, knownPaths, importerIsTypeScript);
+  }
+
+  /**
+   * A dependency installed from a folder of this project (RT-M8): `name` or `name/sub` where the nearest `package.json`
+   * at or above the importer that declares `name` gives a `file:` or `link:` target inside the project. npm, Yarn and
+   * pnpm install that folder as `node_modules/name` next to the manifest, where Node's lookup from the importer finds it.
+   * The folder loads as Node loads a package: through its `exports`, else its `main`, else its index; its manifest must
+   * be in the inventory.
+   */
+  private resolveLocalDependency(importerPath: string, specifier: string, knownPaths: ReadonlySet<string>, importerIsTypeScript: boolean): string | null {
+    if (specifier.startsWith("@") && specifier.split("/").length < 2) return null;
+    const name = packageNameOf(specifier);
+    const root = this.declaredDependency(importerPath, name);
+    const scopes = this.options.scopes;
+    if (typeof root !== "string" || scopes === undefined || !Object.hasOwn(scopes, root)) return null;
+    const mains = this.options.directoryMains;
+    const main = mains !== undefined && Object.hasOwn(mains, root) ? mains[root] : undefined;
+    const subpath = specifier === name ? "." : `./${specifier.slice(name.length + 1)}`;
+    return packageEntry(root, { root, exports: scopes[root]!.exports, ...(main === undefined ? {} : { main }) }, subpath, knownPaths, importerIsTypeScript);
+  }
+
+  /**
+   * What the nearest manifest at or above the importer that declares `name` says about it: the folder of a dependency
+   * installed from the project, null for any other dependency, undefined when no manifest on the way up declares it.
+   */
+  private declaredDependency(importerPath: string, name: string): string | null | undefined {
+    const scopes = this.options.scopes;
+    if (scopes === undefined || isAbsoluteLike(importerPath)) return undefined;
+    for (let directory = posix.dirname(importerPath); ; directory = posix.dirname(directory)) {
+      const key = directory === "" ? "." : directory;
+      const dependencies = Object.hasOwn(scopes, key) ? scopes[key]!.dependencies : undefined;
+      if (dependencies !== undefined && Object.hasOwn(dependencies, name)) return dependencies[name] ?? null;
+      if (key === ".") return undefined;
+    }
+  }
+
+  /** Names some manifest of the project declares as a dependency installed from a project folder. */
+  private localDependencyNames(): ReadonlySet<string> {
+    if (this.localDependencyNameSet === undefined) {
+      const names = new Set<string>();
+      for (const scope of Object.values(this.options.scopes ?? {})) {
+        for (const [name, root] of Object.entries(scope.dependencies ?? {})) if (root !== null) names.add(name);
+      }
+      this.localDependencyNameSet = names;
+    }
+    return this.localDependencyNameSet;
   }
 
   /** The nearest `package.json` at or above the importer's directory, as Node finds a package scope. */
