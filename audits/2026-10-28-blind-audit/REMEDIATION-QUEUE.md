@@ -49,6 +49,34 @@ off; Fact Diff and Scale Gate are now required checks on main; #195 closed; #111
 | C | Receiver tracking, see PHASE-C-DESIGN.md | C1 **Merged** #312 (`7ea08c4`): Fastify oracle recall 7.1% -> 34.3% (CI), 0 contradictions. C2 + C2b **Merged** #315 (`fdc37f3`): prototypes, `Object.create(P)`, ES5 inheritance; 0 lost on 11 corpora, mongoose +132 resolved; Ghost 190.6 s vs 206.1 s. C3 **Merged** #316 (`3039c44`): CommonJS export objects, own-alias writes, factory copies, re-export hop; Express oracle recall 29.4% -> 49.3%, 0 contradictions; facts-lost-explained (owner OK): Ghost 216 = 148 dfg refinements + 68 unused exports now called; review fix c68564a (plain module.exports read). C1b **Merged** #324 (`3d8eea7`): factory literal values from repo-module members, other factories' results, body writes, direct literal returns; Fastify oracle (CI) 2,979 -> 3,469 agree, recall 34.5% -> 40.2%, 0 contradictions; facts-lost-explained (owner OK): 2 Fastify unused exports now called. Next: per the oracle (Express app/router, Fastify `ready`/name rule), C5, C6; B3 folded into D |
 | D-H | See the plan | Queued |
 
+## Track 2026-11-15: red team (RT) on main 3d8eea7 and PR #328
+
+Reports and probes: `audits/2026-11-15-redteam/` (each finding checked under Node 24.22.1). One PR per root cause; each probe becomes a conformance case. Owner rule (2026-11-15): every PR gets a red-team review and the full harness.
+
+| ID | Sev | Root cause | Owner | State |
+|---|---|---|---|---|
+| RT-PR-A | — | #328: writes through `module.exports`/`exports` after `var app = module.exports = f()` | main session | Open (blocks #328) |
+| RT-PR-B | — | #328: forwarder escape check sees only the bare name (`init.call(...[app])`, optional calls, aliases) | main session | Open (blocks #328) |
+| RT-PR-C | — | #328: Annex B block function replaces the forwarded callee | main session | Open (blocks #328) |
+| RT-H1 | High | Rules 1 and 2 ignore writes to the method from other files | session write-checks | Open |
+| RT-M1 | Med | Destructuring and `for…of` writes missed by write checks | write-checks (factory part: main) | Open |
+| RT-M2 | Med | String-key bracket writes and `defineProperty(exports, …)` missed | write-checks (factory part: main) | Open |
+| RT-M3 | Med | Own-exports exemption still applies after `module.exports = require(…)` | write-checks | Open |
+| RT-M4 | Med | Class instance used as another object's prototype | write-checks | Open |
+| RT-M5 | Med | B1c ignores same-file reflection onto the literal | write-checks | Open |
+| RT-M6 | Med | `#imports`/self-reference conditions: `import` tried before `require` | session resolver | Open |
+| RT-M7 | Med | Factory value matches a same-named function from any scope | main session | Open |
+| RT-M8 | Med | `file:` dependency is EXTERNAL though repository code runs | resolver | Open |
+| RT-M9 | Med | Circular `require` gives a stale exports object | design needed | Open |
+| RT-L1 | Low | Factory fall-through returns `undefined` | main session | Open |
+| RT-L2 | Low | Factory receiver not set when the call runs (branch, TDZ) | main session | Open |
+| RT-L3 | Low | `delete` not treated as a write | write-checks | Open |
+| RT-L4 | Low | Self-reference named like a Node built-in | resolver | Open |
+| RT-L5 | Low | `.js` under `"type": "module"`: `require` claimed EXTERNAL | resolver | Open |
+| RT-L6 | Low | Class getter replaces an earlier method | write-checks | Open |
+| RT-L7 | Low | Package patched through a repository wrapper module | write-checks | Open |
+| RT-L8 | Low | Annex B block function replaces a C3a shorthand export | design needed | Open |
+
 ## Track 2026-11-11: cross-file audit B findings (XB-01 to XB-09)
 
 Audit by Shahzaib Hassan on `fdc37f3` (`audits/2026-11-10-blind-audit-b/AUDIT-REPORT.md`, ~70). XB-01 to XB-08 reproduced on `3039c44` (2026-11-11) with Node as ground truth. Order: B2, then XB-01, XB-04, XB-02 with B3, XB-03, XB-05 to XB-08, then C4 to C6.
