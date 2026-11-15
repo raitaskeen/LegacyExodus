@@ -249,24 +249,20 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
     isFunction = literal?.type === "FunctionExpression" || literal?.type === "ArrowFunctionExpression";
     // C1c: `var app = express(); …; return app`, the object never passed to a call (`mixin(app, …)` could give it
     // new methods) nor written by name here; the factory forwards that call's result.
-    const forwarded = assignedValue(literal);
-    if (!reassigned && forwarded?.type === "CallExpression") {
+    // RT-PR-A: a chain (`var app = module.exports = f()`) makes the object the file's exports too, which writes through
+    // `module.exports` can change; a forwarder takes only a plain `var app = f()`.
+    const forwarded = literal?.type === "CallExpression" ? literal : undefined;
+    if (!reassigned && forwarded !== undefined) {
       // Red-team fix: the callee's name must reach the module scope, so neither the factory nor a function around it
       // may bind it (`function createApp(express) { var app = express(); … }` calls the parameter).
       const calleeNode = role(forwarded, "callee");
       const calleeName = calleeNode?.type === "Identifier" ? nameOf(calleeNode) : undefined;
       const reachesModule = atModuleScope && calleeName !== undefined && bindingsInFunction(node, body, calleeName) === 0;
       const source = reachesModule ? callSourceOf(calleeNode, functionsByName, assignedNames, symbols) : undefined;
-      let escapes = false;
-      walkAll(body, (inner) => {
-        if ((inner.type === "CallExpression" || inner.type === "NewExpression") && callArguments(inner).some((argument) => argument.type === "Identifier" && nameOf(argument) === name)) escapes = true;
-        if (inner.type === "AssignmentExpression") {
-          const left = role(inner, "left");
-          if ((left?.type === "MemberExpression" || left?.type === "OptionalMemberExpression") && role(left, "object")?.type === "Identifier" && nameOf(role(left, "object")) === name) escapes = true;
-          if (role(inner, "right")?.type === "Identifier" && nameOf(role(inner, "right")) === name) escapes = true;
-        }
-        if (inner.type === "VariableDeclarator" && inner !== declarators[0] && role(inner, "init")?.type === "Identifier" && nameOf(role(inner, "init")) === name) escapes = true;
-      });
+      // RT-PR-B: an allowlist, not a blocklist. The object's name may appear only as its declarator, as `return name`,
+      // and as the object of a method call `name.m(…)`; any other use (an argument, a spread, an alias, a template, a
+      // `delete`, a write, a sequence) lets other code change it.
+      const escapes = source === undefined || !onlyMethodCallUses(body, name, declarators[0]!);
       if (source !== undefined && !escapes) {
         const forwardIds = [functionSymbol.id, ...symbols.filter((symbol) => symbol.kind === "export" && symbol.moduleSpecifier === undefined && symbol.sourceSymbolName === functionSymbol.name).map((symbol) => symbol.id)];
         factories.push({ ids: [...new Set(forwardIds)].sort(), methods: [], forward: source });
@@ -299,7 +295,7 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
         const object = role(value, "object");
         const member = nameOf(role(value, "property"));
         const binding = object?.type === "Identifier" ? nameOf(object) : undefined;
-        const imported = binding === undefined || assignedNames.has(binding) || !meansModuleBinding(binding) ? undefined : moduleImport(binding, symbols);
+        const imported = binding === undefined || assignedNames.has(binding) || !meansModuleBinding(binding) || functionsByName.has(binding) ? undefined : moduleImport(binding, symbols);
         const specifier = imported?.moduleSpecifier;
         const whole = imported !== undefined && (imported.sourceSymbolName === undefined || imported.sourceSymbolName === "*" || imported.defaultExport);
         return member !== undefined && whole && typeof specifier === "string" && /^\.\.?(\/|$)/.test(specifier) ? { kind: "member", specifier, member } : undefined;
@@ -321,7 +317,10 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
         const callee = role(init, "callee");
         const calleeName = callee?.type === "Identifier" ? nameOf(callee) : undefined;
         if (calleeName === undefined || assignedNames.has(calleeName) || !meansModuleBinding(calleeName)) return undefined;
-        const functions = (functionsByName.get(calleeName) ?? []).filter((symbol) => symbol.scopeId === "scope:module");
+        // RT-PR-C: a function declared in a block anywhere in the file (Annex B) may replace the module binding.
+        const everyNamed = functionsByName.get(calleeName) ?? [];
+        if (everyNamed.some((symbol) => symbol.scopeId !== "scope:module")) return undefined;
+        const functions = everyNamed;
         if (functions.length === 1) return { kind: "result", call: { kind: "local", id: functions[0]!.id }, member };
         const imported = functions.length === 0 ? moduleImport(calleeName, symbols) : undefined;
         const specifier = imported?.moduleSpecifier;
@@ -341,7 +340,12 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
         const bound = bindingsInFactory(nameOf(value) ?? "") > 0;
         // Red-team fix: in a nested factory a name it does not bind may belong to a function around it, so only the
         // factory's own functions count there.
-        const candidates = (functionsByName.get(nameOf(value) ?? "") ?? []).filter((candidate) => (bound || !atModuleScope) ? insideFactory(candidate) : true);
+        // RT-M7, RT-PR-C: outside the factory's own bindings the name means the module's binding, which is one module-scope
+        // function only when no import of that name exists and no function of that name is declared anywhere else in the
+        // file (a nested one is another binding; a block one replaces the module binding, Annex B).
+        const all = functionsByName.get(nameOf(value) ?? "") ?? [];
+        const moduleOnly = all.every((candidate) => candidate.scopeId === "scope:module") && moduleImport(nameOf(value) ?? "", symbols) === undefined;
+        const candidates = bound || !atModuleScope ? all.filter(insideFactory) : moduleOnly ? all : [];
         if (candidates.length === 1) return bound && !boundOnceInBody(nameOf(value) ?? "") ? {} : { id: candidates[0]!.id };
         if (candidates.length > 1) return {};
       }
@@ -1096,13 +1100,6 @@ export class FactoryIndex {
   }
 }
 
-/** Phase C1c: the value an initialiser gives its binding, through an assignment chain (`var app = module.exports = f()`). */
-function assignedValue(node: ASTNode | undefined): ASTNode | undefined {
-  let value = node;
-  for (let depth = 0; depth < 8 && value?.type === "AssignmentExpression" && value.attributes.operator === "="; depth++) value = role(value, "right");
-  return value;
-}
-
 /**
  * Phase C1c: the function a call's callee names, when the file proves it: one of its module-scope functions, or a
  * repository module it imports (a named member, or the module itself), the binding never assigned.
@@ -1110,7 +1107,10 @@ function assignedValue(node: ASTNode | undefined): ASTNode | undefined {
 function callSourceOf(callee: ASTNode | undefined, functionsByName: ReadonlyMap<string, readonly CodeSymbol[]>, assignedNames: ReadonlySet<string>, symbols: readonly CodeSymbol[]): CallSource | undefined {
   const calleeName = callee?.type === "Identifier" ? nameOf(callee) : undefined;
   if (calleeName === undefined || assignedNames.has(calleeName)) return undefined;
-  const functions = (functionsByName.get(calleeName) ?? []).filter((symbol) => symbol.scopeId === "scope:module");
+  // RT-PR-C: a function declared in a block anywhere in the file (Annex B) may replace the module binding.
+  const everyNamed = functionsByName.get(calleeName) ?? [];
+  if (everyNamed.some((symbol) => symbol.scopeId !== "scope:module")) return undefined;
+  const functions = everyNamed;
   if (functions.length === 1) return { kind: "local", id: functions[0]!.id };
   const imported = functions.length === 0 ? moduleImport(calleeName, symbols) : undefined;
   const specifier = imported?.moduleSpecifier;
@@ -1128,4 +1128,31 @@ function bindingsInFunction(fn: ASTNode, body: ASTNode, name: string): number {
     for (const child of inner.children) if ((child.type === "FunctionDeclaration" || child.type === "ClassDeclaration") && nameOf(role(child, "id")) === name) count++;
   });
   return count;
+}
+
+/**
+ * RT-PR-B: whether every use of `name` in `body` is harmless to the object it holds: its own declarator, a
+ * `return name`, or the object of a non-computed method call `name.m(…)`. A non-computed member's property name or a
+ * non-computed object key is not a use. Anything else (an argument, a spread, an alias, a template, `delete`, a write,
+ * a sequence, a shadowing binding in a nested function) counts as an escape.
+ */
+function onlyMethodCallUses(body: ASTNode, name: string, declarator: ASTNode): boolean {
+  let harmless = true;
+  const visit = (node: ASTNode, parent: ASTNode | undefined, grandparent: ASTNode | undefined): void => {
+    if (!harmless) return;
+    if (node.type === "Identifier" && nameOf(node) === name) {
+      const memberLike = parent?.type === "MemberExpression" || parent?.type === "OptionalMemberExpression";
+      const propertyName = memberLike && node.role === "property" && parent!.attributes.computed !== true;
+      const objectKey = (parent?.type === "ObjectProperty" || parent?.type === "ObjectMethod" || parent?.type === "ClassMethod" || parent?.type === "ClassProperty")
+        && node.role === "key" && parent!.attributes.computed !== true;
+      const ownDeclarator = parent === declarator && node.role === "id";
+      const returned = parent?.type === "ReturnStatement" && node.role === "argument";
+      const methodCall = memberLike && node.role === "object" && parent!.attributes.computed !== true
+        && (grandparent?.type === "CallExpression" || grandparent?.type === "OptionalCallExpression") && parent!.role === "callee";
+      if (!(propertyName || objectKey || ownDeclarator || returned || methodCall)) harmless = false;
+    }
+    for (const child of node.children) visit(child, node, parent);
+  };
+  visit(body, undefined, undefined);
+  return harmless;
 }

@@ -2324,9 +2324,14 @@ function resolveLocalCall(
   if (receiver !== "this" && context.factories !== undefined) {
     const frame = declaredBindingFrame(index, receiver, context.scope);
     if (frame !== undefined && !isRebound(index, frame.id, receiver)) {
-      const init = assignedValue(index.writes.declaredValues.get(bindingWriteKey(frame.id, receiver)));
+      const declared = index.writes.declaredValues.get(bindingWriteKey(frame.id, receiver));
+      const init = assignedValue(declared);
+      // C1c, red-team RT-PR-A: through a chain (`var app = module.exports = f()`) the object is also the file's exports,
+      // which own-exports writes (`module.exports.use = …`, exempt elsewhere) can change; no write of the name may exist.
+      const chained = init !== declared;
       // 1d. Constructor prototype (Phase C2): `const x = new F()` where F's prototype holds `methodName`.
-      const producer = init?.type === "CallExpression" || init?.type === "NewExpression" ? resolvedCallTargets.get(index)?.get(init) : undefined;
+      const producer = chained && propertyWriteCount(index, methodName) > 0 ? undefined
+        : init?.type === "CallExpression" || init?.type === "NewExpression" ? resolvedCallTargets.get(index)?.get(init) : undefined;
       const start = callNode?.location?.start;
       const topLevelCall = context.callerName === "module" && start !== undefined ? { filePath: canonicalizePath(table.filePath), line: start.line, column: start.column } : undefined;
       const method = producer === undefined ? undefined : context.factories.methodOf(producer, methodName, init?.type === "NewExpression", topLevelCall);

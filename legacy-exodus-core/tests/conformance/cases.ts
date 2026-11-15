@@ -1255,6 +1255,33 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "shadow:module-factory-module-function-resolves", category: "calls", has: /^b\.js@11:\d+\|module\|p\.helper\|RESOLVED\|function:helper@1:0@b\.js$/ },
     ],
   },
+  // Red team on PR #328 (audits/2026-11-15-redteam/redteam-pr328-probes, one case per probe so the run-wide name rule of
+  // one cannot hide another). In Node each prints "EVIL use" or "FAKE use": the call never reaches realUse.
+  ...([
+    ["rt-pr-a-modexports-write", "p01", {
+      "main.js": "var express = require(\"./lib\");\nvar app = module.exports = express();\nmodule.exports.use = function evil() { console.log(\"EVIL use\"); };\napp.use();\n",
+    }, /^main\.js@4:\d+\|module\|app\.use\|UNRESOLVED\|/],
+    ["rt-pr-a-forwarder-chain", "p03", {
+      "main.js": "var express = require(\"./lib\");\nfunction createApp() {\n  var app = module.exports = express();\n  module.exports.use = function evil() { console.log(\"EVIL use\"); };\n  return app;\n}\nvar a = createApp();\na.use();\n",
+    }, /^main\.js@8:\d+\|module\|a\.use\|UNRESOLVED\|/],
+    ["rt-pr-b-spread-argument", "p21", {
+      "create.js": "var express = require(\"./lib\");\nfunction init() { this.use = function evil() { console.log(\"EVIL use\"); }; }\nfunction createApp() {\n  var app = express();\n  init.call(...[app]);\n  return app;\n}\nexports.createApp = createApp;\n",
+      "main.js": "var c = require(\"./create\");\nvar a = c.createApp();\na.use();\n",
+    }, /^main\.js@3:\d+\|module\|a\.use\|UNRESOLVED\|/],
+    ["rt-pr-c-annex-b-callee", "p28", {
+      "main.js": "function realUse() { console.log(\"REAL use\"); }\nfunction fakeUse() { console.log(\"FAKE use\"); }\nfunction express() { var o = { use: realUse }; return o; }\nif (true) { function express() { var o = { use: fakeUse }; return o; } }\nfunction createApp() { var app = express(); return app; }\nvar a = createApp();\na.use();\n",
+    }, /^main\.js@7:\d+\|module\|a\.use\|UNRESOLVED\|/],
+    // RT-M7 (main red team, f-nested-pick): `{ run }` means the imported `run` ("lib-run" in Node), not a `run` declared
+    // inside another function; lib.js here is the import's module.
+    ["rt-m7-nested-namesake", "f-nested-pick", {
+      "lib.js": "exports.run = function () { return \"lib-run\"; };\n",
+      "main.js": "const { run } = require(\"./lib\");\nfunction helper() { function run() { return \"helper-inner-run\"; } return run(); }\nfunction make() { return { run }; }\nconst x = make();\nconsole.log(x.run(), helper());\n",
+    }, /^main\.js@5:\d+\|module\|x\.run\|UNRESOLVED\|/],
+  ] as const).map(([id, probe, files, unresolved]): ConformanceCase => ({
+    id,
+    files: { "lib.js": "function realUse() { console.log(\"REAL use\"); }\nfunction createApplication() {\n  var app = { use: realUse };\n  return app;\n}\nmodule.exports = createApplication;\n", ...files },
+    expectations: [{ id: `${id}:${probe}-unresolved`, category: "calls", has: unresolved }],
+  })),
   {
     // Phase C2: an instance of a constructor function reaches the method its prototype is given by name, and
     // `Object.create(P)` reaches P's method. Each control breaks one condition: the constructor returns an object,
