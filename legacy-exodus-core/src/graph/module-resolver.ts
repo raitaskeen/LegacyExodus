@@ -324,17 +324,21 @@ function matchSubpathMap(map: Readonly<Record<string, unknown>>, subpath: string
 /**
  * The one repository file an `exports` or `imports` target loads (RT-M6). Node picks a conditional target by how the
  * importer loads it, which the resolver is not told, so the target is picked for every way in LOAD_CONDITIONS. When
- * two ways lead to different files, or one leads to a target that is no repository file (another package, or build
- * output with no source here), the import stays unresolved. A way that picks nothing is ignored: Node throws there,
- * so no call through it runs.
+ * two ways reach different repository files, or one picks a target that is not a `./` path (another package), the
+ * import stays unresolved. A way whose `./` target is no file in the repository, even after the build-output mapping,
+ * does not count: it is taken to be build output compiled from the file the other ways reach (Ghost's `build/cjs/x.js`
+ * next to `source: ./src/x.ts`), and on the checkout Node throws there. A way that picks nothing is ignored too: Node
+ * throws there, so no call through it runs. At least one way must reach a file.
  */
 function resolveExportTarget(target: unknown, captured: string | undefined, file: (target: string) => string | null): string | null {
   let resolved: string | null = null;
   for (const conditions of LOAD_CONDITIONS) {
     const picked = pickTarget(target, captured, conditions);
     if (picked === undefined || picked === null) continue;
-    const path = picked.startsWith("./") ? file(picked) : null;
-    if (path === null || (resolved !== null && resolved !== path)) return null;
+    if (!picked.startsWith("./")) return null;
+    const path = file(picked);
+    if (path === null) continue;
+    if (resolved !== null && resolved !== path) return null;
     resolved = path;
   }
   return resolved;
