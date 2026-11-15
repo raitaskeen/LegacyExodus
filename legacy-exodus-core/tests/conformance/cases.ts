@@ -905,6 +905,62 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // RT-M6 (red team 2026-11-15): Node picks a conditional target by the first key, in the object's own order, that
+    // matches how the file is loaded (`require` or `import`, plus `node`, `default` and a few more). Node (24) prints
+    // "cjs-run cjs-run cjs-run same order-default" for main.js, "esm-run esm-only order-default" for main.mjs and "1s"
+    // for ext.js (after `npm install --offline` links packages/dual and installs ms). The resolver is not told the form,
+    // so a target that differs by form stays unresolved, never EXTERNAL: it is repository code either way. A target
+    // every form agrees on, or that only one form can load, still resolves; a real package stays EXTERNAL.
+    id: "export-conditions",
+    files: {
+      "package.json": JSON.stringify({
+        name: "condpkg",
+        private: true,
+        workspaces: ["packages/*"],
+        dependencies: { ms: "*" },
+        exports: { ".": { import: "./impl.mjs", require: "./impl.cjs" }, "./same": { import: "./same.js", require: "./same.js" }, "./order": { default: "./order-default.js", require: "./order-require.js" } },
+        imports: { "#impl": { import: "./impl.mjs", require: "./impl.cjs" }, "#order": { default: "./order-default.js", require: "./order-require.js" }, "#esm": { import: "./esm-only.mjs" } },
+      }) + "\n",
+      "impl.cjs": "exports.run = function run() { return \"cjs-run\"; };\n",
+      "impl.mjs": "export function run() { return \"esm-run\"; }\n",
+      "same.js": "exports.s = () => \"same\";\n",
+      "order-default.js": "exports.o = () => \"order-default\";\n",
+      "order-require.js": "exports.o = () => \"order-require\";\n",
+      "esm-only.mjs": "export function e() { return \"esm-only\"; }\n",
+      "packages/dual/package.json": JSON.stringify({ name: "dual", exports: { ".": { import: "./impl.mjs", require: "./impl.cjs" } } }) + "\n",
+      "packages/dual/impl.cjs": "exports.run = function run() { return \"cjs-run\"; };\n",
+      "packages/dual/impl.mjs": "export function run() { return \"esm-run\"; }\n",
+      "main.js": [
+        "const impl = require(\"#impl\");",
+        "const self = require(\"condpkg\");",
+        "const dual = require(\"dual\");",
+        "const same = require(\"condpkg/same\");",
+        "const order = require(\"#order\");",
+        "console.log(impl.run(), self.run(), dual.run(), same.s(), order.o());",
+        "",
+      ].join("\n"),
+      "main.mjs": [
+        "import * as impl from \"#impl\";",
+        "import * as esm from \"#esm\";",
+        "import * as order from \"condpkg/order\";",
+        "console.log(impl.run(), esm.e(), order.o());",
+        "",
+      ].join("\n"),
+      "ext.js": "const ms = require(\"ms\");\nconsole.log(ms(1000));\n",
+    },
+    expectations: [
+      { id: "rt-m6:imports-by-form-unresolved", category: "calls", has: /^main\.js@6:\d+\|module\|impl\.run\|UNRESOLVED\|/ },
+      { id: "rt-m6:self-reference-by-form-unresolved", category: "calls", has: /^main\.js@6:\d+\|module\|self\.run\|UNRESOLVED\|/ },
+      { id: "rt-m6:workspace-by-form-unresolved", category: "calls", has: /^main\.js@6:\d+\|module\|dual\.run\|UNRESOLVED\|/ },
+      { id: "rt-m6:esm-importer-never-cjs-or-external", category: "calls", lacks: /^main\.mjs@4:\d+\|module\|impl\.run\|(?:EXTERNAL\||RESOLVED\|.*@impl\.cjs$)/ },
+      { id: "rt-m6:npm-package-stays-external", category: "calls", has: /^ext\.js@2:\d+\|module\|ms\|EXTERNAL\|/ },
+      { id: "rt-m6:object-order-imports", category: "calls", has: /^main\.js@6:\d+\|module\|order\.o\|RESOLVED\|export:o@1:0@order-default\.js$/ },
+      { id: "rt-m6:object-order-self", category: "calls", has: /^main\.mjs@4:\d+\|module\|order\.o\|RESOLVED\|export:o@1:0@order-default\.js$/ },
+      { id: "rt-m6:same-target-resolves", category: "calls", has: /^main\.js@6:\d+\|module\|same\.s\|RESOLVED\|export:s@1:0@same\.js$/ },
+      { id: "rt-m6:import-only-resolves", category: "calls", has: /^main\.mjs@4:\d+\|module\|esm\.e\|RESOLVED\|export:e@1:0@esm-only\.mjs$/ },
+    ],
+  },
+  {
     // ADR-012, Phase B1b: a call on an unbound standard global is EXTERNAL unless some file writes that path; a test
     // runner's globals stay UNRESOLVED; `require` is EXTERNAL only in CommonJS.
     id: "external-globals",

@@ -50,6 +50,20 @@ describe("S3 workspace package resolution", () => {
     expect(resolve("missing")).toBeNull();
   });
 
+  it("picks a conditional target in the object's own order, and leaves one that differs by require and import unresolved (RT-M6)", () => {
+    const dual = new ModuleResolver({ packages: {
+      dual: { root: "p", exports: { require: "./a.cjs", import: "./a.mjs" } },
+      ordered: { root: "p", exports: { default: "./d.js", require: "./a.cjs" } },
+    } });
+    const present = new Set(["p/a.cjs", "p/a.mjs", "p/d.js"]);
+    expect(dual.resolve("main.js", "dual", present).resolvedPath).toBeNull();
+    expect(dual.resolve("main.js", "ordered", present).resolvedPath).toBe("p/d.js");
+    expect(dual.namesRepositoryPackage("main.js", "dual")).toBe(true);
+    expect(dual.namesRepositoryPackage("main.js", "#anything")).toBe(true);
+    expect(dual.namesRepositoryPackage("main.js", "express")).toBe(false);
+    expect(dual.namesRepositoryPackage("main.js", "./dual")).toBe(false);
+  });
+
   it("leaves unknown packages, built-ins and relative paths as before", () => {
     expect(resolve("express")).toBeNull();
     expect(resolve("node:fs")).toBeNull();
