@@ -58,7 +58,7 @@ Reports and probes: `audits/2026-11-15-redteam/` (each finding checked under Nod
 | RT-PR-A | — | #328: writes through `module.exports`/`exports` after `var app = module.exports = f()` | main session | **Fixed** #328 (`3ac23eb`), probes UNRESOLVED, conformance rt-pr-* |
 | RT-PR-B | — | #328: forwarder escape check sees only the bare name (`init.call(...[app])`, optional calls, aliases) | main session | **Fixed** #328 (`3ac23eb`), probes UNRESOLVED, conformance rt-pr-* |
 | RT-PR-C | — | #328: Annex B block function replaces the forwarded callee | main session | **Fixed** #328 (`3ac23eb`), probes UNRESOLVED, conformance rt-pr-* |
-| RT-H1 | High | Rules 1 and 2 ignore writes to the method from other files | session write-checks | Draft #331 (mongoose 2 correct calls lost to the name rule, explained) |
+| RT-H1 | High | Rules 1 and 2 ignore writes to the method from other files | session write-checks | **Fixed** #331: mongoose 2 and Ghost 16 correct calls lost to the name rule (explained in the PR) |
 | RT-M1 | Med | Destructuring and `for…of` writes missed by write checks | write-checks (factory part: main) | Open |
 | RT-M2 | Med | String-key bracket writes and `defineProperty(exports, …)` missed | write-checks (factory part: main) | Open |
 | RT-M3 | Med | Own-exports exemption still applies after `module.exports = require(…)` | write-checks | **Fixed** #330 (`03b9d20`): 0 lost/0 gained on 11 corpora incl. Ghost |
