@@ -933,6 +933,36 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // RT-L4 (red team 2026-11-15): Node loads its own module for a built-in name before any package, so a package named
+    // `url` that requires "url", or a workspace package named `path`, still gets Node's module. Node (24), after
+    // `npm install --offline` links the workspaces, prints "real.example repo-extra y.js repo-test": `url/extra` is no
+    // built-in, so the self-reference holds, and `test` is a built-in only as `node:test`, so the workspace package loads.
+    id: "builtin-names",
+    files: {
+      "package.json": JSON.stringify({ name: "url", private: true, workspaces: ["packages/*"], exports: { ".": "./index.js", "./extra": "./extra.js" } }) + "\n",
+      "index.js": "exports.parse = function parse() { return { host: \"repo-parse\" }; };\n",
+      "extra.js": "exports.e = function e() { return \"repo-extra\"; };\n",
+      "packages/path/package.json": JSON.stringify({ name: "path", main: "index.js" }) + "\n",
+      "packages/path/index.js": "exports.basename = function basename() { return \"repo-basename\"; };\n",
+      "packages/test/package.json": JSON.stringify({ name: "test", main: "index.js" }) + "\n",
+      "packages/test/index.js": "exports.t = function t() { return \"repo-test\"; };\n",
+      "main.js": [
+        "const url = require(\"url\");",
+        "const extra = require(\"url/extra\");",
+        "const path = require(\"path\");",
+        "const t = require(\"test\");",
+        "console.log(url.parse(\"http://real.example/\").host, extra.e(), path.basename(\"/x/y.js\"), t.t());",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "rt-l4:self-reference-builtin-name-not-repository", category: "calls", lacks: /^main\.js@5:\d+\|module\|url\.parse\|RESOLVED\|/ },
+      { id: "rt-l4:workspace-builtin-name-not-repository", category: "calls", lacks: /^main\.js@5:\d+\|module\|path\.basename\|RESOLVED\|/ },
+      { id: "rt-l4:self-reference-subpath-resolves", category: "calls", has: /^main\.js@5:\d+\|module\|extra\.e\|RESOLVED\|export:e@1:0@extra\.js$/ },
+      { id: "rt-l4:node-prefix-only-name-is-package", category: "calls", has: /^main\.js@5:\d+\|module\|t\.t\|RESOLVED\|export:t@1:0@packages\/test\/index\.js$/ },
+    ],
+  },
+  {
     // ADR-012, Phase B1b: a call on an unbound standard global is EXTERNAL unless some file writes that path; a test
     // runner's globals stay UNRESOLVED; `require` is EXTERNAL only in CommonJS.
     id: "external-globals",
@@ -1210,6 +1240,107 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // Phase C1c: Express's shapes. `var app = module.exports = express()` binds app to the call's result, and a helper
+    // that returns `express()`'s result unchanged (`createApp`) is a factory too, followed through index.js's
+    // re-export. In Node a.js prints "set set set". Control: mixed() passes its object to a call, which could give it
+    // other methods, so m.set stays unresolved.
+    id: "factory-forwarding",
+    files: {
+      "application.js": "var app = exports = module.exports = {};\napp.set = function set() { return \"set\"; };\napp.engine = function engine() { return \"engine\"; };\n",
+      "express.js": "var mixin = require(\"merge-descriptors\");\nvar proto = require(\"./application\");\nexports = module.exports = createApplication;\nfunction createApplication() { var app = function (req, res, next) {}; mixin(app, proto, false); return app; }\n",
+      "index.js": "module.exports = require(\"./express\");\n",
+      "a.js": [
+        "var express = require(\"./index\");",
+        "var app = module.exports = express();",
+        "function createApp() { var app = express(); app.engine(\"md\"); return app; }",
+        "function mixed() { var m = express(); Object.assign({}, m); return m; }",
+        "var made = createApp();",
+        "var m = mixed();",
+        "console.log(app.set(), made.set(), m.set());",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "c1c:assignment-chain", category: "calls", has: /^a\.js@7:\d+\|module\|app\.set\|RESOLVED\|method:set@2:\d+@application\.js$/ },
+      { id: "c1c:forwarding-factory", category: "calls", has: /^a\.js@7:\d+\|module\|made\.set\|RESOLVED\|method:set@2:\d+@application\.js$/ },
+      { id: "c1c:escaping-object-unresolved", category: "calls", has: /^a\.js@7:\d+\|module\|m\.set\|UNRESOLVED\|/ },
+    ],
+  },
+  {
+    // Red team on C1b/C1c: a name a factory (or a function around it) binds itself hides the module import or function
+    // of that name. In Node a.js prints "fake-set fake-add fake-set" and b.js "outer-helper outer-set module-helper":
+    // every call but p.helper runs a parameter, so only p.helper may resolve.
+    id: "factory-shadowing",
+    files: {
+      "application.js": "var app = exports = module.exports = {};\napp.set = function set() { return \"real-set\"; };\n",
+      "lib.js": "var proto = require(\"./application\");\nfunction createApplication() { var app = { set: proto.set }; return app; }\nmodule.exports = { createApplication, add: function add() { return \"real-add\"; } };\n",
+      "a.js": [
+        "const { createApplication } = require(\"./lib\");",
+        "const decorator = require(\"./lib\");",
+        "function createApp(createApplication) { var app = createApplication(); return app; }",
+        "function make(decorator, createApplication) {",
+        "  const { set } = createApplication();",
+        "  const o = { add: decorator.add, set };",
+        "  return o;",
+        "}",
+        "const fake = () => ({ set() { return \"fake-set\"; } });",
+        "const x = createApp(fake);",
+        "const m = make({ add() { return \"fake-add\"; } }, fake);",
+        "console.log(x.set(), m.add(), m.set());",
+        "",
+      ].join("\n"),
+      "b.js": [
+        "function helper() { return \"module-helper\"; }",
+        "const { createApplication } = require(\"./lib\");",
+        "function outer(helper, createApplication) {",
+        "  function inner() { const o = { helper }; return o; }",
+        "  function forward() { var app = createApplication(); return app; }",
+        "  return [inner(), forward()];",
+        "}",
+        "const [i, f] = outer(() => \"outer-helper\", () => ({ set() { return \"outer-set\"; } }));",
+        "function plain() { const o = { helper }; return o; }",
+        "const p = plain();",
+        "console.log(i.helper(), f.set(), p.helper());",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "shadow:forward-callee-parameter-unresolved", category: "calls", has: /^a\.js@12:\d+\|module\|x\.set\|UNRESOLVED\|/ },
+      { id: "shadow:member-object-parameter-unresolved", category: "calls", has: /^a\.js@12:\d+\|module\|m\.add\|UNRESOLVED\|/ },
+      { id: "shadow:destructured-callee-parameter-unresolved", category: "calls", has: /^a\.js@12:\d+\|module\|m\.set\|UNRESOLVED\|/ },
+      { id: "shadow:nested-factory-outer-parameter-unresolved", category: "calls", has: /^b\.js@11:\d+\|module\|i\.helper\|UNRESOLVED\|/ },
+      { id: "shadow:nested-forward-outer-parameter-unresolved", category: "calls", has: /^b\.js@11:\d+\|module\|f\.set\|UNRESOLVED\|/ },
+      { id: "shadow:module-factory-module-function-resolves", category: "calls", has: /^b\.js@11:\d+\|module\|p\.helper\|RESOLVED\|function:helper@1:0@b\.js$/ },
+    ],
+  },
+  // Red team on PR #328 (audits/2026-11-15-redteam/redteam-pr328-probes, one case per probe so the run-wide name rule of
+  // one cannot hide another). In Node each prints "EVIL use" or "FAKE use": the call never reaches realUse.
+  ...([
+    ["rt-pr-a-modexports-write", "p01", {
+      "main.js": "var express = require(\"./lib\");\nvar app = module.exports = express();\nmodule.exports.use = function evil() { console.log(\"EVIL use\"); };\napp.use();\n",
+    }, /^main\.js@4:\d+\|module\|app\.use\|UNRESOLVED\|/],
+    ["rt-pr-a-forwarder-chain", "p03", {
+      "main.js": "var express = require(\"./lib\");\nfunction createApp() {\n  var app = module.exports = express();\n  module.exports.use = function evil() { console.log(\"EVIL use\"); };\n  return app;\n}\nvar a = createApp();\na.use();\n",
+    }, /^main\.js@8:\d+\|module\|a\.use\|UNRESOLVED\|/],
+    ["rt-pr-b-spread-argument", "p21", {
+      "create.js": "var express = require(\"./lib\");\nfunction init() { this.use = function evil() { console.log(\"EVIL use\"); }; }\nfunction createApp() {\n  var app = express();\n  init.call(...[app]);\n  return app;\n}\nexports.createApp = createApp;\n",
+      "main.js": "var c = require(\"./create\");\nvar a = c.createApp();\na.use();\n",
+    }, /^main\.js@3:\d+\|module\|a\.use\|UNRESOLVED\|/],
+    ["rt-pr-c-annex-b-callee", "p28", {
+      "main.js": "function realUse() { console.log(\"REAL use\"); }\nfunction fakeUse() { console.log(\"FAKE use\"); }\nfunction express() { var o = { use: realUse }; return o; }\nif (true) { function express() { var o = { use: fakeUse }; return o; } }\nfunction createApp() { var app = express(); return app; }\nvar a = createApp();\na.use();\n",
+    }, /^main\.js@7:\d+\|module\|a\.use\|UNRESOLVED\|/],
+    // RT-M7 (main red team, f-nested-pick): `{ run }` means the imported `run` ("lib-run" in Node), not a `run` declared
+    // inside another function; lib.js here is the import's module.
+    ["rt-m7-nested-namesake", "f-nested-pick", {
+      "lib.js": "exports.run = function () { return \"lib-run\"; };\n",
+      "main.js": "const { run } = require(\"./lib\");\nfunction helper() { function run() { return \"helper-inner-run\"; } return run(); }\nfunction make() { return { run }; }\nconst x = make();\nconsole.log(x.run(), helper());\n",
+    }, /^main\.js@5:\d+\|module\|x\.run\|UNRESOLVED\|/],
+  ] as const).map(([id, probe, files, unresolved]): ConformanceCase => ({
+    id,
+    files: { "lib.js": "function realUse() { console.log(\"REAL use\"); }\nfunction createApplication() {\n  var app = { use: realUse };\n  return app;\n}\nmodule.exports = createApplication;\n", ...files },
+    expectations: [{ id: `${id}:${probe}-unresolved`, category: "calls", has: unresolved }],
+  })),
+  {
     // Phase C2: an instance of a constructor function reaches the method its prototype is given by name, and
     // `Object.create(P)` reaches P's method. Each control breaks one condition: the constructor returns an object,
     // inherits (passed to a call), has its prototype replaced, the instance gets its own method, another file writes the
@@ -1349,6 +1480,68 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "xb07:computed-this-write-unresolved", category: "calls", has: /^assign\.js@8:\d+\|module\|k\.go\|UNRESOLVED\|/ },
       { id: "xb07:define-property-this-unresolved", category: "calls", has: /^assign\.js@12:\d+\|module\|d\.hop\|UNRESOLVED\|/ },
       { id: "xb07:literal-this-writes-resolves", category: "calls", has: /^assign\.js@16:\d+\|module\|pt\.norm\|RESOLVED\|method:norm@14:\d+@assign\.js/ },
+    ],
+  },
+  {
+    // RT-M1 (red team 2026-11-15): the cross-file write checks (class hierarchy, other modules' exports, packages and
+    // globals) saw only `o.m = …`. A destructuring target, a `for…of` head, `++` and a TypeScript-wrapped target store
+    // too. In Node, main.js prints "destr-m forof-n THROWS this.k is not a function ts-as-w forof-p destr-run H.q"
+    // and "destr-max forof-stringify destr-parseInt destr-join 1 b": every patched call runs the patch; `this.q()`,
+    // `Math.min` and `path.basename` are untouched (patch.js writes `lib5.other`, another name).
+    id: "write-target-forms",
+    files: {
+      "lib.js": "class C { go() { return this.m(); } m() { return \"C.m\"; } }\nmodule.exports = new C();\n",
+      "lib2.js": "class D { go() { return this.n(); } n() { return \"D.n\"; } }\nmodule.exports = new D();\n",
+      "lib3.js": "class E { go() { try { return this.k(); } catch (e) { return \"THROWS \" + e.message; } } k() { return \"E.k\"; } }\nmodule.exports = new E();\n",
+      "lib4.js": "class G { go() { return this.w(); } w() { return \"G.w\"; } }\nmodule.exports = new G();\n",
+      "lib5.js": "class H { go() { return this.q(); } q() { return \"H.q\"; } }\nmodule.exports = new H();\n",
+      "proto.js": [
+        "function F() {}",
+        "F.prototype.p = function () { return \"F.p\"; };",
+        "const x = new F();",
+        "module.exports = x;",
+        "module.exports.go = function () { return x.p(); };",
+        "",
+      ].join("\n"),
+      "exp.js": "exports.run = function () { return \"exp-run\"; };\n",
+      "patch-ts.cts": "const lib4 = require(\"./lib4.js\");\n(lib4.w as any) = function () { return \"ts-as-w\"; };\n",
+      "patch.js": [
+        "const lib = require(\"./lib\"); [lib.m] = [function () { return \"destr-m\"; }];",
+        "const lib2 = require(\"./lib2\"); for (lib2.n of [function () { return \"forof-n\"; }]);",
+        "const lib3 = require(\"./lib3\"); lib3.k++;",
+        "require(\"./patch-ts.cts\");",
+        "const proto = require(\"./proto\"); for (proto.p of [function () { return \"forof-p\"; }]);",
+        "[require(\"./exp\").run] = [function () { return \"destr-run\"; }];",
+        "const lib5 = require(\"./lib5\"); [lib5.other] = [1];",
+        "[Math.max] = [function () { return \"destr-max\"; }];",
+        "for (JSON.stringify of [function () { return \"forof-stringify\"; }]);",
+        "[parseInt] = [function () { return \"destr-parseInt\"; }];",
+        "const path = require(\"path\"); [path.join] = [function () { return \"destr-join\"; }];",
+        "",
+      ].join("\n"),
+      "main.js": [
+        "require(\"./patch\");",
+        "const { run } = require(\"./exp\");",
+        "const path = require(\"path\");",
+        "console.log(require(\"./lib\").go(), require(\"./lib2\").go(), require(\"./lib3\").go(), require(\"./lib4\").go(), require(\"./proto\").go(), run(), require(\"./lib5\").go());",
+        "console.log(Math.max(1, 2), JSON.stringify({}), parseInt(\"1\"), path.join(\"a\", \"b\"), Math.min(1, 2), path.basename(\"/a/b\"));",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "rt-m1:destructuring-write-unresolved", category: "calls", has: /^lib\.js@1:\d+\|go\|this\.m\|UNRESOLVED\|/ },
+      { id: "rt-m1:for-of-write-unresolved", category: "calls", has: /^lib2\.js@1:\d+\|go\|this\.n\|UNRESOLVED\|/ },
+      { id: "rt-m1:update-write-unresolved", category: "calls", has: /^lib3\.js@1:\d+\|go\|this\.k\|UNRESOLVED\|/ },
+      { id: "rt-m1:typescript-wrapped-write-unresolved", category: "calls", has: /^lib4\.js@1:\d+\|go\|this\.w\|UNRESOLVED\|/ },
+      { id: "rt-m1:prototype-for-of-write-unresolved", category: "calls", has: /^proto\.js@5:\d+\|go\|x\.p\|UNRESOLVED\|/ },
+      { id: "rt-m1:export-destructuring-write-unresolved", category: "calls", has: /^main\.js@4:\d+\|module\|run\|UNRESOLVED\|/ },
+      { id: "rt-m1:global-member-destructuring-unresolved", category: "calls", has: /^main\.js@5:\d+\|module\|Math\.max\|UNRESOLVED\|/ },
+      { id: "rt-m1:global-member-for-of-unresolved", category: "calls", has: /^main\.js@5:\d+\|module\|JSON\.stringify\|UNRESOLVED\|/ },
+      { id: "rt-m1:global-name-destructuring-unresolved", category: "calls", has: /^main\.js@5:\d+\|module\|parseInt\|UNRESOLVED\|/ },
+      { id: "rt-m1:package-member-destructuring-unresolved", category: "calls", has: /^main\.js@5:\d+\|module\|path\.join\|UNRESOLVED\|/ },
+      { id: "rt-m1:unwritten-name-resolves", category: "calls", has: /^lib5\.js@1:\d+\|go\|this\.q\|RESOLVED\|method:q@1:\d+@lib5\.js/ },
+      { id: "rt-m1:unwritten-global-external", category: "calls", has: /^main\.js@5:\d+\|module\|Math\.min\|EXTERNAL\|/ },
+      { id: "rt-m1:unwritten-package-member-external", category: "calls", has: /^main\.js@5:\d+\|module\|path\.basename\|EXTERNAL\|/ },
     ],
   },
   {
@@ -1736,6 +1929,66 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // RT-H1 (red team 2026-11-15): rule 1 (`const c = new C(); c.m()`) and rule 2 (`app.init = function …;
+    // app.init()`) counted writes in the calling file only. Another file that imports the instance or the object can
+    // replace the method by a plain assignment. In Node, main.js prints "patched-m patched-n patched-init K.k run":
+    // the three patched calls run main.js's functions; `kk.k()` and `box.run()` are untouched (main.js writes
+    // `box.other`, another name).
+    id: "cross-file-method-writes",
+    files: {
+      "r1.js": [
+        "class C { m() { return \"C.m\"; } }",
+        "const c = new C();",
+        "function go() { return c.m(); }",
+        "module.exports = { c, go };",
+        "",
+      ].join("\n"),
+      "r1b.js": [
+        "class D { n() { return \"D.n\"; } }",
+        "const d = new D();",
+        "exports.d = d;",
+        "exports.go = function () { return d.n(); };",
+        "",
+      ].join("\n"),
+      "r2.js": [
+        "const app = {};",
+        "app.init = function () { return \"init\"; };",
+        "app.start = function () { return app.init(); };",
+        "module.exports = app;",
+        "",
+      ].join("\n"),
+      "keep.js": [
+        "class K { k() { return \"K.k\"; } }",
+        "const kk = new K();",
+        "function goK() { return kk.k(); }",
+        "const box = {};",
+        "box.run = function () { return \"run\"; };",
+        "box.go = function () { return box.run(); };",
+        "module.exports = { kk, goK, box };",
+        "",
+      ].join("\n"),
+      "main.js": [
+        "const r1 = require(\"./r1\");",
+        "r1.c.m = function () { return \"patched-m\"; };",
+        "const { d, go } = require(\"./r1b\");",
+        "d.n = function () { return \"patched-n\"; };",
+        "const r2 = require(\"./r2\");",
+        "r2.init = function () { return \"patched-init\"; };",
+        "const keep = require(\"./keep\");",
+        "keep.box.other = function () { return \"other\"; };",
+        "console.log(r1.go(), go(), r2.start(), keep.goK(), keep.box.go());",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "rt-h1:instance-method-written-elsewhere-unresolved", category: "calls", has: /^r1\.js@3:\d+\|go\|c\.m\|UNRESOLVED\|/ },
+      { id: "rt-h1:destructured-instance-written-elsewhere-unresolved", category: "calls", has: /^r1b\.js@4:\d+\|go\|d\.n\|UNRESOLVED\|/ },
+      { id: "rt-h1:container-method-written-elsewhere-unresolved", category: "calls", has: /^r2\.js@3:\d+\|start\|app\.init\|UNRESOLVED\|/ },
+      { id: "rt-h1:unwritten-instance-method-resolves", category: "calls", has: /^keep\.js@3:\d+\|goK\|kk\.k\|RESOLVED\|method:k@1:\d+@keep\.js/ },
+      { id: "rt-h1:unwritten-container-method-resolves", category: "calls", has: /^keep\.js@6:\d+\|go\|box\.run\|RESOLVED\|method:run@5:\d+@keep\.js/ },
+    ],
+  },
+  {
     // NA-02: `with` and direct `eval` make names dynamic. In a `with` body a name bound outside it may be a
     // property of the object; a direct `eval` can declare or reassign any binding it can see, so no call
     // in its file is proven and its exports are unstable for other files.
@@ -1766,6 +2019,45 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "dynamic-scope:eval-file-unresolved", category: "calls", has: /^evil\.cjs@3:\d+\|other\|k\|UNRESOLVED\|/ },
       { id: "dynamic-scope:eval-export-unstable", category: "calls", has: /^user\.cjs@2:\d+\|module\|k\|UNRESOLVED\|/ },
       { id: "dynamic-scope:clean-file-resolves", category: "calls", has: /^user\.cjs@4:\d+\|module\|m\|RESOLVED\|/ },
+    ],
+  },
+  {
+    // RT-M3 (red team 2026-11-15): a write on a file's own `exports` or `module.exports` was never counted as a write
+    // on another module's object, even after `module.exports = require("./x")` or `exports = …` made it one, or where
+    // `exports` names a parameter. In Node, main.js prints
+    // "patched-own patched-alias patched-c3a patched-param own.q own.r": the first four calls run the patches; the
+    // patches of own.js and fn.js write their own fresh exports, so `this.q()` and `this.r()` are untouched.
+    id: "own-exports-foreign-values",
+    files: {
+      "lib.js": "class C { go() { return this.m(); } m() { return \"C.m\"; } }\nmodule.exports = new C();\n",
+      "patch.js": "module.exports = require(\"./lib\");\nmodule.exports.m = function () { return \"patched-own\"; };\n",
+      "lib2.js": "class D { go() { return this.n(); } n() { return \"D.n\"; } }\nmodule.exports = new D();\n",
+      "patch2.js": "exports = module.exports = require(\"./lib2\");\nexports.n = function () { return \"patched-alias\"; };\n",
+      "lib3.js": "module.exports = { run: function () { return \"lib3-run\"; } };\n",
+      "patch3.js": "module.exports = require(\"./lib3\");\nmodule.exports.run = function () { return \"patched-c3a\"; };\n",
+      "lib4.js": "class E { go() { return this.p(); } p() { return \"E.p\"; } }\nmodule.exports = new E();\n",
+      "patch4.js": "function extend(exports) { exports.p = function () { return \"patched-param\"; }; }\nextend(require(\"./lib4\"));\n",
+      "lib5.js": [
+        "class F { go() { return this.q(); } q() { return \"own.q\"; } r() { return \"own.r\"; } both() { return this.r(); } }",
+        "module.exports = new F();",
+        "",
+      ].join("\n"),
+      "own.js": "exports = module.exports = function own() {};\nexports.q = function () { return \"own-q\"; };\n",
+      "fn.js": "function createApp() {}\nexports = module.exports = createApp;\nexports.r = function () { return \"own-r\"; };\n",
+      "main.js": [
+        "require(\"./patch\"); require(\"./patch2\"); require(\"./patch3\"); require(\"./patch4\"); require(\"./own\"); require(\"./fn\");",
+        "const lib3 = require(\"./lib3\");",
+        "console.log(require(\"./lib\").go(), require(\"./lib2\").go(), lib3.run(), require(\"./lib4\").go(), require(\"./lib5\").go(), require(\"./lib5\").both());",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "rt-m3:module-exports-of-require-unresolved", category: "calls", has: /^lib\.js@1:\d+\|go\|this\.m\|UNRESOLVED\|/ },
+      { id: "rt-m3:exports-alias-of-require-unresolved", category: "calls", has: /^lib2\.js@1:\d+\|go\|this\.n\|UNRESOLVED\|/ },
+      { id: "rt-m3:c3a-member-patched-through-own-exports-unresolved", category: "calls", has: /^main\.js@3:\d+\|module\|lib3\.run\|UNRESOLVED\|/ },
+      { id: "rt-m3:exports-parameter-unresolved", category: "calls", has: /^lib4\.js@1:\d+\|go\|this\.p\|UNRESOLVED\|/ },
+      { id: "rt-m3:fresh-own-exports-write-resolves", category: "calls", has: /^lib5\.js@1:\d+\|go\|this\.q\|RESOLVED\|method:q@1:\d+@lib5\.js/ },
+      { id: "rt-m3:own-function-exports-write-resolves", category: "calls", has: /^lib5\.js@1:\d+\|both\|this\.r\|RESOLVED\|method:r@1:\d+@lib5\.js/ },
     ],
   },
   ...taintCases,
