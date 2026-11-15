@@ -1425,6 +1425,68 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // RT-M1 (red team 2026-11-15): the cross-file write checks (class hierarchy, other modules' exports, packages and
+    // globals) saw only `o.m = …`. A destructuring target, a `for…of` head, `++` and a TypeScript-wrapped target store
+    // too. In Node, main.js prints "destr-m forof-n THROWS this.k is not a function ts-as-w forof-p destr-run H.q"
+    // and "destr-max forof-stringify destr-parseInt destr-join 1 b": every patched call runs the patch; `this.q()`,
+    // `Math.min` and `path.basename` are untouched (patch.js writes `lib5.other`, another name).
+    id: "write-target-forms",
+    files: {
+      "lib.js": "class C { go() { return this.m(); } m() { return \"C.m\"; } }\nmodule.exports = new C();\n",
+      "lib2.js": "class D { go() { return this.n(); } n() { return \"D.n\"; } }\nmodule.exports = new D();\n",
+      "lib3.js": "class E { go() { try { return this.k(); } catch (e) { return \"THROWS \" + e.message; } } k() { return \"E.k\"; } }\nmodule.exports = new E();\n",
+      "lib4.js": "class G { go() { return this.w(); } w() { return \"G.w\"; } }\nmodule.exports = new G();\n",
+      "lib5.js": "class H { go() { return this.q(); } q() { return \"H.q\"; } }\nmodule.exports = new H();\n",
+      "proto.js": [
+        "function F() {}",
+        "F.prototype.p = function () { return \"F.p\"; };",
+        "const x = new F();",
+        "module.exports = x;",
+        "module.exports.go = function () { return x.p(); };",
+        "",
+      ].join("\n"),
+      "exp.js": "exports.run = function () { return \"exp-run\"; };\n",
+      "patch-ts.cts": "const lib4 = require(\"./lib4.js\");\n(lib4.w as any) = function () { return \"ts-as-w\"; };\n",
+      "patch.js": [
+        "const lib = require(\"./lib\"); [lib.m] = [function () { return \"destr-m\"; }];",
+        "const lib2 = require(\"./lib2\"); for (lib2.n of [function () { return \"forof-n\"; }]);",
+        "const lib3 = require(\"./lib3\"); lib3.k++;",
+        "require(\"./patch-ts.cts\");",
+        "const proto = require(\"./proto\"); for (proto.p of [function () { return \"forof-p\"; }]);",
+        "[require(\"./exp\").run] = [function () { return \"destr-run\"; }];",
+        "const lib5 = require(\"./lib5\"); [lib5.other] = [1];",
+        "[Math.max] = [function () { return \"destr-max\"; }];",
+        "for (JSON.stringify of [function () { return \"forof-stringify\"; }]);",
+        "[parseInt] = [function () { return \"destr-parseInt\"; }];",
+        "const path = require(\"path\"); [path.join] = [function () { return \"destr-join\"; }];",
+        "",
+      ].join("\n"),
+      "main.js": [
+        "require(\"./patch\");",
+        "const { run } = require(\"./exp\");",
+        "const path = require(\"path\");",
+        "console.log(require(\"./lib\").go(), require(\"./lib2\").go(), require(\"./lib3\").go(), require(\"./lib4\").go(), require(\"./proto\").go(), run(), require(\"./lib5\").go());",
+        "console.log(Math.max(1, 2), JSON.stringify({}), parseInt(\"1\"), path.join(\"a\", \"b\"), Math.min(1, 2), path.basename(\"/a/b\"));",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "rt-m1:destructuring-write-unresolved", category: "calls", has: /^lib\.js@1:\d+\|go\|this\.m\|UNRESOLVED\|/ },
+      { id: "rt-m1:for-of-write-unresolved", category: "calls", has: /^lib2\.js@1:\d+\|go\|this\.n\|UNRESOLVED\|/ },
+      { id: "rt-m1:update-write-unresolved", category: "calls", has: /^lib3\.js@1:\d+\|go\|this\.k\|UNRESOLVED\|/ },
+      { id: "rt-m1:typescript-wrapped-write-unresolved", category: "calls", has: /^lib4\.js@1:\d+\|go\|this\.w\|UNRESOLVED\|/ },
+      { id: "rt-m1:prototype-for-of-write-unresolved", category: "calls", has: /^proto\.js@5:\d+\|go\|x\.p\|UNRESOLVED\|/ },
+      { id: "rt-m1:export-destructuring-write-unresolved", category: "calls", has: /^main\.js@4:\d+\|module\|run\|UNRESOLVED\|/ },
+      { id: "rt-m1:global-member-destructuring-unresolved", category: "calls", has: /^main\.js@5:\d+\|module\|Math\.max\|UNRESOLVED\|/ },
+      { id: "rt-m1:global-member-for-of-unresolved", category: "calls", has: /^main\.js@5:\d+\|module\|JSON\.stringify\|UNRESOLVED\|/ },
+      { id: "rt-m1:global-name-destructuring-unresolved", category: "calls", has: /^main\.js@5:\d+\|module\|parseInt\|UNRESOLVED\|/ },
+      { id: "rt-m1:package-member-destructuring-unresolved", category: "calls", has: /^main\.js@5:\d+\|module\|path\.join\|UNRESOLVED\|/ },
+      { id: "rt-m1:unwritten-name-resolves", category: "calls", has: /^lib5\.js@1:\d+\|go\|this\.q\|RESOLVED\|method:q@1:\d+@lib5\.js/ },
+      { id: "rt-m1:unwritten-global-external", category: "calls", has: /^main\.js@5:\d+\|module\|Math\.min\|EXTERNAL\|/ },
+      { id: "rt-m1:unwritten-package-member-external", category: "calls", has: /^main\.js@5:\d+\|module\|path\.basename\|EXTERNAL\|/ },
+    ],
+  },
+  {
     // Phase C2b: a constructor that inherits, through `Object.create(X.prototype)`, `util.inherits` or
     // `Object.setPrototypeOf`, still reaches its own prototype's methods when the link comes first and the parent cannot
     // give the instance an own method unseen (a package, a standard error, a constructor of this file).
