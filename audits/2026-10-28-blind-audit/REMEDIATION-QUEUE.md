@@ -61,7 +61,7 @@ Reports and probes: `audits/2026-11-15-redteam/` (each finding checked under Nod
 | RT-H1 | High | Rules 1 and 2 ignore writes to the method from other files | session write-checks | Draft #331 (mongoose 2 correct calls lost to the name rule, explained) |
 | RT-M1 | Med | Destructuring and `for…of` writes missed by write checks | write-checks (factory part: main) | Open |
 | RT-M2 | Med | String-key bracket writes and `defineProperty(exports, …)` missed | write-checks (factory part: main) | Open |
-| RT-M3 | Med | Own-exports exemption still applies after `module.exports = require(…)` | write-checks | Draft #330 (0 lost on 10 corpora; Ghost running) |
+| RT-M3 | Med | Own-exports exemption still applies after `module.exports = require(…)` | write-checks | **Fixed** #330 (`03b9d20`): 0 lost/0 gained on 11 corpora incl. Ghost |
 | RT-M4 | Med | Class instance used as another object's prototype | write-checks | Open |
 | RT-M5 | Med | B1c ignores same-file reflection onto the literal | write-checks | Open |
 | RT-M6 | Med | `#imports`/self-reference conditions: `import` tried before `require` | session resolver | Open |
