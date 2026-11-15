@@ -1,0 +1,1 @@
+delete require("path").join;

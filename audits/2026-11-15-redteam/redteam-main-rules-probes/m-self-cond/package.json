@@ -1,0 +1,1 @@
+{ "name": "app", "exports": { ".": { "import": "./impl.mjs", "require": "./impl.cjs" } } }
