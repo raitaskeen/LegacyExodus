@@ -1708,39 +1708,6 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
-    // NA-02: `with` and direct `eval` make names dynamic. In a `with` body a name bound outside it may be a
-    // property of the object; a direct `eval` can declare or reassign any binding it can see, so no call
-    // in its file is proven and its exports are unstable for other files.
-    id: "dynamic-scope",
-    files: {
-      "with.cjs": [
-        "function g() { return 1; }",
-        "function w(o) { with (o) { return g(); } }",
-        "function inner(o) { with (o) { function h() { return 2; } return h(); } }",
-        "function after(o) { with (o) {} return g(); }",
-        "module.exports = { w, inner, after };",
-        "",
-      ].join("\n"),
-      "evil.cjs": [
-        "function k() { return 1; }",
-        "function ev(code) { eval(code); return k(); }",
-        "function other() { return k(); }",
-        "module.exports = { k, ev, other };",
-        "",
-      ].join("\n"),
-      "user.cjs": "const { k } = require(\"./evil.cjs\");\nk();\nfunction m() { return 1; }\nm();\n",
-    },
-    expectations: [
-      { id: "dynamic-scope:with-outer-name-unresolved", category: "calls", has: /^with\.cjs@2:\d+\|w\|g\|UNRESOLVED\|/ },
-      { id: "dynamic-scope:with-inner-binding-resolves", category: "calls", has: /^with\.cjs@3:\d+\|inner\|h\|RESOLVED\|/ },
-      { id: "dynamic-scope:after-with-resolves", category: "calls", has: /^with\.cjs@4:\d+\|after\|g\|RESOLVED\|/ },
-      { id: "dynamic-scope:eval-function-unresolved", category: "calls", has: /^evil\.cjs@2:\d+\|ev\|k\|UNRESOLVED\|/ },
-      { id: "dynamic-scope:eval-file-unresolved", category: "calls", has: /^evil\.cjs@3:\d+\|other\|k\|UNRESOLVED\|/ },
-      { id: "dynamic-scope:eval-export-unstable", category: "calls", has: /^user\.cjs@2:\d+\|module\|k\|UNRESOLVED\|/ },
-      { id: "dynamic-scope:clean-file-resolves", category: "calls", has: /^user\.cjs@4:\d+\|module\|m\|RESOLVED\|/ },
-    ],
-  },
-  {
     // RT-H1 (red team 2026-11-15): rule 1 (`const c = new C(); c.m()`) and rule 2 (`app.init = function …;
     // app.init()`) counted writes in the calling file only. Another file that imports the instance or the object can
     // replace the method by a plain assignment. In Node, main.js prints "patched-m patched-n patched-init K.k run":
@@ -1798,6 +1765,39 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "rt-h1:container-method-written-elsewhere-unresolved", category: "calls", has: /^r2\.js@3:\d+\|start\|app\.init\|UNRESOLVED\|/ },
       { id: "rt-h1:unwritten-instance-method-resolves", category: "calls", has: /^keep\.js@3:\d+\|goK\|kk\.k\|RESOLVED\|method:k@1:\d+@keep\.js/ },
       { id: "rt-h1:unwritten-container-method-resolves", category: "calls", has: /^keep\.js@6:\d+\|go\|box\.run\|RESOLVED\|method:run@5:\d+@keep\.js/ },
+    ],
+  },
+  {
+    // NA-02: `with` and direct `eval` make names dynamic. In a `with` body a name bound outside it may be a
+    // property of the object; a direct `eval` can declare or reassign any binding it can see, so no call
+    // in its file is proven and its exports are unstable for other files.
+    id: "dynamic-scope",
+    files: {
+      "with.cjs": [
+        "function g() { return 1; }",
+        "function w(o) { with (o) { return g(); } }",
+        "function inner(o) { with (o) { function h() { return 2; } return h(); } }",
+        "function after(o) { with (o) {} return g(); }",
+        "module.exports = { w, inner, after };",
+        "",
+      ].join("\n"),
+      "evil.cjs": [
+        "function k() { return 1; }",
+        "function ev(code) { eval(code); return k(); }",
+        "function other() { return k(); }",
+        "module.exports = { k, ev, other };",
+        "",
+      ].join("\n"),
+      "user.cjs": "const { k } = require(\"./evil.cjs\");\nk();\nfunction m() { return 1; }\nm();\n",
+    },
+    expectations: [
+      { id: "dynamic-scope:with-outer-name-unresolved", category: "calls", has: /^with\.cjs@2:\d+\|w\|g\|UNRESOLVED\|/ },
+      { id: "dynamic-scope:with-inner-binding-resolves", category: "calls", has: /^with\.cjs@3:\d+\|inner\|h\|RESOLVED\|/ },
+      { id: "dynamic-scope:after-with-resolves", category: "calls", has: /^with\.cjs@4:\d+\|after\|g\|RESOLVED\|/ },
+      { id: "dynamic-scope:eval-function-unresolved", category: "calls", has: /^evil\.cjs@2:\d+\|ev\|k\|UNRESOLVED\|/ },
+      { id: "dynamic-scope:eval-file-unresolved", category: "calls", has: /^evil\.cjs@3:\d+\|other\|k\|UNRESOLVED\|/ },
+      { id: "dynamic-scope:eval-export-unstable", category: "calls", has: /^user\.cjs@2:\d+\|module\|k\|UNRESOLVED\|/ },
+      { id: "dynamic-scope:clean-file-resolves", category: "calls", has: /^user\.cjs@4:\d+\|module\|m\|RESOLVED\|/ },
     ],
   },
   ...taintCases,
