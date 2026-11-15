@@ -905,6 +905,34 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // RT-L5 (red team 2026-11-15): under the nearest package.json's `"type": "module"`, Node runs a `.js` (and, with type
+    // stripping, a `.ts`) file as an ES module, where `require` is not defined. Node (24) prints "THROWS require is not
+    // defined" for main.js, tool.ts and tsc/a.ts (whose tsconfig.json says `module: commonjs`, but Node runs it, and tsc's
+    // output beside it, as an ES module), and "y.js" for legacy.cjs, cjs/a.js (nearest type is commonjs) and plain/b.js
+    // (the nearest package.json has no type, so CommonJS).
+    id: "package-type",
+    files: {
+      "package.json": "{ \"name\": \"typed\", \"type\": \"module\" }\n",
+      "main.js": "try { const p = require(\"path\"); console.log(p.join(\"a\", \"b\")); } catch (e) { console.log(\"THROWS\", e.message); }\n",
+      "tool.ts": "try { const p = require(\"path\"); console.log(p.join(\"a\", \"b\")); } catch (e) { console.log(\"THROWS\", (e as Error).message); }\n",
+      "legacy.cjs": "const p = require(\"path\");\nconsole.log(p.basename(\"/x/y.js\"));\n",
+      "cjs/package.json": "{ \"type\": \"commonjs\" }\n",
+      "cjs/a.js": "const p = require(\"path\");\nconsole.log(p.basename(\"/x/y.js\"));\n",
+      "plain/package.json": "{ \"name\": \"plain\" }\n",
+      "plain/b.js": "const p = require(\"path\");\nconsole.log(p.basename(\"/x/y.js\"));\n",
+      "tsc/tsconfig.json": "{ \"compilerOptions\": { \"module\": \"commonjs\" } }\n",
+      "tsc/a.ts": "try { const p = require(\"path\"); console.log(p.join(\"a\", \"b\")); } catch (e) { console.log(\"THROWS\", (e as Error).message); }\n",
+    },
+    expectations: [
+      { id: "rt-l5:type-module-js-require-not-external", category: "calls", has: /^main\.js@1:\d+\|module\|require\|UNRESOLVED\|/ },
+      { id: "rt-l5:type-module-ts-require-not-external", category: "calls", has: /^tool\.ts@1:\d+\|module\|require\|UNRESOLVED\|/ },
+      { id: "rt-l5:type-module-over-tsconfig-commonjs", category: "calls", has: /^tsc\/a\.ts@1:\d+\|module\|require\|UNRESOLVED\|/ },
+      { id: "rt-l5:cjs-extension-require-external", category: "calls", has: /^legacy\.cjs@1:\d+\|module\|require\|EXTERNAL\|/ },
+      { id: "rt-l5:nested-commonjs-type-require-external", category: "calls", has: /^cjs\/a\.js@1:\d+\|module\|require\|EXTERNAL\|/ },
+      { id: "rt-l5:nearest-manifest-without-type-external", category: "calls", has: /^plain\/b\.js@1:\d+\|module\|require\|EXTERNAL\|/ },
+    ],
+  },
+  {
     // ADR-012, Phase B1b: a call on an unbound standard global is EXTERNAL unless some file writes that path; a test
     // runner's globals stay UNRESOLVED; `require` is EXTERNAL only in CommonJS.
     id: "external-globals",

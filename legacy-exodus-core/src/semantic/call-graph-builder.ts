@@ -99,10 +99,13 @@ export class DeterministicCallGraphBuilder {
     const boundCallees = new Set<ASTNode>();
     const table = tablesByPath.get(canonicalizePath(ast.metadata.sourcePath));
     const fileSymbols = createFileSymbolIndex(table, ast, unstableExportIds);
-    // `require` is the module wrapper's own binding only in CommonJS: never in .mjs/.mts, nor in a file with ESM
-    // syntax unless the compiler turns that file into CommonJS (B2).
-    commonJsFiles.set(fileSymbols, !/\.m[jt]s$/i.test(ast.metadata.sourcePath)
-      && (this.compiledCommonJs.has(canonicalizePath(ast.metadata.sourcePath)) || !(table?.moduleReferences ?? []).some((reference) => reference.form.startsWith("esm"))));
+    // `require` is the module wrapper's own binding only in CommonJS: never in .mjs/.mts; never in another file than
+    // .cjs/.cts whose nearest package.json says `"type": "module"`, which Node runs as an ES module, compiled or not
+    // (RT-L5); and not in a file with ESM syntax unless the compiler turns that file into CommonJS (B2).
+    const sourcePath = canonicalizePath(ast.metadata.sourcePath);
+    commonJsFiles.set(fileSymbols, !/\.m[jt]s$/i.test(sourcePath)
+      && (/\.c[jt]s$/i.test(sourcePath) || this.resolver.packageType(sourcePath) !== "module")
+      && (this.compiledCommonJs.has(sourcePath) || !(table?.moduleReferences ?? []).some((reference) => reference.form.startsWith("esm"))));
     factKeyers.set(fileSymbols, new FactKeyer(ast.metadata.sourcePath, ast.root, fileSymbols.ownerSymbols));
     this.visit(ast.root, ast, initialContext, tablesByPath, importsByFile, targetByImportId, calls, references, boundCallees, fileSymbols, undefined, false);
   }
