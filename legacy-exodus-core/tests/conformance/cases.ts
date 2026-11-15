@@ -1841,6 +1841,45 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "dynamic-scope:clean-file-resolves", category: "calls", has: /^user\.cjs@4:\d+\|module\|m\|RESOLVED\|/ },
     ],
   },
+  {
+    // RT-M3 (red team 2026-11-15): a write on a file's own `exports` or `module.exports` was never counted as a write
+    // on another module's object, even after `module.exports = require("./x")` or `exports = …` made it one, or where
+    // `exports` names a parameter. In Node, main.js prints
+    // "patched-own patched-alias patched-c3a patched-param own.q own.r": the first four calls run the patches; the
+    // patches of own.js and fn.js write their own fresh exports, so `this.q()` and `this.r()` are untouched.
+    id: "own-exports-foreign-values",
+    files: {
+      "lib.js": "class C { go() { return this.m(); } m() { return \"C.m\"; } }\nmodule.exports = new C();\n",
+      "patch.js": "module.exports = require(\"./lib\");\nmodule.exports.m = function () { return \"patched-own\"; };\n",
+      "lib2.js": "class D { go() { return this.n(); } n() { return \"D.n\"; } }\nmodule.exports = new D();\n",
+      "patch2.js": "exports = module.exports = require(\"./lib2\");\nexports.n = function () { return \"patched-alias\"; };\n",
+      "lib3.js": "module.exports = { run: function () { return \"lib3-run\"; } };\n",
+      "patch3.js": "module.exports = require(\"./lib3\");\nmodule.exports.run = function () { return \"patched-c3a\"; };\n",
+      "lib4.js": "class E { go() { return this.p(); } p() { return \"E.p\"; } }\nmodule.exports = new E();\n",
+      "patch4.js": "function extend(exports) { exports.p = function () { return \"patched-param\"; }; }\nextend(require(\"./lib4\"));\n",
+      "lib5.js": [
+        "class F { go() { return this.q(); } q() { return \"own.q\"; } r() { return \"own.r\"; } both() { return this.r(); } }",
+        "module.exports = new F();",
+        "",
+      ].join("\n"),
+      "own.js": "exports = module.exports = function own() {};\nexports.q = function () { return \"own-q\"; };\n",
+      "fn.js": "function createApp() {}\nexports = module.exports = createApp;\nexports.r = function () { return \"own-r\"; };\n",
+      "main.js": [
+        "require(\"./patch\"); require(\"./patch2\"); require(\"./patch3\"); require(\"./patch4\"); require(\"./own\"); require(\"./fn\");",
+        "const lib3 = require(\"./lib3\");",
+        "console.log(require(\"./lib\").go(), require(\"./lib2\").go(), lib3.run(), require(\"./lib4\").go(), require(\"./lib5\").go(), require(\"./lib5\").both());",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "rt-m3:module-exports-of-require-unresolved", category: "calls", has: /^lib\.js@1:\d+\|go\|this\.m\|UNRESOLVED\|/ },
+      { id: "rt-m3:exports-alias-of-require-unresolved", category: "calls", has: /^lib2\.js@1:\d+\|go\|this\.n\|UNRESOLVED\|/ },
+      { id: "rt-m3:c3a-member-patched-through-own-exports-unresolved", category: "calls", has: /^main\.js@3:\d+\|module\|lib3\.run\|UNRESOLVED\|/ },
+      { id: "rt-m3:exports-parameter-unresolved", category: "calls", has: /^lib4\.js@1:\d+\|go\|this\.p\|UNRESOLVED\|/ },
+      { id: "rt-m3:fresh-own-exports-write-resolves", category: "calls", has: /^lib5\.js@1:\d+\|go\|this\.q\|RESOLVED\|method:q@1:\d+@lib5\.js/ },
+      { id: "rt-m3:own-function-exports-write-resolves", category: "calls", has: /^lib5\.js@1:\d+\|both\|this\.r\|RESOLVED\|method:r@1:\d+@lib5\.js/ },
+    ],
+  },
   ...taintCases,
 ];
 
