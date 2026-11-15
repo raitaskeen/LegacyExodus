@@ -6,7 +6,7 @@ import type { SymbolTable } from "@symbols/index";
 import { createLexicalScopeId, createSelfScopeId, FactKeyer, type CodeSymbol } from "@symbols/index";
 
 import type { ExternalTarget, SemanticCall, SymbolReference, UnresolvedReason } from "./semantic-contracts";
-import { ClassHierarchy, collectClassHierarchyFacts } from "./class-hierarchy";
+import { ClassHierarchy, collectClassHierarchyFacts, writtenTargets } from "./class-hierarchy";
 import { collectFactoryFacts, FactoryIndex } from "./factory-objects";
 import { stableId } from "@shared/identity";
 import { compareCodePoints } from "@shared/ordering";
@@ -799,18 +799,17 @@ export function collectForeignExportWrites(ast: ASTResult, table: SymbolTable | 
   }
   const writes: ForeignExportWrite[] = [];
   const visit = (node: ASTNode): void => {
-    if (node.type === "AssignmentExpression") {
-      const left = node.children.find((child) => child.role === "left");
-      if (left?.type === "MemberExpression" || left?.type === "OptionalMemberExpression") {
-        const object = left.children.find((child) => child.role === "object");
-        const property = left.children.find((child) => child.role === "property");
-        const name = left.attributes.computed === true
-          ? (property?.type === "StringLiteral" && typeof property.attributes.value === "string" ? property.attributes.value : "*")
-          : identifier(property) ?? "*";
-        const specifier = object?.type === "CallExpression" ? requiredSpecifier(object)
-          : object?.type === "Identifier" ? moduleImports.get(identifier(object) ?? "") : undefined;
-        if (specifier !== undefined) writes.push({ importerPath, specifier, name });
-      }
+    // Every write form counts: `[x.name] = …`, `for (x.name of …)`, `x.name++`, `(x.name as T) = …` (RT-M1).
+    for (const left of writtenTargets(node)) {
+      if (left.type !== "MemberExpression" && left.type !== "OptionalMemberExpression") continue;
+      const object = left.children.find((child) => child.role === "object");
+      const property = left.children.find((child) => child.role === "property");
+      const name = left.attributes.computed === true
+        ? (property?.type === "StringLiteral" && typeof property.attributes.value === "string" ? property.attributes.value : "*")
+        : identifier(property) ?? "*";
+      const specifier = object?.type === "CallExpression" ? requiredSpecifier(object)
+        : object?.type === "Identifier" ? moduleImports.get(identifier(object) ?? "") : undefined;
+      if (specifier !== undefined) writes.push({ importerPath, specifier, name });
     }
     for (const child of node.children) visit(child);
   };
@@ -2521,8 +2520,9 @@ export function collectGlobalWrites(ast: ASTResult): readonly string[] {
     return [...base, name];
   };
   const visit = (node: ASTNode): void => {
-    if (node.type === "AssignmentExpression") {
-      const path = pathOf(node.children.find((child) => child.role === "left"));
+    // Every write form counts: `[Math.max] = …`, `for (JSON.stringify of …)`, `[parseInt] = …` (RT-M1).
+    for (const target of writtenTargets(node)) {
+      const path = pathOf(target);
       const relative = path !== undefined && GLOBAL_OBJECTS.has(path[0]!) ? path.slice(1) : path;
       if (relative !== undefined && relative.length > 0 && STANDARD_GLOBALS.has(relative[0]!)) paths.add(relative.join("."));
     }
@@ -2565,15 +2565,10 @@ function aliasedWrites(root: ASTNode, moduleImports: ReadonlyMap<string, ValueRo
       const name = id?.type === "Identifier" ? identifier(id) : undefined;
       if (name !== undefined && init !== undefined) declared.set(name, [...(declared.get(name) ?? []), init]);
     }
-    if (node.type === "AssignmentExpression") {
-      const left = node.children.find((child) => child.role === "left");
-      if (left?.type === "MemberExpression" || left?.type === "OptionalMemberExpression") assignments.push(left);
-      else for (const name of extractBoundNames(left)) assigned.add(name);
-    }
-    if (node.type === "UpdateExpression") for (const name of extractBoundNames(node.children.find((child) => child.role === "argument"))) assigned.add(name);
-    if (node.type === "ForInStatement" || node.type === "ForOfStatement") {
-      const left = node.children.find((child) => child.role === "left");
-      if (left?.type !== "VariableDeclaration") for (const name of extractBoundNames(left)) assigned.add(name);
+    // Every write form (RT-M1): a member target is a write through its object, a name target reassigns an alias.
+    for (const target of writtenTargets(node)) {
+      if (target.type === "Identifier") { const name = identifier(target); if (name !== undefined) assigned.add(name); }
+      else assignments.push(target);
     }
     if (node.type === "CallExpression" || node.type === "OptionalCallExpression") calls.push(node);
     for (const child of node.children) collect(child);
