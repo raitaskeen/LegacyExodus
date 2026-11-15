@@ -77,7 +77,8 @@ Reports and probes: `audits/2026-11-15-redteam/` (each finding checked under Nod
 | RT-L7 | Low | Package patched through a repository wrapper module | write-checks | Open |
 | RT-L8 | Low | Annex B block function replaces a C3a shorthand export | design needed | Open |
 | RT-L9 | Low | Annex B block function replaces a factory callee for a direct call (`var b = express(); b.use()`, probe p06 of the PR328 set; on main) | design needed | Open |
-| RT-N1 | Med | `this.x = …` in another file's plain function (`patch.call(app)`) is exempt from the name rule (XA-03), so app.init stays RESOLVED; probe h1-this-call | owner decision | Open |
+| RT-N2 | Low | A class method borrowed onto another object (`P.prototype.patch.call(lib)` with `this.m = …`) still writes unseen; class elements stay exempt (follow-up: `isBorrowed`) | write-checks | Open |
+| RT-N1 | Med | `this.x = …` in another file's plain function (`patch.call(app)`) is exempt from the name rule (XA-03), so app.init stays RESOLVED; probe h1-this-call | write-checks | Draft #334 (owner: measure strict first): cost 7 correct express `app.engine` calls (ES5 constructors write `this.engine`), 0 elsewhere; Ghost pending |
 
 ## Track 2026-11-11: cross-file audit B findings (XB-01 to XB-09)
 
