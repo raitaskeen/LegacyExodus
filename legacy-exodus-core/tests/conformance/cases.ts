@@ -905,6 +905,36 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // RT-L4 (red team 2026-11-15): Node loads its own module for a built-in name before any package, so a package named
+    // `url` that requires "url", or a workspace package named `path`, still gets Node's module. Node (24), after
+    // `npm install --offline` links the workspaces, prints "real.example repo-extra y.js repo-test": `url/extra` is no
+    // built-in, so the self-reference holds, and `test` is a built-in only as `node:test`, so the workspace package loads.
+    id: "builtin-names",
+    files: {
+      "package.json": JSON.stringify({ name: "url", private: true, workspaces: ["packages/*"], exports: { ".": "./index.js", "./extra": "./extra.js" } }) + "\n",
+      "index.js": "exports.parse = function parse() { return { host: \"repo-parse\" }; };\n",
+      "extra.js": "exports.e = function e() { return \"repo-extra\"; };\n",
+      "packages/path/package.json": JSON.stringify({ name: "path", main: "index.js" }) + "\n",
+      "packages/path/index.js": "exports.basename = function basename() { return \"repo-basename\"; };\n",
+      "packages/test/package.json": JSON.stringify({ name: "test", main: "index.js" }) + "\n",
+      "packages/test/index.js": "exports.t = function t() { return \"repo-test\"; };\n",
+      "main.js": [
+        "const url = require(\"url\");",
+        "const extra = require(\"url/extra\");",
+        "const path = require(\"path\");",
+        "const t = require(\"test\");",
+        "console.log(url.parse(\"http://real.example/\").host, extra.e(), path.basename(\"/x/y.js\"), t.t());",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "rt-l4:self-reference-builtin-name-not-repository", category: "calls", lacks: /^main\.js@5:\d+\|module\|url\.parse\|RESOLVED\|/ },
+      { id: "rt-l4:workspace-builtin-name-not-repository", category: "calls", lacks: /^main\.js@5:\d+\|module\|path\.basename\|RESOLVED\|/ },
+      { id: "rt-l4:self-reference-subpath-resolves", category: "calls", has: /^main\.js@5:\d+\|module\|extra\.e\|RESOLVED\|export:e@1:0@extra\.js$/ },
+      { id: "rt-l4:node-prefix-only-name-is-package", category: "calls", has: /^main\.js@5:\d+\|module\|t\.t\|RESOLVED\|export:t@1:0@packages\/test\/index\.js$/ },
+    ],
+  },
+  {
     // ADR-012, Phase B1b: a call on an unbound standard global is EXTERNAL unless some file writes that path; a test
     // runner's globals stay UNRESOLVED; `require` is EXTERNAL only in CommonJS.
     id: "external-globals",
