@@ -41,6 +41,7 @@ This page is the concise status boundary for LegacyExodus. Implementation source
 A RESOLVED call is proven on these assumptions. Code that breaks one can make a RESOLVED fact false.
 
 - **No reflection or computed access from other files.** Another file does not read or write a method by a computed key or by reflection (`proto[name] = f`, `Reflect.get(o, "run")`, `Object.assign` of methods).
+- **Instance and object methods (rules 1 and 2):** `c.m()` with `c` bound once to `new C()` resolves to the `m` declared once in `C`'s body, and `app.m()` on a never-reassigned `app` to the one function assigned to `app.m`, only when its file writes no other property named `m` and no other file writes a property named `m` on an object other than `this` and its own exports (XA-03's name-based rule, RT-H1). A write through `this` in another file's function (`patch.call(app)`) is assumed not to reach the object.
 - **`this.m()` inside a class** resolves to the class's own `m` only when all of these hold:
   - the class is declared in the analysed files, and neither it nor any class extending it escapes its file (open world; the `closedWorld` switch is off and not configurable, owner decision 2026-11-09; XA-02);
   - no class extending it in the repository defines `m`;

@@ -2232,8 +2232,8 @@ function resolveNamespaceCall(
 
 /**
  * Rule 2, object container method (e.g. app.init after `app.init = function …`): the container binding never changes,
- * the property is declared once on that same binding and never otherwise written, and the call cannot run before the
- * definition takes effect.
+ * the property is declared once on that same binding and never otherwise written, here or by name in another file
+ * (RT-H1), and the call cannot run before the definition takes effect.
  */
 function containerMethod(index: FileSymbolIndex, receiver: string, methodName: string, context: ResolutionContext, callNode: ASTNode | undefined): string | undefined {
   const containerFrame = declaredBindingFrame(index, receiver, context.scope);
@@ -2246,6 +2246,7 @@ function containerMethod(index: FileSymbolIndex, receiver: string, methodName: s
   // A member-assigned definition is itself the one permitted write; a class member admits none
   // and, called on the class, must be a static method declared in its body.
   if (candidate === undefined || propertyWriteCount(index, methodName) !== (candidate.containerId === undefined ? 1 : ownPropertyWrites(index, candidate))) return undefined;
+  if (writtenInOtherFile(context, methodName, candidate)) return undefined;
   const proven = candidate.containerId !== undefined
     ? isClassBodyMethod(index, candidate, candidate.containerId, true)
     : isDefinedBeforeCall(index, candidate, receiver, containerFrame, callNode);
@@ -2260,6 +2261,18 @@ function objectCreateArgument(value: ASTNode | undefined, index: FileSymbolIndex
   if (context.globalWrites === undefined || !globalPathUnwritten(path, context.globalWrites)) return undefined;
   const args = value.children.filter((child) => child.role === "arguments");
   return args.length === 1 && args[0]!.type === "Identifier" ? identifier(args[0]) : undefined;
+}
+
+/**
+ * RT-H1: whether a file other than `symbol`'s may write a property named `name` by name on an object that is not its
+ * own `this` or exports (`require("./lib").app.init = …`, or `app.init = …` on an imported `app`). Such a write may
+ * replace the method on the very object a rule 1 or rule 2 call reaches; the defining file's own writes are counted
+ * where the call is (propertyWriteCount). Private names cannot be written outside their class. Without the
+ * repository's write facts (no hierarchy) nothing is known about other files, so any public name may be written.
+ */
+function writtenInOtherFile(context: ResolutionContext, name: string, symbol: CodeSymbol): boolean {
+  if (name.startsWith("#")) return false;
+  return context.hierarchy === undefined || context.hierarchy.isWrittenOutside(name, canonicalizePath(symbol.filePath));
 }
 
 /** Writes that may replace `propertyName`; dynamic and reflective writes cannot reach private names. */
@@ -2299,8 +2312,9 @@ function resolveLocalCall(
       (symbol) => symbol.kind === "method" && symbol.containerId === classId && isClassBodyMethod(index, symbol, classId, receiver === "this" ? undefined : false),
     );
     const candidate = candidates.length === 1 ? candidates[0] : undefined;
-    // No other write may replace it: a field's own initializer is the one permitted write.
-    if (candidate !== undefined && propertyWriteCount(index, methodName) === ownPropertyWrites(index, candidate)) return candidate.id;
+    // No other write may replace it, in this file or another: a field's own initializer is the one permitted write.
+    if (candidate !== undefined && propertyWriteCount(index, methodName) === ownPropertyWrites(index, candidate)
+      && !writtenInOtherFile(context, methodName, candidate)) return candidate.id;
   }
 
   // 1b. Public `this` dispatch, where `this` is the instance (or class) of C (thisClassFor): C declares the method
@@ -2346,9 +2360,9 @@ function resolveLocalCall(
     const frame = declaredBindingFrame(index, receiver, context.scope);
     const init = frame === undefined || isRebound(index, frame.id, receiver) ? undefined : index.writes.declaredValues.get(bindingWriteKey(frame.id, receiver));
     const prototype = objectCreateArgument(init, index, context);
-    const target = prototype === undefined || context.hierarchy === undefined ? undefined : containerMethod(index, prototype, methodName, context, callNode);
-    const definedIn = target === undefined ? undefined : index.byName.get(methodName)?.find((symbol) => symbol.id === target)?.filePath;
-    if (definedIn !== undefined && !context.hierarchy!.isWrittenOutside(methodName, definedIn)) return target;
+    // containerMethod checks the writes of other files too (RT-H1).
+    const target = prototype === undefined ? undefined : containerMethod(index, prototype, methodName, context, callNode);
+    if (target !== undefined) return target;
   }
 
   // 2. Object container method (e.g. app.init after `app.init = function …`).
