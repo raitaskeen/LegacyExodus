@@ -2338,9 +2338,14 @@ function resolveLocalCall(
   if (receiver !== "this" && context.factories !== undefined) {
     const frame = declaredBindingFrame(index, receiver, context.scope);
     if (frame !== undefined && !isRebound(index, frame.id, receiver)) {
-      const init = index.writes.declaredValues.get(bindingWriteKey(frame.id, receiver));
+      const declared = index.writes.declaredValues.get(bindingWriteKey(frame.id, receiver));
+      const init = assignedValue(declared);
+      // C1c, red-team RT-PR-A: through a chain (`var app = module.exports = f()`) the object is also the file's exports,
+      // which own-exports writes (`module.exports.use = …`, exempt elsewhere) can change; no write of the name may exist.
+      const chained = init !== declared;
       // 1d. Constructor prototype (Phase C2): `const x = new F()` where F's prototype holds `methodName`.
-      const producer = init?.type === "CallExpression" || init?.type === "NewExpression" ? resolvedCallTargets.get(index)?.get(init) : undefined;
+      const producer = chained && propertyWriteCount(index, methodName) > 0 ? undefined
+        : init?.type === "CallExpression" || init?.type === "NewExpression" ? resolvedCallTargets.get(index)?.get(init) : undefined;
       const start = callNode?.location?.start;
       const topLevelCall = context.callerName === "module" && start !== undefined ? { filePath: canonicalizePath(table.filePath), line: start.line, column: start.column } : undefined;
       const method = producer === undefined ? undefined : context.factories.methodOf(producer, methodName, init?.type === "NewExpression", topLevelCall);
@@ -2728,7 +2733,7 @@ function factoryExternalTarget(calleeName: string, index: FileSymbolIndex, conte
   if (receiver === "this" || receiver.length === 0 || method.length === 0) return undefined;
   const frame = declaredBindingFrame(index, receiver, context.scope);
   if (frame === undefined || isRebound(index, frame.id, receiver)) return undefined;
-  const init = index.writes.declaredValues.get(bindingWriteKey(frame.id, receiver));
+  const init = assignedValue(index.writes.declaredValues.get(bindingWriteKey(frame.id, receiver)));
   const producer = init?.type === "CallExpression" ? resolvedCallTargets.get(index)?.get(init) : undefined;
   if (producer === undefined || propertyWriteCount(index, method) > 0) return undefined;
   return context.factories.externalOf(producer, method);
@@ -2906,4 +2911,16 @@ function receiverKey(scope: ScopeFrame, name: string): string {
 
 function hash(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+/**
+ * Phase C1c: the value an initialiser gives its binding, through an assignment chain: `var app = module.exports =
+ * express()` binds `app` to the call's result, as an assignment expression's value is its right-hand side.
+ */
+function assignedValue(node: ASTNode | undefined): ASTNode | undefined {
+  let value = node;
+  for (let depth = 0; depth < 8 && value?.type === "AssignmentExpression" && value.attributes.operator === "="; depth++) {
+    value = value.children.find((child) => child.role === "right");
+  }
+  return value;
 }
