@@ -71,7 +71,7 @@ Reports and probes: `audits/2026-11-15-redteam/` (each finding checked under Nod
 | RT-L1 | Low | Factory fall-through returns `undefined` | main session | Open |
 | RT-L2 | Low | Factory receiver not set when the call runs (branch, TDZ) | main session | Open |
 | RT-L3 | Low | `delete` not treated as a write | write-checks | Open |
-| RT-L4 | Low | Self-reference named like a Node built-in | resolver | Open |
+| RT-L4 | Low | Self-reference named like a Node built-in | resolver | **Fixed** #332: 0 lost/0 gained on 11 corpora incl. Ghost |
 | RT-L5 | Low | `.js` under `"type": "module"`: `require` claimed EXTERNAL | resolver | Open |
 | RT-L6 | Low | Class getter replaces an earlier method | write-checks | Open |
 | RT-L7 | Low | Package patched through a repository wrapper module | write-checks | Open |
