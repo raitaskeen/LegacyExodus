@@ -935,6 +935,34 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // RT-L5 (red team 2026-11-15): under the nearest package.json's `"type": "module"`, Node runs a `.js` (and, with type
+    // stripping, a `.ts`) file as an ES module, where `require` is not defined. Node (24) prints "THROWS require is not
+    // defined" for main.js, tool.ts and tsc/a.ts (whose tsconfig.json says `module: commonjs`, but Node runs it, and tsc's
+    // output beside it, as an ES module), and "y.js" for legacy.cjs, cjs/a.js (nearest type is commonjs) and plain/b.js
+    // (the nearest package.json has no type, so CommonJS).
+    id: "package-type",
+    files: {
+      "package.json": "{ \"name\": \"typed\", \"type\": \"module\" }\n",
+      "main.js": "try { const p = require(\"path\"); console.log(p.join(\"a\", \"b\")); } catch (e) { console.log(\"THROWS\", e.message); }\n",
+      "tool.ts": "try { const p = require(\"path\"); console.log(p.join(\"a\", \"b\")); } catch (e) { console.log(\"THROWS\", (e as Error).message); }\n",
+      "legacy.cjs": "const p = require(\"path\");\nconsole.log(p.basename(\"/x/y.js\"));\n",
+      "cjs/package.json": "{ \"type\": \"commonjs\" }\n",
+      "cjs/a.js": "const p = require(\"path\");\nconsole.log(p.basename(\"/x/y.js\"));\n",
+      "plain/package.json": "{ \"name\": \"plain\" }\n",
+      "plain/b.js": "const p = require(\"path\");\nconsole.log(p.basename(\"/x/y.js\"));\n",
+      "tsc/tsconfig.json": "{ \"compilerOptions\": { \"module\": \"commonjs\" } }\n",
+      "tsc/a.ts": "try { const p = require(\"path\"); console.log(p.join(\"a\", \"b\")); } catch (e) { console.log(\"THROWS\", (e as Error).message); }\n",
+    },
+    expectations: [
+      { id: "rt-l5:type-module-js-require-not-external", category: "calls", has: /^main\.js@1:\d+\|module\|require\|UNRESOLVED\|/ },
+      { id: "rt-l5:type-module-ts-require-not-external", category: "calls", has: /^tool\.ts@1:\d+\|module\|require\|UNRESOLVED\|/ },
+      { id: "rt-l5:type-module-over-tsconfig-commonjs", category: "calls", has: /^tsc\/a\.ts@1:\d+\|module\|require\|UNRESOLVED\|/ },
+      { id: "rt-l5:cjs-extension-require-external", category: "calls", has: /^legacy\.cjs@1:\d+\|module\|require\|EXTERNAL\|/ },
+      { id: "rt-l5:nested-commonjs-type-require-external", category: "calls", has: /^cjs\/a\.js@1:\d+\|module\|require\|EXTERNAL\|/ },
+      { id: "rt-l5:nearest-manifest-without-type-external", category: "calls", has: /^plain\/b\.js@1:\d+\|module\|require\|EXTERNAL\|/ },
+    ],
+  },
+  {
     // RT-L4 (red team 2026-11-15): Node loads its own module for a built-in name before any package, so a package named
     // `url` that requires "url", or a workspace package named `path`, still gets Node's module. Node (24), after
     // `npm install --offline` links the workspaces, prints "real.example repo-extra y.js repo-test": `url/extra` is no
@@ -1186,6 +1214,21 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "xb04:return-in-block-resolves", category: "calls", has: /^a\.js@8:\d+\|module\|n\.run\|RESOLVED\|variable:run@6:\d+@a\.js/ },
     ],
   },
+  // RT-M1/M2, factory side (audits/2026-11-15-redteam/redteam-main-rules-probes, one case per probe so the run-wide
+  // name rule of one cannot hide another): a store in any form, or under a static string key, replaces the method.
+  // Node prints the replacement in every case, so each call must stay UNRESOLVED.
+  ...([
+    ["rt-m2-c3a-strkey", { "lib.js": "module.exports = { run: function () { return \"literal-run\"; } };\nmodule.exports[\"run\"] = function () { return \"string-key-run\"; };\n", "main.js": "const lib = require(\"./lib\");\nconsole.log(lib.run());\n" }, /^main\.js@2:\d+\|module\|lib\.run\|UNRESOLVED\|/],
+    ["rt-m2-c2-strkey", { "main.js": "function F() {}\nF.prototype.m = function () { return \"F.m\"; };\nconst x = new F();\nx[\"m\"] = function () { return \"own-m-by-string-key\"; };\nconsole.log(x.m());\n" }, /^main\.js@5:\d+\|module\|x\.m\|UNRESOLVED\|/],
+    ["rt-m2-c1-strkey", { "main.js": "function make() { const o = { run() { return \"literal-run\"; } }; return o; }\nconst x = make();\nx[\"run\"] = function () { return \"patched-by-string-key\"; };\nconsole.log(x.run());\n" }, /^main\.js@4:\d+\|module\|x\.run\|UNRESOLVED\|/],
+    ["rt-m2-c1b-named-strkey", { "lib.js": "function add() { return \"declared-add\"; }\nexports.add = add;\nexports[\"add\"] = function () { return \"replaced-by-string-key\"; };\n", "main.js": "const lib = require(\"./lib\");\nfunction make() { return { add: lib.add }; }\nconst x = make();\nconsole.log(x.add());\n" }, /^main\.js@4:\d+\|module\|x\.add\|UNRESOLVED\|/],
+    ["rt-m2-c1b-named-defprop", { "lib.js": "function add() { return \"declared-add\"; }\nexports.add = add;\nObject.defineProperty(exports, \"add\", { value: function () { return \"replaced-by-defineProperty\"; } });\n", "main.js": "const lib = require(\"./lib\");\nfunction make() { return { add: lib.add }; }\nconst x = make();\nconsole.log(x.add());\n" }, /^main\.js@4:\d+\|module\|x\.add\|UNRESOLVED\|/],
+    ["rt-m1-c1-destructuring", { "main.js": "function make() { const o = { run() { return \"literal-run\"; } }; return o; }\nconst x = make();\n[x.run] = [function () { return \"patched-by-destructuring\"; }];\nconsole.log(x.run());\n" }, /^main\.js@4:\d+\|module\|x\.run\|UNRESOLVED\|/],
+    ["rt-m1-c1-for-of", { "main.js": "function make() { const o = { run() { return \"literal-run\"; } }; return o; }\nconst x = make();\nfor (x.run of [function () { return \"patched-by-for-of\"; }]);\nconsole.log(x.run());\n" }, /^main\.js@4:\d+\|module\|x\.run\|UNRESOLVED\|/],
+    ["rt-m1-c2-constructor-destructuring", { "main.js": "function F(fn) { [this.m] = [fn]; }\nF.prototype.m = function () { return \"F.m\"; };\nconst x = new F(function () { return \"own-m-by-destructuring\"; });\nconsole.log(x.m());\n" }, /^main\.js@4:\d+\|module\|x\.m\|UNRESOLVED\|/],
+    // Control: a static-key write of another name does not block the factory's method ("literal-run" in Node).
+    ["rt-m2-c1-other-key-control", { "main.js": "function make() { const o = { run() { return \"literal-run\"; } }; return o; }\nconst x = make();\nx[\"other\"] = 1;\nconsole.log(x.run());\n" }, /^main\.js@4:\d+\|module\|x\.run\|RESOLVED\|/],
+  ] as const).map(([id, files, expected]): ConformanceCase => ({ id, files, expectations: [{ id: `${id}:call`, category: "calls", has: expected }] })),
   {
     // Phase C1b: a factory literal's property takes its function from a member of a repository module, from a property
     // of another factory's result, or from a top-level write on the object in the factory's body (the last one wins).
@@ -1482,6 +1525,68 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "xb07:computed-this-write-unresolved", category: "calls", has: /^assign\.js@8:\d+\|module\|k\.go\|UNRESOLVED\|/ },
       { id: "xb07:define-property-this-unresolved", category: "calls", has: /^assign\.js@12:\d+\|module\|d\.hop\|UNRESOLVED\|/ },
       { id: "xb07:literal-this-writes-resolves", category: "calls", has: /^assign\.js@16:\d+\|module\|pt\.norm\|RESOLVED\|method:norm@14:\d+@assign\.js/ },
+    ],
+  },
+  {
+    // RT-M1 (red team 2026-11-15): the cross-file write checks (class hierarchy, other modules' exports, packages and
+    // globals) saw only `o.m = …`. A destructuring target, a `for…of` head, `++` and a TypeScript-wrapped target store
+    // too. In Node, main.js prints "destr-m forof-n THROWS this.k is not a function ts-as-w forof-p destr-run H.q"
+    // and "destr-max forof-stringify destr-parseInt destr-join 1 b": every patched call runs the patch; `this.q()`,
+    // `Math.min` and `path.basename` are untouched (patch.js writes `lib5.other`, another name).
+    id: "write-target-forms",
+    files: {
+      "lib.js": "class C { go() { return this.m(); } m() { return \"C.m\"; } }\nmodule.exports = new C();\n",
+      "lib2.js": "class D { go() { return this.n(); } n() { return \"D.n\"; } }\nmodule.exports = new D();\n",
+      "lib3.js": "class E { go() { try { return this.k(); } catch (e) { return \"THROWS \" + e.message; } } k() { return \"E.k\"; } }\nmodule.exports = new E();\n",
+      "lib4.js": "class G { go() { return this.w(); } w() { return \"G.w\"; } }\nmodule.exports = new G();\n",
+      "lib5.js": "class H { go() { return this.q(); } q() { return \"H.q\"; } }\nmodule.exports = new H();\n",
+      "proto.js": [
+        "function F() {}",
+        "F.prototype.p = function () { return \"F.p\"; };",
+        "const x = new F();",
+        "module.exports = x;",
+        "module.exports.go = function () { return x.p(); };",
+        "",
+      ].join("\n"),
+      "exp.js": "exports.run = function () { return \"exp-run\"; };\n",
+      "patch-ts.cts": "const lib4 = require(\"./lib4.js\");\n(lib4.w as any) = function () { return \"ts-as-w\"; };\n",
+      "patch.js": [
+        "const lib = require(\"./lib\"); [lib.m] = [function () { return \"destr-m\"; }];",
+        "const lib2 = require(\"./lib2\"); for (lib2.n of [function () { return \"forof-n\"; }]);",
+        "const lib3 = require(\"./lib3\"); lib3.k++;",
+        "require(\"./patch-ts.cts\");",
+        "const proto = require(\"./proto\"); for (proto.p of [function () { return \"forof-p\"; }]);",
+        "[require(\"./exp\").run] = [function () { return \"destr-run\"; }];",
+        "const lib5 = require(\"./lib5\"); [lib5.other] = [1];",
+        "[Math.max] = [function () { return \"destr-max\"; }];",
+        "for (JSON.stringify of [function () { return \"forof-stringify\"; }]);",
+        "[parseInt] = [function () { return \"destr-parseInt\"; }];",
+        "const path = require(\"path\"); [path.join] = [function () { return \"destr-join\"; }];",
+        "",
+      ].join("\n"),
+      "main.js": [
+        "require(\"./patch\");",
+        "const { run } = require(\"./exp\");",
+        "const path = require(\"path\");",
+        "console.log(require(\"./lib\").go(), require(\"./lib2\").go(), require(\"./lib3\").go(), require(\"./lib4\").go(), require(\"./proto\").go(), run(), require(\"./lib5\").go());",
+        "console.log(Math.max(1, 2), JSON.stringify({}), parseInt(\"1\"), path.join(\"a\", \"b\"), Math.min(1, 2), path.basename(\"/a/b\"));",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "rt-m1:destructuring-write-unresolved", category: "calls", has: /^lib\.js@1:\d+\|go\|this\.m\|UNRESOLVED\|/ },
+      { id: "rt-m1:for-of-write-unresolved", category: "calls", has: /^lib2\.js@1:\d+\|go\|this\.n\|UNRESOLVED\|/ },
+      { id: "rt-m1:update-write-unresolved", category: "calls", has: /^lib3\.js@1:\d+\|go\|this\.k\|UNRESOLVED\|/ },
+      { id: "rt-m1:typescript-wrapped-write-unresolved", category: "calls", has: /^lib4\.js@1:\d+\|go\|this\.w\|UNRESOLVED\|/ },
+      { id: "rt-m1:prototype-for-of-write-unresolved", category: "calls", has: /^proto\.js@5:\d+\|go\|x\.p\|UNRESOLVED\|/ },
+      { id: "rt-m1:export-destructuring-write-unresolved", category: "calls", has: /^main\.js@4:\d+\|module\|run\|UNRESOLVED\|/ },
+      { id: "rt-m1:global-member-destructuring-unresolved", category: "calls", has: /^main\.js@5:\d+\|module\|Math\.max\|UNRESOLVED\|/ },
+      { id: "rt-m1:global-member-for-of-unresolved", category: "calls", has: /^main\.js@5:\d+\|module\|JSON\.stringify\|UNRESOLVED\|/ },
+      { id: "rt-m1:global-name-destructuring-unresolved", category: "calls", has: /^main\.js@5:\d+\|module\|parseInt\|UNRESOLVED\|/ },
+      { id: "rt-m1:package-member-destructuring-unresolved", category: "calls", has: /^main\.js@5:\d+\|module\|path\.join\|UNRESOLVED\|/ },
+      { id: "rt-m1:unwritten-name-resolves", category: "calls", has: /^lib5\.js@1:\d+\|go\|this\.q\|RESOLVED\|method:q@1:\d+@lib5\.js/ },
+      { id: "rt-m1:unwritten-global-external", category: "calls", has: /^main\.js@5:\d+\|module\|Math\.min\|EXTERNAL\|/ },
+      { id: "rt-m1:unwritten-package-member-external", category: "calls", has: /^main\.js@5:\d+\|module\|path\.basename\|EXTERNAL\|/ },
     ],
   },
   {

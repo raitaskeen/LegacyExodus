@@ -128,6 +128,8 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
   }
   const isOwnAlias = (object: ASTNode | undefined, assignment: ASTNode | undefined): boolean =>
     object?.type === "Identifier" && assignment !== undefined && topLevelAssignments.has(assignment) && exportAliases.has(nameOf(object) ?? "");
+  // RT-M1: each member expression the file writes, and the node that writes it (see writtenTargets).
+  const writers = new Map<ASTNode, ASTNode>();
 
   const visit = (node: ASTNode, parent: ASTNode | undefined, currentClass: string | undefined): void => {
     let classInside = currentClass;
@@ -148,18 +150,19 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
         });
       }
     }
+    for (const target of writtenTargets(node)) if (target.type !== "Identifier") writers.set(target, node);
     if (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") {
       const name = memberPropertyName(node);
       const role = node.role;
       const called = (parent?.type === "CallExpression" || parent?.type === "OptionalCallExpression" || parent?.type === "NewExpression") && role === "callee";
       const tagged = parent?.type === "TaggedTemplateExpression" && role === "tag";
-      if (parent?.type === "AssignmentExpression" && role === "left") {
+      const writer = writers.get(node);
+      if (writer !== undefined) {
         written.add(name ?? COMPUTED);
         const object = node.children.find((child) => child.role === "object");
-        if (name !== undefined && !isOwnObject(object, ownExports) && !isOwnAlias(object, parent)) foreignWritten.add(name);
+        if (name !== undefined && !isOwnObject(object, ownExports) && !isOwnAlias(object, writer)) foreignWritten.add(name);
       }
-      else if (!called && !tagged && parent?.type !== "UpdateExpression"
-        && !(parent?.type === "UnaryExpression" && parent.attributes.operator === "delete")) {
+      else if (!called && !tagged && !(parent?.type === "UnaryExpression" && parent.attributes.operator === "delete")) {
         if (name !== undefined) borrowed.add(name);
         else if (node.attributes.computed === true) noteComputedRead(node.children.find((child) => child.role === "object"), currentClass);
       }
@@ -393,6 +396,49 @@ function isOwnObject(object: ASTNode | undefined, own: OwnExports): boolean {
 }
 
 /**
+ * The places a node stores a value, each an Identifier or a member expression (RT-M1): the target of an assignment of
+ * any operator (`o.m = …`, `o.m ||= …`), every target of a destructuring assignment (`[o.m] = …`, `({ k: o.m } = …)`,
+ * defaults and rest included), the head of a `for…in` or `for…of` that declares nothing (`for (o.m of fns)`), and the
+ * operand of `++` or `--`. Parentheses and TypeScript wrappers are looked through (`(o.m as any) = …`). A declaration
+ * (`const { m } = o`) stores into its new bindings only and is not listed.
+ */
+export function writtenTargets(node: ASTNode): ASTNode[] {
+  if (node.type === "AssignmentExpression") return targetLeaves(node.children.find((child) => child.role === "left"));
+  if (node.type === "UpdateExpression") return targetLeaves(node.children.find((child) => child.role === "argument"));
+  if (node.type === "ForInStatement" || node.type === "ForOfStatement") {
+    const left = node.children.find((child) => child.role === "left");
+    return left?.type === "VariableDeclaration" ? [] : targetLeaves(left);
+  }
+  return [];
+}
+
+function targetLeaves(target: ASTNode | undefined): ASTNode[] {
+  switch (target?.type) {
+    case "Identifier":
+    case "MemberExpression":
+    case "OptionalMemberExpression":
+      return [target];
+    case "AssignmentPattern":
+      return targetLeaves(target.children.find((child) => child.role === "left"));
+    case "RestElement":
+      return targetLeaves(target.children.find((child) => child.role === "argument"));
+    case "ObjectPattern":
+      return target.children.flatMap((property) => property.type === "RestElement" ? targetLeaves(property)
+        : property.type === "ObjectProperty" ? targetLeaves(property.children.find((child) => child.role === "value") ?? property.children.find((child) => child.role === "key")) : []);
+    case "ArrayPattern":
+      return target.children.flatMap((element) => targetLeaves(element));
+    case "TSAsExpression":
+    case "TSSatisfiesExpression":
+    case "TSNonNullExpression":
+    case "TSTypeAssertion":
+    case "ParenthesizedExpression":
+      return targetLeaves(target.children.find((child) => child.role === "expression"));
+    default:
+      return [];
+  }
+}
+
+/**
  * Whether an identifier reads a binding as a value that could reach a class: not a declaration's own name, not
  * `new C()` or `extends C`, not a type position, and not the object of a static member (`C.create()`) other
  * than `C.prototype`. Any binding of the name counts, which only over-approximates.
@@ -425,10 +471,8 @@ function classMembers(classNode: ASTNode): Set<string> {
   }
   const visit = (node: ASTNode): void => {
     if (node !== classNode && (node.type === "ClassDeclaration" || node.type === "ClassExpression")) return;
-    if (node.type === "AssignmentExpression") {
-      const left = node.children.find((child) => child.role === "left");
-      if ((left?.type === "MemberExpression" || left?.type === "OptionalMemberExpression")
-        && left.children.find((child) => child.role === "object")?.type === "ThisExpression") members.add(memberPropertyName(left) ?? COMPUTED);
+    for (const target of writtenTargets(node)) {
+      if (target.type !== "Identifier" && target.children.find((child) => child.role === "object")?.type === "ThisExpression") members.add(memberPropertyName(target) ?? COMPUTED);
     }
     for (const child of node.children) visit(child);
   };

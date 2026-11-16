@@ -26,11 +26,15 @@ export interface ModuleResolutionOptions {
   readonly scopes?: Readonly<Record<string, PackageScope>>;
 }
 
-/** The fields of one `package.json` that let its own files load it: by name through `exports`, and `#` imports. */
+/**
+ * The fields of one `package.json` that let its own files load it: by name through `exports`, and `#` imports; and
+ * `type`, which decides whether Node runs its `.js` files as CommonJS or as ES modules (RT-L5).
+ */
 export interface PackageScope {
   readonly name?: string;
   readonly exports?: unknown;
   readonly imports?: unknown;
+  readonly type?: "module" | "commonjs";
 }
 
 /** A workspace package: its project-relative POSIX root and the manifest fields naming its entry points. */
@@ -185,6 +189,14 @@ export class ModuleResolver {
     if (workspacePackage === undefined) return null;
     const subpath = specifier === name ? "." : `./${specifier.slice(name.length + 1)}`;
     return packageEntry(canonicalizePath(workspacePackage.root), workspacePackage, subpath, knownPaths, importerIsTypeScript);
+  }
+
+  /**
+   * The `type` of the nearest `package.json` at or above a project-relative file (RT-L5), which Node reads to run a
+   * `.js` or `.ts` file as an ES module (`"module"`) or as CommonJS; undefined when that manifest has no valid `type`.
+   */
+  public packageType(filePath: string): "module" | "commonjs" | undefined {
+    return this.nearestScope(canonicalizePath(filePath))?.scope.type;
   }
 
   /** The nearest `package.json` at or above the importer's directory, as Node finds a package scope. */
