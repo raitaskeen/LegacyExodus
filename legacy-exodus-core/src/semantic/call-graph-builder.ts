@@ -838,7 +838,9 @@ export function collectForeignExportWrites(ast: ASTResult, table: SymbolTable | 
     const whole = symbol.defaultExport || symbol.sourceSymbolName === "*";
     importRoots.set(symbol.name, { specifier: symbol.moduleSpecifier, path: whole ? [] : [symbol.sourceSymbolName ?? symbol.name] });
   }
-  for (const root of exportsValueRoots(ast.root, importRoots)) writes.push({ importerPath, specifier: root.specifier ?? ANY_VALUE, name: "", member: root.path.join("."), reexport: true });
+  for (const root of exportsValueRoots(ast.root, importRoots)) {
+    if (root.specifier !== undefined) writes.push({ importerPath, specifier: root.specifier, name: "", member: root.path.join("."), reexport: true });
+  }
   return writes;
 }
 
@@ -847,31 +849,20 @@ export function collectForeignExportWrites(ast: ASTResult, table: SymbolTable | 
  * (also through `exports = module.exports = …`, `export default …` or `export = …`) gives `fs`;
  * `module.exports = require("fs").promises` gives `fs` at `promises`; an import binding gives its module and path. A
  * value made here (an object, array, function or class literal, `Object.create(…)`, or a name the file declares once and
- * never reassigns, as a function, a class or with such a value) gives nothing. Any other value (a call, `new`, a
- * parameter) gives a root without a specifier: it may be any module's value.
+ * never reassigns, as a function, a class or with such a value) gives nothing. So does any other value (a call's
+ * result, `new`, a parameter, an alias): it is assumed to hold no package or global value, as XB-03 assumes for a
+ * target reached any other way. Treating it as possibly any module's value blocked every package and global member of
+ * the written name: one test stub `settingsCache.get = …` cost Ghost 50 correct `Map.prototype.get`/`http.get` calls.
  */
 function exportsValueRoots(root: ASTNode, imports: ReadonlyMap<string, ValueRoot>): ValueRoot[] {
-  const declarations = new Map<string, number>();
-  const ownNames = new Set<string>();
-  const assigned = new Set<string>();
+  // Names the file declares anywhere: such a name is not taken for the standard global of that name.
+  const declarations = new Set<string>();
   const values: Array<ASTNode | undefined> = [];
-  const fresh = (node: ASTNode | undefined): boolean => node !== undefined && (["ObjectExpression", "ArrayExpression", "FunctionExpression", "ArrowFunctionExpression", "ClassExpression"].includes(node.type)
-    || (node.type === "CallExpression" && memberPathOf(node.children.find((child) => child.role === "callee"))?.join(".") === "Object.create"));
-  const declare = (name: string | undefined, own: boolean): void => {
-    if (name === undefined) return;
-    declarations.set(name, (declarations.get(name) ?? 0) + 1);
-    if (own) ownNames.add(name);
-  };
   const walk = (node: ASTNode): void => {
-    if (node.type === "VariableDeclarator") {
-      const id = node.children.find((child) => child.role === "id");
-      if (id?.type === "Identifier") declare(identifier(id), fresh(node.children.find((child) => child.role === "init")));
-      else for (const name of extractBoundNames(id)) declare(name, false);
-    }
-    if (node.type === "FunctionDeclaration" || node.type === "ClassDeclaration") declare(nodeName(node), true);
-    for (const target of writtenTargets(node)) {
-      const name = target.type === "Identifier" ? identifier(target) : undefined;
-      if (name !== undefined) assigned.add(name);
+    if (node.type === "VariableDeclarator") for (const name of extractBoundNames(node.children.find((child) => child.role === "id"))) declarations.add(name);
+    if (node.type === "FunctionDeclaration" || node.type === "ClassDeclaration") {
+      const name = nodeName(node);
+      if (name !== undefined) declarations.add(name);
     }
     if (node.type === "AssignmentExpression" && memberPathOf(node.children.find((child) => child.role === "left"))?.join(".") === "module.exports") {
       values.push(node.attributes.operator === "=" ? node.children.find((child) => child.role === "right") : undefined);
@@ -884,15 +875,13 @@ function exportsValueRoots(root: ASTNode, imports: ReadonlyMap<string, ValueRoot
     for (const child of node.children) walk(child);
   };
   walk(root);
-  // `undefined`: made here; a root without a specifier: not known.
-  const unknown: ValueRoot = { specifier: ANY_VALUE, path: [] };
+  // `undefined`: made here, or not followed (see above).
   const rootOf = (value: ASTNode | undefined): ValueRoot | undefined => {
-    if (value === undefined) return unknown;
+    if (value === undefined) return undefined;
     if (value.type === "AssignmentExpression" && value.attributes.operator === "=") return rootOf(value.children.find((child) => child.role === "right"));
-    if (fresh(value)) return undefined;
     if (value.type === "CallExpression") {
       const specifier = requiredSpecifier(value);
-      return specifier === undefined ? unknown : { specifier, path: [] };
+      return specifier === undefined ? undefined : { specifier, path: [] };
     }
     if (value.type === "Identifier") {
       const name = identifier(value);
@@ -901,16 +890,15 @@ function exportsValueRoots(root: ASTNode, imports: ReadonlyMap<string, ValueRoot
       // An unbound standard global (`module.exports = JSON`, `= process`, `= globalThis`) is the global value itself.
       if (name !== undefined && !declarations.has(name) && GLOBAL_OBJECTS.has(name)) return { specifier: GLOBAL_VALUE, path: [] };
       if (name !== undefined && !declarations.has(name) && STANDARD_GLOBALS.has(name)) return { specifier: GLOBAL_VALUE, path: [name] };
-      return name !== undefined && ownNames.has(name) && declarations.get(name) === 1 && !assigned.has(name) ? undefined : unknown;
+      return undefined;
     }
     if (value.type === "MemberExpression") {
       const property = value.children.find((child) => child.role === "property");
       const key = value.attributes.computed === true ? staticPropertyKey(property) : identifier(property);
       const base = rootOf(value.children.find((child) => child.role === "object"));
-      if (base === undefined || base.specifier === ANY_VALUE || key === undefined) return unknown;
-      return { specifier: base.specifier, path: [...base.path, key] };
+      return base === undefined || key === undefined ? undefined : { specifier: base.specifier, path: [...base.path, key] };
     }
-    return unknown;
+    return undefined;
   };
   return values.flatMap((value) => {
     const found = rootOf(value);
@@ -2811,7 +2799,6 @@ function memberPathOf(node: ASTNode | undefined): string[] | undefined {
 
 /** Whether no file of the run writes `path` or any part of it (see collectGlobalWrites). */
 function globalPathUnwritten(path: readonly string[], globalWrites: ReadonlySet<string>): boolean {
-  if (anyValueWritten(path, (written) => globalWrites.has(`${ANY_VALUE}:${written}`))) return false;
   for (let length = 1; length <= path.length; length++) {
     const prefix = path.slice(0, length).join(".");
     if (globalWrites.has(prefix) || globalWrites.has(`${prefix}.*`)) return false;
@@ -2863,26 +2850,12 @@ function valueTarget(calleeName: string, index: FileSymbolIndex, context: Resolu
   return globalPathUnwritten([kind, "prototype", method], globalWrites) ? { module: "global", member: `${kind}.prototype.${method}` } : undefined;
 }
 
-/** RT-L7: the specifier of a re-export whose value is not known (any package or global), and of a standard global. */
-const ANY_VALUE = "*";
+/** RT-L7: the specifier of a re-export of a standard global (`module.exports = JSON`). */
 const GLOBAL_VALUE = "\u0000global";
 
 /**
- * Whether a write on a value that is not known (RT-L7: `*`) may name a member along `path`: any run of its pieces
- * (`stringify`, `promises.readFile`), or `*` for a computed write.
- */
-function anyValueWritten(path: readonly string[], has: (written: string) => boolean): boolean {
-  if (has("*")) return true;
-  for (let start = 0; start < path.length; start++) {
-    for (let end = start + 1; end <= path.length; end++) if (has(path.slice(start, end).join("."))) return true;
-  }
-  return false;
-}
-
-/**
  * RT-L7: the global writes made through repository wrappers, from packageWriteKeys: a write on a module that
- * re-exports a standard global (`module.exports = JSON`) is a global write of that path, and one on a module whose
- * value is not known is kept as `*:<member>`, which globalPathUnwritten matches against any run of a path.
+ * re-exports a standard global (`module.exports = JSON`) is a global write of that path.
  */
 export function wrapperGlobalWrites(packageWrites: ReadonlySet<string>): readonly string[] {
   const paths: string[] = [];
@@ -2891,7 +2864,6 @@ export function wrapperGlobalWrites(packageWrites: ReadonlySet<string>): readonl
     const module = key.slice(0, separator);
     const member = key.slice(separator + 1);
     if (module === GLOBAL_VALUE && member.length > 0) paths.push(member);
-    if (module === ANY_VALUE) paths.push(`${ANY_VALUE}:${member}`);
   }
   return paths;
 }
@@ -2906,7 +2878,7 @@ function packageName(specifier: string): string {
  * keys `module\u0000member`, `*` for a computed member, the member being the whole written path when known
  * (`ObjectId.prototype._id`). A specifier that resolves to a repository file is not a package, but a write on it is a
  * write on every package value that file's exports object may hold (RT-L7, see exportsValueRoots), followed through
- * files that re-export other files; module `*` stands for any package.
+ * files that re-export other files. A relative specifier that reaches no repository file is not followed.
  */
 export function packageWriteKeys(writes: readonly ForeignExportWrite[], resolveFile: (importerPath: string, specifier: string) => string | undefined): ReadonlySet<string> {
   const keys = new Set<string>();
@@ -2918,10 +2890,9 @@ export function packageWriteKeys(writes: readonly ForeignExportWrite[], resolveF
     const next = new Set([...chain, file]);
     return (reexports.get(file) ?? []).flatMap((entry) => {
       const path = entry.member === undefined || entry.member === "" ? [] : entry.member.split(".");
-      if (entry.specifier === ANY_VALUE) return [{ module: ANY_VALUE, path: [] }];
       if (entry.specifier === GLOBAL_VALUE) return [{ module: GLOBAL_VALUE, path }];
       const target = resolveFile(file, entry.specifier);
-      if (target === undefined) return isRelativeSpecifier(entry.specifier) ? [{ module: ANY_VALUE, path: [] }] : [{ module: packageName(entry.specifier), path }];
+      if (target === undefined) return isRelativeSpecifier(entry.specifier) ? [] : [{ module: packageName(entry.specifier), path }];
       return packagesOf(canonicalizePath(target), next).map((found) => ({ module: found.module, path: [...found.path, ...path] }));
     });
   };
@@ -2948,8 +2919,7 @@ function packagePathUnwritten(module: string, path: readonly string[], packageWr
     const prefix = path.slice(0, length).join(".");
     if (packageWrites.has(`${module}\u0000${prefix}`) || packageWrites.has(`${module}\u0000${prefix}.*`)) return false;
   }
-  // A write on a repository module whose exports value is not known (RT-L7) may name any part of the path.
-  return !anyValueWritten(path, (written) => packageWrites.has(`${ANY_VALUE}\u0000${written}`));
+  return true;
 }
 
 /** A specifier naming a file (`./x`, `../x`, `/x`) rather than a package; an unknown one counts as a file. */
