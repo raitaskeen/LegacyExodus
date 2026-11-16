@@ -994,6 +994,92 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // RT-M6 (red team 2026-11-15): Node picks a conditional target by the first key, in the object's own order, that
+    // matches how the file is loaded (`require` or `import`, plus `node`, `default` and a few more). Node (24) prints
+    // "cjs-run cjs-run cjs-run same order-default" for main.js, "esm-run esm-only order-default" for main.mjs and "1s"
+    // for ext.js (after `npm install --offline` links packages/dual and installs ms). The resolver is not told the form,
+    // so a target that differs by form stays unresolved, never EXTERNAL: it is repository code either way. A target
+    // every form agrees on, or that only one form can load, still resolves; a real package stays EXTERNAL.
+    id: "export-conditions",
+    files: {
+      "package.json": JSON.stringify({
+        name: "condpkg",
+        private: true,
+        workspaces: ["packages/*"],
+        dependencies: { ms: "*" },
+        exports: { ".": { import: "./impl.mjs", require: "./impl.cjs" }, "./same": { import: "./same.js", require: "./same.js" }, "./order": { default: "./order-default.js", require: "./order-require.js" } },
+        imports: { "#impl": { import: "./impl.mjs", require: "./impl.cjs" }, "#order": { default: "./order-default.js", require: "./order-require.js" }, "#esm": { import: "./esm-only.mjs" } },
+      }) + "\n",
+      "impl.cjs": "exports.run = function run() { return \"cjs-run\"; };\n",
+      "impl.mjs": "export function run() { return \"esm-run\"; }\n",
+      "same.js": "exports.s = () => \"same\";\n",
+      "order-default.js": "exports.o = () => \"order-default\";\n",
+      "order-require.js": "exports.o = () => \"order-require\";\n",
+      "esm-only.mjs": "export function e() { return \"esm-only\"; }\n",
+      "packages/dual/package.json": JSON.stringify({ name: "dual", exports: { ".": { import: "./impl.mjs", require: "./impl.cjs" } } }) + "\n",
+      "packages/dual/impl.cjs": "exports.run = function run() { return \"cjs-run\"; };\n",
+      "packages/dual/impl.mjs": "export function run() { return \"esm-run\"; }\n",
+      "main.js": [
+        "const impl = require(\"#impl\");",
+        "const self = require(\"condpkg\");",
+        "const dual = require(\"dual\");",
+        "const same = require(\"condpkg/same\");",
+        "const order = require(\"#order\");",
+        "console.log(impl.run(), self.run(), dual.run(), same.s(), order.o());",
+        "",
+      ].join("\n"),
+      "main.mjs": [
+        "import * as impl from \"#impl\";",
+        "import * as esm from \"#esm\";",
+        "import * as order from \"condpkg/order\";",
+        "console.log(impl.run(), esm.e(), order.o());",
+        "",
+      ].join("\n"),
+      "ext.js": "const ms = require(\"ms\");\nconsole.log(ms(1000));\n",
+    },
+    expectations: [
+      { id: "rt-m6:imports-by-form-unresolved", category: "calls", has: /^main\.js@6:\d+\|module\|impl\.run\|UNRESOLVED\|/ },
+      { id: "rt-m6:self-reference-by-form-unresolved", category: "calls", has: /^main\.js@6:\d+\|module\|self\.run\|UNRESOLVED\|/ },
+      { id: "rt-m6:workspace-by-form-unresolved", category: "calls", has: /^main\.js@6:\d+\|module\|dual\.run\|UNRESOLVED\|/ },
+      { id: "rt-m6:esm-importer-never-cjs-or-external", category: "calls", lacks: /^main\.mjs@4:\d+\|module\|impl\.run\|(?:EXTERNAL\||RESOLVED\|.*@impl\.cjs$)/ },
+      { id: "rt-m6:npm-package-stays-external", category: "calls", has: /^ext\.js@2:\d+\|module\|ms\|EXTERNAL\|/ },
+      { id: "rt-m6:object-order-imports", category: "calls", has: /^main\.js@6:\d+\|module\|order\.o\|RESOLVED\|export:o@1:0@order-default\.js$/ },
+      { id: "rt-m6:object-order-self", category: "calls", has: /^main\.mjs@4:\d+\|module\|order\.o\|RESOLVED\|export:o@1:0@order-default\.js$/ },
+      { id: "rt-m6:same-target-resolves", category: "calls", has: /^main\.js@6:\d+\|module\|same\.s\|RESOLVED\|export:s@1:0@same\.js$/ },
+      { id: "rt-m6:import-only-resolves", category: "calls", has: /^main\.mjs@4:\d+\|module\|esm\.e\|RESOLVED\|export:e@1:0@esm-only\.mjs$/ },
+    ],
+  },
+  {
+    // RT-M6 with build output (Ghost's shapes): `import` and `require` name build files the repository does not hold, and
+    // `source` names the file they are compiled from. A way that reaches no repository file does not count, so each
+    // import resolves to the one file the other ways reach. fw's `source` names `render.ts` while the file is
+    // `render.tsx`, which only the `dist` targets reach through the build-output mapping. With the build files added,
+    // Node (24) loads `build/esm/visibility.js`, `dist/test/render.js` and `build/locale-data.json` for these
+    // specifiers: the `./test/*` wildcard exports `fw/test/render`.
+    id: "export-build-output",
+    files: {
+      "package.json": JSON.stringify({ name: "root", private: true, workspaces: ["packages/*"] }) + "\n",
+      "packages/kg/package.json": JSON.stringify({ name: "kg", exports: { "./visibility": { source: "./src/visibility.ts", types: "./build/esm/visibility.d.ts", import: "./build/esm/visibility.js", require: "./build/cjs/visibility.js" } } }) + "\n",
+      "packages/kg/src/visibility.ts": "export function buildDefaultVisibility(): string { return \"visibility\"; }\n",
+      "packages/fw/package.json": JSON.stringify({ name: "fw", type: "module", exports: { "./test/*": { source: "./src/test/*.ts", types: "./types/test/*.d.ts", import: "./dist/test/*.js", require: "./dist/test/*.cjs" } } }) + "\n",
+      "packages/fw/src/test/render.tsx": "export function renderStandaloneApp(): string { return \"render\"; }\n",
+      "packages/i18n/package.json": JSON.stringify({ name: "i18n", type: "module", exports: { "./locale-data.json": { source: "./src/locale-data.json", types: "./src/locale-data.json", default: "./build/locale-data.json" } } }) + "\n",
+      "packages/i18n/src/locale-data.json": "[\"en\"]\n",
+      "app.ts": [
+        "import { buildDefaultVisibility } from \"kg/visibility\";",
+        "import { renderStandaloneApp } from \"fw/test/render\";",
+        "import locales from \"i18n/locale-data.json\";",
+        "console.log(buildDefaultVisibility(), renderStandaloneApp(), locales.length);",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "rt-m6:build-output-source-resolves", category: "calls", has: /^app\.ts@4:\d+\|module\|buildDefaultVisibility\|RESOLVED\|export:buildDefaultVisibility@1:0@packages\/kg\/src\/visibility\.ts$/ },
+      { id: "rt-m6:build-output-wildcard-resolves", category: "calls", has: /^app\.ts@4:\d+\|module\|renderStandaloneApp\|RESOLVED\|export:renderStandaloneApp@1:0@packages\/fw\/src\/test\/render\.tsx$/ },
+      { id: "rt-m6:build-output-json-edge", category: "module-edges", has: /^app\.ts -> packages\/i18n\/src\/locale-data\.json\|i18n\/locale-data\.json\|/ },
+    ],
+  },
+  {
     // RT-L5 (red team 2026-11-15): under the nearest package.json's `"type": "module"`, Node runs a `.js` (and, with type
     // stripping, a `.ts`) file as an ES module, where `require` is not defined. Node (24) prints "THROWS require is not
     // defined" for main.js, tool.ts and tsc/a.ts (whose tsconfig.json says `module: commonjs`, but Node runs it, and tsc's

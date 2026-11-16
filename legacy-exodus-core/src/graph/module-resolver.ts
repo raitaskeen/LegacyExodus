@@ -97,6 +97,22 @@ export class ModuleResolver {
   }
 
   /**
+   * Whether a non-relative specifier names code of this repository, resolved or not (RT-M6): a `#` import, a workspace
+   * package, or the importer's own package by name when that package has `exports`. Such an import is never a call
+   * into a package from outside, even when no single file can be named for it.
+   */
+  public namesRepositoryPackage(importerPath: string, moduleSpecifier: string): boolean {
+    const specifier = moduleSpecifier.replaceAll("\\", "/");
+    if (specifier.startsWith("#")) return true;
+    if (specifier.startsWith(".") || specifier.startsWith("/")) return false;
+    const packages = this.options.packages;
+    if (packages !== undefined && Object.hasOwn(packages, packageNameOf(specifier))) return true;
+    const nearest = this.nearestScope(canonicalizePath(importerPath));
+    const name = nearest?.scope.name;
+    return name !== undefined && nearest?.scope.exports !== undefined && (specifier === name || specifier.startsWith(`${name}/`));
+  }
+
+  /**
    * A relative path as Node loads it: as a file, then as a directory through its `package.json` `main`, then
    * through the directory's index. A `main` that leaves its directory is not followed.
    */
@@ -173,18 +189,16 @@ export class ModuleResolver {
 
   /**
    * `name` or `name/subpath` of a workspace package. With an `exports` map the subpath must be
-   * exported, and a conditional target is tried in SOURCE_FIRST_CONDITIONS order; without one, the
-   * root is `source`, `module`, then `main`, then the package's index. Only files that exist in the
+   * exported, and a conditional target must lead to one file however it is loaded (resolveExportTarget);
+   * without one, the root is `source`, `module`, then `main`, then the package's index. Only files that exist in the
    * project and lie inside the package root are accepted: an export to build output that is not in
    * the repository stays unresolved.
    */
   private resolveWorkspacePackage(specifier: string, knownPaths: ReadonlySet<string>, importerIsTypeScript: boolean): string | null {
     const packages = this.options.packages;
     if (packages === undefined) return null;
-    const segments = specifier.split("/");
-    const scoped = specifier.startsWith("@");
-    if (scoped && segments.length < 2) return null;
-    const name = scoped ? `${segments[0]}/${segments[1]}` : segments[0]!;
+    if (specifier.startsWith("@") && specifier.split("/").length < 2) return null;
+    const name = packageNameOf(specifier);
     const workspacePackage = Object.hasOwn(packages, name) ? packages[name] : undefined;
     if (workspacePackage === undefined) return null;
     const subpath = specifier === name ? "." : `./${specifier.slice(name.length + 1)}`;
@@ -237,6 +251,12 @@ export class ModuleResolver {
   }
 }
 
+/** The package name a bare specifier starts with: `@scope/name` or `name`. */
+function packageNameOf(specifier: string): string {
+  const segments = specifier.split("/");
+  return specifier.startsWith("@") && segments.length >= 2 ? `${segments[0]}/${segments[1]}` : segments[0]!;
+}
+
 /** A `./` or bare path inside a package root, as an existing file; a path that leaves the root is refused. */
 function packageFile(root: string, target: string, knownPaths: ReadonlySet<string>, importerIsTypeScript: boolean): string | null {
   const relative = target.startsWith("./") || target.startsWith("../") ? target : `./${target}`;
@@ -246,9 +266,9 @@ function packageFile(root: string, target: string, knownPaths: ReadonlySet<strin
 }
 
 /**
- * A package's file for `subpath`. With an `exports` map the subpath must be exported, and a conditional target is
- * tried in SOURCE_FIRST_CONDITIONS order; without one, the root is `source`, `module`, then `main`, then the
- * package's index. Only existing files inside the package root are accepted.
+ * A package's file for `subpath`. With an `exports` map the subpath must be exported, and a conditional target must
+ * lead to one file however the package is loaded (see resolveExportTarget); without one, the root is `source`,
+ * `module`, then `main`, then the package's index. Only existing files inside the package root are accepted.
  */
 function packageEntry(root: string, entry: WorkspacePackage, subpath: string, knownPaths: ReadonlySet<string>, importerIsTypeScript: boolean): string | null {
   const located = (target: string): string | null => packageFile(root, target, knownPaths, importerIsTypeScript);
@@ -265,7 +285,8 @@ function packageEntry(root: string, entry: WorkspacePackage, subpath: string, kn
     const match = matchExports(entry.exports, subpath);
     if (match === undefined) return null;
     // A root export only to a bundle (`dist/name.umd.js`) has no same-named source; the package's entry is src/index.
-    return resolveExportTarget(match.target, match.captured, file) ?? (subpath === "." && match.target !== null ? located("./src/index") : null);
+    const rootFile = (target: string): string | null => file(target) ?? located("./src/index");
+    return resolveExportTarget(match.target, match.captured, subpath === "." ? rootFile : file);
   }
   if (subpath !== ".") return file(subpath);
   for (const field of [entry.source, entry.module, entry.main]) {
@@ -276,8 +297,17 @@ function packageEntry(root: string, entry: WorkspacePackage, subpath: string, kn
   return located("./index") ?? located("./src/index");
 }
 
-/** Conditions tried for a conditional export: the source first, since analysis wants code, not build output. */
-const SOURCE_FIRST_CONDITIONS = ["source", "import", "require", "node", "default", "types"] as const;
+/**
+ * The conditions of each way a package can be loaded (RT-M6), as Node (24) matches them: `require` for `require()`,
+ * `import` for `import` and `import()`, and `node`, `node-addons` and `module-sync` for both (`default` always
+ * matches). `source` is no Node condition; tools that load a package from its source set it, so it adds two more ways.
+ */
+const LOAD_CONDITIONS: readonly ReadonlySet<string>[] = [
+  new Set(["require", "node", "node-addons", "module-sync"]),
+  new Set(["import", "node", "node-addons", "module-sync"]),
+  new Set(["source", "require", "node", "node-addons", "module-sync"]),
+  new Set(["source", "import", "node", "node-addons", "module-sync"]),
+];
 
 /** The target an `exports` field maps `subpath` to: an exact key, else the wildcard key with the longest prefix. */
 function matchExports(exports: unknown, subpath: string): { readonly target: unknown; readonly captured: string | undefined } | undefined {
@@ -305,26 +335,51 @@ function matchSubpathMap(map: Readonly<Record<string, unknown>>, subpath: string
   return best;
 }
 
+/**
+ * The one repository file an `exports` or `imports` target loads (RT-M6). Node picks a conditional target by how the
+ * importer loads it, which the resolver is not told, so the target is picked for every way in LOAD_CONDITIONS. When
+ * two ways reach different repository files, or one picks a target that is not a `./` path (another package), the
+ * import stays unresolved. A way whose `./` target is no file in the repository, even after the build-output mapping,
+ * does not count: it is taken to be build output compiled from the file the other ways reach (Ghost's `build/cjs/x.js`
+ * next to `source: ./src/x.ts`), and on the checkout Node throws there. A way that picks nothing is ignored too: Node
+ * throws there, so no call through it runs. At least one way must reach a file.
+ */
 function resolveExportTarget(target: unknown, captured: string | undefined, file: (target: string) => string | null): string | null {
-  if (typeof target === "string") {
-    if (!target.startsWith("./")) return null;
-    return file(captured === undefined ? target : target.replaceAll("*", captured));
+  let resolved: string | null = null;
+  for (const conditions of LOAD_CONDITIONS) {
+    const picked = pickTarget(target, captured, conditions);
+    if (picked === undefined || picked === null) continue;
+    if (!picked.startsWith("./")) return null;
+    const path = file(picked);
+    if (path === null) continue;
+    if (resolved !== null && resolved !== path) return null;
+    resolved = path;
   }
+  return resolved;
+}
+
+/**
+ * The target string Node picks for one set of conditions, as its PACKAGE_TARGET_RESOLVE does: in a conditions object,
+ * the first key in the object's own order that is `default` or active and gives a target; in an array, the first item
+ * that gives one. `*` is replaced by the captured text. `null` means the path is not exported (Node throws) and
+ * `undefined` that no condition matched, so an enclosing object tries its next key.
+ */
+function pickTarget(target: unknown, captured: string | undefined, conditions: ReadonlySet<string>): string | null | undefined {
+  if (typeof target === "string") return captured === undefined ? target : target.replaceAll("*", captured);
   if (Array.isArray(target)) {
-    for (const candidate of target) {
-      const resolved = resolveExportTarget(candidate, captured, file);
-      if (resolved !== null) return resolved;
+    for (const item of target) {
+      const picked = pickTarget(item, captured, conditions);
+      if (picked !== undefined && picked !== null) return picked;
     }
     return null;
   }
   if (typeof target !== "object" || target === null) return null;
-  const conditions = target as Record<string, unknown>;
-  for (const condition of SOURCE_FIRST_CONDITIONS) {
-    if (!Object.hasOwn(conditions, condition)) continue;
-    const resolved = resolveExportTarget(conditions[condition], captured, file);
-    if (resolved !== null) return resolved;
+  for (const [condition, value] of Object.entries(target)) {
+    if (condition !== "default" && !conditions.has(condition)) continue;
+    const picked = pickTarget(value, captured, conditions);
+    if (picked !== undefined) return picked;
   }
-  return null;
+  return undefined;
 }
 
 /**
