@@ -1184,6 +1184,21 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "xb04:return-in-block-resolves", category: "calls", has: /^a\.js@8:\d+\|module\|n\.run\|RESOLVED\|variable:run@6:\d+@a\.js/ },
     ],
   },
+  // RT-M1/M2, factory side (audits/2026-11-15-redteam/redteam-main-rules-probes, one case per probe so the run-wide
+  // name rule of one cannot hide another): a store in any form, or under a static string key, replaces the method.
+  // Node prints the replacement in every case, so each call must stay UNRESOLVED.
+  ...([
+    ["rt-m2-c3a-strkey", { "lib.js": "module.exports = { run: function () { return \"literal-run\"; } };\nmodule.exports[\"run\"] = function () { return \"string-key-run\"; };\n", "main.js": "const lib = require(\"./lib\");\nconsole.log(lib.run());\n" }, /^main\.js@2:\d+\|module\|lib\.run\|UNRESOLVED\|/],
+    ["rt-m2-c2-strkey", { "main.js": "function F() {}\nF.prototype.m = function () { return \"F.m\"; };\nconst x = new F();\nx[\"m\"] = function () { return \"own-m-by-string-key\"; };\nconsole.log(x.m());\n" }, /^main\.js@5:\d+\|module\|x\.m\|UNRESOLVED\|/],
+    ["rt-m2-c1-strkey", { "main.js": "function make() { const o = { run() { return \"literal-run\"; } }; return o; }\nconst x = make();\nx[\"run\"] = function () { return \"patched-by-string-key\"; };\nconsole.log(x.run());\n" }, /^main\.js@4:\d+\|module\|x\.run\|UNRESOLVED\|/],
+    ["rt-m2-c1b-named-strkey", { "lib.js": "function add() { return \"declared-add\"; }\nexports.add = add;\nexports[\"add\"] = function () { return \"replaced-by-string-key\"; };\n", "main.js": "const lib = require(\"./lib\");\nfunction make() { return { add: lib.add }; }\nconst x = make();\nconsole.log(x.add());\n" }, /^main\.js@4:\d+\|module\|x\.add\|UNRESOLVED\|/],
+    ["rt-m2-c1b-named-defprop", { "lib.js": "function add() { return \"declared-add\"; }\nexports.add = add;\nObject.defineProperty(exports, \"add\", { value: function () { return \"replaced-by-defineProperty\"; } });\n", "main.js": "const lib = require(\"./lib\");\nfunction make() { return { add: lib.add }; }\nconst x = make();\nconsole.log(x.add());\n" }, /^main\.js@4:\d+\|module\|x\.add\|UNRESOLVED\|/],
+    ["rt-m1-c1-destructuring", { "main.js": "function make() { const o = { run() { return \"literal-run\"; } }; return o; }\nconst x = make();\n[x.run] = [function () { return \"patched-by-destructuring\"; }];\nconsole.log(x.run());\n" }, /^main\.js@4:\d+\|module\|x\.run\|UNRESOLVED\|/],
+    ["rt-m1-c1-for-of", { "main.js": "function make() { const o = { run() { return \"literal-run\"; } }; return o; }\nconst x = make();\nfor (x.run of [function () { return \"patched-by-for-of\"; }]);\nconsole.log(x.run());\n" }, /^main\.js@4:\d+\|module\|x\.run\|UNRESOLVED\|/],
+    ["rt-m1-c2-constructor-destructuring", { "main.js": "function F(fn) { [this.m] = [fn]; }\nF.prototype.m = function () { return \"F.m\"; };\nconst x = new F(function () { return \"own-m-by-destructuring\"; });\nconsole.log(x.m());\n" }, /^main\.js@4:\d+\|module\|x\.m\|UNRESOLVED\|/],
+    // Control: a static-key write of another name does not block the factory's method ("literal-run" in Node).
+    ["rt-m2-c1-other-key-control", { "main.js": "function make() { const o = { run() { return \"literal-run\"; } }; return o; }\nconst x = make();\nx[\"other\"] = 1;\nconsole.log(x.run());\n" }, /^main\.js@4:\d+\|module\|x\.run\|RESOLVED\|/],
+  ] as const).map(([id, files, expected]): ConformanceCase => ({ id, files, expectations: [{ id: `${id}:call`, category: "calls", has: expected }] })),
   {
     // Phase C1b: a factory literal's property takes its function from a member of a repository module, from a property
     // of another factory's result, or from a top-level write on the object in the factory's body (the last one wins).
