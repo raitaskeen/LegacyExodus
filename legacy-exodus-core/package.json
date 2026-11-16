@@ -22,7 +22,7 @@
     "verify": "bun run src/cli/index.ts verify"
   },
   "dependencies": {
-    "@babel/parser": "8.0.6",
+    "@babel/parser": "8.1.0",
     "commander": "^15.0.0",
     "pino": "^10.4.0",
     "zod": "^4.6.7"
