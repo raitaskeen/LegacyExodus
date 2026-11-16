@@ -1,4 +1,4 @@
-# Remediation queue and resume guide
+Draft #343 (head 56e1682): review found spread in a `__proto__` literal still false; back with write-checks
 
 The live plan for fixing the audit findings ([FINDINGS.md](FINDINGS.md)), plus the scale and storage
 work the Ghost run showed is needed before the IR phase. This file is the hand-off point: a new
