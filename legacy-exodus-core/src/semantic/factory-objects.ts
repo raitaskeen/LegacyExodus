@@ -1,6 +1,7 @@
 import type { ASTNode, ASTResult } from "@parser/index";
 import type { CodeSymbol, SymbolTable } from "@symbols/index";
 import { canonicalizePath } from "@graph/index";
+import { writtenTargets } from "./class-hierarchy";
 
 /**
  * Phase C1 (audits/2026-11-10-blind-audit/PHASE-C-DESIGN.md): an object a repository factory builds and returns.
@@ -49,6 +50,11 @@ export interface FactoryFact {
    * (`decorate: decorator.add`) or a property of another factory's result (`const { listen } = createServer()`).
    */
   readonly references?: readonly (readonly [string, MethodReference])[];
+  /**
+   * Phase C1c: the factory returns, unchanged, the object another call makes (`function createApp() { var app =
+   * express(); app.set(…); return app; }`): its result is that call's result. Set alone, with no methods.
+   */
+  readonly forward?: CallSource;
 }
 
 /** Phase C1b: where a factory's property gets its function when it is not a function of the factory's own file. */
@@ -168,24 +174,12 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
     if (symbol.kind === "function") functionsByName.set(symbol.name, [...(functionsByName.get(symbol.name) ?? []), symbol]);
   }
   // Names the file writes by name on any object, `this` included: such a property may not hold its literal value.
-  const writtenHere = new Set<string>();
-  const writeCount = new Map<string, number>();
+  // RT-M1/M2: every store form counts (destructuring, for…of, ++, static string keys, literal-key defineProperty).
   // Plain names assigned anywhere in the file (`x = …`, `[x] = …`): such a binding may not hold its declared value.
-  const assignedNames = new Set<string>();
-  walkAll(ast.root, (node) => {
-    if (node.type !== "AssignmentExpression") return;
-    const left = role(node, "left");
-    if ((left?.type === "MemberExpression" || left?.type === "OptionalMemberExpression") && left.attributes.computed !== true) {
-      const name = nameOf(role(left, "property"));
-      if (name !== undefined) { writtenHere.add(name); writeCount.set(name, (writeCount.get(name) ?? 0) + 1); }
-    } else {
-      for (const name of patternNames(left)) assignedNames.add(name);
-    }
-  });
-  walkAll(ast.root, (node) => {
-    if (node.type === "UpdateExpression" && role(node, "argument")?.type === "Identifier") assignedNames.add(nameOf(role(node, "argument")) ?? "");
-    if ((node.type === "ForOfStatement" || node.type === "ForInStatement") && role(node, "left")?.type !== "VariableDeclaration") for (const name of patternNames(role(node, "left"))) assignedNames.add(name);
-  });
+  const fileWrites = collectFileWrites(ast.root);
+  const writeCount = fileWrites.counts;
+  const writtenHere = new Set(writeCount.keys());
+  const assignedNames = fileWrites.assignedNames;
 
   const factories: FactoryFact[] = [];
   walkAll(ast.root, (node) => {
@@ -193,6 +187,9 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
     const functionSymbol = (byStart.get(startKey(node.location) ?? "") ?? []).find((symbol) => symbol.kind === "function");
     const body = role(node, "body");
     if (functionSymbol === undefined || body === undefined) return;
+    // Red-team fix: only a module-scope factory sees module-scope names directly; a function around a nested one may
+    // bind them.
+    const atModuleScope = functionSymbol.scopeId === "scope:module";
     const returned = new Set<string>();
     let bareReturn = false;
     const returns: ASTNode[] = [];
@@ -239,6 +236,28 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
     });
     literal = declarators.length === 1 ? role(declarators[0]!, "init") : undefined;
     isFunction = literal?.type === "FunctionExpression" || literal?.type === "ArrowFunctionExpression";
+    // C1c: `var app = express(); …; return app`, the object never passed to a call (`mixin(app, …)` could give it
+    // new methods) nor written by name here; the factory forwards that call's result.
+    // RT-PR-A: a chain (`var app = module.exports = f()`) makes the object the file's exports too, which writes through
+    // `module.exports` can change; a forwarder takes only a plain `var app = f()`.
+    const forwarded = literal?.type === "CallExpression" ? literal : undefined;
+    if (!reassigned && forwarded !== undefined) {
+      // Red-team fix: the callee's name must reach the module scope, so neither the factory nor a function around it
+      // may bind it (`function createApp(express) { var app = express(); … }` calls the parameter).
+      const calleeNode = role(forwarded, "callee");
+      const calleeName = calleeNode?.type === "Identifier" ? nameOf(calleeNode) : undefined;
+      const reachesModule = atModuleScope && calleeName !== undefined && bindingsInFunction(node, body, calleeName) === 0;
+      const source = reachesModule ? callSourceOf(calleeNode, functionsByName, assignedNames, symbols) : undefined;
+      // RT-PR-B: an allowlist, not a blocklist. The object's name may appear only as its declarator, as `return name`,
+      // and as the object of a method call `name.m(…)`; any other use (an argument, a spread, an alias, a template, a
+      // `delete`, a write, a sequence) lets other code change it.
+      const escapes = source === undefined || !onlyMethodCallUses(body, name, declarators[0]!);
+      if (source !== undefined && !escapes) {
+        const forwardIds = [functionSymbol.id, ...symbols.filter((symbol) => symbol.kind === "export" && symbol.moduleSpecifier === undefined && symbol.sourceSymbolName === functionSymbol.name).map((symbol) => symbol.id)];
+        factories.push({ ids: [...new Set(forwardIds)].sort(), methods: [], forward: source });
+      }
+      return;
+    }
     if (reassigned || (literal?.type !== "ObjectExpression" && !isFunction)) return;
     copies = collectCopies(body, name, symbols, filePath);
     if (copies === undefined) return;
@@ -249,15 +268,10 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
     const methods = new Map<string, string>();
     const references = new Map<string, MethodReference>();
     // C1b: a binding of the factory declared once, by a statement of its body, and never assigned in the file.
-    const bindingsInFactory = (name: string): number => {
-      let count = node.children.filter((child) => child.role === "params").flatMap(patternNames).filter((bound) => bound === name).length;
-      walkOwn(body, (inner) => {
-        if (inner.type === "VariableDeclarator" && patternNames(role(inner, "id")).includes(name)) count++;
-        if (inner.type === "CatchClause" && patternNames(role(inner, "param")).includes(name)) count++;
-        for (const child of inner.children) if ((child.type === "FunctionDeclaration" || child.type === "ClassDeclaration") && nameOf(role(child, "id")) === name) count++;
-      });
-      return count;
-    };
+    const bindingsInFactory = (name: string): number => bindingsInFunction(node, body, name);
+    // Red-team fix: a module-scope import or function is what a name means only when the factory sits at module scope
+    // and does not bind the name itself (a parameter `decorator` hides `const decorator = require(…)`).
+    const meansModuleBinding = (name: string): boolean => atModuleScope && bindingsInFactory(name) === 0;
     const boundOnceInBody = (name: string): boolean => bindingsInFactory(name) === 1 && !assignedNames.has(name);
     // Function declarations in the factory's own scope (not in functions nested inside it), by start position.
     const ownFunctionStarts = new Set<string>();
@@ -270,7 +284,7 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
         const object = role(value, "object");
         const member = nameOf(role(value, "property"));
         const binding = object?.type === "Identifier" ? nameOf(object) : undefined;
-        const imported = binding === undefined || assignedNames.has(binding) ? undefined : moduleImport(binding, symbols);
+        const imported = binding === undefined || assignedNames.has(binding) || !meansModuleBinding(binding) || functionsByName.has(binding) ? undefined : moduleImport(binding, symbols);
         const specifier = imported?.moduleSpecifier;
         const whole = imported !== undefined && (imported.sourceSymbolName === undefined || imported.sourceSymbolName === "*" || imported.defaultExport);
         return member !== undefined && whole && typeof specifier === "string" && /^\.\.?(\/|$)/.test(specifier) ? { kind: "member", specifier, member } : undefined;
@@ -291,8 +305,11 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
         if (member === undefined) continue;
         const callee = role(init, "callee");
         const calleeName = callee?.type === "Identifier" ? nameOf(callee) : undefined;
-        if (calleeName === undefined || assignedNames.has(calleeName)) return undefined;
-        const functions = (functionsByName.get(calleeName) ?? []).filter((symbol) => symbol.scopeId === "scope:module");
+        if (calleeName === undefined || assignedNames.has(calleeName) || !meansModuleBinding(calleeName)) return undefined;
+        // RT-PR-C: a function declared in a block anywhere in the file (Annex B) may replace the module binding.
+        const everyNamed = functionsByName.get(calleeName) ?? [];
+        if (everyNamed.some((symbol) => symbol.scopeId !== "scope:module")) return undefined;
+        const functions = everyNamed;
         if (functions.length === 1) return { kind: "result", call: { kind: "local", id: functions[0]!.id }, member };
         const imported = functions.length === 0 ? moduleImport(calleeName, symbols) : undefined;
         const specifier = imported?.moduleSpecifier;
@@ -310,7 +327,14 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
       if (value?.type === "Identifier") {
         // A name the factory binds itself can only be a function declared inside the factory (C1b: scope-aware).
         const bound = bindingsInFactory(nameOf(value) ?? "") > 0;
-        const candidates = (functionsByName.get(nameOf(value) ?? "") ?? []).filter((candidate) => !bound || insideFactory(candidate));
+        // Red-team fix: in a nested factory a name it does not bind may belong to a function around it, so only the
+        // factory's own functions count there.
+        // RT-M7, RT-PR-C: outside the factory's own bindings the name means the module's binding, which is one module-scope
+        // function only when no import of that name exists and no function of that name is declared anywhere else in the
+        // file (a nested one is another binding; a block one replaces the module binding, Annex B).
+        const all = functionsByName.get(nameOf(value) ?? "") ?? [];
+        const moduleOnly = all.every((candidate) => candidate.scopeId === "scope:module") && moduleImport(nameOf(value) ?? "", symbols) === undefined;
+        const candidates = bound || !atModuleScope ? all.filter(insideFactory) : moduleOnly ? all : [];
         if (candidates.length === 1) return bound && !boundOnceInBody(nameOf(value) ?? "") ? {} : { id: candidates[0]!.id };
         if (candidates.length > 1) return {};
       }
@@ -526,22 +550,14 @@ function literalMembers(literal: ASTNode): Map<string, ASTNode> | undefined {
 function collectExportMembers(ast: ASTResult, symbols: readonly CodeSymbol[]): { readonly members: (readonly [string, string])[]; readonly names?: string[] } {
   if (symbols.some((symbol) => (symbol.name === "module" || symbol.name === "exports") && symbol.kind !== "export" && symbol.kind !== "import")) return { members: [] };
   let moduleExportsWrites = 0;
-  const writes = new Map<string, number>();
-  const reassigned = new Set<string>();
+  // RT-M1/M2: every store form counts, `module.exports["run"] = …` and destructuring included.
+  const fileWrites = collectFileWrites(ast.root);
+  const writes = fileWrites.counts;
+  const reassigned = fileWrites.assignedNames;
   const passed = new Set<string>();
   walkAll(ast.root, (node) => {
-    if (node.type === "AssignmentExpression") {
-      const left = role(node, "left");
-      if (isModuleExports(left)) moduleExportsWrites++;
-      if (left?.type === "Identifier" && nameOf(left) !== undefined) reassigned.add(nameOf(left)!);
-      if ((left?.type === "MemberExpression" || left?.type === "OptionalMemberExpression") && left.attributes.computed !== true) {
-        const name = nameOf(role(left, "property"));
-        if (name !== undefined) writes.set(name, (writes.get(name) ?? 0) + 1);
-      }
-    }
+    if (node.type === "AssignmentExpression" && isModuleExports(role(node, "left"))) moduleExportsWrites++;
     if (node.type === "CallExpression" || node.type === "NewExpression" || node.type === "OptionalCallExpression") {
-      const literal = literalKeyWrite(node);
-      if (literal !== undefined) writes.set(literal, (writes.get(literal) ?? 0) + 1);
       for (const argument of callArguments(node)) {
         if (isModuleExports(argument)) passed.add("module.exports");
         else if (argument.type === "Identifier" && nameOf(argument) !== undefined) passed.add(nameOf(argument)!);
@@ -634,7 +650,8 @@ function prototypeOwner(node: ASTNode | undefined): string | undefined {
  * unknown names onto `this` (XB-07, copiesOntoThis). An async function or a generator is never a constructor (XB-06).
  */
 function collectConstructors(ast: ASTResult, symbols: readonly CodeSymbol[], byStart: ReadonlyMap<string, CodeSymbol[]>): FactoryFact[] {
-  const writes = new Map<string, number>();
+  // RT-M1/M2: the file's stores by property name, in every form.
+  const writes = collectFileWrites(ast.root).counts;
   const prototypeWrites = new Map<string, [string, ASTNode][]>();
   const disqualified = new Set<string>();
   // Only a top-level statement's `F` is surely the file's own `F`; one in a function may be a parameter or a local of
@@ -670,28 +687,26 @@ function collectConstructors(ast: ASTResult, symbols: readonly CodeSymbol[], byS
     if (standardObject && literalDefinition(expression) !== undefined) handled.add(expression);
   });
   walkAll(ast.root, (node) => {
-    // A literal-key `Object.defineProperty(o, "m", …)` anywhere in the file writes `m`.
-    const defined = node.type === "CallExpression" ? literalKeyWrite(node) : undefined;
-    if (defined !== undefined) writes.set(defined, (writes.get(defined) ?? 0) + 1);
-    if (node.type === "AssignmentExpression") {
-      const left = role(node, "left");
-      if ((left?.type === "MemberExpression" || left?.type === "OptionalMemberExpression") && left.attributes.computed !== true) {
-        const name = nameOf(role(left, "property"));
-        if (name !== undefined) writes.set(name, (writes.get(name) ?? 0) + 1);
-        const owner = prototypeOwner(role(left, "object"));
-        if (owner !== undefined && name !== undefined && node.attributes.operator === "=" && topLevel.has(node)) {
-          prototypeWrites.set(owner, [...(prototypeWrites.get(owner) ?? []), [name, role(node, "right")!]]);
-        } else if (owner !== undefined) disqualified.add(owner);
+    // RT-M1/M2: every store form is a write (destructuring, for…of, ++, `x["m"] = …`, literal-key defineProperty),
+    // counted once for the whole file by collectFileWrites.
+    for (const target of writtenTargets(node)) {
+      if (target.type === "Identifier") {
+        // `F = …` rebinds the constructor, in any store form.
+        const rebound = nameOf(target);
+        if (rebound !== undefined) disqualified.add(rebound);
+        continue;
       }
-      // `F.prototype[key] = …` may write any name.
-      if ((left?.type === "MemberExpression" || left?.type === "OptionalMemberExpression") && left.attributes.computed === true) {
-        const owner = prototypeOwner(role(left, "object"));
-        if (owner !== undefined) disqualified.add(owner);
-      }
-      // `F.prototype = …` replaces the prototype; `F = …` rebinds the constructor.
-      const replaced = prototypeOwner(left);
+      if (target.type !== "MemberExpression" && target.type !== "OptionalMemberExpression") continue;
+      // `F.prototype.m = f` as a plain top-level assignment is a method; any other store on `F.prototype.<x>`
+      // (computed, compound, destructured, in a function) may write any name.
+      const owner = prototypeOwner(role(target, "object"));
+      const name = target.attributes.computed === true ? undefined : nameOf(role(target, "property"));
+      const plainMethod = node.type === "AssignmentExpression" && node.attributes.operator === "=" && role(node, "left") === target && topLevel.has(node);
+      if (owner !== undefined && name !== undefined && plainMethod) prototypeWrites.set(owner, [...(prototypeWrites.get(owner) ?? []), [name, role(node, "right")!]]);
+      else if (owner !== undefined) disqualified.add(owner);
+      // `F.prototype = …` replaces the prototype.
+      const replaced = prototypeOwner(target);
       if (replaced !== undefined && !handled.has(node)) disqualified.add(replaced);
-      if (left?.type === "Identifier" && nameOf(left) !== undefined) disqualified.add(nameOf(left)!);
     }
     if ((node.type === "CallExpression" || node.type === "NewExpression" || node.type === "OptionalCallExpression") && !handled.has(node)) {
       for (const argument of node.children.filter((child) => child.role === "arguments")) {
@@ -856,7 +871,7 @@ function literalKeyWrite(call: ASTNode): string | undefined {
   const path = pathOf(role(call, "callee"))?.join(".");
   if (path !== "Object.defineProperty" && path !== "Reflect.defineProperty") return undefined;
   const key = callArguments(call)[1];
-  return key?.type === "StringLiteral" && typeof key.attributes.value === "string" ? key.attributes.value : undefined;
+  return staticKeyOf(key);
 }
 
 const STANDARD_ERRORS = new Set(["Error", "TypeError", "RangeError", "SyntaxError", "ReferenceError", "EvalError", "URIError"]);
@@ -920,6 +935,10 @@ export class FactoryIndex {
       if (file.exportNames !== undefined) this.exportNamesByFile.set(file.filePath, new Set(file.exportNames));
       if (file.namedExports !== undefined) this.namedExportsByFile.set(file.filePath, new Map(file.namedExports));
       for (const factory of file.factories) {
+        if (factory.forward !== undefined) {
+          for (const id of factory.ids) this.forwardsById.set(id, { filePath: file.filePath, source: factory.forward });
+          continue;
+        }
         const entry: FactoryEntry = {
           filePath: file.filePath,
           methods: new Map(factory.methods),
@@ -937,24 +956,45 @@ export class FactoryIndex {
       }
       const defaultEntry = file.defaultFactoryIds?.[0] === undefined ? undefined : this.methodsById.get(file.defaultFactoryIds[0]);
       if (defaultEntry !== undefined) this.methodsById.set(`default:${file.filePath}`, defaultEntry);
-      for (const id of file.reexportsDefault?.exportIds ?? []) this.reexports.set(id, { importer: file.filePath, specifier: file.reexportsDefault!.specifier });
+      const defaultForward = file.defaultFactoryIds?.[0] === undefined ? undefined : this.forwardsById.get(file.defaultFactoryIds[0]);
+      if (defaultForward !== undefined) this.forwardsById.set(`default:${file.filePath}`, defaultForward);
+      if (file.reexportsDefault !== undefined) {
+        const link = { importer: file.filePath, specifier: file.reexportsDefault.specifier };
+        for (const id of file.reexportsDefault.exportIds) this.reexports.set(id, link);
+        // C1c: `require("./index")()` names the file's default; follow its re-export the same way.
+        this.reexports.set(`default:${file.filePath}`, link);
+      }
     }
   }
 
   private readonly reexports = new Map<string, { readonly importer: string; readonly specifier: string }>();
+  private readonly forwardsById = new Map<string, { readonly filePath: string; readonly source: CallSource }>();
 
-  /** A factory by the symbol its call resolved to, through `module.exports = require("./x")` re-exports (C3b). */
+  /**
+   * A factory by the symbol its call resolved to, through `module.exports = require("./x")` re-exports (C3b) and
+   * factories that forward another call's result (C1c), at most 8 hops.
+   */
   private factoryEntry(producerId: string): FactoryEntry | undefined {
-    let id = producerId;
-    for (let hop = 0; hop < 8; hop++) {
+    let id: string | undefined = producerId;
+    for (let hop = 0; hop < 8 && id !== undefined; hop++) {
       const entry = this.methodsById.get(id);
       if (entry !== undefined) return entry;
+      const forward = this.forwardsById.get(id);
+      if (forward !== undefined) { id = this.producerOf(forward.filePath, forward.source); continue; }
       const link = this.reexports.get(id);
       const target = link === undefined ? undefined : this.resolveModule(link.importer, link.specifier);
       if (target === undefined) return undefined;
       id = `default:${target}`;
     }
     return undefined;
+  }
+
+  /** The symbol a call reaches (C1b, C1c): a local function, a module's named export, or `default:<file>` for the module itself. */
+  private producerOf(filePath: string, source: CallSource): string | undefined {
+    if (source.kind === "local") return source.id;
+    const target = this.resolveModule(filePath, source.specifier);
+    if (target === undefined) return undefined;
+    return source.member === undefined ? `default:${target}` : this.exportMemberOf(target, source.member) ?? this.namedExportOf(target, source.member);
   }
 
   /** C1b: the function `require(filePath).name` reaches through a plain named export (`module.exports.name = f`). */
@@ -1035,13 +1075,107 @@ export class FactoryIndex {
       const target = this.resolveModule(filePath, reference.specifier);
       return target === undefined ? undefined : this.exportMemberOf(target, reference.member) ?? this.namedExportOf(target, reference.member);
     }
-    const call = reference.call;
-    let producer: string | undefined;
-    if (call.kind === "local") producer = call.id;
-    else {
-      const target = this.resolveModule(filePath, call.specifier);
-      producer = target === undefined ? undefined : call.member === undefined ? `default:${target}` : this.exportMemberOf(target, call.member) ?? this.namedExportOf(target, call.member);
-    }
+    const producer = this.producerOf(filePath, reference.call);
     return producer === undefined ? undefined : this.methodOf(producer, reference.member, false, undefined, hops + 1);
   }
+}
+
+/**
+ * Phase C1c: the function a call's callee names, when the file proves it: one of its module-scope functions, or a
+ * repository module it imports (a named member, or the module itself), the binding never assigned.
+ */
+function callSourceOf(callee: ASTNode | undefined, functionsByName: ReadonlyMap<string, readonly CodeSymbol[]>, assignedNames: ReadonlySet<string>, symbols: readonly CodeSymbol[]): CallSource | undefined {
+  const calleeName = callee?.type === "Identifier" ? nameOf(callee) : undefined;
+  if (calleeName === undefined || assignedNames.has(calleeName)) return undefined;
+  // RT-PR-C: a function declared in a block anywhere in the file (Annex B) may replace the module binding.
+  const everyNamed = functionsByName.get(calleeName) ?? [];
+  if (everyNamed.some((symbol) => symbol.scopeId !== "scope:module")) return undefined;
+  const functions = everyNamed;
+  if (functions.length === 1) return { kind: "local", id: functions[0]!.id };
+  const imported = functions.length === 0 ? moduleImport(calleeName, symbols) : undefined;
+  const specifier = imported?.moduleSpecifier;
+  if (imported === undefined || typeof specifier !== "string" || !/^\.\.?(\/|$)/.test(specifier)) return undefined;
+  const named = imported.sourceSymbolName !== undefined && imported.sourceSymbolName !== "*" && !imported.defaultExport;
+  return { kind: "import", specifier, ...(named ? { member: imported.sourceSymbolName! } : {}) };
+}
+
+/** How many bindings a function gives `name` in its own scope: parameters, declarations, `catch`, functions and classes. */
+function bindingsInFunction(fn: ASTNode, body: ASTNode, name: string): number {
+  let count = fn.children.filter((child) => child.role === "params").flatMap(patternNames).filter((bound) => bound === name).length;
+  walkOwn(body, (inner) => {
+    if (inner.type === "VariableDeclarator" && patternNames(role(inner, "id")).includes(name)) count++;
+    if (inner.type === "CatchClause" && patternNames(role(inner, "param")).includes(name)) count++;
+    for (const child of inner.children) if ((child.type === "FunctionDeclaration" || child.type === "ClassDeclaration") && nameOf(role(child, "id")) === name) count++;
+  });
+  return count;
+}
+
+/**
+ * RT-PR-B: whether every use of `name` in `body` is harmless to the object it holds: its own declarator, a
+ * `return name`, or the object of a non-computed method call `name.m(…)`. A non-computed member's property name or a
+ * non-computed object key is not a use. Anything else (an argument, a spread, an alias, a template, `delete`, a write,
+ * a sequence, a shadowing binding in a nested function) counts as an escape.
+ */
+function onlyMethodCallUses(body: ASTNode, name: string, declarator: ASTNode): boolean {
+  let harmless = true;
+  const visit = (node: ASTNode, parent: ASTNode | undefined, grandparent: ASTNode | undefined): void => {
+    if (!harmless) return;
+    if (node.type === "Identifier" && nameOf(node) === name) {
+      const memberLike = parent?.type === "MemberExpression" || parent?.type === "OptionalMemberExpression";
+      const propertyName = memberLike && node.role === "property" && parent!.attributes.computed !== true;
+      const objectKey = (parent?.type === "ObjectProperty" || parent?.type === "ObjectMethod" || parent?.type === "ClassMethod" || parent?.type === "ClassProperty")
+        && node.role === "key" && parent!.attributes.computed !== true;
+      const ownDeclarator = parent === declarator && node.role === "id";
+      const returned = parent?.type === "ReturnStatement" && node.role === "argument";
+      const methodCall = memberLike && node.role === "object" && parent!.attributes.computed !== true
+        && (grandparent?.type === "CallExpression" || grandparent?.type === "OptionalCallExpression") && parent!.role === "callee";
+      if (!(propertyName || objectKey || ownDeclarator || returned || methodCall)) harmless = false;
+    }
+    for (const child of node.children) visit(child, node, parent);
+  };
+  visit(body, undefined, undefined);
+  return harmless;
+}
+
+/** RT-M1/M2: the file's stores, by property name (how many) and plain binding name. See collectFileWrites. */
+interface FileWrites {
+  readonly counts: ReadonlyMap<string, number>;
+  readonly assignedNames: ReadonlySet<string>;
+}
+
+/**
+ * RT-M1/M2: every store in the file, in any form the language allows: an assignment of any operator, each target of
+ * a destructuring assignment, the head of a `for…in`/`for…of` loop, `++`/`--` (all through `writtenTargets`), plus a
+ * literal-key `Object.defineProperty(o, "m", …)`. A member target counts under its property name when that name is
+ * static: `o.m`, `o["m"]`, `` o[`m`] ``, `o[0]`. A computed key with any other value is assumed not to produce a name,
+ * as the C1 assumption states. Identifier targets are plain names the file assigns.
+ */
+function collectFileWrites(root: ASTNode): FileWrites {
+  const counts = new Map<string, number>();
+  const assignedNames = new Set<string>();
+  const count = (name: string | undefined): void => { if (name !== undefined) counts.set(name, (counts.get(name) ?? 0) + 1); };
+  walkAll(root, (node) => {
+    for (const target of writtenTargets(node)) {
+      if (target.type === "Identifier") { const name = nameOf(target); if (name !== undefined) assignedNames.add(name); continue; }
+      if (target.type === "MemberExpression" || target.type === "OptionalMemberExpression") count(memberName(target));
+    }
+    if (node.type === "CallExpression" || node.type === "NewExpression" || node.type === "OptionalCallExpression") count(literalKeyWrite(node));
+  });
+  return { counts, assignedNames };
+}
+
+/** The property a member expression names when it is static: `o.m`, `o["m"]`, `` o[`m`] `` or `o[0]`. */
+function memberName(member: ASTNode): string | undefined {
+  const property = role(member, "property");
+  if (member.attributes.computed !== true) return nameOf(property);
+  return staticKeyOf(property);
+}
+
+/** A literal key's text: a string, a number, or a template literal without substitutions. */
+function staticKeyOf(node: ASTNode | undefined): string | undefined {
+  if (node?.type === "StringLiteral") return typeof node.attributes.value === "string" ? node.attributes.value : undefined;
+  if (node?.type === "NumericLiteral") return typeof node.attributes.value === "number" ? String(node.attributes.value) : undefined;
+  if (node?.type !== "TemplateLiteral" || node.children.some((child) => child.role === "expressions")) return undefined;
+  const quasi = node.children.find((child) => child.role === "quasis" || child.type === "TemplateElement");
+  return typeof quasi?.attributes.value === "string" ? quasi.attributes.value : undefined;
 }

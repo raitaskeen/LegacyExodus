@@ -26,11 +26,15 @@ export interface ModuleResolutionOptions {
   readonly scopes?: Readonly<Record<string, PackageScope>>;
 }
 
-/** The fields of one `package.json` that let its own files load it: by name through `exports`, and `#` imports. */
+/**
+ * The fields of one `package.json` that let its own files load it: by name through `exports`, and `#` imports; and
+ * `type`, which decides whether Node runs its `.js` files as CommonJS or as ES modules (RT-L5).
+ */
 export interface PackageScope {
   readonly name?: string;
   readonly exports?: unknown;
   readonly imports?: unknown;
+  readonly type?: "module" | "commonjs";
   /**
    * Every dependency the manifest declares, by name (RT-M8): the project-relative folder of a `file:` or `link:` target
    * inside the project, which the package manager installs as that folder; null for any other (registry, git, a path
@@ -84,6 +88,8 @@ export class ModuleResolver {
       return immutable({ importerPath, moduleSpecifier, resolvedPath });
     }
     if (!rawNormalizedSpecifier.startsWith(".")) {
+      // Node loads its own module for a built-in name before any package, alias or self-reference (RT-L4).
+      if (isNodeBuiltin(rawNormalizedSpecifier)) return immutable({ importerPath, moduleSpecifier, resolvedPath: null });
       const resolvedPath = this.resolveNonRelative(rawNormalizedSpecifier, knownPaths, importerIsTypeScript)
         ?? this.resolveSelfReference(normalizedImporter, rawNormalizedSpecifier, knownPaths, importerIsTypeScript)
         ?? this.resolveLocalDependency(normalizedImporter, rawNormalizedSpecifier, knownPaths, importerIsTypeScript);
@@ -260,6 +266,14 @@ export class ModuleResolver {
     return this.localDependencyNameSet;
   }
 
+  /**
+   * The `type` of the nearest `package.json` at or above a project-relative file (RT-L5), which Node reads to run a
+   * `.js` or `.ts` file as an ES module (`"module"`) or as CommonJS; undefined when that manifest has no valid `type`.
+   */
+  public packageType(filePath: string): "module" | "commonjs" | undefined {
+    return this.nearestScope(canonicalizePath(filePath))?.scope.type;
+  }
+
   /** The nearest `package.json` at or above the importer's directory, as Node finds a package scope. */
   private nearestScope(importerPath: string): { readonly root: string; readonly scope: PackageScope } | undefined {
     const scopes = this.options.scopes;
@@ -427,6 +441,28 @@ function pickTarget(target: unknown, captured: string | undefined, conditions: R
     if (picked !== undefined) return picked;
   }
   return undefined;
+}
+
+/**
+ * Node (24) built-in modules that a bare specifier loads, `require("module").builtinModules` without the `node:`-only
+ * names. Node checks these before any package, so `require("url")` is Node's `url` even inside a package named `url`
+ * or with a workspace package of that name. `sea`, `sqlite`, `test` and `test/reporters` are built-ins only as
+ * `node:sea` and so on; bare, they name packages.
+ */
+const NODE_BUILTINS: ReadonlySet<string> = new Set([
+  "_http_agent", "_http_client", "_http_common", "_http_incoming", "_http_outgoing", "_http_server", "_stream_duplex",
+  "_stream_passthrough", "_stream_readable", "_stream_transform", "_stream_wrap", "_stream_writable", "_tls_common",
+  "_tls_wrap", "assert", "assert/strict", "async_hooks", "buffer", "child_process", "cluster", "console", "constants",
+  "crypto", "dgram", "diagnostics_channel", "dns", "dns/promises", "domain", "events", "fs", "fs/promises", "http",
+  "http2", "https", "inspector", "inspector/promises", "module", "net", "os", "path", "path/posix", "path/win32",
+  "perf_hooks", "process", "punycode", "querystring", "readline", "readline/promises", "repl", "stream",
+  "stream/consumers", "stream/promises", "stream/web", "string_decoder", "sys", "timers", "timers/promises", "tls",
+  "trace_events", "tty", "url", "util", "util/types", "v8", "vm", "wasi", "worker_threads", "zlib",
+]);
+
+/** A specifier Node loads as one of its own modules: any `node:` specifier, or a bare built-in name. */
+function isNodeBuiltin(specifier: string): boolean {
+  return specifier.startsWith("node:") || NODE_BUILTINS.has(specifier);
 }
 
 /** Importers whose own language is TypeScript; they prefer TypeScript sources for `.js` specifiers. */

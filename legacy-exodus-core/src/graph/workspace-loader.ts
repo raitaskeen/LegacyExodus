@@ -25,8 +25,9 @@ export async function loadDirectoryMains(projectPath: string, files: readonly Fi
 /**
  * Every `package.json` discovery found, by its project-relative POSIX directory (`.` for the root), with the fields
  * Node uses to load a package from inside itself (XB-02): `name` and `exports` for a self-reference
- * (`require("pkg/sub")` within pkg), `imports` for `#` specifiers; and its declared dependencies, marking those
- * installed from a folder of the project (RT-M8, see localDependencyRoot). Unreadable manifests are skipped.
+ * (`require("pkg/sub")` within pkg), `imports` for `#` specifiers; `type` (`"module"` or `"commonjs"`, RT-L5), which decides
+ * how Node runs the package's `.js` files; and its declared dependencies, marking those installed from a folder of the
+ * project (RT-M8, see localDependencyRoot). Unreadable manifests are skipped.
  */
 export async function loadPackageScopes(projectPath: string, files: readonly FileArtifact[]): Promise<Readonly<Record<string, PackageScope>>> {
   const scopes: Record<string, PackageScope> = {};
@@ -40,6 +41,7 @@ export async function loadPackageScopes(projectPath: string, files: readonly Fil
       ...(typeof manifest.name === "string" && manifest.name.length > 0 ? { name: manifest.name } : {}),
       ...(manifest.exports === undefined || manifest.exports === null ? {} : { exports: manifest.exports }),
       ...(typeof manifest.imports === "object" && manifest.imports !== null && !Array.isArray(manifest.imports) ? { imports: manifest.imports } : {}),
+      ...(manifest.type === "module" || manifest.type === "commonjs" ? { type: manifest.type } : {}),
       ...(Object.keys(dependencies).length === 0 ? {} : { dependencies }),
     };
     // Recorded even when empty: the nearest manifest decides, so one without `imports` hides an outer one's.
