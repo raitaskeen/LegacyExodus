@@ -64,6 +64,22 @@ describe("S3 workspace package resolution", () => {
     expect(dual.namesRepositoryPackage("main.js", "./dual")).toBe(false);
   });
 
+  it("never resolves a Node built-in name to a workspace package, self-reference or alias (RT-L4)", () => {
+    const builtins = new ModuleResolver({
+      packages: { path: { root: "packages/path" }, test: { root: "packages/test" } },
+      scopes: { ".": { name: "url", exports: "./index.js" } },
+      baseUrl: ".",
+      paths: { crypto: ["./shim/crypto.js"] },
+    });
+    const present = new Set(["packages/path/index.js", "packages/test/index.js", "index.js", "shim/crypto.js", "util.js"]);
+    expect(builtins.resolve("main.js", "path", present).resolvedPath).toBeNull();
+    expect(builtins.resolve("main.js", "url", present).resolvedPath).toBeNull();
+    expect(builtins.resolve("main.js", "crypto", present).resolvedPath).toBeNull();
+    expect(builtins.resolve("main.js", "util", present).resolvedPath).toBeNull();
+    expect(builtins.resolve("main.js", "node:path", present).resolvedPath).toBeNull();
+    expect(builtins.resolve("main.js", "test", present).resolvedPath).toBe("packages/test/index.js");
+  });
+
   it("leaves unknown packages, built-ins and relative paths as before", () => {
     expect(resolve("express")).toBeNull();
     expect(resolve("node:fs")).toBeNull();

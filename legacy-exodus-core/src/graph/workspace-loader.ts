@@ -25,8 +25,8 @@ export async function loadDirectoryMains(projectPath: string, files: readonly Fi
 /**
  * Every `package.json` discovery found, by its project-relative POSIX directory (`.` for the root), with the fields
  * Node uses to load a package from inside itself (XB-02): `name` and `exports` for a self-reference
- * (`require("pkg/sub")` within pkg), `imports` for `#` specifiers. Manifests with none of them, or unreadable, are
- * skipped.
+ * (`require("pkg/sub")` within pkg), `imports` for `#` specifiers; and `type` (`"module"` or `"commonjs"`, RT-L5),
+ * which decides how Node runs the package's `.js` files. Unreadable manifests are skipped.
  */
 export async function loadPackageScopes(projectPath: string, files: readonly FileArtifact[]): Promise<Readonly<Record<string, PackageScope>>> {
   const scopes: Record<string, PackageScope> = {};
@@ -38,6 +38,7 @@ export async function loadPackageScopes(projectPath: string, files: readonly Fil
       ...(typeof manifest.name === "string" && manifest.name.length > 0 ? { name: manifest.name } : {}),
       ...(manifest.exports === undefined || manifest.exports === null ? {} : { exports: manifest.exports }),
       ...(typeof manifest.imports === "object" && manifest.imports !== null && !Array.isArray(manifest.imports) ? { imports: manifest.imports } : {}),
+      ...(manifest.type === "module" || manifest.type === "commonjs" ? { type: manifest.type } : {}),
     };
     // Recorded even when empty: the nearest manifest decides, so one without `imports` hides an outer one's.
     scopes[canonicalizePath(posix.dirname(path))] = scope;
