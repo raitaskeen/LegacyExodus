@@ -106,6 +106,7 @@ export class DeterministicCallGraphBuilder {
     commonJsFiles.set(fileSymbols, !/\.m[jt]s$/i.test(sourcePath)
       && (/\.c[jt]s$/i.test(sourcePath) || this.resolver.packageType(sourcePath) !== "module")
       && (this.compiledCommonJs.has(sourcePath) || !(table?.moduleReferences ?? []).some((reference) => reference.form.startsWith("esm"))));
+    repositoryPackageImports.set(fileSymbols, (specifier) => this.resolver.namesRepositoryPackage(sourcePath, specifier));
     factKeyers.set(fileSymbols, new FactKeyer(ast.metadata.sourcePath, ast.root, fileSymbols.ownerSymbols));
     this.visit(ast.root, ast, initialContext, tablesByPath, importsByFile, targetByImportId, calls, references, boundCallees, fileSymbols, undefined, false);
   }
@@ -2419,7 +2420,7 @@ function unresolvedReason(input: {
   const { imported, calleeName, index, context } = input;
   if (imported !== undefined) {
     if (input.importTarget !== undefined) return "import-unstable";
-    return isRelativeSpecifier(imported.moduleSpecifier) ? "import-unresolved" : "package-import";
+    return isRepositoryImport(index, imported.moduleSpecifier) ? "import-unresolved" : "package-import";
   }
   if (calleeName === "require") return "module-load";
   const pieces = calleeName.split(".");
@@ -2427,7 +2428,7 @@ function unresolvedReason(input: {
   if (pieces.length === 1) return isUnboundName(index, root, context) ? "unbound-name" : isParameter(index, root, context) ? "parameter-callee" : "local-not-proven";
   if (root === "this") return pieces.length === 2 ? "this-open" : "member-chain";
   const rootImport = isLexicallyShadowed(root, context, index) ? undefined : visibleImport(index, root, context.scope);
-  if (rootImport !== undefined) return isRelativeSpecifier(rootImport.moduleSpecifier) ? "import-member" : "package-import";
+  if (rootImport !== undefined) return isRepositoryImport(index, rootImport.moduleSpecifier) ? "import-member" : "package-import";
   if (isUnboundName(index, root, context)) return "global-member";
   if (isParameter(index, root, context)) return "parameter-member";
   return pieces.length === 2 ? "receiver-not-proven" : "member-chain";
@@ -2470,7 +2471,7 @@ function externalTarget(imported: CodeSymbol | undefined, calleeName: string, in
   const binding = imported !== undefined
     ? imported
     : pieces.length > 1 && root !== "this" && !isLexicallyShadowed(root, context, index) ? visibleImport(index, root, context.scope) : undefined;
-  if (binding === undefined || binding.kind !== "import" || isRelativeSpecifier(binding.moduleSpecifier)) return undefined;
+  if (binding === undefined || binding.kind !== "import" || isRepositoryImport(index, binding.moduleSpecifier)) return undefined;
   if (binding.scopeId === MODULE_SCOPE_ID && isRebound(index, MODULE_SCOPE_ID, binding.name)) return undefined;
   const module = packageName(binding.moduleSpecifier!);
   const source = binding.sourceSymbolName;
@@ -2499,6 +2500,16 @@ const STANDARD_GLOBALS: ReadonlySet<string> = new Set([
 ]);
 /** Whether each file being built is CommonJS, where `require` is the module wrapper's own function. */
 const commonJsFiles = new WeakMap<FileSymbolIndex, boolean>();
+/** For each file being built, whether a specifier names repository code (`#x`, a workspace package, its own package). */
+const repositoryPackageImports = new WeakMap<FileSymbolIndex, (specifier: string) => boolean>();
+
+/**
+ * An import that loads repository code, by a relative path or by a name the resolver knows as the repository's (RT-M6):
+ * never a call into a package, even when no one file can be named for it.
+ */
+function isRepositoryImport(index: FileSymbolIndex, specifier: string | undefined): boolean {
+  return isRelativeSpecifier(specifier) || repositoryPackageImports.get(index)?.(specifier!) === true;
+}
 
 /** Names through which code reaches the global object itself. */
 const GLOBAL_OBJECTS: ReadonlySet<string> = new Set(["globalThis", "global", "window", "self"]);
