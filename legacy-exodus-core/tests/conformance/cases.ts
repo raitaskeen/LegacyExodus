@@ -1079,6 +1079,23 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // RT-L7 review (2026-11-16): a repository module that re-exports a standard global (`module.exports = JSON`,
+    // `= process`) passes writes on to the global. In Node, main.js prints "patched-stringify" and
+    // "1 patched-nextTick": the patched `nextTick` ran; `JSON.parse` is never written.
+    id: "global-wrapper-writes",
+    files: {
+      "wrap.js": "module.exports = JSON;\n",
+      "wrap2.js": "module.exports = process;\n",
+      "patch.js": "require(\"./wrap\").stringify = () => \"patched-stringify\";\nrequire(\"./wrap2\").nextTick = () => { globalThis.tick = \"patched-nextTick\"; };\n",
+      "main.js": "require(\"./patch\");\nconsole.log(JSON.stringify({}));\nprocess.nextTick(() => {});\nconsole.log(JSON.parse(\"1\"), globalThis.tick);\n",
+    },
+    expectations: [
+      { id: "rt-l7:global-wrapper-write-unresolved", category: "calls", has: /^main\.js@2:\d+\|module\|JSON\.stringify\|UNRESOLVED\|/ },
+      { id: "rt-l7:global-member-wrapper-write-unresolved", category: "calls", has: /^main\.js@3:\d+\|module\|process\.nextTick\|UNRESOLVED\|/ },
+      { id: "rt-l7:unwritten-global-stays-external", category: "calls", has: /^main\.js@4:\d+\|module\|JSON\.parse\|EXTERNAL\|/ },
+    ],
+  },
+  {
     // ADR-012, Phase B1b: a call on an unbound standard global is EXTERNAL unless some file writes that path; a test
     // runner's globals stay UNRESOLVED; `require` is EXTERNAL only in CommonJS.
     id: "external-globals",
