@@ -321,6 +321,19 @@ interface BindingWrites {
   readonly propertyWrites: ReadonlyMap<string, number>;
   /** A write whose property name is not static (`o[key] = …`, `Object.assign(o, src)`, prototype swaps): it may name any public property. */
   readonly unknownPropertyWrites: boolean;
+  /**
+   * An unknown write other than a computed member write (`o[key] = …`): a prototype swap (`o.__proto__ = …`,
+   * `Object.setPrototypeOf`), a reflective write with an unknown key or source (`Object.assign(o, src)`), or a reflective
+   * writer reached another way. Such a write may give a literal value an own method of any name (RT-M5).
+   */
+  readonly unknownReflectiveWrites: boolean;
+  /** Binding keys whose `__proto__` the file writes (`out.__proto__ = …`) (RT-M5). */
+  readonly protoSwapTargets: ReadonlySet<string>;
+  /**
+   * Binding keys the file uses as a value that can be handed on (`f(out)`, `x = out`, `return out`; see usedAsValue):
+   * their value may reach a reflective write through another name (RT-M5).
+   */
+  readonly escapedNames: ReadonlySet<string>;
   /** Where each statically named member is assigned or deleted (`o.name = …`, `delete o.name`). */
   readonly propertyWriteSites: ReadonlyMap<string, readonly WriteSite[]>;
   /** Value each binding is declared with: its initializer, or the function a declaration creates. */
@@ -887,6 +900,9 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
   const declarations = new Map<string, number>();
   const propertyWrites = new Map<string, number>();
   let unknownPropertyWrites = false;
+  let unknownReflectiveWrites = false;
+  const protoSwapTargets = new Set<string>();
+  const escapedNames = new Set<string>();
   const propertyWriteSites = new Map<string, WriteSite[]>();
   const declaredValues = new Map<string, ASTNode>();
   const writeSites = new Map<string, WriteSite[]>();
@@ -929,10 +945,13 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
     if (count > 1) reboundBindings.add(key);
     recordWrite(key, site, walk, constructed);
   };
-  const writeProperty = (name: string | undefined): void => {
+  // `computed` marks a member or class-field key that is not static (`o[key] = …`), which B1c assumes not to produce
+  // a method's name; every other unknown write is reflective (RT-M5).
+  const writeProperty = (name: string | undefined, computed = false): void => {
     // `__proto__` swaps the prototype, so it may change every inherited method.
     if (name === undefined || name === "__proto__") {
       unknownPropertyWrites = true;
+      if (name === "__proto__" || !computed) unknownReflectiveWrites = true;
       return;
     }
     propertyWrites.set(name, (propertyWrites.get(name) ?? 0) + 1);
@@ -940,6 +959,7 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
   const writeObjectKeys = (source: ASTNode | undefined): void => {
     if (source?.type !== "ObjectExpression") {
       unknownPropertyWrites = true;
+      unknownReflectiveWrites = true;
       return;
     }
     for (const property of source.children) {
@@ -974,7 +994,9 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
       case "MemberExpression":
       case "OptionalMemberExpression": {
         const name = memberPropertyName(target);
-        writeProperty(name);
+        writeProperty(name, true);
+        const object = target.children.find((child) => child.role === "object");
+        if (name === "__proto__" && object?.type === "Identifier") { const swapped = identifier(object); if (swapped !== undefined) protoSwapTargets.add(bindingKeyAt(swapped, walk.scope)); }
         if (name !== undefined) recordSite(propertyWriteSites, name, site, walk);
         return;
       }
@@ -1027,6 +1049,7 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
       const writer = callee === undefined ? undefined : reflectiveWriterName(callee);
       if (writer !== undefined && args.some((arg) => arg.type === "SpreadElement")) {
         unknownPropertyWrites = true;
+        unknownReflectiveWrites = true;
       } else if (writer === "Object.assign") {
         // Filling a fresh object cannot replace a method of an existing one.
         if (!isFreshObject(args[0])) for (const source of args.slice(1)) writeObjectKeys(source);
@@ -1034,6 +1057,7 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
         writeObjectKeys(args[1]);
       } else if (writer === "Object.setPrototypeOf" || writer === "Reflect.setPrototypeOf") {
         unknownPropertyWrites = true;
+        unknownReflectiveWrites = true;
       } else if (writer !== undefined) {
         writeProperty(staticPropertyKey(args[1]));
       }
@@ -1041,7 +1065,14 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
       if (property === "__defineGetter__" || property === "__defineSetter__") writeProperty(staticPropertyKey(args[0]));
     }
     // Object/Reflect writers reached any other way (aliased, passed on, `.call`) are untracked writes.
-    if (escapesReflectiveWriters(node, parent)) unknownPropertyWrites = true;
+    if (escapesReflectiveWriters(node, parent)) unknownPropertyWrites = unknownReflectiveWrites = true;
+    if (node.type === "Identifier" && usedAsValue(node, parent)) {
+      const used = identifier(node);
+      const key = used === undefined ? undefined : bindingKeyAt(used, walk.scope);
+      if (key !== undefined) escapedNames.add(key);
+      // A binding whose real scope is not modelled may be any outer one of that name (as for writes).
+      if (used !== undefined && key !== undefined && unscopedBindings.has(key)) for (let current = walk.scope.parent; current !== undefined; current = current.parent) escapedNames.add(bindingWriteKey(current.id, used));
+    }
     if (node.type === "UnaryExpression" && node.attributes.operator === "delete") {
       const argument = node.children.find((child) => child.role === "argument");
       if (argument?.type === "MemberExpression" || argument?.type === "OptionalMemberExpression") write(argument, node, walk);
@@ -1055,7 +1086,7 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
     }
     if (classFieldTypes.has(node.type)) {
       // A field is an own property of every instance (or of the class, if static): it hides a method of that name.
-      writeProperty(classElementName(node));
+      writeProperty(classElementName(node), true);
     }
     if (node.type === "UpdateExpression") write(node.children.find((child) => child.role === "argument"), node, walk);
     if (node.type === "ForInStatement" || node.type === "ForOfStatement") {
@@ -1099,10 +1130,81 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
     }
   };
   visit(root, { scope: createScope(MODULE_SCOPE_ID), contextId: MODULE_SCOPE_ID, loopIds: [], unconditional: true }, undefined);
-  return immutable({ reboundBindings, propertyWrites, unknownPropertyWrites, propertyWriteSites, declaredValues, writeSites, declaringContext, callSites, declaratorSites, scopeFrames, unscopedBindings, blockFunctionVars });
+  return immutable({ reboundBindings, propertyWrites, unknownPropertyWrites, unknownReflectiveWrites, protoSwapTargets, escapedNames, propertyWriteSites, declaredValues, writeSites, declaringContext, callSites, declaratorSites, scopeFrames, unscopedBindings, blockFunctionVars });
 }
 
 const classFieldTypes = new Set(["ClassProperty", "ClassPrivateProperty", "PropertyDefinition", "ClassAccessorProperty"]);
+
+/**
+ * Whether an identifier reads its binding as a value that can be handed on (RT-M5): any reference except the object of
+ * a member access (`out.push`, `out[i]`), a write target, a name that is not a reference at all (a declaration, a
+ * non-computed key or member name, a label, a type), and uses that only read the value without passing the object on:
+ * iteration (`for (x of out)`, `...out`), a test (`if (out)`, `out ? a : b`, `switch (out)`), a unary or comparison
+ * operator (`!out`, `out === x`), a computed key (`o[out]`) or a statement of its own. `out instanceof C` counts, since
+ * a class may define `Symbol.hasInstance`; a template literal counts, since a tag receives its values.
+ */
+function usedAsValue(node: ASTNode, parent: ASTNode | undefined): boolean {
+  if (parent === undefined) return false;
+  const role = node.role;
+  switch (parent.type) {
+    case "MemberExpression":
+    case "OptionalMemberExpression":
+      return false;
+    case "AssignmentExpression":
+      return role !== "left";
+    case "BinaryExpression":
+      return parent.attributes.operator === "instanceof" && role === "left";
+    case "IfStatement":
+    case "WhileStatement":
+    case "DoWhileStatement":
+    case "ForStatement":
+    case "ConditionalExpression":
+    case "SwitchCase":
+      return role !== "test";
+    case "SwitchStatement":
+      return role !== "discriminant";
+    case "ForInStatement":
+    case "ForOfStatement":
+    case "SpreadElement":
+    case "UnaryExpression":
+    case "ExpressionStatement":
+    case "UpdateExpression":
+    case "ArrayPattern":
+    case "RestElement":
+    case "LabeledStatement":
+    case "BreakStatement":
+    case "ContinueStatement":
+    case "ImportSpecifier":
+    case "ImportDefaultSpecifier":
+    case "ImportNamespaceSpecifier":
+    case "TSTypeReference":
+    case "TSQualifiedName":
+    case "TSTypeQuery":
+    case "TSExpressionWithTypeArguments":
+      return false;
+    case "AssignmentPattern":
+      return role !== "left";
+    case "VariableDeclarator":
+    case "CatchClause":
+      return role !== "id" && role !== "param";
+    case "FunctionDeclaration":
+    case "FunctionExpression":
+    case "ArrowFunctionExpression":
+    case "ClassDeclaration":
+    case "ClassExpression":
+      return role !== "id" && role !== "param" && role !== "params";
+    case "ObjectProperty":
+    case "ObjectMethod":
+    case "ClassMethod":
+    case "ClassPrivateMethod":
+    case "ClassProperty":
+    case "ClassPrivateProperty":
+    case "ClassAccessorProperty":
+      return role !== "key" || parent.attributes.computed === true;
+    default:
+      return true;
+  }
+}
 
 /**
  * Binding keys of declarations whose real scope the symbol table does not model, so a name
@@ -2772,6 +2874,10 @@ function valueTarget(calleeName: string, index: FileSymbolIndex, context: Resolu
   const kind = builtinKind(value, index, context);
   if (kind === undefined || !BUILTIN_METHODS[kind]!.has(method)) return undefined;
   if ((index.writes.propertyWrites.get(method) ?? 0) > 0) return undefined;
+  // RT-M5: a prototype swap of the binding, or a reflective write in the file once the value is passed around, may give
+  // the object its own `method`. A string primitive cannot hold own properties.
+  const key = bindingWriteKey(frame.id, name);
+  if (kind !== "String" && (index.writes.protoSwapTargets.has(key) || (index.writes.unknownReflectiveWrites && index.writes.escapedNames.has(key)))) return undefined;
   return globalPathUnwritten([kind, "prototype", method], globalWrites) ? { module: "global", member: `${kind}.prototype.${method}` } : undefined;
 }
 
