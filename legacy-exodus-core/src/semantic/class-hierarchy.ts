@@ -166,7 +166,8 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
       const args = node.children.filter((child) => child.role === "arguments");
       if (writer === "Object.create" && args.length >= 2 && !plainPrototype(args[0])) {
         // The descriptor object's keys become the new object's own properties.
-        if (args[1]?.type === "ObjectExpression") for (const key of literalKeys(args[1])) prototypeOverrides.add(key);
+        // A descriptor object named by a variable (`Object.create(base, desc)`) owns the keys of the literal it is declared with.
+        linkObject(args[1]);
       }
       if ((writer === "Object.setPrototypeOf" || writer === "Reflect.setPrototypeOf") && !plainPrototype(args[1])) linkObject(args[0]);
     }
@@ -235,6 +236,9 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
   };
   visit(ast.root, undefined, undefined);
   for (const name of linkedLiteralNames) for (const key of literalKeysByName.get(name) ?? []) prototypeOverrides.add(key);
+  // Another file's class sees these names through the name rule too (a file with no class keeps only its foreign
+  // writes in the run's facts): an object that owns `m` on top of an instance acts like a write of `m` on it.
+  for (const name of prototypeOverrides) foreignWritten.add(name);
   const computedClassNames = new Set<string>();
   for (const name of computedObjectNames) {
     computedClassNames.add(name);
