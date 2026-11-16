@@ -911,6 +911,51 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // RT-L3 review (2026-11-16): `Reflect.deleteProperty(x, "run")` in the factory object's own file. Node: "THROWS".
+    id: "reflect-delete-same-file",
+    files: {
+      "main.js": "function make() { const o = { run() { return \"run\"; } }; return o; }\nconst x = make();\nReflect.deleteProperty(x, \"run\");\nlet r; try { r = x.run(); } catch (e) { r = \"THROWS\"; }\nconsole.log(r);\n",
+    },
+    expectations: [
+      { id: "rt-l3:reflect-delete-same-file-unresolved", category: "calls", has: /^main\.js@4:\d+\|[^|]*\|x\.run\|UNRESOLVED\|/ },
+    ],
+  },
+  {
+    // RT-L3 review: `Reflect.deleteProperty(o, "run")` in another file, on the factory object passed in. Node: "THROWS".
+    id: "reflect-delete-cross-file",
+    files: {
+      "lib.js": "function make() { const o = { run() { return \"run\"; } }; return o; }\nmodule.exports = make;\n",
+      "patch.js": "module.exports = function (o) { Reflect.deleteProperty(o, \"run\"); };\n",
+      "main.js": "const make = require(\"./lib\");\nconst x = make();\nrequire(\"./patch\")(x);\nlet r; try { r = x.run(); } catch (e) { r = \"THROWS\"; }\nconsole.log(r);\n",
+    },
+    expectations: [
+      { id: "rt-l3:reflect-delete-cross-file-unresolved", category: "calls", has: /^main\.js@4:\d+\|[^|]*\|x\.run\|UNRESOLVED\|/ },
+    ],
+  },
+  {
+    // RT-L3 review: `Reflect.set(x, "run", f)` in the factory object's own file. Node: "replaced".
+    id: "reflect-set-same-file",
+    files: {
+      "main.js": "function make() { const o = { run() { return \"run\"; } }; return o; }\nconst x = make();\nReflect.set(x, \"run\", () => \"replaced\");\nconsole.log(x.run());\n",
+    },
+    expectations: [
+      { id: "rt-l3:reflect-set-same-file-unresolved", category: "calls", has: /^main\.js@4:\d+\|[^|]*\|x\.run\|UNRESOLVED\|/ },
+    ],
+  },
+  {
+    // RT-L3 review: `Reflect.set(o, "run", f)` in another file. Node: "replaced". Control: `x.stay()` is untouched.
+    id: "reflect-set-cross-file",
+    files: {
+      "lib.js": "function make() { const o = { run() { return \"run\"; }, stay() { return \"stay\"; } }; return o; }\nmodule.exports = make;\n",
+      "patch.js": "module.exports = function (o) { Reflect.set(o, \"run\", () => \"replaced\"); };\n",
+      "main.js": "const make = require(\"./lib\");\nconst x = make();\nrequire(\"./patch\")(x);\nconsole.log(x.run(), x.stay());\n",
+    },
+    expectations: [
+      { id: "rt-l3:reflect-set-cross-file-unresolved", category: "calls", has: /^main\.js@4:\d+\|[^|]*\|x\.run\|UNRESOLVED\|/ },
+      { id: "rt-l3:reflect-set-other-name-resolves", category: "calls", has: /^main\.js@4:\d+\|[^|]*\|x\.stay\|RESOLVED\|/ },
+    ],
+  },
+  {
     // OR-01, found by the call oracle on Fastify: another file replaces an export, so calls to it are not proven.
     // In Node, after test/t.js runs its first line, reply.send() calls the Stub.
     id: "foreign-export-write",

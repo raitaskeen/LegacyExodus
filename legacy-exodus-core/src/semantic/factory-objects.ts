@@ -776,7 +776,7 @@ function copiesOntoThis(body: ASTNode): boolean {
     if (node.type === "CallExpression" && callArguments(node)[0]?.type === "ThisExpression") {
       const path = pathOf(role(node, "callee"))?.join(".");
       if (path === "Object.assign" || path === "Object.defineProperties") copies = true;
-      if ((path === "Object.defineProperty" || path === "Reflect.defineProperty") && literalKeyWrite(node) === undefined) copies = true;
+      if ((path === "Object.defineProperty" || path === "Reflect.defineProperty" || path === "Reflect.set" || path === "Reflect.deleteProperty") && literalKeyWrite(node) === undefined) copies = true;
     }
     if (node.type === "AssignmentExpression") {
       const left = role(node, "left");
@@ -866,10 +866,11 @@ function literalDefinition(expression: ASTNode): { readonly name: string } | und
   return { name: key.attributes.value };
 }
 
-/** The name an `Object.defineProperty(o, "m", …)` call writes, whatever `o` is. */
+/** The name an `Object.defineProperty(o, "m", …)`, `Reflect.defineProperty`, `Reflect.set` or `Reflect.deleteProperty` call writes, whatever `o` is. */
 function literalKeyWrite(call: ASTNode): string | undefined {
   const path = pathOf(role(call, "callee"))?.join(".");
-  if (path !== "Object.defineProperty" && path !== "Reflect.defineProperty") return undefined;
+  // RT-L3: `Reflect.set(o, "m", f)` and `Reflect.deleteProperty(o, "m")` change `m` as a literal-key defineProperty does.
+  if (path !== "Object.defineProperty" && path !== "Reflect.defineProperty" && path !== "Reflect.set" && path !== "Reflect.deleteProperty") return undefined;
   const key = callArguments(call)[1];
   return staticKeyOf(key);
 }

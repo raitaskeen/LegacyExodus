@@ -61,6 +61,8 @@ export interface ClassHierarchyFile {
 }
 
 const MODULE_SCOPE = "scope:module";
+/** Reflective calls that write or remove the property named by their second argument (RT-L3). */
+const keyedReflectiveWriters: ReadonlySet<string> = new Set(["Object.defineProperty", "Reflect.defineProperty", "Reflect.set", "Reflect.deleteProperty"]);
 const COMPUTED = "*";
 
 /** One file's contribution, collected while the file's AST and symbol table are at hand. */
@@ -180,6 +182,20 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
     }
     if (node.type === "VariableDeclarator") noteInstance(node.children.find((child) => child.role === "id"), node.children.find((child) => child.role === "init"));
     if (node.type === "AssignmentExpression") noteInstance(node.children.find((child) => child.role === "left"), node.children.find((child) => child.role === "right"));
+    if (node.type === "CallExpression" || node.type === "OptionalCallExpression") {
+      // RT-L3: a literal-key reflective write (`Reflect.set(o, "m", f)`, `Reflect.deleteProperty(o, "m")`,
+      // `Object.defineProperty(o, "m", …)`) writes `m` as `o.m = …` does. A computed key is assumed not to produce a name.
+      const callee = node.children.find((child) => child.role === "callee");
+      const namespace = callee?.type === "MemberExpression" && callee.attributes.computed !== true ? callee.children.find((child) => child.role === "object") : undefined;
+      const method = callee?.type === "MemberExpression" ? callee.children.find((child) => child.role === "property") : undefined;
+      const writer = namespace?.type === "Identifier" && method !== undefined ? `${nameOf(namespace)}.${nameOf(method)}` : undefined;
+      const args = node.children.filter((child) => child.role === "arguments");
+      const key = writer !== undefined && keyedReflectiveWriters.has(writer) ? staticKey(args[1]) : undefined;
+      if (key !== undefined) {
+        written.add(key);
+        if (!(args[0]?.type === "ThisExpression" || isOwnObject(args[0], ownExports))) foreignWritten.add(key);
+      }
+    }
     if (node.type === "Identifier" && isValueUse(node, parent)) {
       const name = nameOf(node);
       if (name !== undefined) valueUses.set(name, (valueUses.get(name) ?? 0) + 1);
