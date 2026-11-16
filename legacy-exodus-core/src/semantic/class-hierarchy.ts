@@ -399,12 +399,14 @@ function isOwnObject(object: ASTNode | undefined, own: OwnExports): boolean {
  * The places a node stores a value, each an Identifier or a member expression (RT-M1): the target of an assignment of
  * any operator (`o.m = …`, `o.m ||= …`), every target of a destructuring assignment (`[o.m] = …`, `({ k: o.m } = …)`,
  * defaults and rest included), the head of a `for…in` or `for…of` that declares nothing (`for (o.m of fns)`), and the
- * operand of `++` or `--`. Parentheses and TypeScript wrappers are looked through (`(o.m as any) = …`). A declaration
+ * operand of `++` or `--`, and the operand of `delete` (RT-L3: removing `o.m` changes what `o.m()` runs, or makes it
+ * throw). Parentheses and TypeScript wrappers are looked through (`(o.m as any) = …`). A declaration
  * (`const { m } = o`) stores into its new bindings only and is not listed.
  */
 export function writtenTargets(node: ASTNode): ASTNode[] {
   if (node.type === "AssignmentExpression") return targetLeaves(node.children.find((child) => child.role === "left"));
   if (node.type === "UpdateExpression") return targetLeaves(node.children.find((child) => child.role === "argument"));
+  if (node.type === "UnaryExpression" && node.attributes.operator === "delete") return targetLeaves(node.children.find((child) => child.role === "argument"));
   if (node.type === "ForInStatement" || node.type === "ForOfStatement") {
     const left = node.children.find((child) => child.role === "left");
     return left?.type === "VariableDeclaration" ? [] : targetLeaves(left);

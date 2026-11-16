@@ -2541,8 +2541,8 @@ export function collectGlobalWrites(ast: ASTResult): readonly string[] {
 /** A value's origin: a path from the global object (`specifier` undefined) or from a package's module value. */
 interface ValueRoot { readonly specifier?: string; readonly path: readonly string[] }
 
-/** The reflective calls that write properties of their first argument. */
-const PROPERTY_WRITERS: ReadonlySet<string> = new Set(["Object.assign", "Object.defineProperty", "Object.defineProperties", "Reflect.defineProperty", "Reflect.set"]);
+/** The reflective calls that write (or, `Reflect.deleteProperty`, remove: RT-L3) properties of their first argument. */
+const PROPERTY_WRITERS: ReadonlySet<string> = new Set(["Object.assign", "Object.defineProperty", "Object.defineProperties", "Reflect.defineProperty", "Reflect.set", "Reflect.deleteProperty"]);
 
 /**
  * XB-03: the paths a file writes through a name other than the root, or by reflection, each from its root and cut

@@ -852,6 +852,65 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // RT-L3 (red team 2026-11-15): `delete` was not a write. Deleting a package member, a standard global, a factory
+    // object's method, an object's method from another file or a prototype method (or `Reflect.deleteProperty`) makes
+    // the later call throw. In Node, main.js prints "THROWS THROWS THROWS THROWS THROWS THROWS stay 1 b": the six
+    // deleted names throw; patch.js deletes
+    // `keep.other`, another name, so `box.stay()` is untouched, as are `Math.min` and `path.basename`.
+    id: "delete-writes",
+    files: {
+      "app.js": [
+        "const app = {};",
+        "app.init = function () { return \"init\"; };",
+        "app.start = function () { return app.init(); };",
+        "module.exports = app;",
+        "",
+      ].join("\n"),
+      "cls.js": "class C { go() { return this.m(); } m() { return \"C.m\"; } }\nmodule.exports = new C();\n",
+      "keep.js": "const box = {};\nbox.stay = function () { return \"stay\"; };\nbox.go = function () { return box.stay(); };\nmodule.exports = box;\n",
+      "fac.js": [
+        "function make() { const o = { run() { return \"literal-run\"; } }; return o; }",
+        "const x = make();",
+        "delete x.run;",
+        "let r; try { r = x.run(); } catch (e) { r = \"THROWS\"; }",
+        "module.exports = r;",
+        "",
+      ].join("\n"),
+      "patch.js": [
+        "delete JSON.stringify;",
+        "delete require(\"path\").join;",
+        "delete require(\"./app\").init;",
+        "delete Object.getPrototypeOf(require(\"./cls\")).m;",
+        "delete require(\"./keep\").other;",
+        "Reflect.deleteProperty(Math, \"max\");",
+        "",
+      ].join("\n"),
+      "main.js": [
+        "require(\"./patch\");",
+        "const path = require(\"path\");",
+        "function t(f) { try { return f(); } catch (e) { return \"THROWS\"; } }",
+        "const s = t(function () { return JSON.stringify({}); });",
+        "const j = t(function () { return path.join(\"a\", \"b\"); });",
+        "const a = t(function () { return require(\"./app\").start(); });",
+        "const c = t(function () { return require(\"./cls\").go(); });",
+        "const m = t(function () { return Math.max(1, 2); });",
+        "console.log(s, j, a, c, m, require(\"./fac\"), require(\"./keep\").go(), Math.min(1, 2), path.basename(\"/a/b\"));",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "rt-l3:deleted-global-member-unresolved", category: "calls", has: /^main\.js@4:\d+\|[^|]*\|JSON\.stringify\|UNRESOLVED\|/ },
+      { id: "rt-l3:deleted-package-member-unresolved", category: "calls", has: /^main\.js@5:\d+\|[^|]*\|path\.join\|UNRESOLVED\|/ },
+      { id: "rt-l3:deleted-container-method-unresolved", category: "calls", has: /^app\.js@3:\d+\|start\|app\.init\|UNRESOLVED\|/ },
+      { id: "rt-l3:deleted-prototype-method-unresolved", category: "calls", has: /^cls\.js@1:\d+\|go\|this\.m\|UNRESOLVED\|/ },
+      { id: "rt-l3:deleted-factory-method-unresolved", category: "calls", has: /^fac\.js@4:\d+\|[^|]*\|x\.run\|UNRESOLVED\|/ },
+      { id: "rt-l3:other-name-deleted-resolves", category: "calls", has: /^keep\.js@3:\d+\|go\|box\.stay\|RESOLVED\|method:stay@2:\d+@keep\.js/ },
+      { id: "rt-l3:reflect-delete-property-unresolved", category: "calls", has: /^main\.js@8:\d+\|[^|]*\|Math\.max\|UNRESOLVED\|/ },
+      { id: "rt-l3:undeleted-global-external", category: "calls", has: /^main\.js@9:\d+\|module\|Math\.min\|EXTERNAL\|/ },
+      { id: "rt-l3:undeleted-package-member-external", category: "calls", has: /^main\.js@9:\d+\|module\|path\.basename\|EXTERNAL\|/ },
+    ],
+  },
+  {
     // OR-01, found by the call oracle on Fastify: another file replaces an export, so calls to it are not proven.
     // In Node, after test/t.js runs its first line, reply.send() calls the Stub.
     id: "foreign-export-write",
