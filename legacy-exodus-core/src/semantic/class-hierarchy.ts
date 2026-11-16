@@ -58,6 +58,12 @@ export interface ClassHierarchyFile {
   readonly foreignWrittenNames: readonly string[];
   /** Property names the file reads as a value rather than calling them. */
   readonly borrowedNames: readonly string[];
+  /**
+   * RT-M4: names an object of this file owns while its prototype is set to a value that may be a class's instance or
+   * prototype (`{ __proto__: base, m() {} }`, `Object.create(base, { m: … })`, `Object.setPrototypeOf(child, base)`):
+   * a method of that class run on the object (`child.go()`) reaches the object's own `m` through `this.m()`.
+   */
+  readonly prototypeOverrides?: readonly string[];
 }
 
 const MODULE_SCOPE = "scope:module";
@@ -130,6 +136,46 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
     object?.type === "Identifier" && assignment !== undefined && topLevelAssignments.has(assignment) && exportAliases.has(nameOf(object) ?? "");
   // RT-M1: each member expression the file writes, and the node that writes it (see writtenTargets).
   const writers = new Map<ASTNode, ASTNode>();
+  // RT-M4: names owned by objects whose prototype may be a class's instance or prototype. A linked name (`child` in
+  // `Object.setPrototypeOf(child, base)`) owns the keys of every object literal the file declares under that name.
+  const prototypeOverrides = new Set<string>();
+  const linkedLiteralNames = new Set<string>();
+  const literalKeysByName = new Map<string, string[]>();
+  const linkObject = (object: ASTNode | undefined): void => {
+    if (object?.type === "ObjectExpression") for (const key of literalKeys(object)) prototypeOverrides.add(key);
+    else if (object?.type === "Identifier" && nameOf(object) !== undefined) linkedLiteralNames.add(nameOf(object)!);
+  };
+  const notePrototypeLinks = (node: ASTNode): void => {
+    if (node.type === "VariableDeclarator") {
+      const id = node.children.find((child) => child.role === "id");
+      const init = node.children.find((child) => child.role === "init");
+      const name = id?.type === "Identifier" ? nameOf(id) : undefined;
+      if (name !== undefined && init?.type === "ObjectExpression") literalKeysByName.set(name, [...(literalKeysByName.get(name) ?? []), ...literalKeys(init)]);
+    }
+    if (node.type === "ObjectExpression") {
+      // `{ __proto__: base, … }` sets the prototype; a computed or shorthand `__proto__` is an ordinary property.
+      const link = node.children.find((property) => property.type === "ObjectProperty" && property.attributes.computed !== true
+        && property.attributes.shorthand !== true && keyName(property) === "__proto__");
+      if (link !== undefined && !plainPrototype(link.children.find((child) => child.role === "value"))) linkObject(node);
+    }
+    if (node.type === "CallExpression" || node.type === "OptionalCallExpression") {
+      const callee = node.children.find((child) => child.role === "callee");
+      const base = callee?.type === "MemberExpression" && callee.attributes.computed !== true ? callee.children.find((child) => child.role === "object") : undefined;
+      const property = callee?.type === "MemberExpression" ? callee.children.find((child) => child.role === "property") : undefined;
+      const writer = base?.type === "Identifier" && property !== undefined ? `${nameOf(base)}.${nameOf(property)}` : undefined;
+      const args = node.children.filter((child) => child.role === "arguments");
+      if (writer === "Object.create" && args.length >= 2 && !plainPrototype(args[0])) {
+        // The descriptor object's keys become the new object's own properties.
+        if (args[1]?.type === "ObjectExpression") for (const key of literalKeys(args[1])) prototypeOverrides.add(key);
+      }
+      if ((writer === "Object.setPrototypeOf" || writer === "Reflect.setPrototypeOf") && !plainPrototype(args[1])) linkObject(args[0]);
+    }
+    if (node.type === "AssignmentExpression") {
+      const left = node.children.find((child) => child.role === "left");
+      if ((left?.type === "MemberExpression" || left?.type === "OptionalMemberExpression") && memberPropertyName(left) === "__proto__"
+        && !plainPrototype(node.children.find((child) => child.role === "right"))) linkObject(left.children.find((child) => child.role === "object"));
+    }
+  };
 
   const visit = (node: ASTNode, parent: ASTNode | undefined, currentClass: string | undefined): void => {
     let classInside = currentClass;
@@ -180,6 +226,7 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
     }
     if (node.type === "VariableDeclarator") noteInstance(node.children.find((child) => child.role === "id"), node.children.find((child) => child.role === "init"));
     if (node.type === "AssignmentExpression") noteInstance(node.children.find((child) => child.role === "left"), node.children.find((child) => child.role === "right"));
+    notePrototypeLinks(node);
     if (node.type === "Identifier" && isValueUse(node, parent)) {
       const name = nameOf(node);
       if (name !== undefined) valueUses.set(name, (valueUses.get(name) ?? 0) + 1);
@@ -187,6 +234,7 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
     for (const child of node.children) visit(child, node, classInside);
   };
   visit(ast.root, undefined, undefined);
+  for (const name of linkedLiteralNames) for (const key of literalKeysByName.get(name) ?? []) prototypeOverrides.add(key);
   const computedClassNames = new Set<string>();
   for (const name of computedObjectNames) {
     computedClassNames.add(name);
@@ -202,7 +250,25 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
     writtenNames: [...written].sort(),
     foreignWrittenNames: [...foreignWritten].sort(),
     borrowedNames: [...borrowed].sort(),
+    prototypeOverrides: [...prototypeOverrides].sort(),
   };
+}
+
+/** The statically named keys an object literal owns (`{ m() {}, n: f, "o": g }`); computed keys are left out (RT-M4). */
+function literalKeys(literal: ASTNode): string[] {
+  return literal.children.flatMap((property) => {
+    if (property.type !== "ObjectProperty" && property.type !== "ObjectMethod") return [];
+    const name = keyName(property);
+    return name === undefined || name === "__proto__" ? [] : [name];
+  });
+}
+
+/**
+ * A prototype that cannot be a class's instance or prototype: `null`, or an object literal made here (RT-M4). Anything
+ * else (an import, `new C()`, `C.prototype`, a call) may be one.
+ */
+function plainPrototype(node: ASTNode | undefined): boolean {
+  return node?.type === "NullLiteral" || node?.type === "ObjectExpression";
 }
 
 function isModuleExportsNode(node: ASTNode | undefined): boolean {
@@ -562,6 +628,8 @@ export class ClassHierarchy {
   private readonly childrenByFile = new Map<string, ClassFact[]>();
   private readonly writtenByFile = new Map<string, ReadonlySet<string>>();
   private readonly borrowed = new Set<string>();
+  /** RT-M4: names some object owns while its prototype may be a class's instance or prototype (see prototypeOverrides). */
+  private readonly prototypeOverrides = new Set<string>();
   /** Members of classes with an unknown superclass, and of their subclasses: they may override any class's members. */
   private readonly unknownOverrides = new Set<string>();
   /**
@@ -585,6 +653,7 @@ export class ClassHierarchy {
     const unknownRoots: ClassFact[] = [];
     for (const file of files) {
       for (const name of file.borrowedNames) this.borrowed.add(name);
+      for (const name of file.prototypeOverrides ?? []) this.prototypeOverrides.add(name);
       for (const name of file.foreignWrittenNames) {
         const writer = this.foreignWriters.get(name);
         this.foreignWriters.set(name, writer === undefined || writer === file.filePath ? file.filePath : true);
@@ -617,11 +686,13 @@ export class ClassHierarchy {
   }
 
   /**
-   * Whether a class that extends `classId`, directly or not, anywhere in the repository may define `name`, or
-   * another file may write `name` on one of its instances.
+   * Whether a class that extends `classId`, directly or not, anywhere in the repository may define `name`, another file
+   * may write `name` on one of its instances, or an object whose prototype may be one of its instances owns `name`
+   * (RT-M4).
    */
   public mayOverride(classId: string, name: string): boolean {
     if (!this.closedWorld && this.mayBeExtendedOutside(classId)) return true;
+    if (this.prototypeOverrides.has(name)) return true;
     const writer = this.foreignWriters.get(name);
     if (writer !== undefined && writer !== this.classes.get(classId)?.filePath) return true;
     if (this.unknownOverrides.has(name) || this.unknownOverrides.has(COMPUTED)) return true;
