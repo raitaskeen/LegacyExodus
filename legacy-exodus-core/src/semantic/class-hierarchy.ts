@@ -236,6 +236,17 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
   };
   visit(ast.root, undefined, undefined);
   for (const name of linkedLiteralNames) for (const key of literalKeysByName.get(name) ?? []) prototypeOverrides.add(key);
+  // A spread of a name owns the keys of the literal that name is declared with, spreads in it included (cycles end).
+  const expandSpreads = (keys: Iterable<string>, seen: Set<string>): string[] => [...keys].flatMap((key) => {
+    if (!key.startsWith(SPREAD)) return [key];
+    const name = key.slice(SPREAD.length);
+    if (seen.has(name)) return [];
+    seen.add(name);
+    return expandSpreads(literalKeysByName.get(name) ?? [], seen);
+  });
+  const ownedKeys = expandSpreads(prototypeOverrides, new Set());
+  prototypeOverrides.clear();
+  for (const key of ownedKeys) prototypeOverrides.add(key);
   // Another file's class sees these names through the name rule too (a file with no class keeps only its foreign
   // writes in the run's facts): an object that owns `m` on top of an instance acts like a write of `m` on it.
   for (const name of prototypeOverrides) foreignWritten.add(name);
@@ -258,9 +269,21 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
   };
 }
 
-/** The statically named keys an object literal owns (`{ m() {}, n: f, "o": g }`); computed keys are left out (RT-M4). */
+/** Marks a spread of a name (`...extra`) among literal keys, until the keys of the literal that name holds replace it. */
+const SPREAD = "...";
+
+/**
+ * The statically named keys an object literal owns (`{ m() {}, n: f, "o": g }`), and `...name` for a spread of a name
+ * (`{ __proto__: base, ...extra }`, resolved later to the keys of the literal `extra` is declared with). Computed keys
+ * and spreads of any other value are left out, as a computed write is assumed not to produce a name (RT-M4).
+ */
 function literalKeys(literal: ASTNode): string[] {
   return literal.children.flatMap((property) => {
+    if (property.type === "SpreadElement") {
+      const argument = property.children.find((child) => child.role === "argument");
+      const name = argument?.type === "Identifier" ? nameOf(argument) : undefined;
+      return name === undefined ? [] : [`${SPREAD}${name}`];
+    }
     if (property.type !== "ObjectProperty" && property.type !== "ObjectMethod") return [];
     const name = keyName(property);
     return name === undefined || name === "__proto__" ? [] : [name];
