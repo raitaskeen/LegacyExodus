@@ -64,13 +64,13 @@ Reports and probes: `audits/2026-11-15-redteam/` (each finding checked under Nod
 | RT-M3 | Med | Own-exports exemption still applies after `module.exports = require(…)` | write-checks | **Fixed** #330 (`03b9d20`): 0 lost/0 gained on 11 corpora incl. Ghost |
 | RT-M4 | Med | Class instance used as another object's prototype | write-checks | Open |
 | RT-M5 | Med | B1c ignores same-file reflection onto the literal | write-checks | Draft #339: strict rule costs 128 correct EXTERNAL (mongoose 87, axios 26, hono 9, lodash 5, fastify 1); option (2) binding+aliases with a documented assumption being measured; owner decides |
-| RT-M6 | Med | `#imports`/self-reference conditions: `import` tried before `require` | session resolver | Open |
+| RT-M6 | Med | `#imports`/self-reference conditions: `import` tried before `require` | session resolver | **Fixed** #329 (`0ad366d`): Ghost 395 calls EXTERNAL to UNRESOLVED (workspace packages whose ways reach different files), 0 RESOLVED lost; main CI green |
 | RT-M7 | Med | Factory value matches a same-named function from any scope | main session | **Fixed** #328 (`3ac23eb`), case rt-m7-nested-namesake |
-| RT-M8 | Med | `file:` dependency is EXTERNAL though repository code runs | resolver | Open |
+| RT-M8 | Med | `file:` dependency is EXTERNAL though repository code runs | resolver | Draft #335: merging main after #329; Ghost on the new head pending |
 | RT-M9 | Med | Circular `require` gives a stale exports object | design needed | Open |
-| RT-L1 | Low | Factory fall-through returns `undefined` | main session | Open |
-| RT-L2 | Low | Factory receiver not set when the call runs (branch, TDZ) | main session | Open |
-| RT-L3 | Low | `delete` not treated as a write | write-checks | Open |
+| RT-L1 | Low | Factory fall-through returns `undefined` | main session | In progress (branch fix/rt-l1-l2-factory-receivers): a factory body must end with `return` |
+| RT-L2 | Low | Factory receiver not set when the call runs (branch, TDZ) | main session | In progress: a declared value counts only when its declarator runs whenever its scope is entered (all 5 readers); TDZ inside a function stays a documented assumption |
+| RT-L3 | Low | `delete` not treated as a write | write-checks | Draft #340: 6 RED cases fixed, 10 corpora 0 changed; Ghost pending |
 | RT-L4 | Low | Self-reference named like a Node built-in | resolver | **Fixed** #332: 0 lost/0 gained on 11 corpora incl. Ghost |
 | RT-L5 | Low | `.js` under `"type": "module"`: `require` claimed EXTERNAL | resolver | **Fixed** #333: 0 lost/0 gained on 11 corpora incl. Ghost |
 | RT-L6 | Low | Class getter replaces an earlier method | write-checks | Open |
@@ -78,6 +78,7 @@ Reports and probes: `audits/2026-11-15-redteam/` (each finding checked under Nod
 | RT-L8 | Low | Annex B block function replaces a C3a shorthand export | design needed | Open |
 | RT-L9 | Low | Annex B block function replaces a factory callee for a direct call (`var b = express(); b.use()`, probe p06 of the PR328 set; on main) | design needed | Open |
 | RT-N2 | Low | A class method borrowed onto another object (`P.prototype.patch.call(lib)` with `this.m = …`) still writes unseen; class elements stay exempt (follow-up: `isBorrowed`) | write-checks | Open |
+| RT-N3 | Med | A file that fails to parse is never seen as a writer: `delete JSON;` (module-goal parse error StrictDelete) in patch.js leaves `JSON.stringify()` EXTERNAL elsewhere; any unparsed file can write anything (found by write-checks session) | design needed | Open |
 | RT-N1 | Med | `this.x = …` in another file's plain function (`patch.call(app)`) is exempt from the name rule (XA-03), so app.init stays RESOLVED; probe h1-this-call | write-checks | Draft #334 (owner: measure strict first): cost 7 correct express `app.engine` calls (ES5 constructors write `this.engine`), 0 elsewhere; Ghost pending |
 
 ## Track 2026-11-11: cross-file audit B findings (XB-01 to XB-09)
