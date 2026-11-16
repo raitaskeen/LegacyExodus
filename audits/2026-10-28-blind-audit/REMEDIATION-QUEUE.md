@@ -60,7 +60,7 @@ Reports and probes: `audits/2026-11-15-redteam/` (each finding checked under Nod
 | RT-PR-C | — | #328: Annex B block function replaces the forwarded callee | main session | **Fixed** #328 (`3ac23eb`), probes UNRESOLVED, conformance rt-pr-* |
 | RT-H1 | High | Rules 1 and 2 ignore writes to the method from other files | session write-checks | **Fixed** #331: mongoose 2 and Ghost 16 correct calls lost to the name rule (explained in the PR) |
 | RT-M1 | Med | Destructuring and `for…of` writes missed by write checks | write-checks (factory part: main) | **Fixed** #336 (write checks; 0 lost/0 gained on 11 corpora incl. Ghost); factory part **Fixed** #338 (`ab7d07a`), 0 lost/0 gained on 11 corpora |
-| RT-M2 | Med | String-key bracket writes and `defineProperty(exports, …)` missed | write-checks (factory part: main) | Draft #337 (template keys in class-hierarchy); factory part **Fixed** #338 (`ab7d07a`); class-hierarchy part #337 in CI |
+| RT-M2 | Med | String-key bracket writes and `defineProperty(exports, …)` missed | write-checks (factory part: main) | Draft #337 (template keys in class-hierarchy); factory part **Fixed** #338 (`ab7d07a`); class-hierarchy part **Fixed** #337 (template keys); RT-M2 closed |
 | RT-M3 | Med | Own-exports exemption still applies after `module.exports = require(…)` | write-checks | **Fixed** #330 (`03b9d20`): 0 lost/0 gained on 11 corpora incl. Ghost |
 | RT-M4 | Med | Class instance used as another object's prototype | write-checks | Open |
 | RT-M5 | Med | B1c ignores same-file reflection onto the literal | write-checks | Open |
