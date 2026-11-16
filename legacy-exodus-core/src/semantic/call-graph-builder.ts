@@ -323,7 +323,11 @@ interface BindingWrites {
   readonly unknownPropertyWrites: boolean;
   /** Where each statically named member is assigned or deleted (`o.name = …`, `delete o.name`). */
   readonly propertyWriteSites: ReadonlyMap<string, readonly WriteSite[]>;
-  /** Value each binding is declared with: its initializer, or the function a declaration creates. */
+  /**
+   * Value each binding is declared with: its initializer, or the function a declaration creates. A declarator that
+   * may not run whenever its binding's scope is entered (RT-L2: `if (…) { var x = make(); }` leaves `x` undefined on
+   * the other path) records one only when every use of the binding follows it in the same branch of the same function.
+   */
   readonly declaredValues: ReadonlyMap<string, ASTNode>;
   /** Every write to a binding, including implicit parameter, catch and for-in/of writes. */
   readonly writeSites: ReadonlyMap<string, readonly WriteSite[]>;
@@ -872,6 +876,8 @@ interface WriteWalk {
   readonly contextId: string;
   readonly loopIds: readonly string[];
   readonly unconditional: boolean;
+  /** The branch, loop part, `try` part, `switch` case or label body the walk last entered in its context, and the scope around it (RT-L2). */
+  readonly guard: { readonly scope: ScopeFrame; readonly node: ASTNode } | undefined;
 }
 
 /**
@@ -895,12 +901,26 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
   const declaratorSites = new Map<string, { readonly contextId: string; readonly end: SourcePoint }>();
   const scopeFrames = new Map<string, ScopeFrame>();
 
-  const bindingKeyAt = (name: string, scope: ScopeFrame): string => {
+  const bindingFrameAt = (name: string, scope: ScopeFrame): ScopeFrame => {
     for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
-      if ((byScopeAndName.get(lexicalBindingKey(current.id, name)) ?? []).length > 0 || current.selfName === name) return bindingWriteKey(current.id, name);
+      if ((byScopeAndName.get(lexicalBindingKey(current.id, name)) ?? []).length > 0 || current.selfName === name) return current;
     }
-    return bindingWriteKey(scope.id, name);
+    return scope;
   };
+  const bindingKeyAt = (name: string, scope: ScopeFrame): string => bindingWriteKey(bindingFrameAt(name, scope).id, name);
+  // RT-L2: a declarator runs whenever its binding's scope is entered when no branch, loop, `try`, `switch` case or label
+  // lies between that scope and the declarator: every read in the scope then sees the value or comes before the
+  // declarator (a `let`/`const` read there throws). `if (…) { var x = make(); }` may leave `x` undefined after the block;
+  // `if (…) { const x = make(); x.run(); }` cannot.
+  const runsWithScope = (frame: ScopeFrame, guard: WriteWalk["guard"]): boolean => {
+    if (guard === undefined) return true;
+    for (let current = frame.parent; current !== undefined; current = current.parent) if (current.id === guard.scope.id) return true;
+    return false;
+  };
+  // RT-L2: a guarded declarator's value still counts when every use of the binding comes after it, in the same function
+  // and inside the branch it sits in (`if (…) { var obj = new Map(); obj.set(k, v); }`): the declarator ran first.
+  const guardedValues: Array<{ readonly key: string; readonly name: string; readonly id: ASTNode; readonly init: ASTNode; readonly region: ASTNode; readonly contextId: string; readonly end: SourcePoint }> = [];
+  const uses = new Map<string, Array<{ readonly node: ASTNode; readonly scope: ScopeFrame; readonly contextId: string; readonly start: SourcePoint }>>();
   const unscopedBindings = collectUnscopedBindings(root, bindingKeyAt);
   const blockFunctionVars = collectBlockFunctionVars(root, bindingKeyAt);
   const recordSite = (sitesByKey: Map<string, WriteSite[]>, key: string, site: ASTNode, walk: WriteWalk, constructed?: WriteSite["constructed"]): void => {
@@ -1012,7 +1032,18 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
     const loopIds = opensContext ? [] : loopStatements.has(node.type)
       ? [...walk.loopIds, `loop:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`]
       : walk.loopIds;
-    const inner: WriteWalk = { scope, contextId, loopIds, unconditional: opensContext || (walk.unconditional && !loopStatements.has(node.type)) };
+    const inner: WriteWalk = {
+      scope, contextId, loopIds,
+      unconditional: opensContext || (walk.unconditional && !loopStatements.has(node.type)),
+      guard: opensContext ? undefined : walk.guard,
+    };
+    if (node.type === "Identifier" && node.location !== undefined && !isNonReferenceName(node, parent)) {
+      const name = identifier(node);
+      const list = name === undefined ? undefined : uses.get(name);
+      const use = { node, scope, contextId: walk.contextId, start: node.location.start };
+      if (list !== undefined) list.push(use);
+      else if (name !== undefined) uses.set(name, [use]);
+    }
 
     if (node.type === "CallExpression" || node.type === "OptionalCallExpression" || node.type === "NewExpression") {
       if (node.location !== undefined) callSites.set(node, { contextId: walk.contextId, loopIds: walk.loopIds, start: node.location.start });
@@ -1075,7 +1106,12 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
       const id = node.children.find((child) => child.role === "id");
       for (const name of extractBoundNames(id)) {
         declare(name, node, walk, init !== undefined, id?.type === "Identifier" ? constructedBy(init, scope) : undefined);
-        if (id?.type === "Identifier" && init !== undefined) declaredValues.set(bindingKeyAt(name, walk.scope), init);
+        if (id?.type === "Identifier" && init !== undefined) {
+          const frame = bindingFrameAt(name, walk.scope);
+          const key = bindingWriteKey(frame.id, name);
+          if (runsWithScope(frame, walk.guard)) declaredValues.set(key, init);
+          else if (walk.guard !== undefined && node.location !== undefined) guardedValues.push({ key, name, id, init, region: walk.guard.node, contextId: walk.contextId, end: node.location.end });
+        }
       }
     }
     if (node.type === "FunctionDeclaration" || node.type === "ClassDeclaration") {
@@ -1095,10 +1131,20 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
     }
 
     for (const child of node.children) {
-      visit(child, { ...inner, unconditional: inner.unconditional && !isConditionalChild(node, child) }, node);
+      const conditional = isConditionalChild(node, child);
+      // A loop's `init` (and a for…in/of's iterated value) runs whenever the loop is reached; its other parts may not.
+      const guarded = conditional || (loopStatements.has(node.type) && child.role !== "init" && child.role !== "right");
+      visit(child, { ...inner, unconditional: inner.unconditional && !conditional, guard: guarded ? { scope, node: child } : inner.guard }, node);
     }
   };
-  visit(root, { scope: createScope(MODULE_SCOPE_ID), contextId: MODULE_SCOPE_ID, loopIds: [], unconditional: true }, undefined);
+  visit(root, { scope: createScope(MODULE_SCOPE_ID), contextId: MODULE_SCOPE_ID, loopIds: [], unconditional: true, guard: undefined }, undefined);
+  for (const value of guardedValues) {
+    const region = value.region.location;
+    const followsInRegion = (start: SourcePoint): boolean => region !== undefined && comparePoints(value.end, start) <= 0 && comparePoints(start, region.end) <= 0;
+    const usedAfter = (uses.get(value.name) ?? []).every((use) => use.node === value.id || bindingKeyAt(value.name, use.scope) !== value.key
+      || (use.contextId === value.contextId && followsInRegion(use.start)));
+    if (usedAfter) declaredValues.set(value.key, value.init);
+  }
   return immutable({ reboundBindings, propertyWrites, unknownPropertyWrites, propertyWriteSites, declaredValues, writeSites, declaringContext, callSites, declaratorSites, scopeFrames, unscopedBindings, blockFunctionVars });
 }
 
@@ -1250,6 +1296,14 @@ function isFreshObject(node: ASTNode | undefined): boolean {
 }
 
 /** Children that run only on some executions of their parent, or not in source order. */
+/** An identifier that names no binding: a non-computed member or key name, or a label. */
+function isNonReferenceName(node: ASTNode, parent: ASTNode | undefined): boolean {
+  if (parent === undefined) return false;
+  if (node.role === "label") return true;
+  if (node.role === "property") return parent.attributes.computed !== true && (parent.type === "MemberExpression" || parent.type === "OptionalMemberExpression");
+  return node.role === "key" && parent.attributes.computed !== true && parent.attributes.shorthand !== true;
+}
+
 function isConditionalChild(parent: ASTNode, child: ASTNode): boolean {
   switch (parent.type) {
     case "IfStatement":
