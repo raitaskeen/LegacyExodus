@@ -786,8 +786,10 @@ export function collectUnstableExportIds(ast: ASTResult, table: SymbolTable | un
 /**
  * A property written on another module's value, as one file sees it (OR-01). `*` is a computed name. `member` is the
  * whole written path when it is known to be deeper (`ObjectId.prototype._id`), ending at a computed member (XB-03).
+ * `reexport` marks no write but a module value the exports object of `importerPath` may hold (RT-L7): `specifier` at
+ * path `member`, `*` for a value whose origin is not known (see exportsValueRoots).
  */
-export interface ForeignExportWrite { readonly importerPath: string; readonly specifier: string; readonly name: string; readonly member?: string }
+export interface ForeignExportWrite { readonly importerPath: string; readonly specifier: string; readonly name: string; readonly member?: string; readonly reexport?: true }
 
 /**
  * Writes this file makes to another module's exports: `require("./x").name = …`, or `x.name = …` where `x` is an
@@ -829,7 +831,86 @@ export function collectForeignExportWrites(ast: ASTResult, table: SymbolTable | 
   for (const write of aliasedWrites(ast.root, packageImports)) {
     if (write.specifier !== undefined && !isRelativeSpecifier(write.specifier) && write.path.length > 0) writes.push({ importerPath, specifier: write.specifier, name: write.path[0]!, member: write.path.join(".") });
   }
+  // RT-L7: the module values this file's own exports object may hold, so that a write on it elsewhere reaches them.
+  const importRoots = new Map<string, ValueRoot>();
+  for (const symbol of table?.symbols ?? []) {
+    if (symbol.kind !== "import" || typeof symbol.moduleSpecifier !== "string") continue;
+    const whole = symbol.defaultExport || symbol.sourceSymbolName === "*";
+    importRoots.set(symbol.name, { specifier: symbol.moduleSpecifier, path: whole ? [] : [symbol.sourceSymbolName ?? symbol.name] });
+  }
+  for (const root of exportsValueRoots(ast.root, importRoots)) writes.push({ importerPath, specifier: root.specifier ?? "*", name: "", member: root.path.join("."), reexport: true });
   return writes;
+}
+
+/**
+ * RT-L7: where a file's exports object may come from when the file does not make it. `module.exports = require("fs")`
+ * (also through `exports = module.exports = …`, `export default …` or `export = …`) gives `fs`;
+ * `module.exports = require("fs").promises` gives `fs` at `promises`; an import binding gives its module and path. A
+ * value made here (an object, array, function or class literal, `Object.create(…)`, or a name the file declares once and
+ * never reassigns, as a function, a class or with such a value) gives nothing. Any other value (a call, `new`, a
+ * parameter) gives a root without a specifier: it may be any module's value.
+ */
+function exportsValueRoots(root: ASTNode, imports: ReadonlyMap<string, ValueRoot>): ValueRoot[] {
+  const declarations = new Map<string, number>();
+  const ownNames = new Set<string>();
+  const assigned = new Set<string>();
+  const values: Array<ASTNode | undefined> = [];
+  const fresh = (node: ASTNode | undefined): boolean => node !== undefined && (["ObjectExpression", "ArrayExpression", "FunctionExpression", "ArrowFunctionExpression", "ClassExpression"].includes(node.type)
+    || (node.type === "CallExpression" && memberPathOf(node.children.find((child) => child.role === "callee"))?.join(".") === "Object.create"));
+  const declare = (name: string | undefined, own: boolean): void => {
+    if (name === undefined) return;
+    declarations.set(name, (declarations.get(name) ?? 0) + 1);
+    if (own) ownNames.add(name);
+  };
+  const walk = (node: ASTNode): void => {
+    if (node.type === "VariableDeclarator") {
+      const id = node.children.find((child) => child.role === "id");
+      if (id?.type === "Identifier") declare(identifier(id), fresh(node.children.find((child) => child.role === "init")));
+      else for (const name of extractBoundNames(id)) declare(name, false);
+    }
+    if (node.type === "FunctionDeclaration" || node.type === "ClassDeclaration") declare(nodeName(node), true);
+    for (const target of writtenTargets(node)) {
+      const name = target.type === "Identifier" ? identifier(target) : undefined;
+      if (name !== undefined) assigned.add(name);
+    }
+    if (node.type === "AssignmentExpression" && memberPathOf(node.children.find((child) => child.role === "left"))?.join(".") === "module.exports") {
+      values.push(node.attributes.operator === "=" ? node.children.find((child) => child.role === "right") : undefined);
+    }
+    if (node.type === "ExportDefaultDeclaration") {
+      const declaration = node.children.find((child) => child.role === "declaration");
+      if (declaration !== undefined && declaration.type !== "FunctionDeclaration" && declaration.type !== "ClassDeclaration") values.push(declaration);
+    }
+    if (node.type === "TSExportAssignment") values.push(node.children.find((child) => child.role === "expression"));
+    for (const child of node.children) walk(child);
+  };
+  walk(root);
+  // `undefined`: made here; a root without a specifier: not known.
+  const rootOf = (value: ASTNode | undefined): ValueRoot | undefined => {
+    if (value === undefined) return { path: [] };
+    if (value.type === "AssignmentExpression" && value.attributes.operator === "=") return rootOf(value.children.find((child) => child.role === "right"));
+    if (fresh(value)) return undefined;
+    if (value.type === "CallExpression") {
+      const specifier = requiredSpecifier(value);
+      return specifier === undefined ? { path: [] } : { specifier, path: [] };
+    }
+    if (value.type === "Identifier") {
+      const name = identifier(value);
+      const imported = name === undefined ? undefined : imports.get(name);
+      if (imported !== undefined) return imported;
+      return name !== undefined && ownNames.has(name) && declarations.get(name) === 1 && !assigned.has(name) ? undefined : { path: [] };
+    }
+    if (value.type === "MemberExpression") {
+      const property = value.children.find((child) => child.role === "property");
+      const key = value.attributes.computed === true ? staticPropertyKey(property) : identifier(property);
+      const base = rootOf(value.children.find((child) => child.role === "object"));
+      return base?.specifier !== undefined && key !== undefined ? { specifier: base.specifier, path: [...base.path, key] } : { path: [] };
+    }
+    return { path: [] };
+  };
+  return values.flatMap((value) => {
+    const found = rootOf(value);
+    return found === undefined ? [] : [found];
+  });
 }
 
 /** `require("literal")` and its specifier. */
@@ -853,6 +934,7 @@ export function foreignExportWriteTargets(
 ): readonly string[] {
   const ids = new Set<string>();
   for (const write of writes) {
+    if (write.reexport === true) continue;
     const target = resolveFile(write.importerPath, write.specifier);
     if (target === undefined) continue;
     for (const symbol of symbolsOf(canonicalizePath(target))) {
@@ -2783,13 +2865,34 @@ function packageName(specifier: string): string {
 /**
  * The package members a run's files write (`require("fs").readFileSync = …`, `fs.readFileSync = …` through an import):
  * keys `module\u0000member`, `*` for a computed member, the member being the whole written path when known
- * (`ObjectId.prototype._id`). A specifier that resolves to a repository file is not a package.
+ * (`ObjectId.prototype._id`). A specifier that resolves to a repository file is not a package, but a write on it is a
+ * write on every package value that file's exports object may hold (RT-L7, see exportsValueRoots), followed through
+ * files that re-export other files; module `*` stands for any package.
  */
 export function packageWriteKeys(writes: readonly ForeignExportWrite[], resolveFile: (importerPath: string, specifier: string) => string | undefined): ReadonlySet<string> {
   const keys = new Set<string>();
+  const reexports = new Map<string, ForeignExportWrite[]>();
+  for (const write of writes) if (write.reexport === true) reexports.set(write.importerPath, [...(reexports.get(write.importerPath) ?? []), write]);
+  const packagesOf = (file: string, seen: Set<string>): Array<{ readonly module: string; readonly path: readonly string[] }> => {
+    if (seen.has(file)) return [];
+    seen.add(file);
+    return (reexports.get(file) ?? []).flatMap((entry) => {
+      const path = entry.member === undefined || entry.member === "" ? [] : entry.member.split(".");
+      if (entry.specifier === "*") return [{ module: "*", path: [] }];
+      const target = resolveFile(file, entry.specifier);
+      if (target === undefined) return isRelativeSpecifier(entry.specifier) ? [{ module: "*", path: [] }] : [{ module: packageName(entry.specifier), path }];
+      return packagesOf(canonicalizePath(target), seen).map((found) => ({ module: found.module, path: [...found.path, ...path] }));
+    });
+  };
   for (const write of writes) {
-    if (isRelativeSpecifier(write.specifier) || resolveFile(write.importerPath, write.specifier) !== undefined) continue;
-    keys.add(`${packageName(write.specifier)}\u0000${write.member ?? write.name}`);
+    if (write.reexport === true) continue;
+    const written = write.member ?? write.name;
+    const target = resolveFile(write.importerPath, write.specifier);
+    if (target === undefined) {
+      if (!isRelativeSpecifier(write.specifier)) keys.add(`${packageName(write.specifier)}\u0000${written}`);
+      continue;
+    }
+    for (const found of packagesOf(canonicalizePath(target), new Set())) keys.add(`${found.module}\u0000${[...found.path, written].join(".")}`);
   }
   return keys;
 }
@@ -2799,10 +2902,13 @@ export function packageWriteKeys(writes: readonly ForeignExportWrite[], resolveF
  * globals: `x.a = …` and `x.a.*` block `x.a.b()`, while `x.a.prototype.c = …` leaves the call `x.a()` alone.
  */
 function packagePathUnwritten(module: string, path: readonly string[], packageWrites: ReadonlySet<string>): boolean {
-  if (packageWrites.has(`${module}\u0000*`)) return false;
-  for (let length = 1; length <= path.length; length++) {
-    const prefix = path.slice(0, length).join(".");
-    if (packageWrites.has(`${module}\u0000${prefix}`) || packageWrites.has(`${module}\u0000${prefix}.*`)) return false;
+  // `*` is any package: a write on a repository module whose exports value is not known (RT-L7).
+  for (const owner of [module, "*"]) {
+    if (packageWrites.has(`${owner}\u0000*`)) return false;
+    for (let length = 1; length <= path.length; length++) {
+      const prefix = path.slice(0, length).join(".");
+      if (packageWrites.has(`${owner}\u0000${prefix}`) || packageWrites.has(`${owner}\u0000${prefix}.*`)) return false;
+    }
   }
   return true;
 }

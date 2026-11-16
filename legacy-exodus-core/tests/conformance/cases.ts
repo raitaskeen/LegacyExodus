@@ -1907,6 +1907,48 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // RT-L7 (red team 2026-11-15): a write on a repository module that re-exports a package (`module.exports =
+    // require("fs")`) is a write on the package, but writes on repository files were never taken as package writes. In
+    // Node, main.js prints "patched-fs patched-path true patched-platform" and "string false": `isDate` is replaced
+    // through a two-file chain (the patch returns true), `os.platform` through a module whose value comes from a call;
+    // the write on own.js's own object leaves `os.hostname` alone, and `fs.existsSync` is never written.
+    id: "package-wrapper-writes",
+    files: {
+      "myfs.js": "module.exports = require(\"fs\");\n",
+      "mypath.js": "const path = require(\"path\");\nmodule.exports = path;\n",
+      "myutil.js": "module.exports = require(\"util\").types;\n",
+      "wrap2.js": "module.exports = require(\"./myutil\");\n",
+      "dyn.js": "function pick() { return require(\"os\"); }\nmodule.exports = pick();\n",
+      "own.js": "module.exports = { hostname() { return \"own\"; } };\n",
+      "patch.js": [
+        "require(\"./myfs\").copyFileSync = function () { return \"patched-fs\"; };",
+        "require(\"./mypath\").join = function () { return \"patched-path\"; };",
+        "require(\"./wrap2\").isDate = function () { return true; };",
+        "require(\"./dyn\").platform = function () { return \"patched-platform\"; };",
+        "require(\"./own\").hostname = function () { return \"patched-own\"; };",
+        "",
+      ].join("\n"),
+      "main.js": [
+        "require(\"./patch\");",
+        "const fs = require(\"fs\");",
+        "const path = require(\"path\");",
+        "const util = require(\"util\");",
+        "const os = require(\"os\");",
+        "console.log(fs.copyFileSync(\"x\", \"y\"), path.join(\"a\", \"b\"), util.types.isDate(1), os.platform());",
+        "console.log(typeof os.hostname(), fs.existsSync(\"nope\"));",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "rt-l7:package-wrapper-write-unresolved", category: "calls", has: /^main\.js@6:\d+\|module\|fs\.copyFileSync\|UNRESOLVED\|/ },
+      { id: "rt-l7:aliased-package-wrapper-write-unresolved", category: "calls", has: /^main\.js@6:\d+\|module\|path\.join\|UNRESOLVED\|/ },
+      { id: "rt-l7:chained-wrapper-member-write-unresolved", category: "calls", has: /^main\.js@6:\d+\|module\|util\.types\.isDate\|UNRESOLVED\|/ },
+      { id: "rt-l7:unknown-exports-value-write-unresolved", category: "calls", has: /^main\.js@6:\d+\|module\|os\.platform\|UNRESOLVED\|/ },
+      { id: "rt-l7:own-exports-write-stays-external", category: "calls", has: /^main\.js@7:\d+\|module\|os\.hostname\|EXTERNAL\|/ },
+      { id: "rt-l7:unwritten-member-external", category: "calls", has: /^main\.js@7:\d+\|module\|fs\.existsSync\|EXTERNAL\|/ },
+    ],
+  },
+  {
     // ADR-012, Phase B1: a call through a stable import of a package or Node module is EXTERNAL; a rebound import,
     // a package member another file replaces, or a shadowing parameter keeps it UNRESOLVED.
     id: "external-imports",
