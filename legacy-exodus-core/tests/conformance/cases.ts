@@ -668,6 +668,30 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // RT-L6 (red team 2026-11-15): a later class-body element of the same name replaces an earlier method: a getter
+    // (`m() {…} get m() {…}`), or a setter alone, which leaves `this.n` undefined. In Node, main.js prints
+    // "from-getter THROWS instance F.q getter-r H.s": the first two and the fifth run the replacement; a static `k`
+    // beside an instance `k`, a getter of another name and TypeScript overload signatures replace nothing.
+    id: "class-body-duplicates",
+    files: {
+      "getter.js": "class C { m() { return \"method\"; } go() { return this.m(); } get m() { return () => \"from-getter\"; } }\nmodule.exports = new C().go();\n",
+      "setter.js": "class D { n() { return \"method\"; } go() { try { return this.n(); } catch (e) { return \"THROWS\"; } } set n(v) {} }\nmodule.exports = new D().go();\n",
+      "static.js": "class E { static k() { return \"static\"; } k() { return \"instance\"; } go() { return this.k(); } }\nmodule.exports = new E().go();\n",
+      "other.js": "class F { q() { return \"F.q\"; } get other() { return 1; } go() { return this.q(); } }\nmodule.exports = new F().go();\n",
+      "rule1.js": "class G { r() { return \"method\"; } get r() { return () => \"getter-r\"; } }\nconst g = new G();\nmodule.exports = g.r();\n",
+      "h.cts": "class H { s(a: string): string; s(a: number): string; s(a: any): string { return \"H.s\"; } go(): string { return this.s(1); } }\nmodule.exports = new H().go();\n",
+      "main.js": "console.log(require(\"./getter\"), require(\"./setter\"), require(\"./static\"), require(\"./other\"), require(\"./rule1\"), require(\"./h.cts\"));\n",
+    },
+    expectations: [
+      { id: "rt-l6:later-getter-unresolved", category: "calls", has: /^getter\.js@1:\d+\|go\|this\.m\|UNRESOLVED\|/ },
+      { id: "rt-l6:later-setter-unresolved", category: "calls", has: /^setter\.js@1:\d+\|go\|this\.n\|UNRESOLVED\|/ },
+      { id: "rt-l6:rule1-getter-unresolved", category: "calls", has: /^rule1\.js@3:\d+\|[^|]*\|g\.r\|UNRESOLVED\|/ },
+      { id: "rt-l6:static-and-instance-resolves", category: "calls", has: /^static\.js@1:\d+\|go\|this\.k\|RESOLVED\|/ },
+      { id: "rt-l6:other-getter-resolves", category: "calls", has: /^other\.js@1:\d+\|go\|this\.q\|RESOLVED\|/ },
+      { id: "rt-l6:typescript-overloads-resolve", category: "calls", has: /^h\.cts@1:\d+\|go\|this\.s\|RESOLVED\|/ },
+    ],
+  },
+  {
     // XA-02: an exported subclass lets a package's users override the methods of the internal class it extends.
     // In Node, `class Mine extends Public { helper() { return "mine"; } }` makes `new Mine().run()` return "mine".
     id: "this-dispatch-escaping-subclass",
