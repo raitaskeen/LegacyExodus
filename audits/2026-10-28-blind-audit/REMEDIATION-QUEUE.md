@@ -63,7 +63,7 @@ Reports and probes: `audits/2026-11-15-redteam/` (each finding checked under Nod
 | RT-M2 | Med | String-key bracket writes and `defineProperty(exports, …)` missed | write-checks (factory part: main) | Draft #337 (template keys in class-hierarchy); factory part **Fixed** #338 (`ab7d07a`); class-hierarchy part **Fixed** #337 (template keys); RT-M2 closed |
 | RT-M3 | Med | Own-exports exemption still applies after `module.exports = require(…)` | write-checks | **Fixed** #330 (`03b9d20`): 0 lost/0 gained on 11 corpora incl. Ghost |
 | RT-M4 | Med | Class instance used as another object's prototype | write-checks | Open |
-| RT-M5 | Med | B1c ignores same-file reflection onto the literal | write-checks | Open |
+| RT-M5 | Med | B1c ignores same-file reflection onto the literal | write-checks | Draft #339: strict rule costs 128 correct EXTERNAL (mongoose 87, axios 26, hono 9, lodash 5, fastify 1); option (2) binding+aliases with a documented assumption being measured; owner decides |
 | RT-M6 | Med | `#imports`/self-reference conditions: `import` tried before `require` | session resolver | Open |
 | RT-M7 | Med | Factory value matches a same-named function from any scope | main session | **Fixed** #328 (`3ac23eb`), case rt-m7-nested-namesake |
 | RT-M8 | Med | `file:` dependency is EXTERNAL though repository code runs | resolver | Open |
