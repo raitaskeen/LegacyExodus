@@ -912,6 +912,7 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
   const reflectiveTargets = new Set<string>();
   const aliasSources = new Map<string, Set<string>>();
   let escapedReflectiveWriters = false;
+  const writerAliases = new Set<string>();
   // Counts unknown reflective writes, so a call can tell whether it made one (and record its target).
   let reflectiveCount = 0;
   const propertyWriteSites = new Map<string, WriteSite[]>();
@@ -1078,15 +1079,34 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
       }
       const property = callee?.type === "MemberExpression" || callee?.type === "OptionalMemberExpression" ? memberPropertyName(callee) : undefined;
       if (property === "__defineGetter__" || property === "__defineSetter__") writeProperty(staticPropertyKey(args[0]));
+      // RT-M5: a call through a plain alias of a reflective writer (`const assign = Object.assign; assign(out, src)`) is
+      // an unknown reflective write on its first argument.
+      const aliasedWriter = callee?.type === "Identifier" && identifier(callee) !== undefined && writerAliases.has(bindingKeyAt(identifier(callee)!, walk.scope));
+      if (aliasedWriter) { unknownReflectiveWrites = true; reflectiveCount += 1; }
       // RT-M5: the binding an unknown reflective write targets by name (`Object.assign(out, src)`, `out.__defineGetter__(k, …)`).
       if (reflectiveCount > countBefore) {
-        const target = writer !== undefined ? args[0] : callee?.children.find((child) => child.role === "object");
+        const target = writer !== undefined || aliasedWriter ? args[0] : callee?.children.find((child) => child.role === "object");
         const targetName = target?.type === "Identifier" ? identifier(target) : undefined;
         if (targetName !== undefined) reflectiveTargets.add(bindingKeyAt(targetName, walk.scope));
       }
     }
     // Object/Reflect writers reached any other way (aliased, passed on, `.call`) are untracked writes.
     if (escapesReflectiveWriters(node, parent)) unknownPropertyWrites = unknownReflectiveWrites = escapedReflectiveWriters = true;
+    // RT-M5: names declared as a plain alias of a reflective writer: `const assign = Object.assign`, `const { assign } = Object`.
+    if (node.type === "VariableDeclarator") {
+      const id = node.children.find((child) => child.role === "id");
+      const init = node.children.find((child) => child.role === "init");
+      if (id?.type === "Identifier" && init !== undefined && reflectiveWriterName(init) !== undefined && identifier(id) !== undefined) writerAliases.add(bindingKeyAt(identifier(id)!, walk.scope));
+      const namespace = init?.type === "Identifier" ? identifier(init) : undefined;
+      if (id?.type === "ObjectPattern" && namespace !== undefined && reflectiveNamespaces.has(namespace)) {
+        for (const property of id.children) {
+          const key = property.type === "ObjectProperty" ? propertyKeyName(property) : undefined;
+          const value = property.type === "ObjectProperty" ? property.children.find((child) => child.role === "value") : undefined;
+          const local = value?.type === "Identifier" ? identifier(value) : value?.type === "AssignmentPattern" ? identifier(value.children.find((child) => child.role === "left")) : undefined;
+          if (key !== undefined && local !== undefined && reflectiveWriters.has(`${namespace}.${key}`)) writerAliases.add(bindingKeyAt(local, walk.scope));
+        }
+      }
+    }
     // RT-M5: a plain alias (`const a = out`, `a = out`) reaches the same object.
     const aliasPair = node.type === "VariableDeclarator" ? [node.children.find((child) => child.role === "id"), node.children.find((child) => child.role === "init")]
       : node.type === "AssignmentExpression" && node.attributes.operator === "=" ? [node.children.find((child) => child.role === "left"), node.children.find((child) => child.role === "right")] : undefined;
@@ -2909,7 +2929,8 @@ function valueTarget(calleeName: string, index: FileSymbolIndex, context: Resolu
   // RT-M5: a prototype swap of the binding, or a reflective write in the file once the value is passed around, may give
   // the object its own `method`. A string primitive cannot hold own properties.
   const key = bindingWriteKey(frame.id, name);
-  if (kind !== "String" && (reflectivelyTargeted(index.writes, key) || (index.writes.escapedReflectiveWriters && index.writes.escapedNames.has(key)))) return undefined;
+  // A writer handed on any other way (`fn(Object)`) is assumed, like a parameter receiving the value, not to reach it.
+  if (kind !== "String" && reflectivelyTargeted(index.writes, key)) return undefined;
   return globalPathUnwritten([kind, "prototype", method], globalWrites) ? { module: "global", member: `${kind}.prototype.${method}` } : undefined;
 }
 
