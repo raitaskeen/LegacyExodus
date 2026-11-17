@@ -1,4 +1,4 @@
-**Fixed** #344 (`37f5783`, tree = tested head 153f1a3): a class method replaced by a later same-named element is not proven; 0 lost on 11 corpora
+# Remediation queue and resume guide
 
 The live plan for fixing the audit findings ([FINDINGS.md](FINDINGS.md)), plus the scale and storage
 work the Ghost run showed is needed before the IR phase. This file is the hand-off point: a new
@@ -60,26 +60,26 @@ Reports and probes: `audits/2026-11-15-redteam/` (each finding checked under Nod
 | RT-PR-C | — | #328: Annex B block function replaces the forwarded callee | main session | **Fixed** #328 (`3ac23eb`), probes UNRESOLVED, conformance rt-pr-* |
 | RT-H1 | High | Rules 1 and 2 ignore writes to the method from other files | session write-checks | **Fixed** #331: mongoose 2 and Ghost 16 correct calls lost to the name rule (explained in the PR) |
 | RT-M1 | Med | Destructuring and `for…of` writes missed by write checks | write-checks (factory part: main) | **Fixed** #336 (write checks; 0 lost/0 gained on 11 corpora incl. Ghost); factory part **Fixed** #338 (`ab7d07a`), 0 lost/0 gained on 11 corpora |
-| RT-M2 | Med | String-key bracket writes and `defineProperty(exports, …)` missed | write-checks (factory part: main) | Draft #337 (template keys in class-hierarchy); factory part **Fixed** #338 (`ab7d07a`); class-hierarchy part **Fixed** #337 (template keys); RT-M2 closed |
+| RT-M2 | Med | String-key bracket writes and `defineProperty(exports, …)` missed | write-checks (factory part: main) | **Fixed** #338 (`ab7d07a`, factory side) and #337 (`3f6d125`, template keys in the class hierarchy) |
 | RT-M3 | Med | Own-exports exemption still applies after `module.exports = require(…)` | write-checks | **Fixed** #330 (`03b9d20`): 0 lost/0 gained on 11 corpora incl. Ghost |
-| RT-M4 | Med | Class instance used as another object's prototype | write-checks | Open |
-| RT-M5 | Med | B1c ignores same-file reflection onto the literal | write-checks | Draft #339: strict rule costs 128 correct EXTERNAL (mongoose 87, axios 26, hono 9, lodash 5, fastify 1); option (2) binding+aliases with a documented assumption being measured; owner decides |
+| RT-M4 | Med | Class instance used as another object's prototype | write-checks | **Fixed** #343 (`5c1d3af`, tree = tested head b1d43ed): an object linked to a possible instance owns override names; review fix for spreads of literal-declared names; 0 lost on 11 corpora |
+| RT-M5 | Med | B1c ignores same-file reflection onto the literal | write-checks | **Fixed** #339 (`7ec70c7`, tree = tested head a695c94): owner chose option (2); prototype swaps and reflective writes on the binding or a plain alias; 0 lost on 11 corpora; 3 probe patterns excused by a documented assumption |
 | RT-M6 | Med | `#imports`/self-reference conditions: `import` tried before `require` | session resolver | **Fixed** #329 (`0ad366d`): Ghost 395 calls EXTERNAL to UNRESOLVED (workspace packages whose ways reach different files), 0 RESOLVED lost; main CI green |
 | RT-M7 | Med | Factory value matches a same-named function from any scope | main session | **Fixed** #328 (`3ac23eb`), case rt-m7-nested-namesake |
-| RT-M8 | Med | `file:` dependency is EXTERNAL though repository code runs | resolver | Draft #335: merging main after #329; Ghost on the new head pending |
+| RT-M8 | Med | `file:` dependency is EXTERNAL though repository code runs | resolver | **Fixed** #335 (`f4f4012`, tree = tested head 5b0a4e4; owner label): axios 191 + mongoose 966 false EXTERNAL claims now UNRESOLVED; Ghost 0/0 |
 | RT-M9 | Med | Circular `require` gives a stale exports object | design needed | Open |
-| RT-L1 | Low | Factory fall-through returns `undefined` | main session | In progress (branch fix/rt-l1-l2-factory-receivers): a factory body must end with `return` |
-| RT-L2 | Low | Factory receiver not set when the call runs (branch, TDZ) | main session | In progress: a declared value counts only when its declarator runs whenever its scope is entered (all 5 readers); TDZ inside a function stays a documented assumption |
-| RT-L3 | Low | `delete` not treated as a write | write-checks | Draft #340: 6 RED cases fixed, 10 corpora 0 changed; Ghost pending |
+| RT-L1 | Low | Factory fall-through returns `undefined` | main session | **Fixed** #342 (`ab4d8d5`, tree = tested head 4f0cc7d): a factory needs a `return` among its own statements; 10 corpora 0/0 |
+| RT-L2 | Low | Factory receiver not set when the call runs (branch, TDZ) | main session | **Fixed** #342: a declared value counts only if its declarator runs on scope entry or every use follows it in its branch; Ghost: 6 vendored EXTERNAL calls given up (explained); TDZ in a nested function is a documented assumption |
+| RT-L3 | Low | `delete` not treated as a write | write-checks | **Fixed** #340 (`9f954b8`, tree = tested head 5c3b280): `delete`, `Reflect.deleteProperty` and (review) `Reflect.set` are writes, here and in other files; Ghost 0/0 |
 | RT-L4 | Low | Self-reference named like a Node built-in | resolver | **Fixed** #332: 0 lost/0 gained on 11 corpora incl. Ghost |
 | RT-L5 | Low | `.js` under `"type": "module"`: `require` claimed EXTERNAL | resolver | **Fixed** #333: 0 lost/0 gained on 11 corpora incl. Ghost |
-| RT-L6 | Low | Class getter replaces an earlier method | write-checks | Open |
-| RT-L7 | Low | Package patched through a repository wrapper module | write-checks | Open |
+| RT-L6 | Low | Class getter replaces an earlier method | write-checks | **Fixed** #344 (`37f5783`, tree = tested head 153f1a3): a class method replaced by a later same-named element is not proven; 0 lost on 11 corpora |
+| RT-L7 | Low | Package patched through a repository wrapper module | write-checks | **Fixed** #341 (`322a59d`, tree = tested head d55a0a6): package and global wrappers pass writes on; review: unknown exports values not followed (XB-03 assumption), which removed 50 lost Ghost calls; Ghost 0/0 |
 | RT-L8 | Low | Annex B block function replaces a C3a shorthand export | design needed | Open |
 | RT-L9 | Low | Annex B block function replaces a factory callee for a direct call (`var b = express(); b.use()`, probe p06 of the PR328 set; on main) | design needed | Open |
 | RT-N2 | Low | A class method borrowed onto another object (`P.prototype.patch.call(lib)` with `this.m = …`) still writes unseen; class elements stay exempt (follow-up: `isBorrowed`) | write-checks | Open |
 | RT-N3 | Med | A file that fails to parse is never seen as a writer: `delete JSON;` (module-goal parse error StrictDelete) in patch.js leaves `JSON.stringify()` EXTERNAL elsewhere; any unparsed file can write anything (found by write-checks session) | design needed | Open |
-| RT-N1 | Med | `this.x = …` in another file's plain function (`patch.call(app)`) is exempt from the name rule (XA-03), so app.init stays RESOLVED; probe h1-this-call | write-checks | Draft #334 (owner: measure strict first): cost 7 correct express `app.engine` calls (ES5 constructors write `this.engine`), 0 elsewhere; Ghost pending |
+| RT-N1 | Med | `this.x = …` in another file's plain function (`patch.call(app)`) is exempt from the name rule (XA-03), so app.init stays RESOLVED; probe h1-this-call | write-checks | **Fixed** #334 (`9ebd7fa`, tree = tested head 069f395; owner label): `this` writes outside class elements are foreign writes; cost Express 10 + Ghost 3 correct calls (explained) |
 
 ## Track 2026-11-11: cross-file audit B findings (XB-01 to XB-09)
 
