@@ -643,8 +643,7 @@ export class AnalyzeProjectHandler {
         (importer, specifier) => { const resolved = resolver.resolve(importer, specifier, discovery.files).resolvedPath; return resolved === null ? undefined : canonicalizePath(resolved); },
         (filePath) => symbolsByPath.get(filePath) ?? [],
       );
-      for (const id of cycleFacts.unstableExportIds) unstableExportIds.add(id);
-      callGraphBuilder.useCycleImports(cycleFacts.cycleImportIds);
+      callGraphBuilder.useCycleImports(cycleFacts.cycleImports);
       callGraphBuilder.useCompiledCommonJs(await loadCompiledCommonJsFiles(discovery.projectPath, discovery.files));
       const controlFlowBuilder = new DeterministicControlFlowGraphBuilder();
       const dataFlowBuilder = new DeterministicDataFlowGraphBuilder();

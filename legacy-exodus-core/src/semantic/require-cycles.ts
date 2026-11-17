@@ -12,10 +12,12 @@ interface SourcePoint { readonly line: number; readonly column: number }
 
 /** What the call graph needs from a run's require cycles. */
 export interface RequireCycleFacts {
-  /** Exports of files that may leave a module of their cycle holding a replaced `module.exports`. */
-  readonly unstableExportIds: readonly string[];
-  /** Per file, its imports whose module is in the file's own cycle (a load-time call through one may run too early). */
-  readonly cycleImportIds: ReadonlyMap<string, ReadonlySet<string>>;
+  /**
+   * Per file, its imports whose module is in the file's own cycle (a load-time call through one may run too early),
+   * each mapped to whether that module may leave it holding a replaced `module.exports` for the whole run (stale).
+   * An importer outside the cycle is not listed: it cannot load while the cycle does, so it gets the final object.
+   */
+  readonly cycleImports: ReadonlyMap<string, ReadonlyMap<string, boolean>>;
 }
 
 /** Both uses of the cycles, for the run: `symbolsOf` gives a file's symbols, `resolve` the file a specifier loads. */
@@ -25,20 +27,15 @@ export function requireCycleFacts(
   symbolsOf: (filePath: string) => readonly CodeSymbol[],
 ): RequireCycleFacts {
   const cycles = requireCycles(facts, resolve);
-  const unstableExportIds: string[] = [];
-  for (const file of staleExportFiles(facts, cycles, resolve)) {
-    for (const symbol of symbolsOf(file)) {
-      if ((symbol.kind === "export" && symbol.moduleSpecifier === undefined) || (symbol.exported && symbol.kind !== "import")) unstableExportIds.push(symbol.id);
-    }
-  }
-  const cycleImportIds = new Map<string, Set<string>>();
+  const stale = staleExportFiles(facts, cycles, resolve);
+  const cycleImports = new Map<string, Map<string, boolean>>();
   for (const [file, cycle] of [...cycles].sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))) {
     for (const symbol of symbolsOf(file)) {
       const target = symbol.kind === "import" && typeof symbol.moduleSpecifier === "string" ? resolve(file, symbol.moduleSpecifier) : undefined;
-      if (target !== undefined && cycle.has(target)) cycleImportIds.set(file, (cycleImportIds.get(file) ?? new Set()).add(symbol.id));
+      if (target !== undefined && cycle.has(target)) cycleImports.set(file, (cycleImports.get(file) ?? new Map()).set(symbol.id, stale.has(target)));
     }
   }
-  return { unstableExportIds: unstableExportIds.sort(), cycleImportIds };
+  return { cycleImports };
 }
 
 /** What a file does while it loads: the modules it loads, and where it replaces `module.exports`. */
