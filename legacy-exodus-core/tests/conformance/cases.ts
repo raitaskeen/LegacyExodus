@@ -1575,6 +1575,10 @@ export const conformanceCases: readonly ConformanceCase[] = [
     // A use outside the branch: Node throws there, and the binding's value no longer counts anywhere.
     ["rt-l2-branch-and-outside", { "main.js": "function make() { const o = { run() { return \"run\"; } }; return o; }\nif (process.argv.length > 99) { var x = make(); console.log(x.run()); }\ntry { console.log(x.run()); } catch (e) { console.log(\"THROWS\", e.message); }\n" }, /^main\.js@3:\d+\|module\|x\.run\|UNRESOLVED\|/],
     ["rt-l2-loop-const-control", { "main.js": "function make() { const o = { run() { return \"run\"; } }; return o; }\nfor (const i of [1]) { const x = make(); console.log(x.run()); }\n" }, /^main\.js@2:\d+\|module\|x\.run\|RESOLVED\|/],
+    // RT-N3 (probes n3-unparsed, n3-return): a .js file valid only as sloppy CommonJS was dropped, writes included.
+    // Node: "THROWS JSON is not defined" and "patched".
+    ["rt-n3-sloppy-delete", { "patch.js": "delete JSON;\n", "main.js": "require(\"./patch\");\ntry { console.log(JSON.stringify({})); } catch (e) { console.log(\"THROWS\", e.message); }\n" }, /^main\.js@2:\d+\|module\|JSON\.stringify\|UNRESOLVED\|/],
+    ["rt-n3-top-level-return", { "patch.js": "JSON.stringify = () => \"patched\";\nif (process.argv.length > 99) return;\nmodule.exports = 1;\n", "main.js": "require(\"./patch\");\nconsole.log(JSON.stringify({}));\n" }, /^main\.js@2:\d+\|module\|JSON\.stringify\|UNRESOLVED\|/],
   ] as const).map(([id, files, expected]): ConformanceCase => ({ id, files, expectations: [{ id: `${id}:call`, category: "calls", has: expected }] })),
   {
     // Phase C1b: a factory literal's property takes its function from a member of a repository module, from a property

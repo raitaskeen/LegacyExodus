@@ -1,4 +1,4 @@
-import { parse } from "@babel/parser";
+import { parse, type ParserOptions } from "@babel/parser";
 
 import type { ASTNode } from "@parser/contracts/ast-node";
 import type { ParserError } from "@parser/contracts/parser-errors";
@@ -34,10 +34,8 @@ export class JavaScriptParser implements Parser {
   public async parse(request: ParseRequest): Promise<ParseResponse> {
     const startedAt = performance.now();
     try {
-      const parsedFile = parse(request.source, {
-        ...javascriptParserOptionsFor(request.file.path),
-        sourceFilename: request.file.path,
-      });
+      const options = { ...javascriptParserOptionsFor(request.file.path), sourceFilename: request.file.path };
+      const parsedFile = sloppyScriptRetry(request.source, options, parse(request.source, options));
       const mapping = mapJavaScriptNode(parsedFile.program);
 
       return {
@@ -74,6 +72,23 @@ export class JavaScriptParser implements Parser {
         },
       };
     }
+  }
+}
+
+/**
+ * RT-N3: `unambiguous` applies module (strict) rules first, so valid sloppy CommonJS (`delete JSON`, `with`, legacy
+ * octals, a top-level `return` inside Node's module wrapper) came back with errors and the whole file, its writes
+ * included, was left out. A file with no import or export syntax is parsed again as a script that may `return` at its
+ * top level, as Node runs it; the retry is kept only when it has no errors.
+ */
+function sloppyScriptRetry(source: string, options: ParserOptions, first: ReturnType<typeof parse>): ReturnType<typeof parse> {
+  if (first.errors.length === 0 || options.sourceType !== "unambiguous") return first;
+  if (first.program.body.some((statement) => statement.type.startsWith("Import") || statement.type.startsWith("Export"))) return first;
+  try {
+    const retry = parse(source, { ...options, sourceType: "script", allowReturnOutsideFunction: true });
+    return retry.errors.length === 0 ? retry : first;
+  } catch {
+    return first;
   }
 }
 
