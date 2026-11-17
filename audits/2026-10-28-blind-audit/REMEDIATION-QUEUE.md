@@ -1,4 +1,4 @@
-#343 main merged (`b1d43ed`: conflicts with RT-L3/RT-N1 resolved, code lines = measured 6ff5249, 151/151); CI running
+**Fixed** #343 (`5c1d3af`, tree = tested head b1d43ed): objects linked to a possible instance own override names (incl. review fix for spreads); 0 lost on 11 corpora
 
 The live plan for fixing the audit findings ([FINDINGS.md](FINDINGS.md)), plus the scale and storage
 work the Ghost run showed is needed before the IR phase. This file is the hand-off point: a new
