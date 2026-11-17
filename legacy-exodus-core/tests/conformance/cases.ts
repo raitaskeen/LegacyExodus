@@ -769,6 +769,42 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // RT-M4 (red team 2026-11-15): an object whose prototype is a class instance runs that class's methods with
+    // `this` set to the object, so `this.m()` reaches the object's own `m`. The object's keys were not seen as
+    // overrides. In Node, main.js prints "child.m child.n descriptor.k child.p K.q extra.r": every linked object's own
+    // method runs, also one spread in from a literal (spread.js); keep.js links objects only to `null` and to a plain
+    // literal, so `this.q()` is untouched.
+    id: "instance-as-prototype",
+    files: {
+      "lib.js": "class C { go() { return this.m(); } m() { return \"C.m\"; } }\nmodule.exports = new C();\n",
+      "same.js": "class D { go() { return this.n(); } n() { return \"D.n\"; } }\nconst child = { __proto__: new D(), n() { return \"child.n\"; } };\nmodule.exports = child.go();\n",
+      "desc.js": "class E { go() { return this.k(); } k() { return \"E.k\"; } }\nconst child = Object.create(new E(), { k: { value: function () { return \"descriptor.k\"; } } });\nmodule.exports = child.go();\n",
+      "setproto.js": "class F { go() { return this.p(); } p() { return \"F.p\"; } }\nconst child = { p() { return \"child.p\"; } };\nObject.setPrototypeOf(child, new F());\nmodule.exports = child.go();\n",
+      "spread.js": "class G { go() { return this.r(); } r() { return \"G.r\"; } }\nconst extra = { r() { return \"extra.r\"; } };\nconst child = { __proto__: new G(), ...extra };\nmodule.exports = child.go();\n",
+      "keep.js": [
+        "class K { go() { return this.q(); } q() { return \"K.q\"; } }",
+        "const plain = { __proto__: null, q() { return 1; } };",
+        "const other = { __proto__: { s() { return 2; } }, q() { return 3; } };",
+        "module.exports = [new K().go(), plain, other];",
+        "",
+      ].join("\n"),
+      "main.js": [
+        "const base = require(\"./lib\");",
+        "const child = { __proto__: base, m() { return \"child.m\"; } };",
+        "console.log(child.go(), require(\"./same\"), require(\"./desc\"), require(\"./setproto\"), require(\"./keep\")[0], require(\"./spread\"));",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "rt-m4:proto-literal-other-file-unresolved", category: "calls", has: /^lib\.js@1:\d+\|go\|this\.m\|UNRESOLVED\|/ },
+      { id: "rt-m4:proto-literal-same-file-unresolved", category: "calls", has: /^same\.js@1:\d+\|go\|this\.n\|UNRESOLVED\|/ },
+      { id: "rt-m4:object-create-descriptor-unresolved", category: "calls", has: /^desc\.js@1:\d+\|go\|this\.k\|UNRESOLVED\|/ },
+      { id: "rt-m4:set-prototype-of-literal-unresolved", category: "calls", has: /^setproto\.js@1:\d+\|go\|this\.p\|UNRESOLVED\|/ },
+      { id: "rt-m4:plain-prototypes-resolve", category: "calls", has: /^keep\.js@1:\d+\|go\|this\.q\|RESOLVED\|method:q@1:\d+@keep\.js/ },
+      { id: "rt-m4:spread-literal-unresolved", category: "calls", has: /^spread\.js@1:\d+\|go\|this\.r\|UNRESOLVED\|/ },
+    ],
+  },
+  {
     // XA-04: a computed read of an instance takes a method as a value; it then runs with another `this`.
     // In Node, `f.call({ helper() { return "other"; } })` returns "other".
     id: "this-dispatch-computed-borrow",
@@ -873,6 +909,110 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "reason:call-result-member", check: (directory) => callReason(directory, 20, "makeObj().run") === "call-result-member" },
       { id: "reason:resolved-has-none", check: (directory) => callReason(directory, 19, "run") === "RESOLVED" },
       { id: "reason:every-unresolved-call-has-one", check: (directory) => readJson(directory, "semantic.json").calls.every((call: { resolutionState: string; reason?: string }) => (call.resolutionState === "UNRESOLVED") === (call.reason !== undefined)) },
+    ],
+  },
+  {
+    // RT-L3 (red team 2026-11-15): `delete` was not a write. Deleting a package member, a standard global, a factory
+    // object's method, an object's method from another file or a prototype method (or `Reflect.deleteProperty`) makes
+    // the later call throw. In Node, main.js prints "THROWS THROWS THROWS THROWS THROWS THROWS stay 1 b": the six
+    // deleted names throw; patch.js deletes
+    // `keep.other`, another name, so `box.stay()` is untouched, as are `Math.min` and `path.basename`.
+    id: "delete-writes",
+    files: {
+      "app.js": [
+        "const app = {};",
+        "app.init = function () { return \"init\"; };",
+        "app.start = function () { return app.init(); };",
+        "module.exports = app;",
+        "",
+      ].join("\n"),
+      "cls.js": "class C { go() { return this.m(); } m() { return \"C.m\"; } }\nmodule.exports = new C();\n",
+      "keep.js": "const box = {};\nbox.stay = function () { return \"stay\"; };\nbox.go = function () { return box.stay(); };\nmodule.exports = box;\n",
+      "fac.js": [
+        "function make() { const o = { run() { return \"literal-run\"; } }; return o; }",
+        "const x = make();",
+        "delete x.run;",
+        "let r; try { r = x.run(); } catch (e) { r = \"THROWS\"; }",
+        "module.exports = r;",
+        "",
+      ].join("\n"),
+      "patch.js": [
+        "delete JSON.stringify;",
+        "delete require(\"path\").join;",
+        "delete require(\"./app\").init;",
+        "delete Object.getPrototypeOf(require(\"./cls\")).m;",
+        "delete require(\"./keep\").other;",
+        "Reflect.deleteProperty(Math, \"max\");",
+        "",
+      ].join("\n"),
+      "main.js": [
+        "require(\"./patch\");",
+        "const path = require(\"path\");",
+        "function t(f) { try { return f(); } catch (e) { return \"THROWS\"; } }",
+        "const s = t(function () { return JSON.stringify({}); });",
+        "const j = t(function () { return path.join(\"a\", \"b\"); });",
+        "const a = t(function () { return require(\"./app\").start(); });",
+        "const c = t(function () { return require(\"./cls\").go(); });",
+        "const m = t(function () { return Math.max(1, 2); });",
+        "console.log(s, j, a, c, m, require(\"./fac\"), require(\"./keep\").go(), Math.min(1, 2), path.basename(\"/a/b\"));",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "rt-l3:deleted-global-member-unresolved", category: "calls", has: /^main\.js@4:\d+\|[^|]*\|JSON\.stringify\|UNRESOLVED\|/ },
+      { id: "rt-l3:deleted-package-member-unresolved", category: "calls", has: /^main\.js@5:\d+\|[^|]*\|path\.join\|UNRESOLVED\|/ },
+      { id: "rt-l3:deleted-container-method-unresolved", category: "calls", has: /^app\.js@3:\d+\|start\|app\.init\|UNRESOLVED\|/ },
+      { id: "rt-l3:deleted-prototype-method-unresolved", category: "calls", has: /^cls\.js@1:\d+\|go\|this\.m\|UNRESOLVED\|/ },
+      { id: "rt-l3:deleted-factory-method-unresolved", category: "calls", has: /^fac\.js@4:\d+\|[^|]*\|x\.run\|UNRESOLVED\|/ },
+      { id: "rt-l3:other-name-deleted-resolves", category: "calls", has: /^keep\.js@3:\d+\|go\|box\.stay\|RESOLVED\|method:stay@2:\d+@keep\.js/ },
+      { id: "rt-l3:reflect-delete-property-unresolved", category: "calls", has: /^main\.js@8:\d+\|[^|]*\|Math\.max\|UNRESOLVED\|/ },
+      { id: "rt-l3:undeleted-global-external", category: "calls", has: /^main\.js@9:\d+\|module\|Math\.min\|EXTERNAL\|/ },
+      { id: "rt-l3:undeleted-package-member-external", category: "calls", has: /^main\.js@9:\d+\|module\|path\.basename\|EXTERNAL\|/ },
+    ],
+  },
+  {
+    // RT-L3 review (2026-11-16): `Reflect.deleteProperty(x, "run")` in the factory object's own file. Node: "THROWS".
+    id: "reflect-delete-same-file",
+    files: {
+      "main.js": "function make() { const o = { run() { return \"run\"; } }; return o; }\nconst x = make();\nReflect.deleteProperty(x, \"run\");\nlet r; try { r = x.run(); } catch (e) { r = \"THROWS\"; }\nconsole.log(r);\n",
+    },
+    expectations: [
+      { id: "rt-l3:reflect-delete-same-file-unresolved", category: "calls", has: /^main\.js@4:\d+\|[^|]*\|x\.run\|UNRESOLVED\|/ },
+    ],
+  },
+  {
+    // RT-L3 review: `Reflect.deleteProperty(o, "run")` in another file, on the factory object passed in. Node: "THROWS".
+    id: "reflect-delete-cross-file",
+    files: {
+      "lib.js": "function make() { const o = { run() { return \"run\"; } }; return o; }\nmodule.exports = make;\n",
+      "patch.js": "module.exports = function (o) { Reflect.deleteProperty(o, \"run\"); };\n",
+      "main.js": "const make = require(\"./lib\");\nconst x = make();\nrequire(\"./patch\")(x);\nlet r; try { r = x.run(); } catch (e) { r = \"THROWS\"; }\nconsole.log(r);\n",
+    },
+    expectations: [
+      { id: "rt-l3:reflect-delete-cross-file-unresolved", category: "calls", has: /^main\.js@4:\d+\|[^|]*\|x\.run\|UNRESOLVED\|/ },
+    ],
+  },
+  {
+    // RT-L3 review: `Reflect.set(x, "run", f)` in the factory object's own file. Node: "replaced".
+    id: "reflect-set-same-file",
+    files: {
+      "main.js": "function make() { const o = { run() { return \"run\"; } }; return o; }\nconst x = make();\nReflect.set(x, \"run\", () => \"replaced\");\nconsole.log(x.run());\n",
+    },
+    expectations: [
+      { id: "rt-l3:reflect-set-same-file-unresolved", category: "calls", has: /^main\.js@4:\d+\|[^|]*\|x\.run\|UNRESOLVED\|/ },
+    ],
+  },
+  {
+    // RT-L3 review: `Reflect.set(o, "run", f)` in another file. Node: "replaced". Control: `x.stay()` is untouched.
+    id: "reflect-set-cross-file",
+    files: {
+      "lib.js": "function make() { const o = { run() { return \"run\"; }, stay() { return \"stay\"; } }; return o; }\nmodule.exports = make;\n",
+      "patch.js": "module.exports = function (o) { Reflect.set(o, \"run\", () => \"replaced\"); };\n",
+      "main.js": "const make = require(\"./lib\");\nconst x = make();\nrequire(\"./patch\")(x);\nconsole.log(x.run(), x.stay());\n",
+    },
+    expectations: [
+      { id: "rt-l3:reflect-set-cross-file-unresolved", category: "calls", has: /^main\.js@4:\d+\|[^|]*\|x\.run\|UNRESOLVED\|/ },
+      { id: "rt-l3:reflect-set-other-name-resolves", category: "calls", has: /^main\.js@4:\d+\|[^|]*\|x\.stay\|RESOLVED\|/ },
     ],
   },
   {
@@ -1015,6 +1155,42 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // RT-M8 (red team 2026-11-15): a `file:` dependency installs a folder of the repository as node_modules/<name>, so
+    // Node runs repository code. After `npm install --offline` in the root and in tools/, Node (24) prints
+    // "repo-mylib-run repo-mylib-extra cjs-run 1s" for main.js and "repo-mylib2-run" for tools/t.js: the nearest
+    // package.json that declares `mylib` decides which folder it is. dual2's targets differ by require and import, so
+    // its call stays UNRESOLVED, never EXTERNAL; ms is a registry package and stays EXTERNAL.
+    id: "file-dependencies",
+    files: {
+      "package.json": JSON.stringify({ name: "root", private: true, dependencies: { mylib: "file:./packages/mylib", dual2: "file:packages/dual2", ms: "*" } }) + "\n",
+      "packages/mylib/package.json": JSON.stringify({ name: "mylib", main: "index.js" }) + "\n",
+      "packages/mylib/index.js": "exports.run = function run() { return \"repo-mylib-run\"; };\n",
+      "packages/mylib/extra.js": "exports.x = function x() { return \"repo-mylib-extra\"; };\n",
+      "packages/dual2/package.json": JSON.stringify({ name: "dual2", exports: { require: "./impl.cjs", import: "./impl.mjs" } }) + "\n",
+      "packages/dual2/impl.cjs": "exports.run = function run() { return \"cjs-run\"; };\n",
+      "packages/dual2/impl.mjs": "export function run() { return \"esm-run\"; }\n",
+      "packages/mylib2/package.json": JSON.stringify({ name: "mylib", main: "index.js" }) + "\n",
+      "packages/mylib2/index.js": "exports.run = function run() { return \"repo-mylib2-run\"; };\n",
+      "tools/package.json": JSON.stringify({ name: "tools", private: true, dependencies: { mylib: "file:../packages/mylib2" } }) + "\n",
+      "tools/t.js": "const mylib = require(\"mylib\");\nconsole.log(mylib.run());\n",
+      "main.js": [
+        "const mylib = require(\"mylib\");",
+        "const extra = require(\"mylib/extra\");",
+        "const dual2 = require(\"dual2\");",
+        "const ms = require(\"ms\");",
+        "console.log(mylib.run(), extra.x(), dual2.run(), ms(1000));",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "rt-m8:file-dependency-resolves", category: "calls", has: /^main\.js@5:\d+\|module\|mylib\.run\|RESOLVED\|export:run@1:0@packages\/mylib\/index\.js$/ },
+      { id: "rt-m8:file-dependency-subpath-resolves", category: "calls", has: /^main\.js@5:\d+\|module\|extra\.x\|RESOLVED\|export:x@1:0@packages\/mylib\/extra\.js$/ },
+      { id: "rt-m8:nearest-declaring-manifest", category: "calls", has: /^tools\/t\.js@2:\d+\|module\|mylib\.run\|RESOLVED\|export:run@1:0@packages\/mylib2\/index\.js$/ },
+      { id: "rt-m8:file-dependency-by-form-unresolved", category: "calls", has: /^main\.js@5:\d+\|module\|dual2\.run\|UNRESOLVED\|/ },
+      { id: "rt-m8:registry-dependency-external", category: "calls", has: /^main\.js@5:\d+\|module\|ms\|EXTERNAL\|/ },
+    ],
+  },
+  {
     // RT-M6 with build output (Ghost's shapes): `import` and `require` name build files the repository does not hold, and
     // `source` names the file they are compiled from. A way that reaches no repository file does not count, so each
     // import resolves to the one file the other ways reach. fw's `source` names `render.ts` while the file is
@@ -1100,6 +1276,45 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "rt-l4:workspace-builtin-name-not-repository", category: "calls", lacks: /^main\.js@5:\d+\|module\|path\.basename\|RESOLVED\|/ },
       { id: "rt-l4:self-reference-subpath-resolves", category: "calls", has: /^main\.js@5:\d+\|module\|extra\.e\|RESOLVED\|export:e@1:0@extra\.js$/ },
       { id: "rt-l4:node-prefix-only-name-is-package", category: "calls", has: /^main\.js@5:\d+\|module\|t\.t\|RESOLVED\|export:t@1:0@packages\/test\/index\.js$/ },
+    ],
+  },
+  {
+    // RT-M5 (red team 2026-11-15): B1c (`const out = []; out.push(x)` is EXTERNAL `Array.prototype.push`) checked named
+    // writes only. A prototype swap or a reflective copy in the same file can give the array its own `push`. In Node,
+    // main.js prints "fake-proto fake-setproto fake-assign 1 1": the first three run the fakes; a plain computed write
+    // (`out[k] = 1`, documented as not producing a method name) and a clean file keep `Array.prototype.push`.
+    id: "b1c-reflection",
+    files: {
+      "proto.js": "const out = [];\nout.__proto__ = { push() { return \"fake-proto\"; } };\nmodule.exports = out.push(1);\n",
+      "setproto.js": "const out = [];\nObject.setPrototypeOf(out, { push() { return \"fake-setproto\"; } });\nmodule.exports = out.push(1);\n",
+      "assign.js": "const extra = { push() { return \"fake-assign\"; } };\nconst out = [];\nObject.assign(out, extra);\nmodule.exports = out.push(1);\n",
+      "computed.js": "const out = [];\nconst k = \"x\";\nout[k] = 1;\nmodule.exports = out.push(1);\n",
+      "clean.js": "const out = [];\nmodule.exports = out.push(1);\n",
+      "main.js": "console.log(require(\"./proto\"), require(\"./setproto\"), require(\"./assign\"), require(\"./computed\"), require(\"./clean\"));\n",
+    },
+    expectations: [
+      { id: "rt-m5:proto-key-swap-unresolved", category: "calls", has: /^proto\.js@3:\d+\|exports\|out\.push\|UNRESOLVED\|/ },
+      { id: "rt-m5:set-prototype-of-unresolved", category: "calls", has: /^setproto\.js@3:\d+\|exports\|out\.push\|UNRESOLVED\|/ },
+      { id: "rt-m5:object-assign-unknown-source-unresolved", category: "calls", has: /^assign\.js@4:\d+\|exports\|out\.push\|UNRESOLVED\|/ },
+      { id: "rt-m5:computed-write-stays-external", category: "calls", has: /^computed\.js@4:\d+\|exports\|out\.push\|EXTERNAL\|/ },
+      { id: "rt-m5:clean-file-external", category: "calls", has: /^clean\.js@2:\d+\|exports\|out\.push\|EXTERNAL\|/ },
+    ],
+  },
+  {
+    // RT-L7 review (2026-11-16): a repository module that re-exports a standard global (`module.exports = JSON`,
+    // `= process`) passes writes on to the global. In Node, main.js prints "patched-stringify" and
+    // "1 patched-nextTick": the patched `nextTick` ran; `JSON.parse` is never written.
+    id: "global-wrapper-writes",
+    files: {
+      "wrap.js": "module.exports = JSON;\n",
+      "wrap2.js": "module.exports = process;\n",
+      "patch.js": "require(\"./wrap\").stringify = () => \"patched-stringify\";\nrequire(\"./wrap2\").nextTick = () => { globalThis.tick = \"patched-nextTick\"; };\n",
+      "main.js": "require(\"./patch\");\nconsole.log(JSON.stringify({}));\nprocess.nextTick(() => {});\nconsole.log(JSON.parse(\"1\"), globalThis.tick);\n",
+    },
+    expectations: [
+      { id: "rt-l7:global-wrapper-write-unresolved", category: "calls", has: /^main\.js@2:\d+\|module\|JSON\.stringify\|UNRESOLVED\|/ },
+      { id: "rt-l7:global-member-wrapper-write-unresolved", category: "calls", has: /^main\.js@3:\d+\|module\|process\.nextTick\|UNRESOLVED\|/ },
+      { id: "rt-l7:unwritten-global-stays-external", category: "calls", has: /^main\.js@4:\d+\|module\|JSON\.parse\|EXTERNAL\|/ },
     ],
   },
   {
@@ -1338,6 +1553,28 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ["rt-m1-c2-constructor-destructuring", { "main.js": "function F(fn) { [this.m] = [fn]; }\nF.prototype.m = function () { return \"F.m\"; };\nconst x = new F(function () { return \"own-m-by-destructuring\"; });\nconsole.log(x.m());\n" }, /^main\.js@4:\d+\|module\|x\.m\|UNRESOLVED\|/],
     // Control: a static-key write of another name does not block the factory's method ("literal-run" in Node).
     ["rt-m2-c1-other-key-control", { "main.js": "function make() { const o = { run() { return \"literal-run\"; } }; return o; }\nconst x = make();\nx[\"other\"] = 1;\nconsole.log(x.run());\n" }, /^main\.js@4:\d+\|module\|x\.run\|RESOLVED\|/],
+    // RT-L1, RT-L2 (probes f-fall-direct, f-fall-named, cond-var): Node throws "Cannot read properties of undefined";
+    // the factory can fall off its end, or the binding's declarator does not run.
+    ["rt-l1-fall-through-direct", { "main.js": "function make(flag) {\n  if (flag) return { run() { return \"run\"; } };\n}\nconst x = make(false);\ntry { console.log(x.run()); } catch (e) { console.log(\"THROWS\", e.message); }\n" }, /^main\.js@5:\d+\|module\|x\.run\|UNRESOLVED\|/],
+    ["rt-l1-fall-through-named", { "main.js": "function make(flag) {\n  const o = { run() { return \"run\"; } };\n  if (flag) return o;\n}\nconst x = make(false);\ntry { console.log(x.run()); } catch (e) { console.log(\"THROWS\", e.message); }\n" }, /^main\.js@6:\d+\|module\|x\.run\|UNRESOLVED\|/],
+    ["rt-l2-conditional-binding", { "main.js": "function make() { const o = { run() { return \"run\"; } }; return o; }\nif (process.argv.length > 99) { var x = make(); }\ntry { console.log(x.run()); } catch (e) { console.log(\"THROWS\", e.message); }\n" }, /^main\.js@3:\d+\|module\|x\.run\|UNRESOLVED\|/],
+    // Control: a factory whose body ends with its return, bound unconditionally, still resolves ("run" in Node).
+    ["rt-l1-ends-with-return-control", { "main.js": "function make(flag) {\n  const o = { run() { return \"run\"; } };\n  if (flag) { o.extra = 1; }\n  return o;\n}\nconst x = make(false);\nconsole.log(x.run());\n" }, /^main\.js@7:\d+\|module\|x\.run\|RESOLVED\|/],
+    // RT-L2 in every rule that reads a declared value; Node throws "Cannot read properties of undefined" in each.
+    ["rt-l1-forwarder-fall-through", { "main.js": "function make() { const o = { run() { return \"run\"; } }; return o; }\nfunction createApp(flag) { var app = make(); if (flag) return app; }\nconst x = createApp(false);\ntry { console.log(x.run()); } catch (e) { console.log(\"THROWS\", e.message); }\n" }, /^main\.js@4:\d+\|module\|x\.run\|UNRESOLVED\|/],
+    ["rt-l2-loop-var", { "main.js": "function make() { const o = { run() { return \"run\"; } }; return o; }\nfor (const i of []) { var x = make(); }\ntry { console.log(x.run()); } catch (e) { console.log(\"THROWS\", e.message); }\n" }, /^main\.js@3:\d+\|module\|x\.run\|UNRESOLVED\|/],
+    ["rt-l2-conditional-new", { "main.js": "function F() {}\nF.prototype.run = function () { return \"run\"; };\nif (process.argv.length > 99) { var x = new F(); }\ntry { console.log(x.run()); } catch (e) { console.log(\"THROWS\", e.message); }\n" }, /^main\.js@4:\d+\|module\|x\.run\|UNRESOLVED\|/],
+    ["rt-l2-conditional-builtin", { "main.js": "if (process.argv.length > 99) { var s = []; }\ntry { console.log(s.push(1)); } catch (e) { console.log(\"THROWS\", e.message); }\n" }, /^main\.js@2:\d+\|module\|s\.push\|UNRESOLVED\|/],
+    ["rt-l2-conditional-container", { "main.js": "if (process.argv.length > 99) { var o = {}; o.m = function () { return \"m\"; }; }\ntry { console.log(o.m()); } catch (e) { console.log(\"THROWS\", e.message); }\n" }, /^main\.js@2:\d+\|module\|o\.m\|UNRESOLVED\|/],
+    // Controls: a `const` is read only inside its block, after its declarator ("run" in Node).
+    ["rt-l2-block-const-control", { "main.js": "function make() { const o = { run() { return \"run\"; } }; return o; }\nif (process.argv.length > 1) { const x = make(); console.log(x.run()); }\n" }, /^main\.js@2:\d+\|module\|x\.run\|RESOLVED\|/],
+    // A `var` used only after its declarator in the same branch, a `for` init, helpers declared after the `return`.
+    ["rt-l2-block-var-control", { "main.js": "function make() { const o = { run() { return \"run\"; } }; return o; }\nif (process.argv.length > 1) { var x = make(); console.log(x.run()); }\n" }, /^main\.js@2:\d+\|module\|x\.run\|RESOLVED\|/],
+    ["rt-l2-for-init-control", { "main.js": "function make() { const o = { run() { return \"run\"; } }; return o; }\nfor (var i = 0, x = make(); i < 0; i++) {}\nconsole.log(x.run());\n" }, /^main\.js@3:\d+\|module\|x\.run\|RESOLVED\|/],
+    ["rt-l1-helpers-after-return-control", { "main.js": "function make() { const o = { run }; return o; function run() { return \"run\"; } }\nconst x = make();\nconsole.log(x.run());\n" }, /^main\.js@3:\d+\|module\|x\.run\|RESOLVED\|/],
+    // A use outside the branch: Node throws there, and the binding's value no longer counts anywhere.
+    ["rt-l2-branch-and-outside", { "main.js": "function make() { const o = { run() { return \"run\"; } }; return o; }\nif (process.argv.length > 99) { var x = make(); console.log(x.run()); }\ntry { console.log(x.run()); } catch (e) { console.log(\"THROWS\", e.message); }\n" }, /^main\.js@3:\d+\|module\|x\.run\|UNRESOLVED\|/],
+    ["rt-l2-loop-const-control", { "main.js": "function make() { const o = { run() { return \"run\"; } }; return o; }\nfor (const i of [1]) { const x = make(); console.log(x.run()); }\n" }, /^main\.js@2:\d+\|module\|x\.run\|RESOLVED\|/],
   ] as const).map(([id, files, expected]): ConformanceCase => ({ id, files, expectations: [{ id: `${id}:call`, category: "calls", has: expected }] })),
   {
     // Phase C1b: a factory literal's property takes its function from a member of a repository module, from a property
@@ -1570,6 +1807,57 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "prototype:own-property-unresolved", category: "calls", has: /^app\.js@23:\d+\|module\|own\.jump\|UNRESOLVED\|/ },
       { id: "prototype:object-create-resolves", category: "calls", has: /^app\.js@27:\d+\|module\|made\.greet\|RESOLVED\|method:greet@25:\d+@app\.js/ },
       { id: "prototype:object-create-descriptors-unresolved", category: "calls", has: /^app\.js@30:\d+\|module\|described\.wave\|UNRESOLVED\|/ },
+    ],
+  },
+  {
+    // RT-N1 (owner decision 2026-11-16, strict fix): a write on `this` outside a class element was taken as a write on
+    // the file's own object. In a plain function, function expression or object method `this` may be any object
+    // (`patch.call(app)`). In Node, main.js prints "patched-init patched-m patched-n patched-k K.q K.r": the four patched
+    // calls run the patches; other.js writes `q` and `r` only on `this` inside its class, so `this.q()` and `this.r()`
+    // in keep.js are untouched.
+    id: "this-writes-outside-classes",
+    files: {
+      "app.js": [
+        "const app = {};",
+        "app.init = function () { return \"init\"; };",
+        "app.start = function () { return app.init(); };",
+        "module.exports = app;",
+        "",
+      ].join("\n"),
+      "lib.js": "class C { go() { return this.m(); } m() { return \"C.m\"; } }\nmodule.exports = new C();\n",
+      "lib2.js": "class D { go() { return this.n(); } n() { return \"D.n\"; } }\nmodule.exports = new D();\n",
+      "lib3.js": "class E { go() { return this.k(); } k() { return \"E.k\"; } }\nmodule.exports = new E();\n",
+      "keep.js": "class K { go() { return this.q(); } q() { return \"K.q\"; } r() { return \"K.r\"; } both() { return this.r(); } }\nmodule.exports = new K();\n",
+      "other.js": "class Other { constructor() { this.q = 1; } run() { const f = () => { this.r = 2; }; f(); } }\nmodule.exports = Other;\n",
+      "patch.js": [
+        "const app = require(\"./app\");",
+        "function patch() { this.init = function () { return \"patched-init\"; }; }",
+        "patch.call(app);",
+        "const lib = require(\"./lib\");",
+        "function Patcher() { this.m = function () { return \"patched-m\"; }; }",
+        "Patcher.call(lib);",
+        "const lib2 = require(\"./lib2\");",
+        "const helper = { apply() { this.n = function () { return \"patched-n\"; }; } };",
+        "helper.apply.call(lib2);",
+        "const lib3 = require(\"./lib3\");",
+        "const setK = function () { [this.k] = [function () { return \"patched-k\"; }]; };",
+        "setK.call(lib3);",
+        "",
+      ].join("\n"),
+      "main.js": [
+        "require(\"./patch\"); require(\"./other\");",
+        "const keep = require(\"./keep\");",
+        "console.log(require(\"./app\").start(), require(\"./lib\").go(), require(\"./lib2\").go(), require(\"./lib3\").go(), keep.go(), keep.both());",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "rt-n1:function-this-write-container-unresolved", category: "calls", has: /^app\.js@3:\d+\|start\|app\.init\|UNRESOLVED\|/ },
+      { id: "rt-n1:function-this-write-class-unresolved", category: "calls", has: /^lib\.js@1:\d+\|go\|this\.m\|UNRESOLVED\|/ },
+      { id: "rt-n1:object-method-this-write-unresolved", category: "calls", has: /^lib2\.js@1:\d+\|go\|this\.n\|UNRESOLVED\|/ },
+      { id: "rt-n1:function-this-destructuring-unresolved", category: "calls", has: /^lib3\.js@1:\d+\|go\|this\.k\|UNRESOLVED\|/ },
+      { id: "rt-n1:class-constructor-this-write-resolves", category: "calls", has: /^keep\.js@1:\d+\|go\|this\.q\|RESOLVED\|method:q@1:\d+@keep\.js/ },
+      { id: "rt-n1:class-arrow-this-write-resolves", category: "calls", has: /^keep\.js@1:\d+\|both\|this\.r\|RESOLVED\|method:r@1:\d+@keep\.js/ },
     ],
   },
   {
@@ -1928,6 +2216,51 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "copies:object-assign-builtin-external", check: (directory) => external(directory, "test.js", 14) === "events:EventEmitter.prototype.emit" },
       { id: "copies:name-written-by-factory-file-unresolved", category: "calls", has: /^test\.js@16:\d+\|module\|f\.init\|UNRESOLVED\|/ },
       { id: "copies:other-names-still-resolve", category: "calls", has: /^test\.js@17:\d+\|module\|f\.use\|RESOLVED\|method:use@3:\d+@lib\/application\.js/ },
+    ],
+  },
+  {
+    // RT-L7 (red team 2026-11-15): a write on a repository module that re-exports a package (`module.exports =
+    // require("fs")`) is a write on the package, but writes on repository files were never taken as package writes. In
+    // Node, main.js prints "patched-fs patched-path true" and "string false" and "one": `isDate` is replaced through a
+    // two-file chain (the patch returns true); the write on own.js's own object leaves `os.hostname` alone, and
+    // `fs.existsSync` is never written. cache.js's value is a call's result, assumed to hold no package or global value
+    // (as XB-03 assumes), so the stub of its `get` leaves `Map.prototype.get` EXTERNAL (Ghost: `settingsCache.get = …`).
+    id: "package-wrapper-writes",
+    files: {
+      "myfs.js": "module.exports = require(\"fs\");\n",
+      "mypath.js": "const path = require(\"path\");\nmodule.exports = path;\n",
+      "myutil.js": "module.exports = require(\"util\").types;\n",
+      "wrap2.js": "module.exports = require(\"./myutil\");\n",
+      "cache.js": "function make() { return { get() { return \"own\"; } }; }\nmodule.exports = make();\n",
+      "own.js": "module.exports = { hostname() { return \"own\"; } };\n",
+      "patch.js": [
+        "require(\"./myfs\").copyFileSync = function () { return \"patched-fs\"; };",
+        "require(\"./mypath\").join = function () { return \"patched-path\"; };",
+        "require(\"./wrap2\").isDate = function () { return true; };",
+        "require(\"./cache\").get = function () { return \"stub\"; };",
+        "require(\"./own\").hostname = function () { return \"patched-own\"; };",
+        "",
+      ].join("\n"),
+      "main.js": [
+        "require(\"./patch\");",
+        "const fs = require(\"fs\");",
+        "const path = require(\"path\");",
+        "const util = require(\"util\");",
+        "const os = require(\"os\");",
+        "console.log(fs.copyFileSync(\"x\", \"y\"), path.join(\"a\", \"b\"), util.types.isDate(1));",
+        "console.log(typeof os.hostname(), fs.existsSync(\"nope\"));",
+        "const m = new Map([[1, \"one\"]]);",
+        "console.log(m.get(1));",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "rt-l7:package-wrapper-write-unresolved", category: "calls", has: /^main\.js@6:\d+\|module\|fs\.copyFileSync\|UNRESOLVED\|/ },
+      { id: "rt-l7:aliased-package-wrapper-write-unresolved", category: "calls", has: /^main\.js@6:\d+\|module\|path\.join\|UNRESOLVED\|/ },
+      { id: "rt-l7:chained-wrapper-member-write-unresolved", category: "calls", has: /^main\.js@6:\d+\|module\|util\.types\.isDate\|UNRESOLVED\|/ },
+      { id: "rt-l7:call-result-exports-not-followed", category: "calls", has: /^main\.js@9:\d+\|module\|m\.get\|EXTERNAL\|/ },
+      { id: "rt-l7:own-exports-write-stays-external", category: "calls", has: /^main\.js@7:\d+\|module\|os\.hostname\|EXTERNAL\|/ },
+      { id: "rt-l7:unwritten-member-external", category: "calls", has: /^main\.js@7:\d+\|module\|fs\.existsSync\|EXTERNAL\|/ },
     ],
   },
   {
