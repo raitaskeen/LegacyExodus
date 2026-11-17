@@ -27,7 +27,7 @@ import { rmSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { ParserManager, type ASTResult } from "@parser/index";
-import { callSchema, ClassHierarchy, collectClassHierarchyFacts, collectFactoryFacts, FactoryIndex, type FactoryFile, collectForeignExportWrites, collectGlobalWrites, collectUnstableExportIds, foreignExportWriteTargets, packageWriteKeys, type ForeignExportWrite, DeterministicCallGraphBuilder, DeterministicSemanticAnalysisEngine, FactUsage, findHttpCalls, referenceSchema, SortedFactList, type ClassHierarchyFile, type ExpressRoute, type MiddlewareChain, type SemanticAnalysis, type SemanticCall, type SymbolReference } from "@semantic/index";
+import { callSchema, ClassHierarchy, collectClassHierarchyFacts, collectFactoryFacts, collectLoadTimeModuleFacts, requireCycleFacts, type LoadTimeModuleFacts, FactoryIndex, type FactoryFile, collectForeignExportWrites, collectGlobalWrites, collectUnstableExportIds, foreignExportWriteTargets, packageWriteKeys, type ForeignExportWrite, DeterministicCallGraphBuilder, DeterministicSemanticAnalysisEngine, FactUsage, findHttpCalls, referenceSchema, SortedFactList, type ClassHierarchyFile, type ExpressRoute, type MiddlewareChain, type SemanticAnalysis, type SemanticCall, type SymbolReference } from "@semantic/index";
 import { createOwnedStorageRecord, createStorageRecord, type StorageRecord } from "@storage/index";
 import { codeSymbolSchema, JavaScriptSymbolExtractor, type CodeSymbol, type SymbolTable } from "@symbols/index";
 import { RunScopedAstStore, type AnalysisAstStoreFactory } from "./run-scoped-ast-store";
@@ -466,6 +466,8 @@ export class AnalyzeProjectHandler {
     const fullTables = function* (): Generator<SymbolTable> { for (const summary of symbolTables) yield fullTable(summary); };
     // Exports reassigned by their own module; the call graph must know them before any importer is built.
     const unstableExportIds = new Set<string>();
+    // RT-M9: what each file loads, and where it replaces `module.exports`, while it loads (see require-cycles.ts).
+    const loadTimeModuleFacts: LoadTimeModuleFacts[] = [];
     // Writes to another module's exports, resolved once the run's resolver exists (OR-01).
     const foreignExportWrites: ForeignExportWrite[] = [];
     // Standard-global paths the run's files write (ADR-012, Phase B1b).
@@ -551,6 +553,7 @@ export class AnalyzeProjectHandler {
           continue;
         }
         for (const id of collectUnstableExportIds(ast, table)) unstableExportIds.add(id);
+        loadTimeModuleFacts.push(collectLoadTimeModuleFacts(ast));
         foreignExportWrites.push(...collectForeignExportWrites(ast, table));
         for (const path of collectGlobalWrites(ast)) globalWrites.add(path);
         const classFacts = collectClassHierarchyFacts(ast, table);
@@ -635,6 +638,12 @@ export class AnalyzeProjectHandler {
       const callGraphBuilder = new DeterministicCallGraphBuilder(resolver);
       callGraphBuilder.usePackageWrites(packageWrites);
       callGraphBuilder.useGlobalWrites(globalWrites);
+      const cycleFacts = requireCycleFacts(
+        loadTimeModuleFacts,
+        (importer, specifier) => { const resolved = resolver.resolve(importer, specifier, discovery.files).resolvedPath; return resolved === null ? undefined : canonicalizePath(resolved); },
+        (filePath) => symbolsByPath.get(filePath) ?? [],
+      );
+      callGraphBuilder.useCycleImports(cycleFacts.cycleImports);
       callGraphBuilder.useCompiledCommonJs(await loadCompiledCommonJsFiles(discovery.projectPath, discovery.files));
       const controlFlowBuilder = new DeterministicControlFlowGraphBuilder();
       const dataFlowBuilder = new DeterministicDataFlowGraphBuilder();
