@@ -8,6 +8,7 @@ import { createLexicalScopeId, createSelfScopeId, FactKeyer, type CodeSymbol } f
 import type { ExternalTarget, SemanticCall, SymbolReference, UnresolvedReason } from "./semantic-contracts";
 import { ClassHierarchy, collectClassHierarchyFacts, writtenTargets } from "./class-hierarchy";
 import { collectFactoryFacts, FactoryIndex } from "./factory-objects";
+import { collectLoadTimeModuleFacts, requireCycleFacts } from "./require-cycles";
 import { stableId } from "@shared/identity";
 import { compareCodePoints } from "@shared/ordering";
 import { immutable } from "@shared/immutability";
@@ -15,6 +16,8 @@ import { immutable } from "@shared/immutability";
 export class DeterministicCallGraphBuilder {
   /** Package members some file of the run writes (`module\u0000member`, `*` for a computed one): never EXTERNAL (ADR-012). */
   private packageWrites: ReadonlySet<string> = new Set();
+  /** RT-M9: per file, the imports whose module is in the file's own require cycle (see requireCycleFacts). */
+  private cycleImportIds: ReadonlyMap<string, ReadonlySet<string>> = new Map();
   /** Standard-global paths some file of the run writes (`console.log`, `JSON`, `process.*`): never EXTERNAL (ADR-012). */
   private globalWrites: ReadonlySet<string> = new Set();
   /** TypeScript files whose `import` syntax compiles to `require` (B2): `require` is the wrapper's own there too. */
@@ -31,6 +34,11 @@ export class DeterministicCallGraphBuilder {
   /** The standard-global paths the run's files write (see collectGlobalWrites); set before any file is built. */
   public useGlobalWrites(paths: ReadonlySet<string>): void {
     this.globalWrites = paths;
+  }
+
+  /** RT-M9: per file, the imports whose module is in its own require cycle (see requireCycleFacts); set before any file is built. */
+  public useCycleImports(ids: ReadonlyMap<string, ReadonlySet<string>>): void {
+    this.cycleImportIds = ids;
   }
 
   /** TypeScript files compiled to CommonJS (see loadCompiledCommonJsFiles); set before any file is built. */
@@ -50,6 +58,14 @@ export class DeterministicCallGraphBuilder {
     this.usePackageWrites(packageWriteKeys(writes, (importer, specifier) => this.resolver.resolve(importer, specifier, knownPaths).resolvedPath ?? undefined));
     this.useGlobalWrites(new Set(astResults.flatMap((ast) => collectGlobalWrites(ast))));
     const importTargetFile = new Map(dependencyGraph.edges.map((edge) => [edge.importSymbolId, edge.targetFilePath]));
+    // RT-M9: require cycles (see require-cycles.ts).
+    const cycleFacts = requireCycleFacts(
+      astResults.map((ast) => collectLoadTimeModuleFacts(ast)),
+      (importer, specifier) => { const resolved = this.resolver.resolve(importer, specifier, knownPaths).resolvedPath; return resolved === null ? undefined : canonicalizePath(resolved); },
+      (filePath) => tablesByPath.get(filePath)?.symbols ?? [],
+    );
+    for (const id of cycleFacts.unstableExportIds) unstableExportIds.add(id);
+    this.useCycleImports(cycleFacts.cycleImportIds);
     const hierarchy = new ClassHierarchy(
       astResults.map((ast) => collectClassHierarchyFacts(ast, tablesByPath.get(canonicalizePath(ast.metadata.sourcePath)))),
       (importId) => importTargetFile.get(importId),
@@ -98,7 +114,7 @@ export class DeterministicCallGraphBuilder {
     predeclareScopeBindings(ast.root, initialContext);
     const boundCallees = new Set<ASTNode>();
     const table = tablesByPath.get(canonicalizePath(ast.metadata.sourcePath));
-    const fileSymbols = createFileSymbolIndex(table, ast, unstableExportIds);
+    const fileSymbols = createFileSymbolIndex(table, ast, unstableExportIds, this.cycleImportIds.get(canonicalizePath(ast.metadata.sourcePath)) ?? new Set());
     // `require` is the module wrapper's own binding only in CommonJS: never in .mjs/.mts; never in another file than
     // .cjs/.cts whose nearest package.json says `"type": "module"`, which Node runs as an ES module, compiled or not
     // (RT-L5); and not in a file with ESM syntax unless the compiler turns that file into CommonJS (B2).
@@ -169,9 +185,14 @@ export class DeterministicCallGraphBuilder {
           ? undefined
           : imported === undefined
             ? resolveLocalCall(table, fileSymbols, calleeName, nextContext, tablesByPath, this.resolver, node)
-            : isRebound(fileSymbols, MODULE_SCOPE_ID, calleeName) || isUnstableTarget(fileSymbols, importTarget) ? undefined : importTarget;
+            : isRebound(fileSymbols, MODULE_SCOPE_ID, calleeName) || isUnstableTarget(fileSymbols, importTarget) || loadsDuringCycle(fileSymbols, imported, nextContext) ? undefined : importTarget;
+        // RT-M9: a load-time member call on an import of a module in this file's require cycle (`a.run()`), whichever
+        // rule found its target, may run while that module is still loading.
+        const receiverImport = imported === undefined && namedCallee !== undefined && calleeName.includes(".")
+          ? visibleImport(fileSymbols, calleeName.slice(0, calleeName.indexOf(".")), nextContext.scope)
+          : undefined;
         const runsTooEarly = imported === undefined
-          ? runsBeforeAssignment(resolvedTarget, node, nextContext, fileSymbols, ast.root)
+          ? runsBeforeAssignment(resolvedTarget, node, nextContext, fileSymbols, ast.root) || (receiverImport !== undefined && loadsDuringCycle(fileSymbols, receiverImport, nextContext))
           : callsBeforeRequire(fileSymbols, imported, node);
         const targetSymbolId = runsTooEarly ? undefined : resolvedTarget;
         const id = hash(`${ast.metadata.sourcePath}:${nextContext.callerName}:${calleeName}:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`);
@@ -284,6 +305,8 @@ interface FileSymbolIndex {
   readonly writes: BindingWrites;
   /** Export symbols (of any module) whose value can change after definition. */
   readonly unstableExportIds: ReadonlySet<string>;
+  /** RT-M9: imports whose module is in this file's require cycle: a load-time call through one may run too early. */
+  readonly cycleImportIds: ReadonlySet<string>;
   readonly classes: ClassFacts;
   /** The file calls `eval(…)` directly, which can declare or reassign any binding it sees: no call here is proven (NA-02). */
   readonly directEval: boolean;
@@ -450,7 +473,7 @@ function frameFor(node: ASTNode, enclosing: ScopeFrame): ScopeFrame {
   return createsScope(node) ? createScope(createLexicalScopeId(node.type, node.location), outer) : outer;
 }
 
-function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult, unstableExportIds: ReadonlySet<string>): FileSymbolIndex {
+function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult, unstableExportIds: ReadonlySet<string>, cycleImportIds: ReadonlySet<string>): FileSymbolIndex {
   const byScopeAndName = new Map<string, CodeSymbol[]>();
   const byName = new Map<string, CodeSymbol[]>();
   const firstImportByName = new Map<string, CodeSymbol>();
@@ -515,7 +538,7 @@ function createFileSymbolIndex(table: SymbolTable | undefined, ast: ASTResult, u
   const writes = collectBindingWrites(ast.root, declarationsByScopeAndName);
   const classes = collectClassFacts(ast.root, classSymbols);
   const reopened = reopenedNamespaces(namespaceBlocks);
-  return immutable({ byScopeAndName, declarationsByScopeAndName, byName, firstImportByName, classByLocation, lexicalBindings, ownerSymbols, reopened, writes, unstableExportIds, classes, directEval: callsEvalDirectly(ast.root) });
+  return immutable({ byScopeAndName, declarationsByScopeAndName, byName, firstImportByName, classByLocation, lexicalBindings, ownerSymbols, reopened, writes, unstableExportIds, cycleImportIds, classes, directEval: callsEvalDirectly(ast.root) });
 }
 
 /**
@@ -971,6 +994,11 @@ export function foreignExportWriteTargets(
     }
   }
   return [...ids].sort(compareCodePoints);
+}
+
+/** RT-M9: a load-time call through an import of a module in this file's require cycle; that module may still be loading. */
+function loadsDuringCycle(index: FileSymbolIndex, imported: CodeSymbol, context: ResolutionContext): boolean {
+  return context.callerName === "module" && index.cycleImportIds.has(imported.id);
 }
 
 function isUnstableTarget(index: FileSymbolIndex, targetSymbolId: string | undefined): boolean {
