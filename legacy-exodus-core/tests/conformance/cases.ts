@@ -1579,6 +1579,15 @@ export const conformanceCases: readonly ConformanceCase[] = [
     // Node: "THROWS JSON is not defined" and "patched".
     ["rt-n3-sloppy-delete", { "patch.js": "delete JSON;\n", "main.js": "require(\"./patch\");\ntry { console.log(JSON.stringify({})); } catch (e) { console.log(\"THROWS\", e.message); }\n" }, /^main\.js@2:\d+\|module\|JSON\.stringify\|UNRESOLVED\|/],
     ["rt-n3-top-level-return", { "patch.js": "JSON.stringify = () => \"patched\";\nif (process.argv.length > 99) return;\nmodule.exports = 1;\n", "main.js": "require(\"./patch\");\nconsole.log(JSON.stringify({}));\n" }, /^main\.js@2:\d+\|module\|JSON\.stringify\|UNRESOLVED\|/],
+    // RT-L9, RT-L8 (probes p06, annexb-c3a): in sloppy code a function declared in a block assigns the enclosing
+    // function's binding of that name when the block runs (Annex B). Node prints "fake" and "block-run".
+    ["rt-l9-annexb-import-call", { "lib.js": "function createApplication() { return { use() { return \"real\"; } }; }\nmodule.exports = createApplication;\n", "main.js": "var express = require(\"./lib\");\nif (true) { function express() { return { use() { return \"fake\"; } }; } }\nvar b = express();\nconsole.log(b.use());\n" }, /^main\.js@3:\d+\|module\|express\|UNRESOLVED\|/],
+    ["rt-l9-annexb-import-factory", { "lib.js": "function createApplication() { return { use() { return \"real\"; } }; }\nmodule.exports = createApplication;\n", "main.js": "var express = require(\"./lib\");\nif (true) { function express() { return { use() { return \"fake\"; } }; } }\nvar b = express();\nconsole.log(b.use());\n" }, /^main\.js@4:\d+\|module\|b\.use\|UNRESOLVED\|/],
+    ["rt-l8-annexb-export", { "lib.js": "function run() { return \"top-run\"; }\nif (true) { function run() { return \"block-run\"; } }\nmodule.exports = { run };\n", "main.js": "const lib = require(\"./lib\");\nconsole.log(lib.run());\n" }, /^main\.js@2:\d+\|module\|lib\.run\|UNRESOLVED\|/],
+    // Controls: strict code keeps a block function block-scoped ("real"); a block function inside another function
+    // assigns only that function's var, so the module's `run` export is untouched ("top-run").
+    ["rt-l9-strict-import-control", { "lib.js": "function createApplication() { return { use() { return \"real\"; } }; }\nmodule.exports = createApplication;\n", "main.js": "\"use strict\";\nvar express = require(\"./lib\");\nif (true) { function express() { return { use() { return \"fake\"; } }; } }\nvar b = express();\nconsole.log(b.use());\n" }, /^main\.js@4:\d+\|module\|express\|RESOLVED\|/],
+    ["rt-l8-nested-block-control", { "lib.js": "function run() { return \"top-run\"; }\nfunction g() { if (true) { function run() { return \"block-run\"; } } return run(); }\ng();\nmodule.exports = { run };\n", "main.js": "const lib = require(\"./lib\");\nconsole.log(lib.run());\n" }, /^main\.js@2:\d+\|module\|lib\.run\|RESOLVED\|/],
   ] as const).map(([id, files, expected]): ConformanceCase => ({ id, files, expectations: [{ id: `${id}:call`, category: "calls", has: expected }] })),
   {
     // Phase C1b: a factory literal's property takes its function from a member of a repository module, from a property
