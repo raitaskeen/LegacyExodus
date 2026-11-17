@@ -1219,6 +1219,23 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // RT-L7 review (2026-11-16): a repository module that re-exports a standard global (`module.exports = JSON`,
+    // `= process`) passes writes on to the global. In Node, main.js prints "patched-stringify" and
+    // "1 patched-nextTick": the patched `nextTick` ran; `JSON.parse` is never written.
+    id: "global-wrapper-writes",
+    files: {
+      "wrap.js": "module.exports = JSON;\n",
+      "wrap2.js": "module.exports = process;\n",
+      "patch.js": "require(\"./wrap\").stringify = () => \"patched-stringify\";\nrequire(\"./wrap2\").nextTick = () => { globalThis.tick = \"patched-nextTick\"; };\n",
+      "main.js": "require(\"./patch\");\nconsole.log(JSON.stringify({}));\nprocess.nextTick(() => {});\nconsole.log(JSON.parse(\"1\"), globalThis.tick);\n",
+    },
+    expectations: [
+      { id: "rt-l7:global-wrapper-write-unresolved", category: "calls", has: /^main\.js@2:\d+\|module\|JSON\.stringify\|UNRESOLVED\|/ },
+      { id: "rt-l7:global-member-wrapper-write-unresolved", category: "calls", has: /^main\.js@3:\d+\|module\|process\.nextTick\|UNRESOLVED\|/ },
+      { id: "rt-l7:unwritten-global-stays-external", category: "calls", has: /^main\.js@4:\d+\|module\|JSON\.parse\|EXTERNAL\|/ },
+    ],
+  },
+  {
     // ADR-012, Phase B1b: a call on an unbound standard global is EXTERNAL unless some file writes that path; a test
     // runner's globals stay UNRESOLVED; `require` is EXTERNAL only in CommonJS.
     id: "external-globals",
@@ -2117,6 +2134,51 @@ export const conformanceCases: readonly ConformanceCase[] = [
       { id: "copies:object-assign-builtin-external", check: (directory) => external(directory, "test.js", 14) === "events:EventEmitter.prototype.emit" },
       { id: "copies:name-written-by-factory-file-unresolved", category: "calls", has: /^test\.js@16:\d+\|module\|f\.init\|UNRESOLVED\|/ },
       { id: "copies:other-names-still-resolve", category: "calls", has: /^test\.js@17:\d+\|module\|f\.use\|RESOLVED\|method:use@3:\d+@lib\/application\.js/ },
+    ],
+  },
+  {
+    // RT-L7 (red team 2026-11-15): a write on a repository module that re-exports a package (`module.exports =
+    // require("fs")`) is a write on the package, but writes on repository files were never taken as package writes. In
+    // Node, main.js prints "patched-fs patched-path true" and "string false" and "one": `isDate` is replaced through a
+    // two-file chain (the patch returns true); the write on own.js's own object leaves `os.hostname` alone, and
+    // `fs.existsSync` is never written. cache.js's value is a call's result, assumed to hold no package or global value
+    // (as XB-03 assumes), so the stub of its `get` leaves `Map.prototype.get` EXTERNAL (Ghost: `settingsCache.get = …`).
+    id: "package-wrapper-writes",
+    files: {
+      "myfs.js": "module.exports = require(\"fs\");\n",
+      "mypath.js": "const path = require(\"path\");\nmodule.exports = path;\n",
+      "myutil.js": "module.exports = require(\"util\").types;\n",
+      "wrap2.js": "module.exports = require(\"./myutil\");\n",
+      "cache.js": "function make() { return { get() { return \"own\"; } }; }\nmodule.exports = make();\n",
+      "own.js": "module.exports = { hostname() { return \"own\"; } };\n",
+      "patch.js": [
+        "require(\"./myfs\").copyFileSync = function () { return \"patched-fs\"; };",
+        "require(\"./mypath\").join = function () { return \"patched-path\"; };",
+        "require(\"./wrap2\").isDate = function () { return true; };",
+        "require(\"./cache\").get = function () { return \"stub\"; };",
+        "require(\"./own\").hostname = function () { return \"patched-own\"; };",
+        "",
+      ].join("\n"),
+      "main.js": [
+        "require(\"./patch\");",
+        "const fs = require(\"fs\");",
+        "const path = require(\"path\");",
+        "const util = require(\"util\");",
+        "const os = require(\"os\");",
+        "console.log(fs.copyFileSync(\"x\", \"y\"), path.join(\"a\", \"b\"), util.types.isDate(1));",
+        "console.log(typeof os.hostname(), fs.existsSync(\"nope\"));",
+        "const m = new Map([[1, \"one\"]]);",
+        "console.log(m.get(1));",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "rt-l7:package-wrapper-write-unresolved", category: "calls", has: /^main\.js@6:\d+\|module\|fs\.copyFileSync\|UNRESOLVED\|/ },
+      { id: "rt-l7:aliased-package-wrapper-write-unresolved", category: "calls", has: /^main\.js@6:\d+\|module\|path\.join\|UNRESOLVED\|/ },
+      { id: "rt-l7:chained-wrapper-member-write-unresolved", category: "calls", has: /^main\.js@6:\d+\|module\|util\.types\.isDate\|UNRESOLVED\|/ },
+      { id: "rt-l7:call-result-exports-not-followed", category: "calls", has: /^main\.js@9:\d+\|module\|m\.get\|EXTERNAL\|/ },
+      { id: "rt-l7:own-exports-write-stays-external", category: "calls", has: /^main\.js@7:\d+\|module\|os\.hostname\|EXTERNAL\|/ },
+      { id: "rt-l7:unwritten-member-external", category: "calls", has: /^main\.js@7:\d+\|module\|fs\.existsSync\|EXTERNAL\|/ },
     ],
   },
   {
