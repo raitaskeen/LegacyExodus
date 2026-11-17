@@ -991,6 +991,42 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // RT-M8 (red team 2026-11-15): a `file:` dependency installs a folder of the repository as node_modules/<name>, so
+    // Node runs repository code. After `npm install --offline` in the root and in tools/, Node (24) prints
+    // "repo-mylib-run repo-mylib-extra cjs-run 1s" for main.js and "repo-mylib2-run" for tools/t.js: the nearest
+    // package.json that declares `mylib` decides which folder it is. dual2's targets differ by require and import, so
+    // its call stays UNRESOLVED, never EXTERNAL; ms is a registry package and stays EXTERNAL.
+    id: "file-dependencies",
+    files: {
+      "package.json": JSON.stringify({ name: "root", private: true, dependencies: { mylib: "file:./packages/mylib", dual2: "file:packages/dual2", ms: "*" } }) + "\n",
+      "packages/mylib/package.json": JSON.stringify({ name: "mylib", main: "index.js" }) + "\n",
+      "packages/mylib/index.js": "exports.run = function run() { return \"repo-mylib-run\"; };\n",
+      "packages/mylib/extra.js": "exports.x = function x() { return \"repo-mylib-extra\"; };\n",
+      "packages/dual2/package.json": JSON.stringify({ name: "dual2", exports: { require: "./impl.cjs", import: "./impl.mjs" } }) + "\n",
+      "packages/dual2/impl.cjs": "exports.run = function run() { return \"cjs-run\"; };\n",
+      "packages/dual2/impl.mjs": "export function run() { return \"esm-run\"; }\n",
+      "packages/mylib2/package.json": JSON.stringify({ name: "mylib", main: "index.js" }) + "\n",
+      "packages/mylib2/index.js": "exports.run = function run() { return \"repo-mylib2-run\"; };\n",
+      "tools/package.json": JSON.stringify({ name: "tools", private: true, dependencies: { mylib: "file:../packages/mylib2" } }) + "\n",
+      "tools/t.js": "const mylib = require(\"mylib\");\nconsole.log(mylib.run());\n",
+      "main.js": [
+        "const mylib = require(\"mylib\");",
+        "const extra = require(\"mylib/extra\");",
+        "const dual2 = require(\"dual2\");",
+        "const ms = require(\"ms\");",
+        "console.log(mylib.run(), extra.x(), dual2.run(), ms(1000));",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "rt-m8:file-dependency-resolves", category: "calls", has: /^main\.js@5:\d+\|module\|mylib\.run\|RESOLVED\|export:run@1:0@packages\/mylib\/index\.js$/ },
+      { id: "rt-m8:file-dependency-subpath-resolves", category: "calls", has: /^main\.js@5:\d+\|module\|extra\.x\|RESOLVED\|export:x@1:0@packages\/mylib\/extra\.js$/ },
+      { id: "rt-m8:nearest-declaring-manifest", category: "calls", has: /^tools\/t\.js@2:\d+\|module\|mylib\.run\|RESOLVED\|export:run@1:0@packages\/mylib2\/index\.js$/ },
+      { id: "rt-m8:file-dependency-by-form-unresolved", category: "calls", has: /^main\.js@5:\d+\|module\|dual2\.run\|UNRESOLVED\|/ },
+      { id: "rt-m8:registry-dependency-external", category: "calls", has: /^main\.js@5:\d+\|module\|ms\|EXTERNAL\|/ },
+    ],
+  },
+  {
     // RT-M6 with build output (Ghost's shapes): `import` and `require` name build files the repository does not hold, and
     // `source` names the file they are compiled from. A way that reaches no repository file does not count, so each
     // import resolves to the one file the other ways reach. fw's `source` names `render.ts` while the file is
