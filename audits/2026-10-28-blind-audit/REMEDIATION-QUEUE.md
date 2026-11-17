@@ -1,4 +1,4 @@
-#339 option (2), main merged (`48ddc82`, code lines = measured 718643a, 147/147); Ghost 0/0; next after #341
+#344 (`76ab0ef`): review probes OK (static block, later field: UNRESOLVED; TS overload: RESOLVED); 10 corpora 0/0 (session); Ghost running
 
 The live plan for fixing the audit findings ([FINDINGS.md](FINDINGS.md)), plus the scale and storage
 work the Ghost run showed is needed before the IR phase. This file is the hand-off point: a new
