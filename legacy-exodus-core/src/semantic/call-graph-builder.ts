@@ -805,8 +805,11 @@ export function collectUnstableExportIds(ast: ASTResult, table: SymbolTable | un
     }
     if (symbol.kind === "export" && symbol.moduleSpecifier === undefined) exportsBySlot.set(exportSlot(symbol), (exportsBySlot.get(exportSlot(symbol)) ?? 0) + 1);
   }
-  const { reboundBindings } = collectBindingWrites(ast.root, bindingDeclarations(byScopeAndName, ast.root));
-  const rebound = (name: string | undefined): boolean => name !== undefined && reboundBindings.has(bindingWriteKey(MODULE_SCOPE_ID, name));
+  const { reboundBindings, blockFunctionVars } = collectBindingWrites(ast.root, bindingDeclarations(byScopeAndName, ast.root));
+  // RT-L8: a sloppy block function of the same name (`if (…) { function run() {…} }`) replaces the binding when its block
+  // runs (Annex B), so the export may hold that function instead.
+  const rebound = (name: string | undefined): boolean => name !== undefined
+    && (reboundBindings.has(bindingWriteKey(MODULE_SCOPE_ID, name)) || blockFunctionVars.has(bindingWriteKey(MODULE_SCOPE_ID, name)));
   return table.symbols.filter((symbol) => {
     if (symbol.kind === "export") {
       if (symbol.moduleSpecifier !== undefined) return false;
@@ -1037,7 +1040,7 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
   const guardedValues: Array<{ readonly key: string; readonly name: string; readonly id: ASTNode; readonly init: ASTNode; readonly region: ASTNode; readonly contextId: string; readonly end: SourcePoint }> = [];
   const uses = new Map<string, Array<{ readonly node: ASTNode; readonly scope: ScopeFrame; readonly contextId: string; readonly start: SourcePoint }>>();
   const unscopedBindings = collectUnscopedBindings(root, bindingKeyAt);
-  const blockFunctionVars = collectBlockFunctionVars(root, bindingKeyAt);
+  const blockFunctionVars = collectBlockFunctionVars(root, bindingFrameAt);
   const recordSite = (sitesByKey: Map<string, WriteSite[]>, key: string, site: ASTNode, walk: WriteWalk, constructed?: WriteSite["constructed"]): void => {
     const sites = sitesByKey.get(key) ?? [];
     sitesByKey.set(key, sites);
@@ -1441,9 +1444,20 @@ function hasUseStrict(node: ASTNode | undefined): boolean {
  * function (Annex B.3.3), so the same name read outside the block may be that function. Strict code (an ES module,
  * a "use strict" directive, a class body) keeps the declaration block-scoped. Strictness is read from the module
  * source type and the directives, which the parser reports; a function whose strictness cannot be read as strict
- * is treated as sloppy, never the reverse.
+ * is treated as sloppy, never the reverse. That var lives in the enclosing function: a binding of the name declared
+ * outside it (a module function `run` beside `function g() { if (…) { function run() {} } }`) is not touched.
  */
-function collectBlockFunctionVars(root: ASTNode, bindingKeyAt: (name: string, scope: ScopeFrame) => string): ReadonlySet<string> {
+function collectBlockFunctionVars(root: ASTNode, bindingFrameAt: (name: string, scope: ScopeFrame) => ScopeFrame): ReadonlySet<string> {
+  // The frame whose binding of `name` a frame between the block and its function sees, if that binding is declared
+  // inside the function; otherwise Annex B's own var in the function.
+  const affectedFrame = (name: string, frame: ScopeFrame, functionFrame: ScopeFrame): ScopeFrame => {
+    const declared = bindingFrameAt(name, frame);
+    for (let current: ScopeFrame | undefined = frame; current !== undefined; current = current.parent) {
+      if (current.id === declared.id) return declared;
+      if (current.id === functionFrame.id) break;
+    }
+    return functionFrame;
+  };
   const names = new Set<string>();
   const visit = (node: ASTNode, scope: ScopeFrame, functionFrame: ScopeFrame, strict: boolean, parent?: ASTNode, grandparent?: ASTNode): void => {
     const inner = frameFor(node, scope);
@@ -1457,7 +1471,7 @@ function collectBlockFunctionVars(root: ASTNode, bindingKeyAt: (name: string, sc
       const name = nodeName(node);
       if (inBlock && name !== undefined) {
         for (let frame: ScopeFrame | undefined = scope.parent; frame !== undefined; frame = frame.parent) {
-          names.add(bindingKeyAt(name, frame));
+          names.add(bindingWriteKey(affectedFrame(name, frame, functionFrame).id, name));
           if (frame === functionFrame) break;
         }
       }
@@ -2441,6 +2455,11 @@ function bindingKey(scope: ScopeFrame, name: string): string {
 function visibleImport(index: FileSymbolIndex, name: string, scope: ScopeFrame): CodeSymbol | undefined {
   const imported = index.firstImportByName.get(name);
   if (imported === undefined) return undefined;
+  // RT-L9: a sloppy block function of the same name replaces the binding when its block runs (Annex B):
+  // `var express = require("./lib"); if (…) { function express() {…} }` calls the block function afterwards.
+  for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
+    if (index.writes.blockFunctionVars.has(bindingWriteKey(current.id, name))) return undefined;
+  }
   const binding = resolveLexicalBinding(index, name, scope);
   return binding.state === "ONE_BINDING" && binding.referenceTargets.some((target) => target.id === imported.id) ? imported : undefined;
 }
