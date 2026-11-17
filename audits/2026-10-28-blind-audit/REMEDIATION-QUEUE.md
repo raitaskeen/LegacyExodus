@@ -1,4 +1,4 @@
-**Fixed** #343 (`5c1d3af`, tree = tested head b1d43ed): objects linked to a possible instance own override names (incl. review fix for spreads); 0 lost on 11 corpora
+**Fixed** #344 (`37f5783`, tree = tested head 153f1a3): a class method replaced by a later same-named element is not proven; 0 lost on 11 corpora
 
 The live plan for fixing the audit findings ([FINDINGS.md](FINDINGS.md)), plus the scale and storage
 work the Ghost run showed is needed before the IR phase. This file is the hand-off point: a new
