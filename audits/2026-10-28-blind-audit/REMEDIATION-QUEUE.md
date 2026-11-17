@@ -1,4 +1,4 @@
-Draft #344 (head 76ab0ef): not reviewed yet, Ghost pending
+#340 ready, updated to main (`5c3b280`, same changed lines as measured 8efdfe1); CI running
 
 The live plan for fixing the audit findings ([FINDINGS.md](FINDINGS.md)), plus the scale and storage
 work the Ghost run showed is needed before the IR phase. This file is the hand-off point: a new
