@@ -93,7 +93,7 @@ export class DeterministicCallGraphBuilder {
       constantBindings: new Map(),
       ...(hierarchy === undefined ? {} : { hierarchy }),
       ...(factories === undefined ? {} : { factories }),
-      globalWrites: this.globalWrites,
+      globalWrites: new Set([...this.globalWrites, ...wrapperGlobalWrites(this.packageWrites)]),
     };
     predeclareScopeBindings(ast.root, initialContext);
     const boundCallees = new Set<ASTNode>();
@@ -179,8 +179,8 @@ export class DeterministicCallGraphBuilder {
         const external = targetSymbolId !== undefined || namedCallee === undefined || evalOrWith || invokesThroughWrittenProperty || (resolvedTarget !== undefined && runsTooEarly)
           ? undefined
           : externalTarget(imported, calleeName, fileSymbols, nextContext, this.packageWrites)
-            ?? globalTarget(calleeName, fileSymbols, nextContext, this.globalWrites, commonJsFiles.get(fileSymbols) === true)
-            ?? valueTarget(calleeName, fileSymbols, nextContext, this.globalWrites)
+            ?? globalTarget(calleeName, fileSymbols, nextContext, nextContext.globalWrites ?? this.globalWrites, commonJsFiles.get(fileSymbols) === true)
+            ?? valueTarget(calleeName, fileSymbols, nextContext, nextContext.globalWrites ?? this.globalWrites)
             ?? factoryExternalTarget(calleeName, fileSymbols, nextContext);
         const resolutionState = targetSymbolId !== undefined ? "RESOLVED" as const : external !== undefined ? "EXTERNAL" as const : "UNRESOLVED" as const;
         if (targetSymbolId !== undefined) {
@@ -809,8 +809,10 @@ export function collectUnstableExportIds(ast: ASTResult, table: SymbolTable | un
 /**
  * A property written on another module's value, as one file sees it (OR-01). `*` is a computed name. `member` is the
  * whole written path when it is known to be deeper (`ObjectId.prototype._id`), ending at a computed member (XB-03).
+ * `reexport` marks no write but a module value the exports object of `importerPath` may hold (RT-L7): `specifier` at
+ * path `member`, `*` for a value whose origin is not known (see exportsValueRoots).
  */
-export interface ForeignExportWrite { readonly importerPath: string; readonly specifier: string; readonly name: string; readonly member?: string }
+export interface ForeignExportWrite { readonly importerPath: string; readonly specifier: string; readonly name: string; readonly member?: string; readonly reexport?: true }
 
 /**
  * Writes this file makes to another module's exports: `require("./x").name = …`, or `x.name = …` where `x` is an
@@ -852,7 +854,79 @@ export function collectForeignExportWrites(ast: ASTResult, table: SymbolTable | 
   for (const write of aliasedWrites(ast.root, packageImports)) {
     if (write.specifier !== undefined && !isRelativeSpecifier(write.specifier) && write.path.length > 0) writes.push({ importerPath, specifier: write.specifier, name: write.path[0]!, member: write.path.join(".") });
   }
+  // RT-L7: the module values this file's own exports object may hold, so that a write on it elsewhere reaches them.
+  const importRoots = new Map<string, ValueRoot>();
+  for (const symbol of table?.symbols ?? []) {
+    if (symbol.kind !== "import" || typeof symbol.moduleSpecifier !== "string") continue;
+    const whole = symbol.defaultExport || symbol.sourceSymbolName === "*";
+    importRoots.set(symbol.name, { specifier: symbol.moduleSpecifier, path: whole ? [] : [symbol.sourceSymbolName ?? symbol.name] });
+  }
+  for (const root of exportsValueRoots(ast.root, importRoots)) {
+    if (root.specifier !== undefined) writes.push({ importerPath, specifier: root.specifier, name: "", member: root.path.join("."), reexport: true });
+  }
   return writes;
+}
+
+/**
+ * RT-L7: where a file's exports object may come from when the file does not make it. `module.exports = require("fs")`
+ * (also through `exports = module.exports = …`, `export default …` or `export = …`) gives `fs`;
+ * `module.exports = require("fs").promises` gives `fs` at `promises`; an import binding gives its module and path. A
+ * value made here (an object, array, function or class literal, `Object.create(…)`, or a name the file declares once and
+ * never reassigns, as a function, a class or with such a value) gives nothing. So does any other value (a call's
+ * result, `new`, a parameter, an alias): it is assumed to hold no package or global value, as XB-03 assumes for a
+ * target reached any other way. Treating it as possibly any module's value blocked every package and global member of
+ * the written name: one test stub `settingsCache.get = …` cost Ghost 50 correct `Map.prototype.get`/`http.get` calls.
+ */
+function exportsValueRoots(root: ASTNode, imports: ReadonlyMap<string, ValueRoot>): ValueRoot[] {
+  // Names the file declares anywhere: such a name is not taken for the standard global of that name.
+  const declarations = new Set<string>();
+  const values: Array<ASTNode | undefined> = [];
+  const walk = (node: ASTNode): void => {
+    if (node.type === "VariableDeclarator") for (const name of extractBoundNames(node.children.find((child) => child.role === "id"))) declarations.add(name);
+    if (node.type === "FunctionDeclaration" || node.type === "ClassDeclaration") {
+      const name = nodeName(node);
+      if (name !== undefined) declarations.add(name);
+    }
+    if (node.type === "AssignmentExpression" && memberPathOf(node.children.find((child) => child.role === "left"))?.join(".") === "module.exports") {
+      values.push(node.attributes.operator === "=" ? node.children.find((child) => child.role === "right") : undefined);
+    }
+    if (node.type === "ExportDefaultDeclaration") {
+      const declaration = node.children.find((child) => child.role === "declaration");
+      if (declaration !== undefined && declaration.type !== "FunctionDeclaration" && declaration.type !== "ClassDeclaration") values.push(declaration);
+    }
+    if (node.type === "TSExportAssignment") values.push(node.children.find((child) => child.role === "expression"));
+    for (const child of node.children) walk(child);
+  };
+  walk(root);
+  // `undefined`: made here, or not followed (see above).
+  const rootOf = (value: ASTNode | undefined): ValueRoot | undefined => {
+    if (value === undefined) return undefined;
+    if (value.type === "AssignmentExpression" && value.attributes.operator === "=") return rootOf(value.children.find((child) => child.role === "right"));
+    if (value.type === "CallExpression") {
+      const specifier = requiredSpecifier(value);
+      return specifier === undefined ? undefined : { specifier, path: [] };
+    }
+    if (value.type === "Identifier") {
+      const name = identifier(value);
+      const imported = name === undefined ? undefined : imports.get(name);
+      if (imported !== undefined) return imported;
+      // An unbound standard global (`module.exports = JSON`, `= process`, `= globalThis`) is the global value itself.
+      if (name !== undefined && !declarations.has(name) && GLOBAL_OBJECTS.has(name)) return { specifier: GLOBAL_VALUE, path: [] };
+      if (name !== undefined && !declarations.has(name) && STANDARD_GLOBALS.has(name)) return { specifier: GLOBAL_VALUE, path: [name] };
+      return undefined;
+    }
+    if (value.type === "MemberExpression") {
+      const property = value.children.find((child) => child.role === "property");
+      const key = value.attributes.computed === true ? staticPropertyKey(property) : identifier(property);
+      const base = rootOf(value.children.find((child) => child.role === "object"));
+      return base === undefined || key === undefined ? undefined : { specifier: base.specifier, path: [...base.path, key] };
+    }
+    return undefined;
+  };
+  return values.flatMap((value) => {
+    const found = rootOf(value);
+    return found === undefined ? [] : [found];
+  });
 }
 
 /** `require("literal")` and its specifier. */
@@ -876,6 +950,7 @@ export function foreignExportWriteTargets(
 ): readonly string[] {
   const ids = new Set<string>();
   for (const write of writes) {
+    if (write.reexport === true) continue;
     const target = resolveFile(write.importerPath, write.specifier);
     if (target === undefined) continue;
     for (const symbol of symbolsOf(canonicalizePath(target))) {
@@ -3006,6 +3081,24 @@ function reflectivelyTargeted(writes: BindingWrites, key: string): boolean {
   return false;
 }
 
+/** RT-L7: the specifier of a re-export of a standard global (`module.exports = JSON`). */
+const GLOBAL_VALUE = "\u0000global";
+
+/**
+ * RT-L7: the global writes made through repository wrappers, from packageWriteKeys: a write on a module that
+ * re-exports a standard global (`module.exports = JSON`) is a global write of that path.
+ */
+export function wrapperGlobalWrites(packageWrites: ReadonlySet<string>): readonly string[] {
+  const paths: string[] = [];
+  for (const key of packageWrites) {
+    const separator = key.lastIndexOf("\u0000");
+    const module = key.slice(0, separator);
+    const member = key.slice(separator + 1);
+    if (module === GLOBAL_VALUE && member.length > 0) paths.push(member);
+  }
+  return paths;
+}
+
 /** A package or Node module specifier without the `node:` scheme: `node:fs` and `fs` are one module. */
 function packageName(specifier: string): string {
   return specifier.startsWith("node:") ? specifier.slice(5) : specifier;
@@ -3014,13 +3107,35 @@ function packageName(specifier: string): string {
 /**
  * The package members a run's files write (`require("fs").readFileSync = …`, `fs.readFileSync = …` through an import):
  * keys `module\u0000member`, `*` for a computed member, the member being the whole written path when known
- * (`ObjectId.prototype._id`). A specifier that resolves to a repository file is not a package.
+ * (`ObjectId.prototype._id`). A specifier that resolves to a repository file is not a package, but a write on it is a
+ * write on every package value that file's exports object may hold (RT-L7, see exportsValueRoots), followed through
+ * files that re-export other files. A relative specifier that reaches no repository file is not followed.
  */
 export function packageWriteKeys(writes: readonly ForeignExportWrite[], resolveFile: (importerPath: string, specifier: string) => string | undefined): ReadonlySet<string> {
   const keys = new Set<string>();
+  const reexports = new Map<string, ForeignExportWrite[]>();
+  for (const write of writes) if (write.reexport === true) reexports.set(write.importerPath, [...(reexports.get(write.importerPath) ?? []), write]);
+  // `chain` holds the files on the current re-export path only, so a file reached twice along sibling paths keeps both.
+  const packagesOf = (file: string, chain: ReadonlySet<string>): Array<{ readonly module: string; readonly path: readonly string[] }> => {
+    if (chain.has(file)) return [];
+    const next = new Set([...chain, file]);
+    return (reexports.get(file) ?? []).flatMap((entry) => {
+      const path = entry.member === undefined || entry.member === "" ? [] : entry.member.split(".");
+      if (entry.specifier === GLOBAL_VALUE) return [{ module: GLOBAL_VALUE, path }];
+      const target = resolveFile(file, entry.specifier);
+      if (target === undefined) return isRelativeSpecifier(entry.specifier) ? [] : [{ module: packageName(entry.specifier), path }];
+      return packagesOf(canonicalizePath(target), next).map((found) => ({ module: found.module, path: [...found.path, ...path] }));
+    });
+  };
   for (const write of writes) {
-    if (isRelativeSpecifier(write.specifier) || resolveFile(write.importerPath, write.specifier) !== undefined) continue;
-    keys.add(`${packageName(write.specifier)}\u0000${write.member ?? write.name}`);
+    if (write.reexport === true) continue;
+    const written = write.member ?? write.name;
+    const target = resolveFile(write.importerPath, write.specifier);
+    if (target === undefined) {
+      if (!isRelativeSpecifier(write.specifier)) keys.add(`${packageName(write.specifier)}\u0000${written}`);
+      continue;
+    }
+    for (const found of packagesOf(canonicalizePath(target), new Set())) keys.add(`${found.module}\u0000${[...found.path, written].filter((piece) => piece.length > 0).join(".")}`);
   }
   return keys;
 }
