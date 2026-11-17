@@ -745,6 +745,42 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // RT-M4 (red team 2026-11-15): an object whose prototype is a class instance runs that class's methods with
+    // `this` set to the object, so `this.m()` reaches the object's own `m`. The object's keys were not seen as
+    // overrides. In Node, main.js prints "child.m child.n descriptor.k child.p K.q extra.r": every linked object's own
+    // method runs, also one spread in from a literal (spread.js); keep.js links objects only to `null` and to a plain
+    // literal, so `this.q()` is untouched.
+    id: "instance-as-prototype",
+    files: {
+      "lib.js": "class C { go() { return this.m(); } m() { return \"C.m\"; } }\nmodule.exports = new C();\n",
+      "same.js": "class D { go() { return this.n(); } n() { return \"D.n\"; } }\nconst child = { __proto__: new D(), n() { return \"child.n\"; } };\nmodule.exports = child.go();\n",
+      "desc.js": "class E { go() { return this.k(); } k() { return \"E.k\"; } }\nconst child = Object.create(new E(), { k: { value: function () { return \"descriptor.k\"; } } });\nmodule.exports = child.go();\n",
+      "setproto.js": "class F { go() { return this.p(); } p() { return \"F.p\"; } }\nconst child = { p() { return \"child.p\"; } };\nObject.setPrototypeOf(child, new F());\nmodule.exports = child.go();\n",
+      "spread.js": "class G { go() { return this.r(); } r() { return \"G.r\"; } }\nconst extra = { r() { return \"extra.r\"; } };\nconst child = { __proto__: new G(), ...extra };\nmodule.exports = child.go();\n",
+      "keep.js": [
+        "class K { go() { return this.q(); } q() { return \"K.q\"; } }",
+        "const plain = { __proto__: null, q() { return 1; } };",
+        "const other = { __proto__: { s() { return 2; } }, q() { return 3; } };",
+        "module.exports = [new K().go(), plain, other];",
+        "",
+      ].join("\n"),
+      "main.js": [
+        "const base = require(\"./lib\");",
+        "const child = { __proto__: base, m() { return \"child.m\"; } };",
+        "console.log(child.go(), require(\"./same\"), require(\"./desc\"), require(\"./setproto\"), require(\"./keep\")[0], require(\"./spread\"));",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "rt-m4:proto-literal-other-file-unresolved", category: "calls", has: /^lib\.js@1:\d+\|go\|this\.m\|UNRESOLVED\|/ },
+      { id: "rt-m4:proto-literal-same-file-unresolved", category: "calls", has: /^same\.js@1:\d+\|go\|this\.n\|UNRESOLVED\|/ },
+      { id: "rt-m4:object-create-descriptor-unresolved", category: "calls", has: /^desc\.js@1:\d+\|go\|this\.k\|UNRESOLVED\|/ },
+      { id: "rt-m4:set-prototype-of-literal-unresolved", category: "calls", has: /^setproto\.js@1:\d+\|go\|this\.p\|UNRESOLVED\|/ },
+      { id: "rt-m4:plain-prototypes-resolve", category: "calls", has: /^keep\.js@1:\d+\|go\|this\.q\|RESOLVED\|method:q@1:\d+@keep\.js/ },
+      { id: "rt-m4:spread-literal-unresolved", category: "calls", has: /^spread\.js@1:\d+\|go\|this\.r\|UNRESOLVED\|/ },
+    ],
+  },
+  {
     // XA-04: a computed read of an instance takes a method as a value; it then runs with another `this`.
     // In Node, `f.call({ helper() { return "other"; } })` returns "other".
     id: "this-dispatch-computed-borrow",
