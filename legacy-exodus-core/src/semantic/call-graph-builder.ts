@@ -670,7 +670,19 @@ function isClassBodyMethod(index: FileSymbolIndex, method: CodeSymbol, classId: 
   const classNode = index.classes.nodes.get(classId);
   const fact = index.classes.members.get(declarationAnchor(method.location) ?? "");
   return classNode !== undefined && fact !== undefined && fact.classNode === classNode && (fact.kind === "method" || fact.kind === "field") && !fact.decorated
-    && !index.classes.decorated.has(classId) && (isStatic === undefined || fact.isStatic === isStatic);
+    && !index.classes.decorated.has(classId) && (isStatic === undefined || fact.isStatic === isStatic)
+    && soleBodyElement(classNode, method.name, fact.isStatic);
+}
+
+/**
+ * RT-L6: whether the class body gives `name` exactly one element of that staticness. A later getter, setter, field or
+ * method of the same name replaces an earlier method (`m() {…} get m() {…}`). Type-only members (overload signatures,
+ * `declare` fields) define nothing at run time and are not counted; a computed key is assumed not to produce `name`.
+ */
+function soleBodyElement(classNode: ASTNode, name: string, isStatic: boolean): boolean {
+  const body = classNode.children.find((child) => child.type === "ClassBody");
+  return (body?.children ?? []).filter((element) => element.type !== "StaticBlock" && element.type !== "TSDeclareMethod" && element.type !== "TSIndexSignature"
+    && element.attributes.declare !== true && (element.attributes.static === true) === isStatic && classElementName(element) === name).length === 1;
 }
 
 /** Property writes a class member makes itself: a field writes its name once; a method none. */
