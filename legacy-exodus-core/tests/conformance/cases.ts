@@ -1575,6 +1575,10 @@ export const conformanceCases: readonly ConformanceCase[] = [
     // A use outside the branch: Node throws there, and the binding's value no longer counts anywhere.
     ["rt-l2-branch-and-outside", { "main.js": "function make() { const o = { run() { return \"run\"; } }; return o; }\nif (process.argv.length > 99) { var x = make(); console.log(x.run()); }\ntry { console.log(x.run()); } catch (e) { console.log(\"THROWS\", e.message); }\n" }, /^main\.js@3:\d+\|module\|x\.run\|UNRESOLVED\|/],
     ["rt-l2-loop-const-control", { "main.js": "function make() { const o = { run() { return \"run\"; } }; return o; }\nfor (const i of [1]) { const x = make(); console.log(x.run()); }\n" }, /^main\.js@2:\d+\|module\|x\.run\|RESOLVED\|/],
+    // RT-N2 (probe n2c-other): a class method read as a value runs on another object, so its `this.m = …` writes that
+    // object's `m`. Node prints "patched". The control calls the method on its own instance only ("orig").
+    ["rt-n2-borrowed-class-method", { "lib.js": "class P { patch() { this.m = () => \"patched\"; } }\nconst target = require(\"./target\");\nP.prototype.patch.call(target);\n", "target.js": "module.exports = { m() { return \"orig\"; } };\n", "main.js": "require(\"./lib\");\nconst t = require(\"./target\");\nconsole.log(t.m());\n" }, /^main\.js@3:\d+\|module\|t\.m\|UNRESOLVED\|/],
+    ["rt-n2-own-instance-control", { "lib.js": "class P { patch() { this.m = () => \"patched\"; } }\nnew P().patch();\n", "target.js": "module.exports = { m() { return \"orig\"; } };\n", "main.js": "require(\"./lib\");\nconst t = require(\"./target\");\nconsole.log(t.m());\n" }, /^main\.js@3:\d+\|module\|t\.m\|RESOLVED\|/],
   ] as const).map(([id, files, expected]): ConformanceCase => ({ id, files, expectations: [{ id: `${id}:call`, category: "calls", has: expected }] })),
   {
     // Phase C1b: a factory literal's property takes its function from a member of a repository module, from a property
