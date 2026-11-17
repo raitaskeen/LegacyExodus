@@ -1,4 +1,4 @@
-#340 ready, updated to main (`5c3b280`, same changed lines as measured 8efdfe1); CI running
+#339 option (2), main merged (`48ddc82`, code lines = measured 718643a, 147/147); Ghost 0/0; next after #341
 
 The live plan for fixing the audit findings ([FINDINGS.md](FINDINGS.md)), plus the scale and storage
 work the Ghost run showed is needed before the IR phase. This file is the hand-off point: a new
