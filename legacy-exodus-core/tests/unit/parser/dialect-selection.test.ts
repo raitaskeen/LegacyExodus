@@ -153,8 +153,15 @@ describe("JavaScript dialects (.js, .jsx, .mjs, .cjs)", () => {
     expect(findNodes(result.root, "ReturnStatement")).toHaveLength(1);
   });
 
-  test("still rejects top-level return in .js", async () => {
+  test("parses top-level return in a .js file without module syntax, as Node's CommonJS wrapper runs it (RT-N3)", async () => {
     const result = await parseAs("src/main.js", "if (process.argv.length > 99) return;\nmodule.exports = 1;\n");
+
+    expect(codes(result)).toEqual([]);
+    expect(findNodes(result.root, "ReturnStatement")).toHaveLength(1);
+  });
+
+  test("still rejects top-level return in a .js file with module syntax", async () => {
+    const result = await parseAs("src/main.js", "if (process.argv.length > 99) return;\nexport const x = 1;\n");
 
     expect(codes(result)).toContain("IllegalReturn");
   });
@@ -232,5 +239,18 @@ describe("javascriptParserOptionsFor", () => {
     expect(second).toEqual(first);
     expect(optionsFor("other/dir/a.ts")).toEqual(first);
     expect(optionsFor("src/a.js")).not.toEqual(first);
+  });
+});
+
+describe("sloppy CommonJS retry (RT-N3)", () => {
+  test("parses a .js file that is valid only as sloppy CommonJS", async () => {
+    for (const source of ["delete JSON;\n", "with (Math) { max(1, 2); }\n", "var n = 010;\n", "if (process.argv) return;\nmodule.exports = 1;\n"]) {
+      expect((await parseAs("a.js", source)).errors).toEqual([]);
+    }
+  });
+
+  test("keeps the errors of a file with module syntax and of an .mjs file", async () => {
+    expect((await parseAs("a.js", "export const x = 1;\ndelete JSON;\n")).errors.length).toBeGreaterThan(0);
+    expect((await parseAs("a.mjs", "delete JSON;\n")).errors.length).toBeGreaterThan(0);
   });
 });
