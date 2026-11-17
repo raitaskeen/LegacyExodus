@@ -201,6 +201,10 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
       if (name === undefined) bareReturn = true;
       else returned.add(name);
     });
+    // RT-L1: a body that can run past its last statement returns `undefined` (`if (flag) return o;`). A `return` among
+    // the body's own statements ends every path that does not return or throw earlier; what follows it never runs
+    // (functions declared there are hoisted, as in Fastify's `return fastify` before its helpers).
+    if (!body.children.some((statement) => statement.type === "ReturnStatement")) return;
     // C1b: a factory whose one `return` gives an object literal directly (`return { server, listen }`) has no name
     // for its object: nothing can rebind it, copy onto it or write it in the body.
     const direct = returns.length === 1 ? role(returns[0]!, "argument") : undefined;
