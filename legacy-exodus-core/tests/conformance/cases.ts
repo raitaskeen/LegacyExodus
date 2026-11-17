@@ -1219,6 +1219,28 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // RT-M5 (red team 2026-11-15): B1c (`const out = []; out.push(x)` is EXTERNAL `Array.prototype.push`) checked named
+    // writes only. A prototype swap or a reflective copy in the same file can give the array its own `push`. In Node,
+    // main.js prints "fake-proto fake-setproto fake-assign 1 1": the first three run the fakes; a plain computed write
+    // (`out[k] = 1`, documented as not producing a method name) and a clean file keep `Array.prototype.push`.
+    id: "b1c-reflection",
+    files: {
+      "proto.js": "const out = [];\nout.__proto__ = { push() { return \"fake-proto\"; } };\nmodule.exports = out.push(1);\n",
+      "setproto.js": "const out = [];\nObject.setPrototypeOf(out, { push() { return \"fake-setproto\"; } });\nmodule.exports = out.push(1);\n",
+      "assign.js": "const extra = { push() { return \"fake-assign\"; } };\nconst out = [];\nObject.assign(out, extra);\nmodule.exports = out.push(1);\n",
+      "computed.js": "const out = [];\nconst k = \"x\";\nout[k] = 1;\nmodule.exports = out.push(1);\n",
+      "clean.js": "const out = [];\nmodule.exports = out.push(1);\n",
+      "main.js": "console.log(require(\"./proto\"), require(\"./setproto\"), require(\"./assign\"), require(\"./computed\"), require(\"./clean\"));\n",
+    },
+    expectations: [
+      { id: "rt-m5:proto-key-swap-unresolved", category: "calls", has: /^proto\.js@3:\d+\|exports\|out\.push\|UNRESOLVED\|/ },
+      { id: "rt-m5:set-prototype-of-unresolved", category: "calls", has: /^setproto\.js@3:\d+\|exports\|out\.push\|UNRESOLVED\|/ },
+      { id: "rt-m5:object-assign-unknown-source-unresolved", category: "calls", has: /^assign\.js@4:\d+\|exports\|out\.push\|UNRESOLVED\|/ },
+      { id: "rt-m5:computed-write-stays-external", category: "calls", has: /^computed\.js@4:\d+\|exports\|out\.push\|EXTERNAL\|/ },
+      { id: "rt-m5:clean-file-external", category: "calls", has: /^clean\.js@2:\d+\|exports\|out\.push\|EXTERNAL\|/ },
+    ],
+  },
+  {
     // RT-L7 review (2026-11-16): a repository module that re-exports a standard global (`module.exports = JSON`,
     // `= process`) passes writes on to the global. In Node, main.js prints "patched-stringify" and
     // "1 patched-nextTick": the patched `nextTick` ran; `JSON.parse` is never written.
