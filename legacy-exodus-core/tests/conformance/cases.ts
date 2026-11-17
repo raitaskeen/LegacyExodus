@@ -1711,6 +1711,57 @@ export const conformanceCases: readonly ConformanceCase[] = [
     ],
   },
   {
+    // RT-N1 (owner decision 2026-11-16, strict fix): a write on `this` outside a class element was taken as a write on
+    // the file's own object. In a plain function, function expression or object method `this` may be any object
+    // (`patch.call(app)`). In Node, main.js prints "patched-init patched-m patched-n patched-k K.q K.r": the four patched
+    // calls run the patches; other.js writes `q` and `r` only on `this` inside its class, so `this.q()` and `this.r()`
+    // in keep.js are untouched.
+    id: "this-writes-outside-classes",
+    files: {
+      "app.js": [
+        "const app = {};",
+        "app.init = function () { return \"init\"; };",
+        "app.start = function () { return app.init(); };",
+        "module.exports = app;",
+        "",
+      ].join("\n"),
+      "lib.js": "class C { go() { return this.m(); } m() { return \"C.m\"; } }\nmodule.exports = new C();\n",
+      "lib2.js": "class D { go() { return this.n(); } n() { return \"D.n\"; } }\nmodule.exports = new D();\n",
+      "lib3.js": "class E { go() { return this.k(); } k() { return \"E.k\"; } }\nmodule.exports = new E();\n",
+      "keep.js": "class K { go() { return this.q(); } q() { return \"K.q\"; } r() { return \"K.r\"; } both() { return this.r(); } }\nmodule.exports = new K();\n",
+      "other.js": "class Other { constructor() { this.q = 1; } run() { const f = () => { this.r = 2; }; f(); } }\nmodule.exports = Other;\n",
+      "patch.js": [
+        "const app = require(\"./app\");",
+        "function patch() { this.init = function () { return \"patched-init\"; }; }",
+        "patch.call(app);",
+        "const lib = require(\"./lib\");",
+        "function Patcher() { this.m = function () { return \"patched-m\"; }; }",
+        "Patcher.call(lib);",
+        "const lib2 = require(\"./lib2\");",
+        "const helper = { apply() { this.n = function () { return \"patched-n\"; }; } };",
+        "helper.apply.call(lib2);",
+        "const lib3 = require(\"./lib3\");",
+        "const setK = function () { [this.k] = [function () { return \"patched-k\"; }]; };",
+        "setK.call(lib3);",
+        "",
+      ].join("\n"),
+      "main.js": [
+        "require(\"./patch\"); require(\"./other\");",
+        "const keep = require(\"./keep\");",
+        "console.log(require(\"./app\").start(), require(\"./lib\").go(), require(\"./lib2\").go(), require(\"./lib3\").go(), keep.go(), keep.both());",
+        "",
+      ].join("\n"),
+    },
+    expectations: [
+      { id: "rt-n1:function-this-write-container-unresolved", category: "calls", has: /^app\.js@3:\d+\|start\|app\.init\|UNRESOLVED\|/ },
+      { id: "rt-n1:function-this-write-class-unresolved", category: "calls", has: /^lib\.js@1:\d+\|go\|this\.m\|UNRESOLVED\|/ },
+      { id: "rt-n1:object-method-this-write-unresolved", category: "calls", has: /^lib2\.js@1:\d+\|go\|this\.n\|UNRESOLVED\|/ },
+      { id: "rt-n1:function-this-destructuring-unresolved", category: "calls", has: /^lib3\.js@1:\d+\|go\|this\.k\|UNRESOLVED\|/ },
+      { id: "rt-n1:class-constructor-this-write-resolves", category: "calls", has: /^keep\.js@1:\d+\|go\|this\.q\|RESOLVED\|method:q@1:\d+@keep\.js/ },
+      { id: "rt-n1:class-arrow-this-write-resolves", category: "calls", has: /^keep\.js@1:\d+\|both\|this\.r\|RESOLVED\|method:r@1:\d+@keep\.js/ },
+    ],
+  },
+  {
     // XB-05, XB-06, XB-07 (audit B). In Node: `early.toString()` runs Object.prototype.toString ("[object Object]"),
     // `late.toString()` the assigned one; `a.run()`, `g.walk()`, `h.fly()` and `new Spin()` throw (a Promise, an
     // iterator, an async iterator has no such method; a generator is not a constructor); `p.swim()` returns "swim";
