@@ -65,6 +65,12 @@ export interface ClassHierarchyFile {
    * a method of that class run on the object (`child.go()`) reaches the object's own `m` through `this.m()`.
    */
   readonly prototypeOverrides?: readonly string[];
+  /**
+   * RT-N2: per class method of this file, its class and the names it writes on `this` (`patch() { this.m = … }`). A
+   * borrowed method (see isBorrowed: `P.prototype.patch.call(o)`, or `P.prototype[k]`) can run on any object, so
+   * those writes then count as foreign writes.
+   */
+  readonly borrowableThisWrites?: readonly { readonly classId?: string; readonly method: string; readonly names: readonly string[] }[];
 }
 
 const MODULE_SCOPE = "scope:module";
@@ -187,9 +193,14 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
   // block, arrow functions inside them included), so that it is an instance of a class (or the class) of this file. In
   // a plain function, function expression or object method `this` may be any object: `patch.call(app)`. At the top of
   // the file `this` is the file's own original exports object (CommonJS) or undefined (an ES module).
-  const visit = (node: ASTNode, parent: ASTNode | undefined, currentClass: string | undefined, thisInClass: boolean): void => {
+  // RT-N2: `thisMethod` names the class method (not a constructor, field or static block) whose `this` applies here.
+  const thisWritesByMethod = new Map<string, { readonly classId?: string; readonly method: string; readonly names: Set<string> }>();
+  const visit = (node: ASTNode, parent: ASTNode | undefined, currentClass: string | undefined, thisInClass: boolean, thisMethod: string | undefined): void => {
     const childThisInClass = parent?.type === "ClassBody" && classThisElements.has(node.type) ? true
       : ["FunctionDeclaration", "FunctionExpression", "ObjectMethod"].includes(node.type) ? false : thisInClass;
+    const childThisMethod = parent?.type === "ClassBody" && classThisElements.has(node.type)
+      ? (node.type === "ClassMethod" && node.attributes.kind === "method" ? keyName(node) : undefined)
+      : ["FunctionDeclaration", "FunctionExpression", "ObjectMethod"].includes(node.type) ? undefined : thisMethod;
     let classInside = currentClass;
     if (node.type === "ClassDeclaration" || node.type === "ClassExpression") {
       const symbol = node.location === undefined ? undefined : classByStart.get(`${node.location.start.line}:${node.location.start.column}`);
@@ -220,6 +231,12 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
         const object = node.children.find((child) => child.role === "object");
         const own = object?.type === "ThisExpression" ? thisInClass : isOwnObject(object, ownExports) || isOwnAlias(object, writer);
         if (name !== undefined && !own) foreignWritten.add(name);
+        if (name !== undefined && object?.type === "ThisExpression" && thisInClass && thisMethod !== undefined) {
+          const key = `${currentClass ?? ""}\u0000${thisMethod}`;
+          const entry = thisWritesByMethod.get(key) ?? { ...(currentClass === undefined ? {} : { classId: currentClass }), method: thisMethod, names: new Set<string>() };
+          thisWritesByMethod.set(key, entry);
+          entry.names.add(name);
+        }
       }
       else if (!called && !tagged && !(parent?.type === "UnaryExpression" && parent.attributes.operator === "delete")) {
         if (name !== undefined) borrowed.add(name);
@@ -258,9 +275,9 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
       const name = nameOf(node);
       if (name !== undefined) valueUses.set(name, (valueUses.get(name) ?? 0) + 1);
     }
-    for (const child of node.children) visit(child, node, classInside, childThisInClass);
+    for (const child of node.children) visit(child, node, classInside, childThisInClass, childThisMethod);
   };
-  visit(ast.root, undefined, undefined, true);
+  visit(ast.root, undefined, undefined, true, undefined);
   for (const name of linkedLiteralNames) for (const key of literalKeysByName.get(name) ?? []) prototypeOverrides.add(key);
   // A spread of a name owns the keys of the literal that name is declared with, spreads in it included (cycles end).
   const expandSpreads = (keys: Iterable<string>, seen: Set<string>): string[] => [...keys].flatMap((key) => {
@@ -292,6 +309,8 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
     foreignWrittenNames: [...foreignWritten].sort(),
     borrowedNames: [...borrowed].sort(),
     prototypeOverrides: [...prototypeOverrides].sort(),
+    borrowableThisWrites: [...thisWritesByMethod].sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .map(([, { names, ...method }]) => ({ ...method, names: [...names].sort() })),
   };
 }
 
@@ -706,7 +725,9 @@ export class ClassHierarchy {
     private readonly closedWorld = false,
   ) {
     const unknownRoots: ClassFact[] = [];
+    const thisWrites: { readonly filePath: string; readonly classId?: string; readonly method: string; readonly names: readonly string[] }[] = [];
     for (const file of files) {
+      for (const write of file.borrowableThisWrites ?? []) thisWrites.push({ filePath: file.filePath, ...write });
       for (const name of file.borrowedNames) this.borrowed.add(name);
       for (const name of file.prototypeOverrides ?? []) this.prototypeOverrides.add(name);
       for (const name of file.foreignWrittenNames) {
@@ -737,6 +758,15 @@ export class ClassHierarchy {
     for (const root of unknownRoots) {
       for (const name of this.subtreeMembers(root.id, new Set())) this.unknownOverrides.add(name);
       for (const name of this.ownMembers(root)) this.unknownOverrides.add(name);
+    }
+    // RT-N2: a borrowed class method (its name read as a value anywhere, or its class read by a computed key) writes
+    // its `this` names on any object.
+    for (const { filePath, classId, method, names } of thisWrites) {
+      if (!this.isBorrowed(method, classId)) continue;
+      for (const name of names) {
+        const writer = this.foreignWriters.get(name);
+        this.foreignWriters.set(name, writer === undefined || writer === filePath ? filePath : true);
+      }
     }
   }
 
