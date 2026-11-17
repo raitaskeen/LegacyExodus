@@ -25,8 +25,9 @@ export async function loadDirectoryMains(projectPath: string, files: readonly Fi
 /**
  * Every `package.json` discovery found, by its project-relative POSIX directory (`.` for the root), with the fields
  * Node uses to load a package from inside itself (XB-02): `name` and `exports` for a self-reference
- * (`require("pkg/sub")` within pkg), `imports` for `#` specifiers; and `type` (`"module"` or `"commonjs"`, RT-L5),
- * which decides how Node runs the package's `.js` files. Unreadable manifests are skipped.
+ * (`require("pkg/sub")` within pkg), `imports` for `#` specifiers; `type` (`"module"` or `"commonjs"`, RT-L5), which decides
+ * how Node runs the package's `.js` files; and its declared dependencies, marking those installed from a folder of the
+ * project (RT-M8, see localDependencyRoot). Unreadable manifests are skipped.
  */
 export async function loadPackageScopes(projectPath: string, files: readonly FileArtifact[]): Promise<Readonly<Record<string, PackageScope>>> {
   const scopes: Record<string, PackageScope> = {};
@@ -34,16 +35,51 @@ export async function loadPackageScopes(projectPath: string, files: readonly Fil
   for (const path of manifests) {
     const manifest = await readJson(join(projectPath, path));
     if (manifest === undefined) continue;
+    const directory = canonicalizePath(posix.dirname(path));
+    const dependencies = declaredDependencies(directory, manifest);
     const scope: PackageScope = {
       ...(typeof manifest.name === "string" && manifest.name.length > 0 ? { name: manifest.name } : {}),
       ...(manifest.exports === undefined || manifest.exports === null ? {} : { exports: manifest.exports }),
       ...(typeof manifest.imports === "object" && manifest.imports !== null && !Array.isArray(manifest.imports) ? { imports: manifest.imports } : {}),
       ...(manifest.type === "module" || manifest.type === "commonjs" ? { type: manifest.type } : {}),
+      ...(Object.keys(dependencies).length === 0 ? {} : { dependencies }),
     };
     // Recorded even when empty: the nearest manifest decides, so one without `imports` hides an outer one's.
-    scopes[canonicalizePath(posix.dirname(path))] = scope;
+    scopes[directory] = scope;
   }
   return immutable(scopes);
+}
+
+/** Dependency fields, in the order that decides a name declared in more than one (npm: optional over regular). */
+const DEPENDENCY_FIELDS = ["optionalDependencies", "dependencies", "devDependencies", "peerDependencies"] as const;
+
+/** Every dependency a manifest declares, by name: its folder when installed from the project (see localDependencyRoot), else null. */
+function declaredDependencies(directory: string, manifest: Record<string, unknown>): Record<string, string | null> {
+  const declared: Record<string, string | null> = {};
+  for (const field of DEPENDENCY_FIELDS) {
+    const entries = manifest[field];
+    if (typeof entries !== "object" || entries === null || Array.isArray(entries)) continue;
+    for (const [name, spec] of Object.entries(entries)) {
+      if (name.length === 0 || Object.hasOwn(declared, name)) continue;
+      declared[name] = localDependencyRoot(directory, spec);
+    }
+  }
+  return declared;
+}
+
+/**
+ * The project-relative folder a `file:` or `link:` dependency of the manifest in `directory` names (RT-M8): npm, Yarn
+ * and pnpm install it as that folder, by a link or a copy. Null for any other spec, an absolute path, or a folder
+ * outside the project, which is not repository code.
+ */
+function localDependencyRoot(directory: string, spec: unknown): string | null {
+  if (typeof spec !== "string") return null;
+  const match = /^(?:file|link):(.+)$/.exec(spec.trim());
+  if (match === null) return null;
+  const target = match[1]!.replaceAll("\\", "/");
+  if (target.startsWith("/") || /^[a-zA-Z]:/.test(target)) return null;
+  const root = canonicalizePath(posix.join(directory, target)).replace(/\/+$/, "");
+  return root === ".." || root.startsWith("../") ? null : root.length === 0 ? "." : root;
 }
 
 /**

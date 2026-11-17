@@ -201,6 +201,10 @@ export function collectFactoryFacts(ast: ASTResult, table: SymbolTable | undefin
       if (name === undefined) bareReturn = true;
       else returned.add(name);
     });
+    // RT-L1: a body that can run past its last statement returns `undefined` (`if (flag) return o;`). A `return` among
+    // the body's own statements ends every path that does not return or throw earlier; what follows it never runs
+    // (functions declared there are hoisted, as in Fastify's `return fastify` before its helpers).
+    if (!body.children.some((statement) => statement.type === "ReturnStatement")) return;
     // C1b: a factory whose one `return` gives an object literal directly (`return { server, listen }`) has no name
     // for its object: nothing can rebind it, copy onto it or write it in the body.
     const direct = returns.length === 1 ? role(returns[0]!, "argument") : undefined;
@@ -776,7 +780,7 @@ function copiesOntoThis(body: ASTNode): boolean {
     if (node.type === "CallExpression" && callArguments(node)[0]?.type === "ThisExpression") {
       const path = pathOf(role(node, "callee"))?.join(".");
       if (path === "Object.assign" || path === "Object.defineProperties") copies = true;
-      if ((path === "Object.defineProperty" || path === "Reflect.defineProperty") && literalKeyWrite(node) === undefined) copies = true;
+      if ((path === "Object.defineProperty" || path === "Reflect.defineProperty" || path === "Reflect.set" || path === "Reflect.deleteProperty") && literalKeyWrite(node) === undefined) copies = true;
     }
     if (node.type === "AssignmentExpression") {
       const left = role(node, "left");
@@ -866,10 +870,11 @@ function literalDefinition(expression: ASTNode): { readonly name: string } | und
   return { name: key.attributes.value };
 }
 
-/** The name an `Object.defineProperty(o, "m", …)` call writes, whatever `o` is. */
+/** The name an `Object.defineProperty(o, "m", …)`, `Reflect.defineProperty`, `Reflect.set` or `Reflect.deleteProperty` call writes, whatever `o` is. */
 function literalKeyWrite(call: ASTNode): string | undefined {
   const path = pathOf(role(call, "callee"))?.join(".");
-  if (path !== "Object.defineProperty" && path !== "Reflect.defineProperty") return undefined;
+  // RT-L3: `Reflect.set(o, "m", f)` and `Reflect.deleteProperty(o, "m")` change `m` as a literal-key defineProperty does.
+  if (path !== "Object.defineProperty" && path !== "Reflect.defineProperty" && path !== "Reflect.set" && path !== "Reflect.deleteProperty") return undefined;
   const key = callArguments(call)[1];
   return staticKeyOf(key);
 }

@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 
 import type { FileArtifact } from "@contracts/discovery";
 import { ModuleResolver, type WorkspacePackage } from "@graph/module-resolver";
-import { loadWorkspacePackages } from "@graph/workspace-loader";
+import { loadPackageScopes, loadWorkspacePackages } from "@graph/workspace-loader";
 
 /** S3: workspace packages resolve by name to their source, without node_modules or network. */
 
@@ -142,6 +142,16 @@ describe("S3 workspace loader", () => {
       "p/ok/package.json": manifest({ name: "ok" }),
     });
     expect(Object.keys(await loadWorkspacePackages(root, discovered))).toEqual(["ok"]);
+  });
+
+  it("records folder dependencies inside the project, and every other dependency as null (RT-M8)", async () => {
+    const discovered = await project({
+      "package.json": manifest({ dependencies: { a: "file:./libs/a", far: "file:../outside", reg: "^1.0.0", abs: "file:/opt/x" }, devDependencies: { b: "link:libs/b/" } }),
+      "test/cjs/package.json": manifest({ dependencies: { root: "file:../.." }, optionalDependencies: { a: "^2.0.0" } }),
+    });
+    const scopes = await loadPackageScopes(root, discovered);
+    expect(scopes["."]?.dependencies).toEqual({ a: "libs/a", far: null, reg: null, abs: null, b: "libs/b" });
+    expect(scopes["test/cjs"]?.dependencies).toEqual({ a: null, root: "." });
   });
 
   it("has no packages without a workspace declaration", async () => {

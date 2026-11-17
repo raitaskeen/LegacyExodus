@@ -93,7 +93,7 @@ export class DeterministicCallGraphBuilder {
       constantBindings: new Map(),
       ...(hierarchy === undefined ? {} : { hierarchy }),
       ...(factories === undefined ? {} : { factories }),
-      globalWrites: this.globalWrites,
+      globalWrites: new Set([...this.globalWrites, ...wrapperGlobalWrites(this.packageWrites)]),
     };
     predeclareScopeBindings(ast.root, initialContext);
     const boundCallees = new Set<ASTNode>();
@@ -179,8 +179,8 @@ export class DeterministicCallGraphBuilder {
         const external = targetSymbolId !== undefined || namedCallee === undefined || evalOrWith || invokesThroughWrittenProperty || (resolvedTarget !== undefined && runsTooEarly)
           ? undefined
           : externalTarget(imported, calleeName, fileSymbols, nextContext, this.packageWrites)
-            ?? globalTarget(calleeName, fileSymbols, nextContext, this.globalWrites, commonJsFiles.get(fileSymbols) === true)
-            ?? valueTarget(calleeName, fileSymbols, nextContext, this.globalWrites)
+            ?? globalTarget(calleeName, fileSymbols, nextContext, nextContext.globalWrites ?? this.globalWrites, commonJsFiles.get(fileSymbols) === true)
+            ?? valueTarget(calleeName, fileSymbols, nextContext, nextContext.globalWrites ?? this.globalWrites)
             ?? factoryExternalTarget(calleeName, fileSymbols, nextContext);
         const resolutionState = targetSymbolId !== undefined ? "RESOLVED" as const : external !== undefined ? "EXTERNAL" as const : "UNRESOLVED" as const;
         if (targetSymbolId !== undefined) {
@@ -321,9 +321,32 @@ interface BindingWrites {
   readonly propertyWrites: ReadonlyMap<string, number>;
   /** A write whose property name is not static (`o[key] = …`, `Object.assign(o, src)`, prototype swaps): it may name any public property. */
   readonly unknownPropertyWrites: boolean;
+  /**
+   * An unknown write other than a computed member write (`o[key] = …`): a prototype swap (`o.__proto__ = …`,
+   * `Object.setPrototypeOf`), a reflective write with an unknown key or source (`Object.assign(o, src)`), or a reflective
+   * writer reached another way. Such a write may give a literal value an own method of any name (RT-M5).
+   */
+  readonly unknownReflectiveWrites: boolean;
+  /** Binding keys whose `__proto__` the file writes (`out.__proto__ = …`) (RT-M5). */
+  readonly protoSwapTargets: ReadonlySet<string>;
+  /**
+   * Binding keys the file uses as a value that can be handed on (`f(out)`, `x = out`, `return out`; see usedAsValue):
+   * their value may reach a reflective write through another name (RT-M5).
+   */
+  readonly escapedNames: ReadonlySet<string>;
+  /** Binding keys that are the target of an unknown reflective write (`Object.setPrototypeOf(out, …)`) (RT-M5). */
+  readonly reflectiveTargets: ReadonlySet<string>;
+  /** For each binding key, the binding keys it is a plain alias of (`const a = out`, `a = out`) (RT-M5). */
+  readonly aliasSources: ReadonlyMap<string, ReadonlySet<string>>;
+  /** Whether a reflective writer is reached another way (`const assign = Object.assign`): its targets are not known (RT-M5). */
+  readonly escapedReflectiveWriters: boolean;
   /** Where each statically named member is assigned or deleted (`o.name = …`, `delete o.name`). */
   readonly propertyWriteSites: ReadonlyMap<string, readonly WriteSite[]>;
-  /** Value each binding is declared with: its initializer, or the function a declaration creates. */
+  /**
+   * Value each binding is declared with: its initializer, or the function a declaration creates. A declarator that
+   * may not run whenever its binding's scope is entered (RT-L2: `if (…) { var x = make(); }` leaves `x` undefined on
+   * the other path) records one only when every use of the binding follows it in the same branch of the same function.
+   */
   readonly declaredValues: ReadonlyMap<string, ASTNode>;
   /** Every write to a binding, including implicit parameter, catch and for-in/of writes. */
   readonly writeSites: ReadonlyMap<string, readonly WriteSite[]>;
@@ -786,8 +809,10 @@ export function collectUnstableExportIds(ast: ASTResult, table: SymbolTable | un
 /**
  * A property written on another module's value, as one file sees it (OR-01). `*` is a computed name. `member` is the
  * whole written path when it is known to be deeper (`ObjectId.prototype._id`), ending at a computed member (XB-03).
+ * `reexport` marks no write but a module value the exports object of `importerPath` may hold (RT-L7): `specifier` at
+ * path `member`, `*` for a value whose origin is not known (see exportsValueRoots).
  */
-export interface ForeignExportWrite { readonly importerPath: string; readonly specifier: string; readonly name: string; readonly member?: string }
+export interface ForeignExportWrite { readonly importerPath: string; readonly specifier: string; readonly name: string; readonly member?: string; readonly reexport?: true }
 
 /**
  * Writes this file makes to another module's exports: `require("./x").name = …`, or `x.name = …` where `x` is an
@@ -829,7 +854,79 @@ export function collectForeignExportWrites(ast: ASTResult, table: SymbolTable | 
   for (const write of aliasedWrites(ast.root, packageImports)) {
     if (write.specifier !== undefined && !isRelativeSpecifier(write.specifier) && write.path.length > 0) writes.push({ importerPath, specifier: write.specifier, name: write.path[0]!, member: write.path.join(".") });
   }
+  // RT-L7: the module values this file's own exports object may hold, so that a write on it elsewhere reaches them.
+  const importRoots = new Map<string, ValueRoot>();
+  for (const symbol of table?.symbols ?? []) {
+    if (symbol.kind !== "import" || typeof symbol.moduleSpecifier !== "string") continue;
+    const whole = symbol.defaultExport || symbol.sourceSymbolName === "*";
+    importRoots.set(symbol.name, { specifier: symbol.moduleSpecifier, path: whole ? [] : [symbol.sourceSymbolName ?? symbol.name] });
+  }
+  for (const root of exportsValueRoots(ast.root, importRoots)) {
+    if (root.specifier !== undefined) writes.push({ importerPath, specifier: root.specifier, name: "", member: root.path.join("."), reexport: true });
+  }
   return writes;
+}
+
+/**
+ * RT-L7: where a file's exports object may come from when the file does not make it. `module.exports = require("fs")`
+ * (also through `exports = module.exports = …`, `export default …` or `export = …`) gives `fs`;
+ * `module.exports = require("fs").promises` gives `fs` at `promises`; an import binding gives its module and path. A
+ * value made here (an object, array, function or class literal, `Object.create(…)`, or a name the file declares once and
+ * never reassigns, as a function, a class or with such a value) gives nothing. So does any other value (a call's
+ * result, `new`, a parameter, an alias): it is assumed to hold no package or global value, as XB-03 assumes for a
+ * target reached any other way. Treating it as possibly any module's value blocked every package and global member of
+ * the written name: one test stub `settingsCache.get = …` cost Ghost 50 correct `Map.prototype.get`/`http.get` calls.
+ */
+function exportsValueRoots(root: ASTNode, imports: ReadonlyMap<string, ValueRoot>): ValueRoot[] {
+  // Names the file declares anywhere: such a name is not taken for the standard global of that name.
+  const declarations = new Set<string>();
+  const values: Array<ASTNode | undefined> = [];
+  const walk = (node: ASTNode): void => {
+    if (node.type === "VariableDeclarator") for (const name of extractBoundNames(node.children.find((child) => child.role === "id"))) declarations.add(name);
+    if (node.type === "FunctionDeclaration" || node.type === "ClassDeclaration") {
+      const name = nodeName(node);
+      if (name !== undefined) declarations.add(name);
+    }
+    if (node.type === "AssignmentExpression" && memberPathOf(node.children.find((child) => child.role === "left"))?.join(".") === "module.exports") {
+      values.push(node.attributes.operator === "=" ? node.children.find((child) => child.role === "right") : undefined);
+    }
+    if (node.type === "ExportDefaultDeclaration") {
+      const declaration = node.children.find((child) => child.role === "declaration");
+      if (declaration !== undefined && declaration.type !== "FunctionDeclaration" && declaration.type !== "ClassDeclaration") values.push(declaration);
+    }
+    if (node.type === "TSExportAssignment") values.push(node.children.find((child) => child.role === "expression"));
+    for (const child of node.children) walk(child);
+  };
+  walk(root);
+  // `undefined`: made here, or not followed (see above).
+  const rootOf = (value: ASTNode | undefined): ValueRoot | undefined => {
+    if (value === undefined) return undefined;
+    if (value.type === "AssignmentExpression" && value.attributes.operator === "=") return rootOf(value.children.find((child) => child.role === "right"));
+    if (value.type === "CallExpression") {
+      const specifier = requiredSpecifier(value);
+      return specifier === undefined ? undefined : { specifier, path: [] };
+    }
+    if (value.type === "Identifier") {
+      const name = identifier(value);
+      const imported = name === undefined ? undefined : imports.get(name);
+      if (imported !== undefined) return imported;
+      // An unbound standard global (`module.exports = JSON`, `= process`, `= globalThis`) is the global value itself.
+      if (name !== undefined && !declarations.has(name) && GLOBAL_OBJECTS.has(name)) return { specifier: GLOBAL_VALUE, path: [] };
+      if (name !== undefined && !declarations.has(name) && STANDARD_GLOBALS.has(name)) return { specifier: GLOBAL_VALUE, path: [name] };
+      return undefined;
+    }
+    if (value.type === "MemberExpression") {
+      const property = value.children.find((child) => child.role === "property");
+      const key = value.attributes.computed === true ? staticPropertyKey(property) : identifier(property);
+      const base = rootOf(value.children.find((child) => child.role === "object"));
+      return base === undefined || key === undefined ? undefined : { specifier: base.specifier, path: [...base.path, key] };
+    }
+    return undefined;
+  };
+  return values.flatMap((value) => {
+    const found = rootOf(value);
+    return found === undefined ? [] : [found];
+  });
 }
 
 /** `require("literal")` and its specifier. */
@@ -853,6 +950,7 @@ export function foreignExportWriteTargets(
 ): readonly string[] {
   const ids = new Set<string>();
   for (const write of writes) {
+    if (write.reexport === true) continue;
     const target = resolveFile(write.importerPath, write.specifier);
     if (target === undefined) continue;
     for (const symbol of symbolsOf(canonicalizePath(target))) {
@@ -872,6 +970,8 @@ interface WriteWalk {
   readonly contextId: string;
   readonly loopIds: readonly string[];
   readonly unconditional: boolean;
+  /** The branch, loop part, `try` part, `switch` case or label body the walk last entered in its context, and the scope around it (RT-L2). */
+  readonly guard: { readonly scope: ScopeFrame; readonly node: ASTNode } | undefined;
 }
 
 /**
@@ -887,6 +987,15 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
   const declarations = new Map<string, number>();
   const propertyWrites = new Map<string, number>();
   let unknownPropertyWrites = false;
+  let unknownReflectiveWrites = false;
+  const protoSwapTargets = new Set<string>();
+  const escapedNames = new Set<string>();
+  const reflectiveTargets = new Set<string>();
+  const aliasSources = new Map<string, Set<string>>();
+  let escapedReflectiveWriters = false;
+  const writerAliases = new Set<string>();
+  // Counts unknown reflective writes, so a call can tell whether it made one (and record its target).
+  let reflectiveCount = 0;
   const propertyWriteSites = new Map<string, WriteSite[]>();
   const declaredValues = new Map<string, ASTNode>();
   const writeSites = new Map<string, WriteSite[]>();
@@ -895,12 +1004,26 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
   const declaratorSites = new Map<string, { readonly contextId: string; readonly end: SourcePoint }>();
   const scopeFrames = new Map<string, ScopeFrame>();
 
-  const bindingKeyAt = (name: string, scope: ScopeFrame): string => {
+  const bindingFrameAt = (name: string, scope: ScopeFrame): ScopeFrame => {
     for (let current: ScopeFrame | undefined = scope; current !== undefined; current = current.parent) {
-      if ((byScopeAndName.get(lexicalBindingKey(current.id, name)) ?? []).length > 0 || current.selfName === name) return bindingWriteKey(current.id, name);
+      if ((byScopeAndName.get(lexicalBindingKey(current.id, name)) ?? []).length > 0 || current.selfName === name) return current;
     }
-    return bindingWriteKey(scope.id, name);
+    return scope;
   };
+  const bindingKeyAt = (name: string, scope: ScopeFrame): string => bindingWriteKey(bindingFrameAt(name, scope).id, name);
+  // RT-L2: a declarator runs whenever its binding's scope is entered when no branch, loop, `try`, `switch` case or label
+  // lies between that scope and the declarator: every read in the scope then sees the value or comes before the
+  // declarator (a `let`/`const` read there throws). `if (…) { var x = make(); }` may leave `x` undefined after the block;
+  // `if (…) { const x = make(); x.run(); }` cannot.
+  const runsWithScope = (frame: ScopeFrame, guard: WriteWalk["guard"]): boolean => {
+    if (guard === undefined) return true;
+    for (let current = frame.parent; current !== undefined; current = current.parent) if (current.id === guard.scope.id) return true;
+    return false;
+  };
+  // RT-L2: a guarded declarator's value still counts when every use of the binding comes after it, in the same function
+  // and inside the branch it sits in (`if (…) { var obj = new Map(); obj.set(k, v); }`): the declarator ran first.
+  const guardedValues: Array<{ readonly key: string; readonly name: string; readonly id: ASTNode; readonly init: ASTNode; readonly region: ASTNode; readonly contextId: string; readonly end: SourcePoint }> = [];
+  const uses = new Map<string, Array<{ readonly node: ASTNode; readonly scope: ScopeFrame; readonly contextId: string; readonly start: SourcePoint }>>();
   const unscopedBindings = collectUnscopedBindings(root, bindingKeyAt);
   const blockFunctionVars = collectBlockFunctionVars(root, bindingKeyAt);
   const recordSite = (sitesByKey: Map<string, WriteSite[]>, key: string, site: ASTNode, walk: WriteWalk, constructed?: WriteSite["constructed"]): void => {
@@ -929,10 +1052,13 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
     if (count > 1) reboundBindings.add(key);
     recordWrite(key, site, walk, constructed);
   };
-  const writeProperty = (name: string | undefined): void => {
+  // `computed` marks a member or class-field key that is not static (`o[key] = …`), which B1c assumes not to produce
+  // a method's name; every other unknown write is reflective (RT-M5).
+  const writeProperty = (name: string | undefined, computed = false): void => {
     // `__proto__` swaps the prototype, so it may change every inherited method.
     if (name === undefined || name === "__proto__") {
       unknownPropertyWrites = true;
+      if (name === "__proto__" || !computed) { unknownReflectiveWrites = true; reflectiveCount += 1; }
       return;
     }
     propertyWrites.set(name, (propertyWrites.get(name) ?? 0) + 1);
@@ -940,6 +1066,8 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
   const writeObjectKeys = (source: ASTNode | undefined): void => {
     if (source?.type !== "ObjectExpression") {
       unknownPropertyWrites = true;
+      unknownReflectiveWrites = true;
+      reflectiveCount += 1;
       return;
     }
     for (const property of source.children) {
@@ -974,7 +1102,9 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
       case "MemberExpression":
       case "OptionalMemberExpression": {
         const name = memberPropertyName(target);
-        writeProperty(name);
+        writeProperty(name, true);
+        const object = target.children.find((child) => child.role === "object");
+        if (name === "__proto__" && object?.type === "Identifier") { const swapped = identifier(object); if (swapped !== undefined) protoSwapTargets.add(bindingKeyAt(swapped, walk.scope)); }
         if (name !== undefined) recordSite(propertyWriteSites, name, site, walk);
         return;
       }
@@ -1012,7 +1142,18 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
     const loopIds = opensContext ? [] : loopStatements.has(node.type)
       ? [...walk.loopIds, `loop:${node.location?.start.line ?? 0}:${node.location?.start.column ?? 0}`]
       : walk.loopIds;
-    const inner: WriteWalk = { scope, contextId, loopIds, unconditional: opensContext || (walk.unconditional && !loopStatements.has(node.type)) };
+    const inner: WriteWalk = {
+      scope, contextId, loopIds,
+      unconditional: opensContext || (walk.unconditional && !loopStatements.has(node.type)),
+      guard: opensContext ? undefined : walk.guard,
+    };
+    if (node.type === "Identifier" && node.location !== undefined && !isNonReferenceName(node, parent)) {
+      const name = identifier(node);
+      const list = name === undefined ? undefined : uses.get(name);
+      const use = { node, scope, contextId: walk.contextId, start: node.location.start };
+      if (list !== undefined) list.push(use);
+      else if (name !== undefined) uses.set(name, [use]);
+    }
 
     if (node.type === "CallExpression" || node.type === "OptionalCallExpression" || node.type === "NewExpression") {
       if (node.location !== undefined) callSites.set(node, { contextId: walk.contextId, loopIds: walk.loopIds, start: node.location.start });
@@ -1025,8 +1166,11 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
       const callee = node.children.find((child) => child.role === "callee");
       const args = node.children.filter((child) => child.role === "arguments");
       const writer = callee === undefined ? undefined : reflectiveWriterName(callee);
+      const countBefore = reflectiveCount;
       if (writer !== undefined && args.some((arg) => arg.type === "SpreadElement")) {
         unknownPropertyWrites = true;
+        unknownReflectiveWrites = true;
+        reflectiveCount += 1;
       } else if (writer === "Object.assign") {
         // Filling a fresh object cannot replace a method of an existing one.
         if (!isFreshObject(args[0])) for (const source of args.slice(1)) writeObjectKeys(source);
@@ -1034,14 +1178,59 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
         writeObjectKeys(args[1]);
       } else if (writer === "Object.setPrototypeOf" || writer === "Reflect.setPrototypeOf") {
         unknownPropertyWrites = true;
+        unknownReflectiveWrites = true;
+        reflectiveCount += 1;
       } else if (writer !== undefined) {
         writeProperty(staticPropertyKey(args[1]));
       }
       const property = callee?.type === "MemberExpression" || callee?.type === "OptionalMemberExpression" ? memberPropertyName(callee) : undefined;
       if (property === "__defineGetter__" || property === "__defineSetter__") writeProperty(staticPropertyKey(args[0]));
+      // RT-M5: a call through a plain alias of a reflective writer (`const assign = Object.assign; assign(out, src)`) is
+      // an unknown reflective write on its first argument.
+      const aliasedWriter = callee?.type === "Identifier" && identifier(callee) !== undefined && writerAliases.has(bindingKeyAt(identifier(callee)!, walk.scope));
+      if (aliasedWriter) { unknownReflectiveWrites = true; reflectiveCount += 1; }
+      // RT-M5: the binding an unknown reflective write targets by name (`Object.assign(out, src)`, `out.__defineGetter__(k, …)`).
+      if (reflectiveCount > countBefore) {
+        const target = writer !== undefined || aliasedWriter ? args[0] : callee?.children.find((child) => child.role === "object");
+        const targetName = target?.type === "Identifier" ? identifier(target) : undefined;
+        if (targetName !== undefined) reflectiveTargets.add(bindingKeyAt(targetName, walk.scope));
+      }
     }
     // Object/Reflect writers reached any other way (aliased, passed on, `.call`) are untracked writes.
-    if (escapesReflectiveWriters(node, parent)) unknownPropertyWrites = true;
+    if (escapesReflectiveWriters(node, parent)) unknownPropertyWrites = unknownReflectiveWrites = escapedReflectiveWriters = true;
+    // RT-M5: names declared as a plain alias of a reflective writer: `const assign = Object.assign`, `const { assign } = Object`.
+    if (node.type === "VariableDeclarator") {
+      const id = node.children.find((child) => child.role === "id");
+      const init = node.children.find((child) => child.role === "init");
+      if (id?.type === "Identifier" && init !== undefined && reflectiveWriterName(init) !== undefined && identifier(id) !== undefined) writerAliases.add(bindingKeyAt(identifier(id)!, walk.scope));
+      const namespace = init?.type === "Identifier" ? identifier(init) : undefined;
+      if (id?.type === "ObjectPattern" && namespace !== undefined && reflectiveNamespaces.has(namespace)) {
+        for (const property of id.children) {
+          const key = property.type === "ObjectProperty" ? propertyKeyName(property) : undefined;
+          const value = property.type === "ObjectProperty" ? property.children.find((child) => child.role === "value") : undefined;
+          const local = value?.type === "Identifier" ? identifier(value) : value?.type === "AssignmentPattern" ? identifier(value.children.find((child) => child.role === "left")) : undefined;
+          if (key !== undefined && local !== undefined && reflectiveWriters.has(`${namespace}.${key}`)) writerAliases.add(bindingKeyAt(local, walk.scope));
+        }
+      }
+    }
+    // RT-M5: a plain alias (`const a = out`, `a = out`) reaches the same object.
+    const aliasPair = node.type === "VariableDeclarator" ? [node.children.find((child) => child.role === "id"), node.children.find((child) => child.role === "init")]
+      : node.type === "AssignmentExpression" && node.attributes.operator === "=" ? [node.children.find((child) => child.role === "left"), node.children.find((child) => child.role === "right")] : undefined;
+    if (aliasPair !== undefined && aliasPair[0]?.type === "Identifier" && aliasPair[1]?.type === "Identifier") {
+      const aliasName = identifier(aliasPair[0]);
+      const sourceName = identifier(aliasPair[1]);
+      if (aliasName !== undefined && sourceName !== undefined) {
+        const aliasKey = bindingKeyAt(aliasName, walk.scope);
+        aliasSources.set(aliasKey, new Set([...(aliasSources.get(aliasKey) ?? []), bindingKeyAt(sourceName, walk.scope)]));
+      }
+    }
+    if (node.type === "Identifier" && usedAsValue(node, parent)) {
+      const used = identifier(node);
+      const key = used === undefined ? undefined : bindingKeyAt(used, walk.scope);
+      if (key !== undefined) escapedNames.add(key);
+      // A binding whose real scope is not modelled may be any outer one of that name (as for writes).
+      if (used !== undefined && key !== undefined && unscopedBindings.has(key)) for (let current = walk.scope.parent; current !== undefined; current = current.parent) escapedNames.add(bindingWriteKey(current.id, used));
+    }
     if (node.type === "UnaryExpression" && node.attributes.operator === "delete") {
       const argument = node.children.find((child) => child.role === "argument");
       if (argument?.type === "MemberExpression" || argument?.type === "OptionalMemberExpression") write(argument, node, walk);
@@ -1055,7 +1244,7 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
     }
     if (classFieldTypes.has(node.type)) {
       // A field is an own property of every instance (or of the class, if static): it hides a method of that name.
-      writeProperty(classElementName(node));
+      writeProperty(classElementName(node), true);
     }
     if (node.type === "UpdateExpression") write(node.children.find((child) => child.role === "argument"), node, walk);
     if (node.type === "ForInStatement" || node.type === "ForOfStatement") {
@@ -1075,7 +1264,12 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
       const id = node.children.find((child) => child.role === "id");
       for (const name of extractBoundNames(id)) {
         declare(name, node, walk, init !== undefined, id?.type === "Identifier" ? constructedBy(init, scope) : undefined);
-        if (id?.type === "Identifier" && init !== undefined) declaredValues.set(bindingKeyAt(name, walk.scope), init);
+        if (id?.type === "Identifier" && init !== undefined) {
+          const frame = bindingFrameAt(name, walk.scope);
+          const key = bindingWriteKey(frame.id, name);
+          if (runsWithScope(frame, walk.guard)) declaredValues.set(key, init);
+          else if (walk.guard !== undefined && node.location !== undefined) guardedValues.push({ key, name, id, init, region: walk.guard.node, contextId: walk.contextId, end: node.location.end });
+        }
       }
     }
     if (node.type === "FunctionDeclaration" || node.type === "ClassDeclaration") {
@@ -1095,14 +1289,95 @@ function collectBindingWrites(root: ASTNode, byScopeAndName: ReadonlyMap<string,
     }
 
     for (const child of node.children) {
-      visit(child, { ...inner, unconditional: inner.unconditional && !isConditionalChild(node, child) }, node);
+      const conditional = isConditionalChild(node, child);
+      // A loop's `init` (and a for…in/of's iterated value) runs whenever the loop is reached; its other parts may not.
+      const guarded = conditional || (loopStatements.has(node.type) && child.role !== "init" && child.role !== "right");
+      visit(child, { ...inner, unconditional: inner.unconditional && !conditional, guard: guarded ? { scope, node: child } : inner.guard }, node);
     }
   };
-  visit(root, { scope: createScope(MODULE_SCOPE_ID), contextId: MODULE_SCOPE_ID, loopIds: [], unconditional: true }, undefined);
-  return immutable({ reboundBindings, propertyWrites, unknownPropertyWrites, propertyWriteSites, declaredValues, writeSites, declaringContext, callSites, declaratorSites, scopeFrames, unscopedBindings, blockFunctionVars });
+  visit(root, { scope: createScope(MODULE_SCOPE_ID), contextId: MODULE_SCOPE_ID, loopIds: [], unconditional: true, guard: undefined }, undefined);
+  for (const value of guardedValues) {
+    const region = value.region.location;
+    const followsInRegion = (start: SourcePoint): boolean => region !== undefined && comparePoints(value.end, start) <= 0 && comparePoints(start, region.end) <= 0;
+    const usedAfter = (uses.get(value.name) ?? []).every((use) => use.node === value.id || bindingKeyAt(value.name, use.scope) !== value.key
+      || (use.contextId === value.contextId && followsInRegion(use.start)));
+    if (usedAfter) declaredValues.set(value.key, value.init);
+  }
+  return immutable({ reboundBindings, propertyWrites, unknownPropertyWrites, unknownReflectiveWrites, protoSwapTargets, escapedNames, reflectiveTargets, aliasSources, escapedReflectiveWriters, propertyWriteSites, declaredValues, writeSites, declaringContext, callSites, declaratorSites, scopeFrames, unscopedBindings, blockFunctionVars });
 }
 
 const classFieldTypes = new Set(["ClassProperty", "ClassPrivateProperty", "PropertyDefinition", "ClassAccessorProperty"]);
+
+/**
+ * Whether an identifier reads its binding as a value that can be handed on (RT-M5): any reference except the object of
+ * a member access (`out.push`, `out[i]`), a write target, a name that is not a reference at all (a declaration, a
+ * non-computed key or member name, a label, a type), and uses that only read the value without passing the object on:
+ * iteration (`for (x of out)`, `...out`), a test (`if (out)`, `out ? a : b`, `switch (out)`), a unary or comparison
+ * operator (`!out`, `out === x`), a computed key (`o[out]`) or a statement of its own. `out instanceof C` counts, since
+ * a class may define `Symbol.hasInstance`; a template literal counts, since a tag receives its values.
+ */
+function usedAsValue(node: ASTNode, parent: ASTNode | undefined): boolean {
+  if (parent === undefined) return false;
+  const role = node.role;
+  switch (parent.type) {
+    case "MemberExpression":
+    case "OptionalMemberExpression":
+      return false;
+    case "AssignmentExpression":
+      return role !== "left";
+    case "BinaryExpression":
+      return parent.attributes.operator === "instanceof" && role === "left";
+    case "IfStatement":
+    case "WhileStatement":
+    case "DoWhileStatement":
+    case "ForStatement":
+    case "ConditionalExpression":
+    case "SwitchCase":
+      return role !== "test";
+    case "SwitchStatement":
+      return role !== "discriminant";
+    case "ForInStatement":
+    case "ForOfStatement":
+    case "SpreadElement":
+    case "UnaryExpression":
+    case "ExpressionStatement":
+    case "UpdateExpression":
+    case "ArrayPattern":
+    case "RestElement":
+    case "LabeledStatement":
+    case "BreakStatement":
+    case "ContinueStatement":
+    case "ImportSpecifier":
+    case "ImportDefaultSpecifier":
+    case "ImportNamespaceSpecifier":
+    case "TSTypeReference":
+    case "TSQualifiedName":
+    case "TSTypeQuery":
+    case "TSExpressionWithTypeArguments":
+      return false;
+    case "AssignmentPattern":
+      return role !== "left";
+    case "VariableDeclarator":
+    case "CatchClause":
+      return role !== "id" && role !== "param";
+    case "FunctionDeclaration":
+    case "FunctionExpression":
+    case "ArrowFunctionExpression":
+    case "ClassDeclaration":
+    case "ClassExpression":
+      return role !== "id" && role !== "param" && role !== "params";
+    case "ObjectProperty":
+    case "ObjectMethod":
+    case "ClassMethod":
+    case "ClassPrivateMethod":
+    case "ClassProperty":
+    case "ClassPrivateProperty":
+    case "ClassAccessorProperty":
+      return role !== "key" || parent.attributes.computed === true;
+    default:
+      return true;
+  }
+}
 
 /**
  * Binding keys of declarations whose real scope the symbol table does not model, so a name
@@ -1250,6 +1525,14 @@ function isFreshObject(node: ASTNode | undefined): boolean {
 }
 
 /** Children that run only on some executions of their parent, or not in source order. */
+/** An identifier that names no binding: a non-computed member or key name, or a label. */
+function isNonReferenceName(node: ASTNode, parent: ASTNode | undefined): boolean {
+  if (parent === undefined) return false;
+  if (node.role === "label") return true;
+  if (node.role === "property") return parent.attributes.computed !== true && (parent.type === "MemberExpression" || parent.type === "OptionalMemberExpression");
+  return node.role === "key" && parent.attributes.computed !== true && parent.attributes.shorthand !== true;
+}
+
 function isConditionalChild(parent: ASTNode, child: ASTNode): boolean {
   switch (parent.type) {
     case "IfStatement":
@@ -2552,8 +2835,8 @@ export function collectGlobalWrites(ast: ASTResult): readonly string[] {
 /** A value's origin: a path from the global object (`specifier` undefined) or from a package's module value. */
 interface ValueRoot { readonly specifier?: string; readonly path: readonly string[] }
 
-/** The reflective calls that write properties of their first argument. */
-const PROPERTY_WRITERS: ReadonlySet<string> = new Set(["Object.assign", "Object.defineProperty", "Object.defineProperties", "Reflect.defineProperty", "Reflect.set"]);
+/** The reflective calls that write (or, `Reflect.deleteProperty`, remove: RT-L3) properties of their first argument. */
+const PROPERTY_WRITERS: ReadonlySet<string> = new Set(["Object.assign", "Object.defineProperty", "Object.defineProperties", "Reflect.defineProperty", "Reflect.set", "Reflect.deleteProperty"]);
 
 /**
  * XB-03: the paths a file writes through a name other than the root, or by reflection, each from its root and cut
@@ -2772,7 +3055,48 @@ function valueTarget(calleeName: string, index: FileSymbolIndex, context: Resolu
   const kind = builtinKind(value, index, context);
   if (kind === undefined || !BUILTIN_METHODS[kind]!.has(method)) return undefined;
   if ((index.writes.propertyWrites.get(method) ?? 0) > 0) return undefined;
+  // RT-M5: a prototype swap of the binding, or a reflective write in the file once the value is passed around, may give
+  // the object its own `method`. A string primitive cannot hold own properties.
+  const key = bindingWriteKey(frame.id, name);
+  // A writer handed on any other way (`fn(Object)`) is assumed, like a parameter receiving the value, not to reach it.
+  if (kind !== "String" && reflectivelyTargeted(index.writes, key)) return undefined;
   return globalPathUnwritten([kind, "prototype", method], globalWrites) ? { module: "global", member: `${kind}.prototype.${method}` } : undefined;
+}
+
+/**
+ * RT-M5, option (2): whether a prototype swap or an unknown reflective write names binding `key`, or a plain alias of
+ * it (`const a = out`), as its target. A parameter, a call result or `this` that receives the value is assumed not to
+ * change its prototype or methods reflectively, as XB-03 assumes for globals and packages.
+ */
+function reflectivelyTargeted(writes: BindingWrites, key: string): boolean {
+  const seen = new Set<string>();
+  const pending = [key];
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    if (seen.has(current)) continue;
+    seen.add(current);
+    if (writes.protoSwapTargets.has(current) || writes.reflectiveTargets.has(current)) return true;
+    for (const [alias, sources] of writes.aliasSources) if (sources.has(current)) pending.push(alias);
+  }
+  return false;
+}
+
+/** RT-L7: the specifier of a re-export of a standard global (`module.exports = JSON`). */
+const GLOBAL_VALUE = "\u0000global";
+
+/**
+ * RT-L7: the global writes made through repository wrappers, from packageWriteKeys: a write on a module that
+ * re-exports a standard global (`module.exports = JSON`) is a global write of that path.
+ */
+export function wrapperGlobalWrites(packageWrites: ReadonlySet<string>): readonly string[] {
+  const paths: string[] = [];
+  for (const key of packageWrites) {
+    const separator = key.lastIndexOf("\u0000");
+    const module = key.slice(0, separator);
+    const member = key.slice(separator + 1);
+    if (module === GLOBAL_VALUE && member.length > 0) paths.push(member);
+  }
+  return paths;
 }
 
 /** A package or Node module specifier without the `node:` scheme: `node:fs` and `fs` are one module. */
@@ -2783,13 +3107,35 @@ function packageName(specifier: string): string {
 /**
  * The package members a run's files write (`require("fs").readFileSync = …`, `fs.readFileSync = …` through an import):
  * keys `module\u0000member`, `*` for a computed member, the member being the whole written path when known
- * (`ObjectId.prototype._id`). A specifier that resolves to a repository file is not a package.
+ * (`ObjectId.prototype._id`). A specifier that resolves to a repository file is not a package, but a write on it is a
+ * write on every package value that file's exports object may hold (RT-L7, see exportsValueRoots), followed through
+ * files that re-export other files. A relative specifier that reaches no repository file is not followed.
  */
 export function packageWriteKeys(writes: readonly ForeignExportWrite[], resolveFile: (importerPath: string, specifier: string) => string | undefined): ReadonlySet<string> {
   const keys = new Set<string>();
+  const reexports = new Map<string, ForeignExportWrite[]>();
+  for (const write of writes) if (write.reexport === true) reexports.set(write.importerPath, [...(reexports.get(write.importerPath) ?? []), write]);
+  // `chain` holds the files on the current re-export path only, so a file reached twice along sibling paths keeps both.
+  const packagesOf = (file: string, chain: ReadonlySet<string>): Array<{ readonly module: string; readonly path: readonly string[] }> => {
+    if (chain.has(file)) return [];
+    const next = new Set([...chain, file]);
+    return (reexports.get(file) ?? []).flatMap((entry) => {
+      const path = entry.member === undefined || entry.member === "" ? [] : entry.member.split(".");
+      if (entry.specifier === GLOBAL_VALUE) return [{ module: GLOBAL_VALUE, path }];
+      const target = resolveFile(file, entry.specifier);
+      if (target === undefined) return isRelativeSpecifier(entry.specifier) ? [] : [{ module: packageName(entry.specifier), path }];
+      return packagesOf(canonicalizePath(target), next).map((found) => ({ module: found.module, path: [...found.path, ...path] }));
+    });
+  };
   for (const write of writes) {
-    if (isRelativeSpecifier(write.specifier) || resolveFile(write.importerPath, write.specifier) !== undefined) continue;
-    keys.add(`${packageName(write.specifier)}\u0000${write.member ?? write.name}`);
+    if (write.reexport === true) continue;
+    const written = write.member ?? write.name;
+    const target = resolveFile(write.importerPath, write.specifier);
+    if (target === undefined) {
+      if (!isRelativeSpecifier(write.specifier)) keys.add(`${packageName(write.specifier)}\u0000${written}`);
+      continue;
+    }
+    for (const found of packagesOf(canonicalizePath(target), new Set())) keys.add(`${found.module}\u0000${[...found.path, written].filter((piece) => piece.length > 0).join(".")}`);
   }
   return keys;
 }

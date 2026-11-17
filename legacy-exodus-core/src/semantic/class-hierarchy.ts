@@ -53,7 +53,8 @@ export interface ClassHierarchyFile {
   readonly writtenNames: readonly string[];
   /**
    * Property names the file writes by name on an object that may be another module's instance (XA-03): not `this`
-   * (a class's own writes on `this` are its members) and not the file's own `exports` / `module.exports`.
+   * inside a class element (a class's own writes on `this` are its members; RT-N1: `this` in a plain function or an
+   * object method may be any object, so a write on it counts) and not the file's own `exports` / `module.exports`.
    */
   readonly foreignWrittenNames: readonly string[];
   /** Property names the file reads as a value rather than calling them. */
@@ -67,7 +68,11 @@ export interface ClassHierarchyFile {
 }
 
 const MODULE_SCOPE = "scope:module";
+/** Reflective calls that write or remove the property named by their second argument (RT-L3). */
+const keyedReflectiveWriters: ReadonlySet<string> = new Set(["Object.defineProperty", "Reflect.defineProperty", "Reflect.set", "Reflect.deleteProperty"]);
 const COMPUTED = "*";
+/** Class elements whose code runs with `this` bound to an instance or to the class (RT-N1). */
+const classThisElements: ReadonlySet<string> = new Set(["ClassMethod", "ClassPrivateMethod", "ClassProperty", "ClassPrivateProperty", "ClassAccessorProperty", "PropertyDefinition", "StaticBlock"]);
 
 /** One file's contribution, collected while the file's AST and symbol table are at hand. */
 export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | undefined): ClassHierarchyFile {
@@ -178,7 +183,13 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
     }
   };
 
-  const visit = (node: ASTNode, parent: ASTNode | undefined, currentClass: string | undefined): void => {
+  // RT-N1: `thisInClass` tells whether `this` here is bound by a class element (a method, constructor, field or static
+  // block, arrow functions inside them included), so that it is an instance of a class (or the class) of this file. In
+  // a plain function, function expression or object method `this` may be any object: `patch.call(app)`. At the top of
+  // the file `this` is the file's own original exports object (CommonJS) or undefined (an ES module).
+  const visit = (node: ASTNode, parent: ASTNode | undefined, currentClass: string | undefined, thisInClass: boolean): void => {
+    const childThisInClass = parent?.type === "ClassBody" && classThisElements.has(node.type) ? true
+      : ["FunctionDeclaration", "FunctionExpression", "ObjectMethod"].includes(node.type) ? false : thisInClass;
     let classInside = currentClass;
     if (node.type === "ClassDeclaration" || node.type === "ClassExpression") {
       const symbol = node.location === undefined ? undefined : classByStart.get(`${node.location.start.line}:${node.location.start.column}`);
@@ -207,7 +218,8 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
       if (writer !== undefined) {
         written.add(name ?? COMPUTED);
         const object = node.children.find((child) => child.role === "object");
-        if (name !== undefined && !isOwnObject(object, ownExports) && !isOwnAlias(object, writer)) foreignWritten.add(name);
+        const own = object?.type === "ThisExpression" ? thisInClass : isOwnObject(object, ownExports) || isOwnAlias(object, writer);
+        if (name !== undefined && !own) foreignWritten.add(name);
       }
       else if (!called && !tagged && !(parent?.type === "UnaryExpression" && parent.attributes.operator === "delete")) {
         if (name !== undefined) borrowed.add(name);
@@ -228,13 +240,27 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
     if (node.type === "VariableDeclarator") noteInstance(node.children.find((child) => child.role === "id"), node.children.find((child) => child.role === "init"));
     if (node.type === "AssignmentExpression") noteInstance(node.children.find((child) => child.role === "left"), node.children.find((child) => child.role === "right"));
     notePrototypeLinks(node);
+    if (node.type === "CallExpression" || node.type === "OptionalCallExpression") {
+      // RT-L3: a literal-key reflective write (`Reflect.set(o, "m", f)`, `Reflect.deleteProperty(o, "m")`,
+      // `Object.defineProperty(o, "m", …)`) writes `m` as `o.m = …` does. A computed key is assumed not to produce a name.
+      const callee = node.children.find((child) => child.role === "callee");
+      const namespace = callee?.type === "MemberExpression" && callee.attributes.computed !== true ? callee.children.find((child) => child.role === "object") : undefined;
+      const method = callee?.type === "MemberExpression" ? callee.children.find((child) => child.role === "property") : undefined;
+      const writer = namespace?.type === "Identifier" && method !== undefined ? `${nameOf(namespace)}.${nameOf(method)}` : undefined;
+      const args = node.children.filter((child) => child.role === "arguments");
+      const key = writer !== undefined && keyedReflectiveWriters.has(writer) ? staticKey(args[1]) : undefined;
+      if (key !== undefined) {
+        written.add(key);
+        if (!(args[0]?.type === "ThisExpression" || isOwnObject(args[0], ownExports))) foreignWritten.add(key);
+      }
+    }
     if (node.type === "Identifier" && isValueUse(node, parent)) {
       const name = nameOf(node);
       if (name !== undefined) valueUses.set(name, (valueUses.get(name) ?? 0) + 1);
     }
-    for (const child of node.children) visit(child, node, classInside);
+    for (const child of node.children) visit(child, node, classInside, childThisInClass);
   };
-  visit(ast.root, undefined, undefined);
+  visit(ast.root, undefined, undefined, true);
   for (const name of linkedLiteralNames) for (const key of literalKeysByName.get(name) ?? []) prototypeOverrides.add(key);
   // A spread of a name owns the keys of the literal that name is declared with, spreads in it included (cycles end).
   const expandSpreads = (keys: Iterable<string>, seen: Set<string>): string[] => [...keys].flatMap((key) => {
@@ -492,12 +518,14 @@ function isOwnObject(object: ASTNode | undefined, own: OwnExports): boolean {
  * The places a node stores a value, each an Identifier or a member expression (RT-M1): the target of an assignment of
  * any operator (`o.m = …`, `o.m ||= …`), every target of a destructuring assignment (`[o.m] = …`, `({ k: o.m } = …)`,
  * defaults and rest included), the head of a `for…in` or `for…of` that declares nothing (`for (o.m of fns)`), and the
- * operand of `++` or `--`. Parentheses and TypeScript wrappers are looked through (`(o.m as any) = …`). A declaration
+ * operand of `++` or `--`, and the operand of `delete` (RT-L3: removing `o.m` changes what `o.m()` runs, or makes it
+ * throw). Parentheses and TypeScript wrappers are looked through (`(o.m as any) = …`). A declaration
  * (`const { m } = o`) stores into its new bindings only and is not listed.
  */
 export function writtenTargets(node: ASTNode): ASTNode[] {
   if (node.type === "AssignmentExpression") return targetLeaves(node.children.find((child) => child.role === "left"));
   if (node.type === "UpdateExpression") return targetLeaves(node.children.find((child) => child.role === "argument"));
+  if (node.type === "UnaryExpression" && node.attributes.operator === "delete") return targetLeaves(node.children.find((child) => child.role === "argument"));
   if (node.type === "ForInStatement" || node.type === "ForOfStatement") {
     const left = node.children.find((child) => child.role === "left");
     return left?.type === "VariableDeclaration" ? [] : targetLeaves(left);
