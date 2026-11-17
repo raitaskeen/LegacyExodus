@@ -41,7 +41,11 @@ export function requireCycleFacts(
 /** What a file does while it loads: the modules it loads, and where it replaces `module.exports`. */
 export interface LoadTimeModuleFacts {
   readonly filePath: string;
-  /** `require("x")` outside any function, and static `import`/`export … from` (these load before the body runs). */
+  /**
+   * `require("x")` and TypeScript's `import x = require("x")` outside any function, and static `import`/`export … from`
+   * (these load before the body runs). An import that compiles away is no load: `import type`, `export type … from`,
+   * and in a TypeScript file an import whose names are used only as types.
+   */
   readonly loads: readonly { readonly specifier: string; readonly at: SourcePoint }[];
   /** `module.exports = …` outside any function (`exports = module.exports = …` included). */
   readonly exportsReplacedAt: readonly SourcePoint[];
@@ -49,6 +53,56 @@ export interface LoadTimeModuleFacts {
 
 const CALLABLE = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression", "ClassMethod", "ClassPrivateMethod", "ObjectMethod"]);
 const BEFORE_BODY: SourcePoint = { line: 0, column: 0 };
+const TYPESCRIPT_FILE = /\.(?:ts|tsx|mts|cts)$/i;
+const DECLARATION_FILE = /\.d\.(?:ts|mts|cts)$/i;
+/** Nodes whose whole subtree is a type: a name used only inside them is no value use. */
+const TYPE_POSITIONS = new Set([
+  "TSTypeAnnotation", "TSTypeReference", "TSTypeQuery", "TSTypeParameterInstantiation", "TSTypeParameterDeclaration",
+  "TSInterfaceDeclaration", "TSTypeAliasDeclaration", "TSExpressionWithTypeArguments", "TSClassImplements",
+  "TSInterfaceHeritage", "TSDeclareFunction", "TSDeclareMethod", "TSIndexSignature", "TSPropertySignature", "TSMethodSignature",
+]);
+
+/** `import type`, `import typeof` (Flow), `export type`, or one such specifier. */
+function isTypeOnly(node: ASTNode): boolean {
+  return node.attributes.importKind === "type" || node.attributes.importKind === "typeof" || node.attributes.exportKind === "type";
+}
+
+/**
+ * The names a TypeScript file uses as values: identifiers (JSX ones included) outside imports and type positions.
+ * Undefined when the file has a decorator, since compilers that emit decorator metadata keep type imports too.
+ * Over-counting is safe: a name counted by mistake only keeps an import as a load.
+ */
+function valueNames(root: ASTNode): ReadonlySet<string> | undefined {
+  const names = new Set<string>();
+  let decorated = false;
+  const visit = (node: ASTNode): void => {
+    if (node.type === "ImportDeclaration" || TYPE_POSITIONS.has(node.type) || isTypeOnly(node)) return;
+    if (node.type === "Decorator") decorated = true;
+    const name = node.attributes.name;
+    if ((node.type === "Identifier" || node.type === "JSXIdentifier") && typeof name === "string") names.add(name);
+    for (const child of node.children) visit(child);
+  };
+  visit(root);
+  return decorated ? undefined : names;
+}
+
+/** Whether an import declaration loads its module at run time; `values` is undefined when no import is elided. */
+function importLoads(node: ASTNode, values: ReadonlySet<string> | undefined): boolean {
+  if (isTypeOnly(node)) return false;
+  const specifiers = node.children.filter((child) => child.role === "specifiers");
+  if (values === undefined || specifiers.length === 0) return true;
+  return specifiers.some((specifier) => {
+    const local = specifier.children.find((child) => child.role === "local")?.attributes.name;
+    return !isTypeOnly(specifier) && (typeof local !== "string" || values.has(local));
+  });
+}
+
+/** Whether an `export … from` loads its module: not `export type`, and not only type specifiers. */
+function reexportLoads(node: ASTNode): boolean {
+  if (isTypeOnly(node)) return false;
+  const specifiers = node.children.filter((child) => child.role === "specifiers");
+  return specifiers.length === 0 || specifiers.some((specifier) => !isTypeOnly(specifier));
+}
 
 function stringValue(node: ASTNode | undefined): string | undefined {
   const value = node?.type === "StringLiteral" ? node.attributes.value : undefined;
@@ -63,14 +117,26 @@ function isModuleExports(node: ASTNode | undefined): boolean {
 }
 
 export function collectLoadTimeModuleFacts(ast: ASTResult): LoadTimeModuleFacts {
+  const filePath = canonicalizePath(ast.metadata.sourcePath);
+  // A declaration file has no run-time code.
+  if (DECLARATION_FILE.test(filePath)) return { filePath, loads: [], exportsReplacedAt: [] };
+  const values = TYPESCRIPT_FILE.test(filePath) ? valueNames(ast.root) : undefined;
   const loads: { specifier: string; at: SourcePoint }[] = [];
   const exportsReplacedAt: SourcePoint[] = [];
   const visit = (node: ASTNode): void => {
     if (CALLABLE.has(node.type)) return;
     const at = node.location?.start ?? BEFORE_BODY;
-    if (node.type === "ImportDeclaration" || node.type === "ExportAllDeclaration" || node.type === "ExportNamedDeclaration") {
+    const loadsModule = node.type === "ImportDeclaration" ? importLoads(node, values)
+      : node.type === "ExportAllDeclaration" || node.type === "ExportNamedDeclaration" ? reexportLoads(node) : false;
+    if (loadsModule) {
       const specifier = stringValue(node.children.find((child) => child.role === "source"));
       if (specifier !== undefined) loads.push({ specifier, at: BEFORE_BODY });
+    }
+    if (node.type === "TSImportEqualsDeclaration" && !isTypeOnly(node)) {
+      // `import x = require("x")` compiles to a `require` at this statement.
+      const reference = node.children.find((child) => child.role === "moduleReference");
+      const specifier = reference?.type === "TSExternalModuleReference" ? stringValue(reference.children.find((child) => child.role === "expression")) : undefined;
+      if (specifier !== undefined) loads.push({ specifier, at });
     }
     if (node.type === "CallExpression") {
       const callee = node.children.find((child) => child.role === "callee");
@@ -82,7 +148,7 @@ export function collectLoadTimeModuleFacts(ast: ASTResult): LoadTimeModuleFacts 
     for (const child of node.children) visit(child);
   };
   visit(ast.root);
-  return { filePath: canonicalizePath(ast.metadata.sourcePath), loads, exportsReplacedAt };
+  return { filePath, loads, exportsReplacedAt };
 }
 
 function before(left: SourcePoint, right: SourcePoint): boolean {

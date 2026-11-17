@@ -1583,6 +1583,9 @@ export const conformanceCases: readonly ConformanceCase[] = [
     // Control: main.js is outside the cycle, so it cannot load while the cycle does and binds the final value. Node:
     // "THROWS make is not a function" (b.js, inside the cycle), then "a-run" (main.js).
     ["rt-m9-outside-importer-control", { "a.js": "const b = require(\"./b\");\nfunction make() { const o = { run() { return \"a-run\"; } }; return o; }\nmodule.exports = make;\nconsole.log(b.go());\n", "b.js": "const make = require(\"./a\");\nexports.go = function () { try { return make().run(); } catch (e) { return \"THROWS \" + e.message; } };\n", "main.js": "const make = require(\"./a\");\nconsole.log(make().run());\n" }, /^main\.js@2:\d+\|module\|make\|RESOLVED\|/],
+    // Control: `import type` compiles away, so a.ts and b.ts form no cycle and b.ts's top-level call is proven (Node 24
+    // strips the types and prints "run").
+    ["rt-m9-type-import-no-cycle-control", { "a.ts": "import type { T } from \"./b.ts\";\nexport const make = (): { run(): string } => ({ run: () => \"run\" });\nexport const t: T | undefined = undefined;\n", "b.ts": "import { make } from \"./a.ts\";\nexport type T = number;\nconsole.log(make().run());\n", "main.ts": "import \"./b.ts\";\n" }, /^b\.ts@3:\d+\|module\|make\|RESOLVED\|/],
     // Control: a top-level callback runs after the cycle has loaded, so the call through a.js's exports is proven ("a-run").
     ["rt-m9-callback-after-load-control", { "a.js": "const b = require(\"./b\");\nexports.run = function () { return \"a-run\"; };\n", "b.js": "const a = require(\"./a\");\nsetImmediate(() => console.log(a.run()));\n", "main.js": "require(\"./a\");\n" }, /^b\.js@2:\d+\|module\|a\.run\|RESOLVED\|/],
     // Control: a.js sets `module.exports` before it loads b.js, so b.js binds the final value ("a-run").
