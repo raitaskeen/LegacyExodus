@@ -66,10 +66,11 @@ export interface ClassHierarchyFile {
    */
   readonly prototypeOverrides?: readonly string[];
   /**
-   * RT-N2: per class method of this file, the names it writes on `this` (`patch() { this.m = … }`). A method read as a
-   * value anywhere (`P.prototype.patch.call(o)`) can run on any object, so those writes then count as foreign writes.
+   * RT-N2: per class method of this file, its class and the names it writes on `this` (`patch() { this.m = … }`). A
+   * borrowed method (see isBorrowed: `P.prototype.patch.call(o)`, or `P.prototype[k]`) can run on any object, so
+   * those writes then count as foreign writes.
    */
-  readonly borrowableThisWrites?: readonly (readonly [string, readonly string[]])[];
+  readonly borrowableThisWrites?: readonly { readonly classId?: string; readonly method: string; readonly names: readonly string[] }[];
 }
 
 const MODULE_SCOPE = "scope:module";
@@ -193,7 +194,7 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
   // a plain function, function expression or object method `this` may be any object: `patch.call(app)`. At the top of
   // the file `this` is the file's own original exports object (CommonJS) or undefined (an ES module).
   // RT-N2: `thisMethod` names the class method (not a constructor, field or static block) whose `this` applies here.
-  const thisWritesByMethod = new Map<string, Set<string>>();
+  const thisWritesByMethod = new Map<string, { readonly classId?: string; readonly method: string; readonly names: Set<string> }>();
   const visit = (node: ASTNode, parent: ASTNode | undefined, currentClass: string | undefined, thisInClass: boolean, thisMethod: string | undefined): void => {
     const childThisInClass = parent?.type === "ClassBody" && classThisElements.has(node.type) ? true
       : ["FunctionDeclaration", "FunctionExpression", "ObjectMethod"].includes(node.type) ? false : thisInClass;
@@ -231,7 +232,10 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
         const own = object?.type === "ThisExpression" ? thisInClass : isOwnObject(object, ownExports) || isOwnAlias(object, writer);
         if (name !== undefined && !own) foreignWritten.add(name);
         if (name !== undefined && object?.type === "ThisExpression" && thisInClass && thisMethod !== undefined) {
-          thisWritesByMethod.set(thisMethod, (thisWritesByMethod.get(thisMethod) ?? new Set()).add(name));
+          const key = `${currentClass ?? ""}\u0000${thisMethod}`;
+          const entry = thisWritesByMethod.get(key) ?? { ...(currentClass === undefined ? {} : { classId: currentClass }), method: thisMethod, names: new Set<string>() };
+          thisWritesByMethod.set(key, entry);
+          entry.names.add(name);
         }
       }
       else if (!called && !tagged && !(parent?.type === "UnaryExpression" && parent.attributes.operator === "delete")) {
@@ -305,7 +309,8 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
     foreignWrittenNames: [...foreignWritten].sort(),
     borrowedNames: [...borrowed].sort(),
     prototypeOverrides: [...prototypeOverrides].sort(),
-    borrowableThisWrites: [...thisWritesByMethod].map(([method, names]) => [method, [...names].sort()] as const).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)),
+    borrowableThisWrites: [...thisWritesByMethod].sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .map(([, { names, ...method }]) => ({ ...method, names: [...names].sort() })),
   };
 }
 
@@ -720,9 +725,9 @@ export class ClassHierarchy {
     private readonly closedWorld = false,
   ) {
     const unknownRoots: ClassFact[] = [];
-    const thisWrites: { readonly filePath: string; readonly method: string; readonly names: readonly string[] }[] = [];
+    const thisWrites: { readonly filePath: string; readonly classId?: string; readonly method: string; readonly names: readonly string[] }[] = [];
     for (const file of files) {
-      for (const [method, names] of file.borrowableThisWrites ?? []) thisWrites.push({ filePath: file.filePath, method, names });
+      for (const write of file.borrowableThisWrites ?? []) thisWrites.push({ filePath: file.filePath, ...write });
       for (const name of file.borrowedNames) this.borrowed.add(name);
       for (const name of file.prototypeOverrides ?? []) this.prototypeOverrides.add(name);
       for (const name of file.foreignWrittenNames) {
@@ -754,9 +759,10 @@ export class ClassHierarchy {
       for (const name of this.subtreeMembers(root.id, new Set())) this.unknownOverrides.add(name);
       for (const name of this.ownMembers(root)) this.unknownOverrides.add(name);
     }
-    // RT-N2: a borrowed class method (its name read as a value anywhere) writes its `this` names on any object.
-    for (const { filePath, method, names } of thisWrites) {
-      if (!this.borrowed.has(method)) continue;
+    // RT-N2: a borrowed class method (its name read as a value anywhere, or its class read by a computed key) writes
+    // its `this` names on any object.
+    for (const { filePath, classId, method, names } of thisWrites) {
+      if (!this.isBorrowed(method, classId)) continue;
       for (const name of names) {
         const writer = this.foreignWriters.get(name);
         this.foreignWriters.set(name, writer === undefined || writer === filePath ? filePath : true);
