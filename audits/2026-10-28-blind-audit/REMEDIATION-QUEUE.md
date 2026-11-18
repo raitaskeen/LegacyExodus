@@ -94,7 +94,7 @@ Audit by Shahzaib Hassan on `fdc37f3` (`audits/2026-11-10-blind-audit-b/AUDIT-RE
 | XB-05 | Low | C2: an `Object.prototype` name called before its assignment resolves to the later method | **Fixed** #321 (`f57ed30`): 0 lost/0 gained on 11 corpora incl. Ghost |
 | XB-06 | Low | `async` or generator factory resolves `make().m()` | **Fixed** #321 (`f57ed30`): 0 lost/0 gained on 11 corpora incl. Ghost |
 | XB-07 | Low | `Object.assign(this, opts)` in a constructor function: prototype method still RESOLVED | **Fixed** #321 (`f57ed30`): 0 lost/0 gained on 11 corpora incl. Ghost |
-| XB-08 | Info | ESM directory import resolves through `main`; Node throws | Open (wording) |
+| XB-08 | Info | ESM directory import resolves through `main`; Node throws | **Fixed** (wording, #349, main c5d5298): Current Implementation states the directory-import assumption under Assumptions behind RESOLVED; resolver comment corrected. No behaviour change |
 | XB-09 | Info | CI blocked by Actions billing | Closed: repo made public 2026-11-12 (free Actions minutes); running again since 2026-11-10 17:19; Copilot review rule removed from rulesets and drafts skip CI (#317, `df5e290`) |
 
 ## Track 2026-11-09: cross-file audit findings (XA-01 to XA-08)
