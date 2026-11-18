@@ -2,6 +2,7 @@ import type { ASTNode, ASTResult } from "@parser/index";
 import type { CodeSymbol, SymbolTable } from "@symbols/index";
 import { canonicalizePath } from "@graph/index";
 import { writtenTargets } from "./class-hierarchy";
+import { staticPropertyKey } from "./scope-model";
 
 /**
  * Phase C1 (audits/2026-11-10-blind-audit/PHASE-C-DESIGN.md): an object a repository factory builds and returns.
@@ -876,7 +877,7 @@ function literalKeyWrite(call: ASTNode): string | undefined {
   // RT-L3: `Reflect.set(o, "m", f)` and `Reflect.deleteProperty(o, "m")` change `m` as a literal-key defineProperty does.
   if (path !== "Object.defineProperty" && path !== "Reflect.defineProperty" && path !== "Reflect.set" && path !== "Reflect.deleteProperty") return undefined;
   const key = callArguments(call)[1];
-  return staticKeyOf(key);
+  return staticPropertyKey(key);
 }
 
 const STANDARD_ERRORS = new Set(["Error", "TypeError", "RangeError", "SyntaxError", "ReferenceError", "EvalError", "URIError"]);
@@ -1173,14 +1174,5 @@ function collectFileWrites(root: ASTNode): FileWrites {
 function memberName(member: ASTNode): string | undefined {
   const property = role(member, "property");
   if (member.attributes.computed !== true) return nameOf(property);
-  return staticKeyOf(property);
-}
-
-/** A literal key's text: a string, a number, or a template literal without substitutions. */
-function staticKeyOf(node: ASTNode | undefined): string | undefined {
-  if (node?.type === "StringLiteral") return typeof node.attributes.value === "string" ? node.attributes.value : undefined;
-  if (node?.type === "NumericLiteral") return typeof node.attributes.value === "number" ? String(node.attributes.value) : undefined;
-  if (node?.type !== "TemplateLiteral" || node.children.some((child) => child.role === "expressions")) return undefined;
-  const quasi = node.children.find((child) => child.role === "quasis" || child.type === "TemplateElement");
-  return typeof quasi?.attributes.value === "string" ? quasi.attributes.value : undefined;
+  return staticPropertyKey(property);
 }
