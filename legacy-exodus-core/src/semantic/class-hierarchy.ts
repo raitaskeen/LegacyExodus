@@ -1,6 +1,7 @@
 import type { ASTNode, ASTResult } from "@parser/index";
 import type { CodeSymbol, SymbolTable } from "@symbols/index";
 import { canonicalizePath } from "@graph/index";
+import { staticPropertyKey } from "./scope-model";
 
 /**
  * Whole-repository facts that decide whether `this.m()` inside a class is proven to call that class's own `m`.
@@ -265,7 +266,7 @@ export function collectClassHierarchyFacts(ast: ASTResult, table: SymbolTable | 
       const method = callee?.type === "MemberExpression" ? callee.children.find((child) => child.role === "property") : undefined;
       const writer = namespace?.type === "Identifier" && method !== undefined ? `${nameOf(namespace)}.${nameOf(method)}` : undefined;
       const args = node.children.filter((child) => child.role === "arguments");
-      const key = writer !== undefined && keyedReflectiveWriters.has(writer) ? staticKey(args[1]) : undefined;
+      const key = writer !== undefined && keyedReflectiveWriters.has(writer) ? staticPropertyKey(args[1]) : undefined;
       if (key !== undefined) {
         written.add(key);
         if (!(args[0]?.type === "ThisExpression" || isOwnObject(args[0], ownExports))) foreignWritten.add(key);
@@ -659,26 +660,14 @@ function newCalleeName(node: ASTNode): string | undefined {
 
 function memberPropertyName(member: ASTNode): string | undefined {
   const property = member.children.find((child) => child.role === "property");
-  if (member.attributes.computed === true) return staticKey(property);
+  if (member.attributes.computed === true) return staticPropertyKey(property);
   return property === undefined ? undefined : nameOf(property);
-}
-
-/**
- * A key known without running code (RT-M2): a string or numeric literal, or a template literal without substitutions,
- * so `` o[`m`] `` and `o["m"]` both name `m`, as they do at run time.
- */
-function staticKey(node: ASTNode | undefined): string | undefined {
-  if (node?.type === "StringLiteral") return typeof node.attributes.value === "string" ? node.attributes.value : undefined;
-  if (node?.type === "NumericLiteral") return typeof node.attributes.value === "number" ? String(node.attributes.value) : undefined;
-  if (node?.type !== "TemplateLiteral" || node.children.some((child) => child.role === "expressions")) return undefined;
-  const quasi = node.children.find((child) => child.role === "quasis" || child.type === "TemplateElement");
-  return typeof quasi?.attributes.value === "string" ? quasi.attributes.value : undefined;
 }
 
 function keyName(element: ASTNode): string | undefined {
   const key = element.children.find((child) => child.role === "key");
   if (key === undefined) return undefined;
-  if (element.attributes.computed === true || key.type === "StringLiteral" || key.type === "NumericLiteral") return staticKey(key);
+  if (element.attributes.computed === true || key.type === "StringLiteral" || key.type === "NumericLiteral") return staticPropertyKey(key);
   if (key.type === "PrivateName") {
     const id = key.children.find((child) => child.role === "id");
     const inner = id === undefined ? undefined : nameOf(id);
