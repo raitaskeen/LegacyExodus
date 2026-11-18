@@ -128,8 +128,9 @@ export class ModuleResolver {
   }
 
   /**
-   * A relative path as Node loads it: as a file, then as a directory through its `package.json` `main`, then
-   * through the directory's index. A `main` that leaves its directory is not followed.
+   * A relative path as `require`, TypeScript and bundlers load it: as a file, then as a directory through its
+   * `package.json` `main`, then through the directory's index. A `main` that leaves its directory is not followed.
+   * Node's own ESM loader refuses a directory (`ERR_UNSUPPORTED_DIR_IMPORT`); the docs state that assumption (XB-08).
    */
   private resolveRelative(basePath: string, knownPaths: ReadonlySet<string>, importerIsTypeScript: boolean): string | null {
     const candidates = candidatesFor(basePath, importerIsTypeScript);
