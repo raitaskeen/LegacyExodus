@@ -1,8 +1,8 @@
 /** Types shared by the call-graph modules: the per-file symbol index, the resolution context and binding writes. */
 import type { ASTNode } from "@parser/index";
 import { type CodeSymbol } from "@symbols/index";
-import { ClassHierarchy } from "./class-hierarchy";
-import { FactoryIndex } from "./factory-objects";
+import type { ClassHierarchy } from "./class-hierarchy";
+import type { FactoryIndex } from "./factory-objects";
 import type { ScopeFrame, SourcePoint } from "./scope-model";
 
 export interface FileSymbolIndex {
