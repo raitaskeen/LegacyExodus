@@ -7,12 +7,11 @@ import { join } from "node:path";
 import { CORPUS_TESTS, innermostSite, instrument, judgeRun, originalColumn, preloadSource, runNotes, runProblems, targetFunctions, testCommand, testEnvironment } from "../../../benchmarks/call-oracle";
 
 describe("oracle test runs (AUD-16)", () => {
-  test("leaves out only the tests that fail for that oracle and platform", () => {
+  test("leaves out only the tests that fail for that oracle", () => {
     const base = ["npx", "borp", "--reporter=@jsumners/line-reporter"];
-    expect(testCommand("fastify", "flow", "linux")).toEqual([...base, "--ignore", "test/build/version.test.js"]);
-    expect(testCommand("fastify", "call", "linux")).toEqual([...base, "--ignore", "test/build/version.test.js", "--ignore", "test/plugin.1.test.js", "--ignore", "test/plugin.4.test.js", "--ignore", "test/issue-4959.test.js"]);
-    expect(testCommand("fastify", "flow", "win32")).toEqual([...base, "--ignore", "test/build/version.test.js", "--ignore", "test/http2/closing.test.js"]);
-    expect(testCommand("express", "call", "linux")).toEqual(["npm", "run", "test"]);
+    expect(testCommand("fastify", "flow")).toEqual([...base, "--ignore", "test/build/version.test.js", "--ignore", "test/http2/closing.test.js"]);
+    expect(testCommand("fastify", "call")).toEqual([...base, "--ignore", "test/build/version.test.js", "--ignore", "test/plugin.1.test.js", "--ignore", "test/plugin.4.test.js", "--ignore", "test/issue-4959.test.js", "--ignore", "test/http2/closing.test.js"]);
+    expect(testCommand("express", "call")).toEqual(["npm", "run", "test"]);
     expect(() => testCommand("unknown", "call")).toThrow("No test command");
   });
 

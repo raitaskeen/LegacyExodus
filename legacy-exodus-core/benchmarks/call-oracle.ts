@@ -20,15 +20,13 @@ interface SkippedTest {
   readonly file: string;
   /** Only for this oracle; both when absent. */
   readonly oracle?: "call" | "flow";
-  /** Only on this platform; all when absent. */
-  readonly platform?: NodeJS.Platform;
   readonly reason: string;
 }
 
 /**
  * How the oracles run a pinned corpus's own tests (AUD-16). A suite that fails is not evidence, so a failing run fails
  * the oracle. `skip` leaves out the test files that fail whatever the engine does, each with its reason, only for the
- * oracle and platform where they fail. The floors catch a run that passes while seeing little (a preload or coverage
+ * oracle where they fail. The floors catch a run that passes while seeing little (a preload or coverage
  * collection that stopped working); they sit about 10% below the lowest run measured.
  */
 interface CorpusTests {
@@ -53,23 +51,23 @@ export const CORPUS_TESTS: Readonly<Record<string, CorpusTests>> = {
       { file: "test/plugin.1.test.js", oracle: "call", reason: "names a plugin by its source text, which the call oracle's probes change" },
       { file: "test/plugin.4.test.js", oracle: "call", reason: "names a plugin by its source text, which the call oracle's probes change" },
       { file: "test/issue-4959.test.js", oracle: "call", reason: "races a 5 ms socket timer against the request; the probes' slowdown makes it lose the race in some runs" },
-      { file: "test/http2/closing.test.js", platform: "win32", reason: "times out on Windows without any oracle" },
+      { file: "test/http2/closing.test.js", reason: "two tests time out (30 s) on Linux CI and on Windows, with or without the oracles" },
     ],
     minObservedSites: 8100,
     minExecutedStatements: 25000,
   },
 };
 
-/** The test files one oracle's run of a corpus leaves out on `platform`. */
-export function skippedTests(corpus: string, oracle: "call" | "flow", platform: NodeJS.Platform = process.platform): readonly SkippedTest[] {
-  return (CORPUS_TESTS[corpus]?.skip ?? []).filter((test) => (test.oracle ?? oracle) === oracle && (test.platform ?? platform) === platform);
+/** The test files one oracle's run of a corpus leaves out. */
+export function skippedTests(corpus: string, oracle: "call" | "flow"): readonly SkippedTest[] {
+  return (CORPUS_TESTS[corpus]?.skip ?? []).filter((test) => (test.oracle ?? oracle) === oracle);
 }
 
-/** The command that runs a corpus's tests for one oracle on `platform`, with that run's skipped files left out. */
-export function testCommand(corpus: string, oracle: "call" | "flow", platform: NodeJS.Platform = process.platform): readonly string[] {
+/** The command that runs a corpus's tests for one oracle, with that run's skipped files left out. */
+export function testCommand(corpus: string, oracle: "call" | "flow"): readonly string[] {
   const tests = CORPUS_TESTS[corpus];
   if (tests === undefined) throw new Error(`No test command is configured for corpus ${corpus}.`);
-  const skipped = skippedTests(corpus, oracle, platform);
+  const skipped = skippedTests(corpus, oracle);
   if (skipped.length > 0 && tests.ignoreOption === undefined) throw new Error(`Corpus ${corpus} skips tests but its runner has no ignore option.`);
   return [...tests.command, ...skipped.flatMap((test) => [tests.ignoreOption!, test.file])];
 }
