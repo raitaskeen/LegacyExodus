@@ -267,6 +267,17 @@ export function analyzeCleanCopy(engineRoot: string, corpus: string, work: strin
 }
 
 /**
+ * The environment a corpus's tests run in: this process's, plus `env`, without `GITHUB_ACTION`. With that variable set,
+ * Fastify's runner (borp 0.20.2) adds a GitHub annotation reporter that crashes on an event without a file, so every CI
+ * run exited 1 although its tests passed (AUD-16). The oracles need only the exit code.
+ */
+export function testEnvironment(env: Readonly<Record<string, string>>, base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const result: NodeJS.ProcessEnv = { ...base, NO_COLOR: "1", CI: "1", ...env };
+  delete result.GITHUB_ACTION;
+  return result;
+}
+
+/**
  * Installs a corpus copy's dev dependencies and runs `command` with `env` added; returns the exit code. A failing run
  * prints the end of its output, so the CI log shows which tests failed.
  */
@@ -277,7 +288,7 @@ export function installAndTest(run: string, command: readonly string[], env: Rea
   if (existsSync(lock)) cpSync(lock, join(run, "package-lock.json"));
   const install = spawnSync("npm", [existsSync(lock) ? "ci" : "install", "--no-audit", "--no-fund", "--ignore-scripts", "--loglevel=error"], { cwd: run, encoding: "utf8", shell: true, maxBuffer: 1 << 26 });
   if (install.status !== 0) throw new Error(`npm install failed: ${String(install.stderr).slice(0, 2000)}`);
-  const tests = spawnSync(command[0]!, command.slice(1), { cwd: run, encoding: "utf8", shell: true, maxBuffer: 1 << 28, env: { ...process.env, NO_COLOR: "1", CI: "1", ...env } });
+  const tests = spawnSync(command[0]!, command.slice(1), { cwd: run, encoding: "utf8", shell: true, maxBuffer: 1 << 28, env: testEnvironment(env) });
   if (tests.status !== 0) {
     const tail = `${tests.stdout ?? ""}\n${tests.stderr ?? ""}`.split("\n").filter((line) => line.trim() !== "").slice(-60).join("\n");
     console.error(`Tests of ${basename(run)} (${command.join(" ")}) exited with ${tests.status}. Last lines:\n${tail}`);

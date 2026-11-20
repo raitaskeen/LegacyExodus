@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { CORPUS_TESTS, innermostSite, instrument, judgeRun, originalColumn, preloadSource, runNotes, runProblems, targetFunctions, testCommand } from "../../../benchmarks/call-oracle";
+import { CORPUS_TESTS, innermostSite, instrument, judgeRun, originalColumn, preloadSource, runNotes, runProblems, targetFunctions, testCommand, testEnvironment } from "../../../benchmarks/call-oracle";
 
 describe("oracle test runs (AUD-16)", () => {
   test("leaves out only the tests that fail for that oracle and platform", () => {
@@ -14,6 +14,12 @@ describe("oracle test runs (AUD-16)", () => {
     expect(testCommand("fastify", "flow", "win32")).toEqual([...base, "--ignore", "test/build/version.test.js", "--ignore", "test/http2/closing.test.js"]);
     expect(testCommand("express", "call", "linux")).toEqual(["npm", "run", "test"]);
     expect(() => testCommand("unknown", "call")).toThrow("No test command");
+  });
+
+  test("runs the tests without GITHUB_ACTION, whose reporter crashed Fastify's CI runs", () => {
+    const env = testEnvironment({ NODE_OPTIONS: "--require=x" }, { GITHUB_ACTION: "__run", GITHUB_ACTIONS: "true", PATH: "p" });
+    expect(env.GITHUB_ACTION).toBeUndefined();
+    expect(env).toMatchObject({ GITHUB_ACTIONS: "true", PATH: "p", NODE_OPTIONS: "--require=x", CI: "1", NO_COLOR: "1" });
   });
 
   test("gives every left-out test a reason", () => {
