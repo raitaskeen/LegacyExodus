@@ -1,0 +1,16 @@
+[
+  {
+    "id": "4d4d0cea7e443590b59dddca4fc34faa6f37fbfd94a251d8d0047b8aa8ca19ee",
+    "path": "lib.js",
+    "language": "javascript",
+    "fileKind": "source",
+    "size": 155
+  },
+  {
+    "id": "58417e0f781b6656949d37258c8b9052ed266e2eb7a5163cad7b0863e6b2916a",
+    "path": "main.js",
+    "language": "javascript",
+    "fileKind": "source",
+    "size": 81
+  }
+]

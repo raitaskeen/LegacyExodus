@@ -1,0 +1,28 @@
+[
+  {
+    "id": "2165cee90672111a3532ca43b483fa7619803520b872cff9b6b8d9378d094201",
+    "kind": "import",
+    "name": "f",
+    "filePath": "use.ts",
+    "language": "typescript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "moduleSpecifier": "ext",
+    "sourceSymbolName": "f",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 9
+      },
+      "end": {
+        "line": 1,
+        "column": 10
+      }
+    }
+  }
+]

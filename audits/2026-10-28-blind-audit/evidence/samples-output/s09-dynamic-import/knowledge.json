@@ -1,0 +1,110 @@
+{
+  "projectId": "d91e6ef4-bcfb-4129-b9c1-4467d01e2708",
+  "analysisRunId": "d4c1012f-407d-4985-8d83-41d73319e886",
+  "nodes": [
+    {
+      "id": "file:cjs.js",
+      "kind": "file",
+      "name": "cjs.js",
+      "filePath": "cjs.js"
+    },
+    {
+      "id": "file:lib.js",
+      "kind": "file",
+      "name": "lib.js",
+      "filePath": "lib.js"
+    },
+    {
+      "id": "file:main.js",
+      "kind": "file",
+      "name": "main.js",
+      "filePath": "main.js"
+    },
+    {
+      "id": "symbol:16328a1e93a004036f840bad1a2783be82e9cbd2e456c1f35928a1890311d95d",
+      "kind": "symbol",
+      "name": "m",
+      "filePath": "main.js"
+    },
+    {
+      "id": "symbol:5889d6eb90ede7d7db0c248f33e08a74b037a3f3ceeec9118f38cca27615a07c",
+      "kind": "symbol",
+      "name": "load",
+      "filePath": "main.js"
+    },
+    {
+      "id": "symbol:6fbca76aa4b6a40ca3eaadf193f923259fd07a7383c674e43d919978df0afc4b",
+      "kind": "symbol",
+      "name": "name",
+      "filePath": "cjs.js"
+    },
+    {
+      "id": "symbol:800564105f74db6a13c4c4af2033fa52a937125c4a52a6324201556a577a4f15",
+      "kind": "symbol",
+      "name": "load",
+      "filePath": "main.js"
+    },
+    {
+      "id": "symbol:8e3e7a29c8ba6fda4fbd91026b3cb037f2ef414b307b46e5ede327fe4d128f2d",
+      "kind": "symbol",
+      "name": "lazy",
+      "filePath": "lib.js"
+    },
+    {
+      "id": "symbol:cab75585f8ee3ab52a8b97eb6bcff849bd8400023da1f6acd3c77bb88134dc1d",
+      "kind": "symbol",
+      "name": "default",
+      "filePath": "cjs.js"
+    },
+    {
+      "id": "symbol:fec2808b3a8e953b3d6318da6537af80d5889d50df01e4cf51b3918f6efd4f62",
+      "kind": "symbol",
+      "name": "lazy",
+      "filePath": "lib.js"
+    }
+  ],
+  "edges": [
+    {
+      "id": "076e565d5a839b9b2c3252bd77f2bd98551a8b3bffae78487180778eb4517d5c",
+      "from": "file:main.js",
+      "to": "symbol:800564105f74db6a13c4c4af2033fa52a937125c4a52a6324201556a577a4f15",
+      "relationship": "contains"
+    },
+    {
+      "id": "16acbf7a8a840cecef2c50702eb46cb5b28614d4330f6bf558149a35b43a88ad",
+      "from": "file:lib.js",
+      "to": "symbol:8e3e7a29c8ba6fda4fbd91026b3cb037f2ef414b307b46e5ede327fe4d128f2d",
+      "relationship": "contains"
+    },
+    {
+      "id": "64e39bd02bd46c7c23e2873679834f1a39a178844d37340fc77b0c72cdd273ad",
+      "from": "file:cjs.js",
+      "to": "symbol:6fbca76aa4b6a40ca3eaadf193f923259fd07a7383c674e43d919978df0afc4b",
+      "relationship": "contains"
+    },
+    {
+      "id": "6b24866f7ecddc169f2ba741ba5066569da5dbe9305a94c4db7987d7b9287def",
+      "from": "file:main.js",
+      "to": "symbol:16328a1e93a004036f840bad1a2783be82e9cbd2e456c1f35928a1890311d95d",
+      "relationship": "contains"
+    },
+    {
+      "id": "d420ea413afad43a30246d34e8ad79f4b7a08ec25f46d8e475c4ab731299ec1c",
+      "from": "file:lib.js",
+      "to": "symbol:fec2808b3a8e953b3d6318da6537af80d5889d50df01e4cf51b3918f6efd4f62",
+      "relationship": "contains"
+    },
+    {
+      "id": "d4e094de47feda3a2d40895c3e8403c720cb467d2a1ecd5dc505739d31bcc91f",
+      "from": "file:cjs.js",
+      "to": "symbol:cab75585f8ee3ab52a8b97eb6bcff849bd8400023da1f6acd3c77bb88134dc1d",
+      "relationship": "contains"
+    },
+    {
+      "id": "f9e336e69ad47b77d0c2fa3d1dc219de291982b225d7626334d1396240b42c2a",
+      "from": "file:main.js",
+      "to": "symbol:5889d6eb90ede7d7db0c248f33e08a74b037a3f3ceeec9118f38cca27615a07c",
+      "relationship": "contains"
+    }
+  ]
+}

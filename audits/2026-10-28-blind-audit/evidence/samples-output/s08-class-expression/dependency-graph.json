@@ -1,0 +1,37 @@
+{
+  "projectId": "81f62af1-7820-4e3d-85c3-40ec268559f1",
+  "analysisRunId": "35ce8d21-e8a0-49ea-acc2-72426e588c7b",
+  "nodes": [
+    {
+      "id": "symbol:3628ff01c6900b9b40a89b2e4bc116cf9cec49df19e648859a388f92f3f0aad0",
+      "filePath": "x.js",
+      "symbolId": "3628ff01c6900b9b40a89b2e4bc116cf9cec49df19e648859a388f92f3f0aad0"
+    },
+    {
+      "id": "symbol:b16960ec0b2da2f231db66759f80c230242cf8a82a9745ec7b7b4421fd533a18",
+      "filePath": "x.js",
+      "symbolId": "b16960ec0b2da2f231db66759f80c230242cf8a82a9745ec7b7b4421fd533a18"
+    },
+    {
+      "id": "symbol:d6e80fdaeb8c8c63123e9f62a208db65cd3ae5e4c51176aa09cb72e61e5ea0be",
+      "filePath": "x.js",
+      "symbolId": "d6e80fdaeb8c8c63123e9f62a208db65cd3ae5e4c51176aa09cb72e61e5ea0be"
+    },
+    {
+      "id": "symbol:ddd6bfc2888f1c54086ae718187c4598648749a7860a3b1c738648624a921a8f",
+      "filePath": "x.js",
+      "symbolId": "ddd6bfc2888f1c54086ae718187c4598648749a7860a3b1c738648624a921a8f"
+    },
+    {
+      "id": "symbol:ecde191bb89194291ec66bb8322e1aba12dcbc6ac19626f27f7382badbd2dcec",
+      "filePath": "x.js",
+      "symbolId": "ecde191bb89194291ec66bb8322e1aba12dcbc6ac19626f27f7382badbd2dcec"
+    }
+  ],
+  "edges": [],
+  "cycles": [],
+  "moduleGraph": {
+    "contract": "f07-import-relations-v1",
+    "edges": []
+  }
+}

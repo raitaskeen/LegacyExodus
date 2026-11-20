@@ -1,0 +1,17 @@
+{
+  "projectId": "fbe55fa0-8f7a-4627-9995-3ad125acac60",
+  "analysisRunId": "21c9d7be-24d2-465a-9b77-554eaffb2a1c",
+  "nodes": [
+    {
+      "id": "symbol:2165cee90672111a3532ca43b483fa7619803520b872cff9b6b8d9378d094201",
+      "filePath": "use.ts",
+      "symbolId": "2165cee90672111a3532ca43b483fa7619803520b872cff9b6b8d9378d094201"
+    }
+  ],
+  "edges": [],
+  "cycles": [],
+  "moduleGraph": {
+    "contract": "f07-import-relations-v1",
+    "edges": []
+  }
+}

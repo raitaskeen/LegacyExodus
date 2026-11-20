@@ -1,0 +1,143 @@
+{
+  "projectId": "f96bfad7-43fd-4df6-bfb5-7adc757206a8",
+  "analysisRunId": "fbef25e8-3120-41b8-ae46-e3ea5dddee77",
+  "graphs": [
+    {
+      "id": "65b0a7bdf29e06063c3f691410cc61086379b7ddcde7951775dc37a7a50dba6b",
+      "filePath": "lib.js",
+      "state": "INFERRED",
+      "definitions": [
+        {
+          "id": "2fbe614f7cfe60541b630b5c064a0f0d016e3e0552c51d2a6671ed70197e072a",
+          "filePath": "lib.js",
+          "name": "exports.hello",
+          "kind": "assignment"
+        },
+        {
+          "id": "55b5012dc7a7d9f37c13fa50e7e22c2a97b2dbf0f43fc2276fd5270bb7b42d5f",
+          "filePath": "lib.js",
+          "name": "hello",
+          "kind": "declaration"
+        },
+        {
+          "id": "7a4ddd6afcb4de1d1b2108fc620083bab056124cf2245f25493edfcc3093ea95",
+          "filePath": "lib.js",
+          "name": "hello:return",
+          "kind": "return"
+        },
+        {
+          "id": "dd7cb03b3d32691b60a7583e963d928c943cf5a8830132b8ac7a5f47fce04b93",
+          "filePath": "lib.js",
+          "name": "exports.hello",
+          "kind": "assignment"
+        }
+      ],
+      "uses": [
+        {
+          "id": "06d35233ee5ddaba7605b5881f7c50afcb92d55b4baad3ed4098c6e5e2edc12e",
+          "filePath": "lib.js",
+          "name": "hello",
+          "definitionId": "55b5012dc7a7d9f37c13fa50e7e22c2a97b2dbf0f43fc2276fd5270bb7b42d5f"
+        },
+        {
+          "id": "f61d721c15c7ff9fb7b1393976e6984fddaa27d4684136ea0ff0e75fdb4bfcc5",
+          "filePath": "lib.js",
+          "name": "exports"
+        }
+      ],
+      "defUseChains": [
+        {
+          "definitionId": "2fbe614f7cfe60541b630b5c064a0f0d016e3e0552c51d2a6671ed70197e072a",
+          "useIds": []
+        },
+        {
+          "definitionId": "55b5012dc7a7d9f37c13fa50e7e22c2a97b2dbf0f43fc2276fd5270bb7b42d5f",
+          "useIds": [
+            "06d35233ee5ddaba7605b5881f7c50afcb92d55b4baad3ed4098c6e5e2edc12e"
+          ]
+        },
+        {
+          "definitionId": "7a4ddd6afcb4de1d1b2108fc620083bab056124cf2245f25493edfcc3093ea95",
+          "useIds": []
+        },
+        {
+          "definitionId": "dd7cb03b3d32691b60a7583e963d928c943cf5a8830132b8ac7a5f47fce04b93",
+          "useIds": []
+        }
+      ],
+      "lifetimes": [
+        {
+          "name": "exports.hello",
+          "filePath": "lib.js",
+          "declarationId": "2fbe614f7cfe60541b630b5c064a0f0d016e3e0552c51d2a6671ed70197e072a",
+          "useIds": []
+        },
+        {
+          "name": "hello",
+          "filePath": "lib.js",
+          "declarationId": "55b5012dc7a7d9f37c13fa50e7e22c2a97b2dbf0f43fc2276fd5270bb7b42d5f",
+          "useIds": [
+            "06d35233ee5ddaba7605b5881f7c50afcb92d55b4baad3ed4098c6e5e2edc12e"
+          ]
+        },
+        {
+          "name": "hello:return",
+          "filePath": "lib.js",
+          "declarationId": "7a4ddd6afcb4de1d1b2108fc620083bab056124cf2245f25493edfcc3093ea95",
+          "useIds": []
+        },
+        {
+          "name": "exports.hello",
+          "filePath": "lib.js",
+          "declarationId": "dd7cb03b3d32691b60a7583e963d928c943cf5a8830132b8ac7a5f47fce04b93",
+          "useIds": []
+        }
+      ],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [
+        {
+          "symbolId": "16467f517265fccd06758d4b9a2d367fa4cf0bbaee989bc37de6ece1f1ec1046",
+          "filePath": "lib.js",
+          "parameterDefinitionIds": [],
+          "returnDefinitionIds": [
+            "7a4ddd6afcb4de1d1b2108fc620083bab056124cf2245f25493edfcc3093ea95"
+          ]
+        }
+      ],
+      "callBindings": []
+    },
+    {
+      "id": "304656c80d611bf0b8f8e7d3f8024ebc1c58c96564cb4743bc89b5a56b05ad4d",
+      "filePath": "main.js",
+      "state": "INFERRED",
+      "definitions": [
+        {
+          "id": "c21313b2fb979c0ef1026b85b2691cce4642a8b5e83ca8add309a366622f5c3b",
+          "filePath": "main.js",
+          "name": "lib_1",
+          "kind": "declaration"
+        }
+      ],
+      "uses": [],
+      "defUseChains": [
+        {
+          "definitionId": "c21313b2fb979c0ef1026b85b2691cce4642a8b5e83ca8add309a366622f5c3b",
+          "useIds": []
+        }
+      ],
+      "lifetimes": [
+        {
+          "name": "lib_1",
+          "filePath": "main.js",
+          "declarationId": "c21313b2fb979c0ef1026b85b2691cce4642a8b5e83ca8add309a366622f5c3b",
+          "useIds": []
+        }
+      ],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [],
+      "callBindings": []
+    }
+  ]
+}

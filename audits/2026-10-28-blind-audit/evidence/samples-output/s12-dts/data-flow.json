@@ -1,0 +1,64 @@
+{
+  "projectId": "fbe55fa0-8f7a-4627-9995-3ad125acac60",
+  "analysisRunId": "21c9d7be-24d2-465a-9b77-554eaffb2a1c",
+  "graphs": [
+    {
+      "id": "7b36c110c2094cda3eb6f642cee051d3abb0a396a94e68fdd6b33a98feb4b310",
+      "filePath": "types.d.ts",
+      "state": "INFERRED",
+      "definitions": [],
+      "uses": [
+        {
+          "id": "4397842496a6a05e72cc62d939eb00838a82293654dfced0e7d0547c4b476160",
+          "filePath": "types.d.ts",
+          "name": "f"
+        },
+        {
+          "id": "72017b87415cae257c18de342a9b10a48147f0d306b84a5d0ebbb91d0d2ef431",
+          "filePath": "types.d.ts",
+          "name": "app"
+        },
+        {
+          "id": "cd26128d8cb3fba22349685b5ec7321e212803eb50354dd53255e42425c73eba",
+          "filePath": "types.d.ts",
+          "name": "global"
+        },
+        {
+          "id": "fa3933ebe1307bcbd41771c5e23ba50b051365cfe30938b9c7cd9d4a09a787e0",
+          "filePath": "types.d.ts",
+          "name": "Window"
+        }
+      ],
+      "defUseChains": [],
+      "lifetimes": [],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [],
+      "callBindings": []
+    },
+    {
+      "id": "89415e2ed4db8e8c67532d312ea8fc3d076151bb112e92aef7de9214ca09f41b",
+      "filePath": "use.ts",
+      "state": "INFERRED",
+      "definitions": [],
+      "uses": [
+        {
+          "id": "457f47910050dabb4292536d2fd99e40b6debb2d13453754dc11a1b8e2468a29",
+          "filePath": "use.ts",
+          "name": "f"
+        },
+        {
+          "id": "457f47910050dabb4292536d2fd99e40b6debb2d13453754dc11a1b8e2468a29",
+          "filePath": "use.ts",
+          "name": "f"
+        }
+      ],
+      "defUseChains": [],
+      "lifetimes": [],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [],
+      "callBindings": []
+    }
+  ]
+}

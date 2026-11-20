@@ -1,0 +1,130 @@
+{
+  "projectId": "3e507ced-934f-48fd-9be2-568448d16e1f",
+  "analysisRunId": "ada53b84-474b-4181-8030-1ebe7dfe521e",
+  "graphs": [
+    {
+      "id": "73201621630fe1a99ff8d8f7249d17acc5e7637c3bb1040fa434f8468850d695",
+      "filePath": "dist/bundle.min.js",
+      "state": "INFERRED",
+      "definitions": [],
+      "uses": [],
+      "defUseChains": [],
+      "lifetimes": [],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [
+        {
+          "symbolId": "5bf546cba91c2772cb41dfd7d83eb9ef667860d7e52d005d1b10dec3494c2c30",
+          "filePath": "dist/bundle.min.js",
+          "parameterDefinitionIds": [],
+          "returnDefinitionIds": []
+        }
+      ],
+      "callBindings": []
+    },
+    {
+      "id": "c87df306de53c01307bb5a002077743979579c581dd56f612caf51b14ef8f0c3",
+      "filePath": "src/ok.ts",
+      "state": "INFERRED",
+      "definitions": [
+        {
+          "id": "9127bbbbd48ce3e449fa6a63707c6350b594a85b82f092b7b49e8fb727bef54b",
+          "filePath": "src/ok.ts",
+          "name": "x",
+          "kind": "parameter"
+        },
+        {
+          "id": "96ee399feea8069907fa71811315dd14155c31c88d387d24ecb0ca4ad046554f",
+          "filePath": "src/ok.ts",
+          "name": "ok",
+          "kind": "declaration"
+        }
+      ],
+      "uses": [
+        {
+          "id": "864c540528dd03b9143876fa71dd7a55404086c1c369de6257a0e53eeda9efa8",
+          "filePath": "src/ok.ts",
+          "name": "x",
+          "definitionId": "9127bbbbd48ce3e449fa6a63707c6350b594a85b82f092b7b49e8fb727bef54b"
+        }
+      ],
+      "defUseChains": [
+        {
+          "definitionId": "9127bbbbd48ce3e449fa6a63707c6350b594a85b82f092b7b49e8fb727bef54b",
+          "useIds": [
+            "864c540528dd03b9143876fa71dd7a55404086c1c369de6257a0e53eeda9efa8"
+          ]
+        },
+        {
+          "definitionId": "96ee399feea8069907fa71811315dd14155c31c88d387d24ecb0ca4ad046554f",
+          "useIds": []
+        }
+      ],
+      "lifetimes": [
+        {
+          "name": "x",
+          "filePath": "src/ok.ts",
+          "declarationId": "9127bbbbd48ce3e449fa6a63707c6350b594a85b82f092b7b49e8fb727bef54b",
+          "useIds": [
+            "864c540528dd03b9143876fa71dd7a55404086c1c369de6257a0e53eeda9efa8"
+          ]
+        },
+        {
+          "name": "ok",
+          "filePath": "src/ok.ts",
+          "declarationId": "96ee399feea8069907fa71811315dd14155c31c88d387d24ecb0ca4ad046554f",
+          "useIds": []
+        }
+      ],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [],
+      "callBindings": []
+    },
+    {
+      "id": "72e1ef8a8e5b1b42d59ebb6eaa02d6a429f1fd9810f422ec621b96887bb85d2f",
+      "filePath": "src/ok.tsx",
+      "state": "INFERRED",
+      "definitions": [
+        {
+          "id": "7a5d1432acd9000abad856872d7b9d2beb3af668425b35a202d8b4f56839be09",
+          "filePath": "src/ok.tsx",
+          "name": "View",
+          "kind": "declaration"
+        }
+      ],
+      "uses": [],
+      "defUseChains": [
+        {
+          "definitionId": "7a5d1432acd9000abad856872d7b9d2beb3af668425b35a202d8b4f56839be09",
+          "useIds": []
+        }
+      ],
+      "lifetimes": [
+        {
+          "name": "View",
+          "filePath": "src/ok.tsx",
+          "declarationId": "7a5d1432acd9000abad856872d7b9d2beb3af668425b35a202d8b4f56839be09",
+          "useIds": []
+        }
+      ],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [],
+      "callBindings": []
+    },
+    {
+      "id": "4bbd84a31c60dc5f12c6715ef19d35b3f52677e28db6fc9c9abada63b5c9b3e6",
+      "filePath": "src/top-await.mts",
+      "state": "INFERRED",
+      "definitions": [],
+      "uses": [],
+      "defUseChains": [],
+      "lifetimes": [],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [],
+      "callBindings": []
+    }
+  ]
+}

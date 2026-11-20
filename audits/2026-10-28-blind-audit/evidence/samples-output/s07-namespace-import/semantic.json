@@ -1,0 +1,79 @@
+{
+  "calls": [
+    {
+      "id": "7be50eee7ea904f2bf4fb30641bc611866aedeffbd7647371050cae07ec21ebb",
+      "sourceFilePath": "main.js",
+      "callerName": "module",
+      "calleeName": "lib.b",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "21bbe366d0b3624ade3c16506c6cbf2290de573961bfec27f73fc653938a84f8",
+      "location": {
+        "line": 2,
+        "column": 0
+      }
+    }
+  ],
+  "references": [
+    {
+      "id": "426311b23887397264d4a92f48d8602d89875a51ce3588cc50c8e6fedc339d90",
+      "filePath": "main.js",
+      "name": "lib",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "09309203d18623768f84c4a0e91d108ca7ed7a156d7e27a63b9c777de369c077"
+    },
+    {
+      "id": "d2dca82abc353d708411edda3f59be3a5fe3243567a5233390c040a362d7de85",
+      "filePath": "main.js",
+      "name": "lib.b",
+      "kind": "call",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "21bbe366d0b3624ade3c16506c6cbf2290de573961bfec27f73fc653938a84f8"
+    }
+  ],
+  "scopes": [
+    {
+      "id": "b5628bc4a4617d69c7497e196b76727edbf2404af97803af385f5719b3447ca3",
+      "filePath": "lib.js",
+      "name": "module",
+      "declaredSymbols": [
+        "a",
+        "b"
+      ],
+      "referencedNames": []
+    },
+    {
+      "id": "ba117877875d6cf90e58bc32693f914d709acd96ae3055f15e6a3640fd59ced3",
+      "filePath": "main.js",
+      "name": "module",
+      "declaredSymbols": [
+        "lib"
+      ],
+      "referencedNames": [
+        "lib",
+        "lib.b"
+      ]
+    }
+  ],
+  "deadCode": [],
+  "unusedImports": [],
+  "unusedExports": [
+    {
+      "symbolId": "21bbe366d0b3624ade3c16506c6cbf2290de573961bfec27f73fc653938a84f8",
+      "filePath": "lib.js",
+      "name": "b",
+      "reason": "unused-export",
+      "state": "INFERRED"
+    }
+  ],
+  "entryPoints": [
+    {
+      "filePath": "main.js",
+      "reason": "conventional-file"
+    }
+  ],
+  "routes": [],
+  "middlewareChains": [],
+  "projectId": "35f7cafe-ef64-4fbe-891e-64221543af89",
+  "analysisRunId": "1a8b805f-627d-485d-aafa-0da4153e7f03"
+}

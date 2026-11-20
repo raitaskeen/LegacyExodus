@@ -1,0 +1,17 @@
+[
+  {
+    "path": "src/defs.ts",
+    "language": "typescript",
+    "fileKind": "source"
+  },
+  {
+    "path": "src/legacy.ts",
+    "language": "typescript",
+    "fileKind": "source"
+  },
+  {
+    "path": "src/use.ts",
+    "language": "typescript",
+    "fileKind": "source"
+  }
+]

@@ -1,0 +1,292 @@
+[
+  {
+    "id": "56f4bf3c6f20177791c12d974757ec78e50186f4a8d78337cf3954f8cc5d1602",
+    "kind": "variable",
+    "name": "express",
+    "filePath": "app.js",
+    "language": "javascript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "declarationKind": "const",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 6
+      },
+      "end": {
+        "line": 1,
+        "column": 34
+      }
+    }
+  },
+  {
+    "id": "d0084b8bedac0db76f23abb0661d655e4e970b98d935cda7ee57add8b7ccb17b",
+    "kind": "import",
+    "name": "express",
+    "filePath": "app.js",
+    "language": "javascript",
+    "exported": false,
+    "defaultExport": true,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "moduleSpecifier": "express",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 6
+      },
+      "end": {
+        "line": 1,
+        "column": 34
+      }
+    }
+  },
+  {
+    "id": "10454bc2578fd6807856efe0186b6bad6565e3bca83081fa89dbe1348e853e55",
+    "kind": "variable",
+    "name": "app",
+    "filePath": "app.js",
+    "language": "javascript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "declarationKind": "const",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 2,
+        "column": 6
+      },
+      "end": {
+        "line": 2,
+        "column": 21
+      }
+    }
+  },
+  {
+    "id": "240f04a368010bb9ba29c6d8caa8d56c24f0a16ad211d8ca79892a025834d40e",
+    "kind": "variable",
+    "name": "admin",
+    "filePath": "app.js",
+    "language": "javascript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "declarationKind": "const",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 3,
+        "column": 6
+      },
+      "end": {
+        "line": 3,
+        "column": 30
+      }
+    }
+  },
+  {
+    "id": "dcd707e9ca5fda638eb0a035c12d17595c04f047478b2abdd9c60e3a3482dd41",
+    "kind": "function",
+    "name": "auth",
+    "filePath": "app.js",
+    "language": "javascript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [
+      "req",
+      "res",
+      "next"
+    ],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 4,
+        "column": 0
+      },
+      "end": {
+        "line": 4,
+        "column": 41
+      }
+    }
+  },
+  {
+    "id": "ab0e61d4f625be779c17b32b464d2d41feadf9e1779d911d85d563a794db6798",
+    "kind": "variable",
+    "name": "req",
+    "filePath": "app.js",
+    "language": "javascript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "declarationKind": "param",
+    "scopeId": "scope:FunctionDeclaration:4:0",
+    "containerName": "auth",
+    "containerId": "dcd707e9ca5fda638eb0a035c12d17595c04f047478b2abdd9c60e3a3482dd41",
+    "location": {
+      "start": {
+        "line": 4,
+        "column": 14
+      },
+      "end": {
+        "line": 4,
+        "column": 17
+      }
+    }
+  },
+  {
+    "id": "0fc4b48c61f7ea2bc228c12183f610bab54f0361ebc0972fae2aae93c8fb51be",
+    "kind": "variable",
+    "name": "res",
+    "filePath": "app.js",
+    "language": "javascript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "declarationKind": "param",
+    "scopeId": "scope:FunctionDeclaration:4:0",
+    "containerName": "auth",
+    "containerId": "dcd707e9ca5fda638eb0a035c12d17595c04f047478b2abdd9c60e3a3482dd41",
+    "location": {
+      "start": {
+        "line": 4,
+        "column": 19
+      },
+      "end": {
+        "line": 4,
+        "column": 22
+      }
+    }
+  },
+  {
+    "id": "0a74c95166723f39a46a95c1c423a191c07820254b464e05ba47fc164cda5593",
+    "kind": "variable",
+    "name": "next",
+    "filePath": "app.js",
+    "language": "javascript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "declarationKind": "param",
+    "scopeId": "scope:FunctionDeclaration:4:0",
+    "containerName": "auth",
+    "containerId": "dcd707e9ca5fda638eb0a035c12d17595c04f047478b2abdd9c60e3a3482dd41",
+    "location": {
+      "start": {
+        "line": 4,
+        "column": 24
+      },
+      "end": {
+        "line": 4,
+        "column": 28
+      }
+    }
+  },
+  {
+    "id": "f8c6e3468b65becdcdfb044399155c187ddeb7461ddf0b91d692823490dd1eab",
+    "kind": "function",
+    "name": "handler",
+    "filePath": "app.js",
+    "language": "javascript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [
+      "req",
+      "res"
+    ],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 5,
+        "column": 0
+      },
+      "end": {
+        "line": 5,
+        "column": 46
+      }
+    }
+  },
+  {
+    "id": "b987caf3601cef5d58cf97cdbc6bf1386e8a3b89a967872b69cc78266b06c546",
+    "kind": "variable",
+    "name": "req",
+    "filePath": "app.js",
+    "language": "javascript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "declarationKind": "param",
+    "scopeId": "scope:FunctionDeclaration:5:0",
+    "containerName": "handler",
+    "containerId": "f8c6e3468b65becdcdfb044399155c187ddeb7461ddf0b91d692823490dd1eab",
+    "location": {
+      "start": {
+        "line": 5,
+        "column": 17
+      },
+      "end": {
+        "line": 5,
+        "column": 20
+      }
+    }
+  },
+  {
+    "id": "6a706d4d3d26f5669766b98a66d73e746fe68d18b1b38efff57bb1fd559b6713",
+    "kind": "variable",
+    "name": "res",
+    "filePath": "app.js",
+    "language": "javascript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "declarationKind": "param",
+    "scopeId": "scope:FunctionDeclaration:5:0",
+    "containerName": "handler",
+    "containerId": "f8c6e3468b65becdcdfb044399155c187ddeb7461ddf0b91d692823490dd1eab",
+    "location": {
+      "start": {
+        "line": 5,
+        "column": 22
+      },
+      "end": {
+        "line": 5,
+        "column": 25
+      }
+    }
+  }
+]

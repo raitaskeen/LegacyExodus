@@ -1,0 +1,219 @@
+{
+  "projectId": "0937000a-e919-4939-b0d8-7df1b20e330b",
+  "analysisRunId": "7cd54abb-7cc6-4076-aadf-1080eab57822",
+  "graphs": [
+    {
+      "id": "db46d99a2328f6e950ba8cef6c417c19cdb2b2f42eea8cf8704a12533eb94a27",
+      "filePath": "src/App.jsx",
+      "state": "INFERRED",
+      "definitions": [
+        {
+          "id": "821a50e378b1e0741de83453450a1821d47a93fdb40640d4ebe945e20cc642f2",
+          "filePath": "src/App.jsx",
+          "name": "App:return",
+          "kind": "return"
+        },
+        {
+          "id": "a1623ec7c5d5f8c0352de75042eb58ba9df52fc3b1160824d659c8992dba4bc3",
+          "filePath": "src/App.jsx",
+          "name": "App",
+          "kind": "declaration"
+        }
+      ],
+      "uses": [
+        {
+          "id": "dc44ac60843edc5b14f7c68973c023c9d4614cdbd379445c8002badb72ee6ebe",
+          "filePath": "src/App.jsx",
+          "name": "Button"
+        },
+        {
+          "id": "dc44ac60843edc5b14f7c68973c023c9d4614cdbd379445c8002badb72ee6ebe",
+          "filePath": "src/App.jsx",
+          "name": "Button"
+        }
+      ],
+      "defUseChains": [
+        {
+          "definitionId": "821a50e378b1e0741de83453450a1821d47a93fdb40640d4ebe945e20cc642f2",
+          "useIds": []
+        },
+        {
+          "definitionId": "a1623ec7c5d5f8c0352de75042eb58ba9df52fc3b1160824d659c8992dba4bc3",
+          "useIds": []
+        }
+      ],
+      "lifetimes": [
+        {
+          "name": "App:return",
+          "filePath": "src/App.jsx",
+          "declarationId": "821a50e378b1e0741de83453450a1821d47a93fdb40640d4ebe945e20cc642f2",
+          "useIds": []
+        },
+        {
+          "name": "App",
+          "filePath": "src/App.jsx",
+          "declarationId": "a1623ec7c5d5f8c0352de75042eb58ba9df52fc3b1160824d659c8992dba4bc3",
+          "useIds": []
+        }
+      ],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [
+        {
+          "symbolId": "b19fdc2491803c85f2e4aa9632709ef9972baa8a8600517e420d9a759fd022f6",
+          "filePath": "src/App.jsx",
+          "parameterDefinitionIds": [],
+          "returnDefinitionIds": [
+            "821a50e378b1e0741de83453450a1821d47a93fdb40640d4ebe945e20cc642f2"
+          ]
+        }
+      ],
+      "callBindings": []
+    },
+    {
+      "id": "4c66ff52198184d425ff93cf89e52eed4b910ae6c130e2f5339f5f159a352633",
+      "filePath": "src/Button.jsx",
+      "state": "INFERRED",
+      "definitions": [
+        {
+          "id": "0e35b916913a1ad2de1157004e4498c443d4b45d579cabad118f93ec97e9f6bf",
+          "filePath": "src/Button.jsx",
+          "name": "Button:return",
+          "kind": "return"
+        },
+        {
+          "id": "e265aa30bdb283e0b100934448b0183440091c172d00d6a05a5eb03c425b44c6",
+          "filePath": "src/Button.jsx",
+          "name": "Unused:return",
+          "kind": "return"
+        },
+        {
+          "id": "edb02dc696711e426f151c48055ca52480f3a8456cfe8d091ce303a9399758e0",
+          "filePath": "src/Button.jsx",
+          "name": "Button",
+          "kind": "declaration"
+        },
+        {
+          "id": "f47d8a126779f0b772213ec76f2c32ee645b23010a5d34de7268f341fe66d49c",
+          "filePath": "src/Button.jsx",
+          "name": "Unused",
+          "kind": "declaration"
+        }
+      ],
+      "uses": [],
+      "defUseChains": [
+        {
+          "definitionId": "0e35b916913a1ad2de1157004e4498c443d4b45d579cabad118f93ec97e9f6bf",
+          "useIds": []
+        },
+        {
+          "definitionId": "e265aa30bdb283e0b100934448b0183440091c172d00d6a05a5eb03c425b44c6",
+          "useIds": []
+        },
+        {
+          "definitionId": "edb02dc696711e426f151c48055ca52480f3a8456cfe8d091ce303a9399758e0",
+          "useIds": []
+        },
+        {
+          "definitionId": "f47d8a126779f0b772213ec76f2c32ee645b23010a5d34de7268f341fe66d49c",
+          "useIds": []
+        }
+      ],
+      "lifetimes": [
+        {
+          "name": "Button:return",
+          "filePath": "src/Button.jsx",
+          "declarationId": "0e35b916913a1ad2de1157004e4498c443d4b45d579cabad118f93ec97e9f6bf",
+          "useIds": []
+        },
+        {
+          "name": "Unused:return",
+          "filePath": "src/Button.jsx",
+          "declarationId": "e265aa30bdb283e0b100934448b0183440091c172d00d6a05a5eb03c425b44c6",
+          "useIds": []
+        },
+        {
+          "name": "Button",
+          "filePath": "src/Button.jsx",
+          "declarationId": "edb02dc696711e426f151c48055ca52480f3a8456cfe8d091ce303a9399758e0",
+          "useIds": []
+        },
+        {
+          "name": "Unused",
+          "filePath": "src/Button.jsx",
+          "declarationId": "f47d8a126779f0b772213ec76f2c32ee645b23010a5d34de7268f341fe66d49c",
+          "useIds": []
+        }
+      ],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [
+        {
+          "symbolId": "0032f981105e5829e593c8c9b56d07a293247a3bbdba1d539a309c9006231ab4",
+          "filePath": "src/Button.jsx",
+          "parameterDefinitionIds": [],
+          "returnDefinitionIds": [
+            "0e35b916913a1ad2de1157004e4498c443d4b45d579cabad118f93ec97e9f6bf"
+          ]
+        },
+        {
+          "symbolId": "038873e163d638910996face57368d7e0af85eebc05773cd993c85f31d0c6e4b",
+          "filePath": "src/Button.jsx",
+          "parameterDefinitionIds": [],
+          "returnDefinitionIds": [
+            "e265aa30bdb283e0b100934448b0183440091c172d00d6a05a5eb03c425b44c6"
+          ]
+        }
+      ],
+      "callBindings": []
+    },
+    {
+      "id": "db8ec400f3e8e6e040249f57c0ee7f0e03802a226d25470e37b76671b81570e6",
+      "filePath": "src/Card.tsx",
+      "state": "INFERRED",
+      "definitions": [
+        {
+          "id": "ec132e8f9832327cd8362302dc64a4af749fb958fe00f93467d676a4843e8cf8",
+          "filePath": "src/Card.tsx",
+          "name": "Card",
+          "kind": "declaration"
+        }
+      ],
+      "uses": [
+        {
+          "id": "82dd19bc30b3828bdc12a6faae7b09348fe5f10df517cb54b39d6f254fd834e1",
+          "filePath": "src/Card.tsx",
+          "name": "React"
+        },
+        {
+          "id": "ba53a4fc9241bb2facd87dcc71fa41ab874670d21a6d46c7a2e632b710b2bdbb",
+          "filePath": "src/Card.tsx",
+          "name": "Button"
+        },
+        {
+          "id": "ba53a4fc9241bb2facd87dcc71fa41ab874670d21a6d46c7a2e632b710b2bdbb",
+          "filePath": "src/Card.tsx",
+          "name": "Button"
+        }
+      ],
+      "defUseChains": [
+        {
+          "definitionId": "ec132e8f9832327cd8362302dc64a4af749fb958fe00f93467d676a4843e8cf8",
+          "useIds": []
+        }
+      ],
+      "lifetimes": [
+        {
+          "name": "Card",
+          "filePath": "src/Card.tsx",
+          "declarationId": "ec132e8f9832327cd8362302dc64a4af749fb958fe00f93467d676a4843e8cf8",
+          "useIds": []
+        }
+      ],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [],
+      "callBindings": []
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+var express = require("./lib");
+function h1() { var app = express(); return app; }
+function h2() { var app = h1(); return app; }
+function h3() { var app = h2(); return app; }
+function h4() { var app = h3(); return app; }
+function h5() { var app = h4(); return app; }
+function h6() { var app = h5(); return app; }
+function h7() { var app = h6(); return app; }
+function h8() { var app = h7(); return app; }
+function h9() { var app = h8(); return app; }
+function h10() { var app = h9(); return app; }
+var a6 = h6(); a6.use();
+var a7 = h7(); a7.use();
+var a8 = h8(); a8.use();
+var a9 = h9(); a9.use();
+var a10 = h10(); a10.use();

@@ -1,0 +1,46 @@
+{
+  "analysisDisposition": {
+    "contract": "r01-analysis-disposition-v1",
+    "files": [
+      {
+        "fileId": "cd77d5e6d21ec7a5765b6371b7b7ade7877d7644753b1fe408014e80c417d474",
+        "path": "B.js",
+        "kind": "analyzed",
+        "symbolCount": 2
+      },
+      {
+        "fileId": "e700cca8f9af3680695f055c4b66d1414b4d436b30fee045e997fe195b3c8e6d",
+        "path": "Z.js",
+        "kind": "analyzed",
+        "symbolCount": 2
+      },
+      {
+        "fileId": "d00475c39209d3c00a71a178a83cce81ba820c9e47383cb784af3f4e7898ddb8",
+        "path": "_x.js",
+        "kind": "analyzed",
+        "symbolCount": 2
+      },
+      {
+        "fileId": "dc5985b2a377c4ea735c99979da277be3bd24be88cf411c11b52b5c3f9570536",
+        "path": "a.js",
+        "kind": "analyzed",
+        "symbolCount": 2
+      },
+      {
+        "fileId": "4571301574678b949a8d7af9a7e69d13b2d6ca4426360cf9a2f093ff24b3ed26",
+        "path": "ä.js",
+        "kind": "analyzed",
+        "symbolCount": 2
+      }
+    ]
+  },
+  "projectName": "s10-order",
+  "fileCount": 5,
+  "dependencyCount": 0,
+  "frameworkCount": 0,
+  "languages": [
+    "javascript"
+  ],
+  "enumerationFailureCount": 0,
+  "discoveryComplete": true
+}

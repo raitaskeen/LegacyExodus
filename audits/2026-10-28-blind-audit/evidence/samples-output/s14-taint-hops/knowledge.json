@@ -1,0 +1,296 @@
+{
+  "projectId": "14869e1c-8c6a-4949-a201-f83134ac1efb",
+  "analysisRunId": "b04ab568-6791-4115-9e93-409f33c9f7c2",
+  "nodes": [
+    {
+      "id": "file:app.js",
+      "kind": "file",
+      "name": "app.js",
+      "filePath": "app.js"
+    },
+    {
+      "id": "file:helpers.js",
+      "kind": "file",
+      "name": "helpers.js",
+      "filePath": "helpers.js"
+    },
+    {
+      "id": "symbol:0ab173f2d46953bed58233152ec26913b2ee91c8ddb8bbd68506d0bc00300c70",
+      "kind": "symbol",
+      "name": "value",
+      "filePath": "helpers.js"
+    },
+    {
+      "id": "symbol:19544806fc7d6bb072953bb193de840d0ef86ea1eee4f4d1a11720df5b66b86f",
+      "kind": "symbol",
+      "name": "pass",
+      "filePath": "helpers.js"
+    },
+    {
+      "id": "symbol:3d7050646820e95bf94a009050d91f6b9b4527b50715e372165f5f2e2efa05a1",
+      "kind": "symbol",
+      "name": "req",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:4582073143854d0efb1253de98c75dc0d20d2f92f34aa3629531cd246612e307",
+      "kind": "symbol",
+      "name": "app",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:4b14d00c6e08c9cd5d5d39f415d1599e685838c04813e60163ebf6dcae38e9c2",
+      "kind": "symbol",
+      "name": "reply",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:52fac28a5b4df35a3c7614985ab35f6b5fbad27966351186822574205a983b68",
+      "kind": "symbol",
+      "name": "reply",
+      "filePath": "helpers.js"
+    },
+    {
+      "id": "symbol:5ab1b8e24bb02c2baa0ce45bcd1971097aabefa38701460132965181bf2f1506",
+      "kind": "symbol",
+      "name": "res",
+      "filePath": "helpers.js"
+    },
+    {
+      "id": "symbol:5b8f19bc7652c87bd1be5af04371239d0a50cc3da784d42528e56418d5d222e2",
+      "kind": "symbol",
+      "name": "v",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:60ac67b0d5be92385f662b68f30d62f337eef0cc88f85b51df21ede9ae0f62dc",
+      "kind": "symbol",
+      "name": "res",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:6738d557c9ef5b25f33e297b854a1fb1a69bcc2869725fba0799be97a2dd06d7",
+      "kind": "symbol",
+      "name": "res",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:73b1d553e0525aee74c209bf313a2c9468ed39896ef95bc4101de5c4e0cfaf6f",
+      "kind": "symbol",
+      "name": "v",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:971902156d9fd1da8792476e0fde536fba96f43b2c90e5e536da50690ffc92c5",
+      "kind": "symbol",
+      "name": "res",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:a1196c32cb59fe82111cc354e55e22af3959747a84ead828c15ff0074644d3ea",
+      "kind": "symbol",
+      "name": "pass",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:aa81c3b48c07591de0d5fd7c838cfd23f7b49b279cc2069cd25d972f4a95b8d8",
+      "kind": "symbol",
+      "name": "v",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:b2a7ace76b93aeca197824c6e7c1219eb8c32a6530f81b87970608ab38081ffe",
+      "kind": "symbol",
+      "name": "req",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:c1466d683c0ef8e9b0aaae4bba8a983ab1c329143e7988937c951bb223326e46",
+      "kind": "symbol",
+      "name": "pass",
+      "filePath": "helpers.js"
+    },
+    {
+      "id": "symbol:c4ba235a2a4baf33c8bbfd71b1a7a2d5dd1ff4fee1dc05cc3a1842a694858556",
+      "kind": "symbol",
+      "name": "req",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:de17002734caf0765e36bcdbb0c4f31cde0d30a25750a6bdbd1e7a7775606c77",
+      "kind": "symbol",
+      "name": "res",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:de82729fb38a102ace1739aae40efad3fb4d107cdd056d21252d90032f0d8dd4",
+      "kind": "symbol",
+      "name": "express",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:e23298764f44af0d83f11258dc4862a208e62184c2b93192f8fb9f948d42d444",
+      "kind": "symbol",
+      "name": "value",
+      "filePath": "helpers.js"
+    },
+    {
+      "id": "symbol:e3ee5c938ccc43e38db1723b87683a5c2cf06b09e7d50734fca4f9b42808b027",
+      "kind": "symbol",
+      "name": "req",
+      "filePath": "app.js"
+    },
+    {
+      "id": "symbol:eca3f12486b4d8877432f93b0443fadaf75afe3553451b533dea9849fc3226ce",
+      "kind": "symbol",
+      "name": "reply",
+      "filePath": "helpers.js"
+    }
+  ],
+  "edges": [
+    {
+      "id": "004c4fef5315e4dbdbb32918388de5a4ea594639ecb460a32713245f5db38c12",
+      "from": "file:app.js",
+      "to": "symbol:971902156d9fd1da8792476e0fde536fba96f43b2c90e5e536da50690ffc92c5",
+      "relationship": "contains"
+    },
+    {
+      "id": "086889892cb20808560ae6cf0fdccb5e831c3ddfc1350509715690d9c4371529",
+      "from": "file:app.js",
+      "to": "symbol:a1196c32cb59fe82111cc354e55e22af3959747a84ead828c15ff0074644d3ea",
+      "relationship": "contains"
+    },
+    {
+      "id": "1497573634c4e5c16063a733dc2c63f6f49af42af621b0471512c42b1e3fa0d7",
+      "from": "file:helpers.js",
+      "to": "symbol:52fac28a5b4df35a3c7614985ab35f6b5fbad27966351186822574205a983b68",
+      "relationship": "contains"
+    },
+    {
+      "id": "1e3bd4780946d5b4652d128a6d9b7c479310f911e9cfa1464cfe3171e393f1d5",
+      "from": "file:app.js",
+      "to": "symbol:4582073143854d0efb1253de98c75dc0d20d2f92f34aa3629531cd246612e307",
+      "relationship": "contains"
+    },
+    {
+      "id": "44373e040cc65c9dce5d404de899cd027ad4963ee75c7773ce8747c9b92df57e",
+      "from": "file:app.js",
+      "to": "symbol:3d7050646820e95bf94a009050d91f6b9b4527b50715e372165f5f2e2efa05a1",
+      "relationship": "contains"
+    },
+    {
+      "id": "4b7ee1a7919622980c29727c2c8539ccd549adff6acd24347a6514ce8d1cffc1",
+      "from": "file:helpers.js",
+      "to": "symbol:0ab173f2d46953bed58233152ec26913b2ee91c8ddb8bbd68506d0bc00300c70",
+      "relationship": "contains"
+    },
+    {
+      "id": "5e12bfd4b5920c3a81668b417d69bf7b914003a921ec37bb18aef50041d91f7a",
+      "from": "file:helpers.js",
+      "to": "symbol:19544806fc7d6bb072953bb193de840d0ef86ea1eee4f4d1a11720df5b66b86f",
+      "relationship": "contains"
+    },
+    {
+      "id": "606a4e3104a19d1523252c5051b0e88bd1b48486abbebed6365267a080ae714b",
+      "from": "file:app.js",
+      "to": "symbol:aa81c3b48c07591de0d5fd7c838cfd23f7b49b279cc2069cd25d972f4a95b8d8",
+      "relationship": "contains"
+    },
+    {
+      "id": "6300e59bae92c50d658f58f87e7aefb99b0a9393779cc913e2e3ce91303e753f",
+      "from": "file:app.js",
+      "to": "symbol:b2a7ace76b93aeca197824c6e7c1219eb8c32a6530f81b87970608ab38081ffe",
+      "relationship": "contains"
+    },
+    {
+      "id": "68e8f515ee4e3aa880c913b548bdf2bfff44197a89d0b91011b9590171db6eea",
+      "from": "file:app.js",
+      "to": "symbol:de82729fb38a102ace1739aae40efad3fb4d107cdd056d21252d90032f0d8dd4",
+      "relationship": "contains"
+    },
+    {
+      "id": "755fcf5087110058fd6b8417916d6e68f472e958991c124ea485db95eb4efbbf",
+      "from": "file:app.js",
+      "to": "symbol:c4ba235a2a4baf33c8bbfd71b1a7a2d5dd1ff4fee1dc05cc3a1842a694858556",
+      "relationship": "contains"
+    },
+    {
+      "id": "7b3ef7f4cb68a1b46e1625a6811d4e4d83a712fcc9137c1e9177640bf2591600",
+      "from": "file:app.js",
+      "to": "symbol:5b8f19bc7652c87bd1be5af04371239d0a50cc3da784d42528e56418d5d222e2",
+      "relationship": "contains"
+    },
+    {
+      "id": "816afebd5bac05ffe8e343b020139f244fff28c111237ce8db279e882e597658",
+      "from": "file:helpers.js",
+      "to": "symbol:5ab1b8e24bb02c2baa0ce45bcd1971097aabefa38701460132965181bf2f1506",
+      "relationship": "contains"
+    },
+    {
+      "id": "8515fa7ad8c9ad69059070eafe68e917e58ad98bcda56073754666bfa4007f30",
+      "from": "file:helpers.js",
+      "to": "symbol:c1466d683c0ef8e9b0aaae4bba8a983ab1c329143e7988937c951bb223326e46",
+      "relationship": "contains"
+    },
+    {
+      "id": "ac398a89f8d995256ee623ed7f2f5e22a5c884fc5f50be551cd80babe52dba9e",
+      "from": "file:app.js",
+      "to": "symbol:4b14d00c6e08c9cd5d5d39f415d1599e685838c04813e60163ebf6dcae38e9c2",
+      "relationship": "contains"
+    },
+    {
+      "id": "aec374c9789e9149923c498e925d57de65260522184bd50ebcf429ee382acfd8",
+      "from": "file:app.js",
+      "to": "symbol:e3ee5c938ccc43e38db1723b87683a5c2cf06b09e7d50734fca4f9b42808b027",
+      "relationship": "contains"
+    },
+    {
+      "id": "b60797a0ac8316d814c689d22df060c76f3382dcee35d1eca7d94f92b82516a7",
+      "from": "symbol:a1196c32cb59fe82111cc354e55e22af3959747a84ead828c15ff0074644d3ea",
+      "to": "symbol:c1466d683c0ef8e9b0aaae4bba8a983ab1c329143e7988937c951bb223326e46",
+      "relationship": "imports"
+    },
+    {
+      "id": "bd2a658604926dfb767915c80a87de24984658f224526c9d93d0fb37813dae54",
+      "from": "file:app.js",
+      "to": "symbol:6738d557c9ef5b25f33e297b854a1fb1a69bcc2869725fba0799be97a2dd06d7",
+      "relationship": "contains"
+    },
+    {
+      "id": "ce08676be49f6d2fd35683ee7326bddae25de403bd97725679237035a4e6465f",
+      "from": "file:app.js",
+      "to": "symbol:de17002734caf0765e36bcdbb0c4f31cde0d30a25750a6bdbd1e7a7775606c77",
+      "relationship": "contains"
+    },
+    {
+      "id": "e69185fa774c9e3d80c0c42ca9d0580c66bce4f79fe51ed7854ecafda301e990",
+      "from": "file:app.js",
+      "to": "symbol:73b1d553e0525aee74c209bf313a2c9468ed39896ef95bc4101de5c4e0cfaf6f",
+      "relationship": "contains"
+    },
+    {
+      "id": "ed215cc0f4f4341540cf622ae2b91c8eb7b36771a9b8c375e61eabdacd4e5fe6",
+      "from": "file:helpers.js",
+      "to": "symbol:eca3f12486b4d8877432f93b0443fadaf75afe3553451b533dea9849fc3226ce",
+      "relationship": "contains"
+    },
+    {
+      "id": "f0f2ce7a5ac2e90493fce59cd20f9b231dd12551cec669ef43e35b8214db74ac",
+      "from": "file:app.js",
+      "to": "symbol:60ac67b0d5be92385f662b68f30d62f337eef0cc88f85b51df21ede9ae0f62dc",
+      "relationship": "contains"
+    },
+    {
+      "id": "f56b01e200b3c6926e8813c0550ed6763098f6792ac4ac1693bf90532e83b96d",
+      "from": "symbol:4b14d00c6e08c9cd5d5d39f415d1599e685838c04813e60163ebf6dcae38e9c2",
+      "to": "symbol:eca3f12486b4d8877432f93b0443fadaf75afe3553451b533dea9849fc3226ce",
+      "relationship": "imports"
+    },
+    {
+      "id": "fc45eb1b2abde0ce84669224ac81145745f616e15ede14bfebc9b865fac8248c",
+      "from": "file:helpers.js",
+      "to": "symbol:e23298764f44af0d83f11258dc4862a208e62184c2b93192f8fb9f948d42d444",
+      "relationship": "contains"
+    }
+  ]
+}

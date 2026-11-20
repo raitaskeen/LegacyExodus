@@ -1,0 +1,97 @@
+{
+  "calls": [],
+  "references": [
+    {
+      "id": "7305ddbfd6fcc905de64e9f03e15c5089a4fed0798e1421db473d2f1b2c0cbfd",
+      "filePath": "src/Card.tsx",
+      "name": "Button",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "091ce9a480d8cb868ea45920bc87c298d7a57d57ffe751cbd191245c9a4ad5b7"
+    },
+    {
+      "id": "a90da1137857dcb7701c9015201d614722b7385dd79a41f4114e0c4057adaa69",
+      "filePath": "src/App.jsx",
+      "name": "Button",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "8afdb9e725dafc194e752cbd0a206b799a290a5a3fbf7fa03309a9caf82aea90"
+    }
+  ],
+  "scopes": [
+    {
+      "id": "1464d23aee12bec233efa60e47f363e7b0c9a8dd3fdff36aadeeb1a4821182a1",
+      "filePath": "src/Button.jsx",
+      "name": "module",
+      "declaredSymbols": [
+        "Button",
+        "Unused"
+      ],
+      "referencedNames": []
+    },
+    {
+      "id": "5457b3f81da11e9988c595e958956a086b5f2121e28a9dc0a9bb6ca15bab3a74",
+      "filePath": "src/App.jsx",
+      "name": "module",
+      "declaredSymbols": [
+        "App",
+        "Button",
+        "default"
+      ],
+      "referencedNames": [
+        "Button"
+      ]
+    },
+    {
+      "id": "a8fe338b062f2f6551f08d180b27e523985c34687e41704090497429202b0782",
+      "filePath": "src/Card.tsx",
+      "name": "module",
+      "declaredSymbols": [
+        "Button",
+        "Card",
+        "React"
+      ],
+      "referencedNames": [
+        "Button"
+      ]
+    }
+  ],
+  "deadCode": [],
+  "unusedImports": [
+    {
+      "symbolId": "9b73f253076e10d904b5611a96aa89bf08ed93e2ef6d8c6735bb5cd4b67cff5d",
+      "filePath": "src/Card.tsx",
+      "name": "React",
+      "reason": "unused-import",
+      "state": "INFERRED"
+    }
+  ],
+  "unusedExports": [
+    {
+      "symbolId": "07b9e552cca37d1aace594869fc3ebbf6c4a7772a73d9f5b91282d17412e6583",
+      "filePath": "src/App.jsx",
+      "name": "default",
+      "reason": "unused-export",
+      "state": "INFERRED"
+    },
+    {
+      "symbolId": "e0e6f9ee7c553dfa9579b02a5f2be36c64be27483b787a8d8d52e68c122e82e7",
+      "filePath": "src/Button.jsx",
+      "name": "Unused",
+      "reason": "unused-export",
+      "state": "INFERRED"
+    },
+    {
+      "symbolId": "61e4c23020c7924f424aac4f2c39f7389eab92f5f05c46022f6251df66595c5e",
+      "filePath": "src/Card.tsx",
+      "name": "Card",
+      "reason": "unused-export",
+      "state": "INFERRED"
+    }
+  ],
+  "entryPoints": [],
+  "routes": [],
+  "middlewareChains": [],
+  "projectId": "0937000a-e919-4939-b0d8-7df1b20e330b",
+  "analysisRunId": "7cd54abb-7cc6-4076-aadf-1080eab57822"
+}

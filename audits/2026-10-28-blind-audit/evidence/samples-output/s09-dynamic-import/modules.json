@@ -1,0 +1,17 @@
+[
+  {
+    "path": "cjs.js",
+    "language": "javascript",
+    "fileKind": "source"
+  },
+  {
+    "path": "lib.js",
+    "language": "javascript",
+    "fileKind": "source"
+  },
+  {
+    "path": "main.js",
+    "language": "javascript",
+    "fileKind": "source"
+  }
+]

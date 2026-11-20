@@ -1,0 +1,128 @@
+{
+  "projectId": "35f7cafe-ef64-4fbe-891e-64221543af89",
+  "analysisRunId": "1a8b805f-627d-485d-aafa-0da4153e7f03",
+  "graphs": [
+    {
+      "id": "65b0a7bdf29e06063c3f691410cc61086379b7ddcde7951775dc37a7a50dba6b",
+      "filePath": "lib.js",
+      "state": "INFERRED",
+      "definitions": [
+        {
+          "id": "2bbbcd34246f4bb96db36029dad820415ff27aeca850d4cd56167325b540d962",
+          "filePath": "lib.js",
+          "name": "b",
+          "kind": "declaration"
+        },
+        {
+          "id": "72bca01b8f1790ffc86c69f1ab599461c74868c64c57211689564797430d453b",
+          "filePath": "lib.js",
+          "name": "b:return",
+          "kind": "return"
+        },
+        {
+          "id": "a4939e323f6739cf7f2459ddf3e7cd5213582114e6d27b90a80ac71e3ac07f60",
+          "filePath": "lib.js",
+          "name": "a:return",
+          "kind": "return"
+        },
+        {
+          "id": "cb31bd43ec0ab1f2d3e1e0e646fa6e2ac8333946238a667125e6c229cbc87801",
+          "filePath": "lib.js",
+          "name": "a",
+          "kind": "declaration"
+        }
+      ],
+      "uses": [],
+      "defUseChains": [
+        {
+          "definitionId": "2bbbcd34246f4bb96db36029dad820415ff27aeca850d4cd56167325b540d962",
+          "useIds": []
+        },
+        {
+          "definitionId": "72bca01b8f1790ffc86c69f1ab599461c74868c64c57211689564797430d453b",
+          "useIds": []
+        },
+        {
+          "definitionId": "a4939e323f6739cf7f2459ddf3e7cd5213582114e6d27b90a80ac71e3ac07f60",
+          "useIds": []
+        },
+        {
+          "definitionId": "cb31bd43ec0ab1f2d3e1e0e646fa6e2ac8333946238a667125e6c229cbc87801",
+          "useIds": []
+        }
+      ],
+      "lifetimes": [
+        {
+          "name": "b",
+          "filePath": "lib.js",
+          "declarationId": "2bbbcd34246f4bb96db36029dad820415ff27aeca850d4cd56167325b540d962",
+          "useIds": []
+        },
+        {
+          "name": "b:return",
+          "filePath": "lib.js",
+          "declarationId": "72bca01b8f1790ffc86c69f1ab599461c74868c64c57211689564797430d453b",
+          "useIds": []
+        },
+        {
+          "name": "a:return",
+          "filePath": "lib.js",
+          "declarationId": "a4939e323f6739cf7f2459ddf3e7cd5213582114e6d27b90a80ac71e3ac07f60",
+          "useIds": []
+        },
+        {
+          "name": "a",
+          "filePath": "lib.js",
+          "declarationId": "cb31bd43ec0ab1f2d3e1e0e646fa6e2ac8333946238a667125e6c229cbc87801",
+          "useIds": []
+        }
+      ],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [
+        {
+          "symbolId": "034a4f474ac6c0f5c154500b8ab0aa15f3040e9c8a1b25acdb0c95aa5c22a3f1",
+          "filePath": "lib.js",
+          "parameterDefinitionIds": [],
+          "returnDefinitionIds": [
+            "72bca01b8f1790ffc86c69f1ab599461c74868c64c57211689564797430d453b"
+          ]
+        },
+        {
+          "symbolId": "17001d2a827b4d727ed6f635e89e072e337d1e4fadab21bf4ebb5f1882de6850",
+          "filePath": "lib.js",
+          "parameterDefinitionIds": [],
+          "returnDefinitionIds": [
+            "a4939e323f6739cf7f2459ddf3e7cd5213582114e6d27b90a80ac71e3ac07f60"
+          ]
+        }
+      ],
+      "callBindings": []
+    },
+    {
+      "id": "304656c80d611bf0b8f8e7d3f8024ebc1c58c96564cb4743bc89b5a56b05ad4d",
+      "filePath": "main.js",
+      "state": "INFERRED",
+      "definitions": [],
+      "uses": [
+        {
+          "id": "6174093c5fe71b2364204308f4cd0e5ed1888be612789015bc1fd591757553c0",
+          "filePath": "main.js",
+          "name": "lib"
+        }
+      ],
+      "defUseChains": [],
+      "lifetimes": [],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [],
+      "callBindings": [
+        {
+          "callId": "7be50eee7ea904f2bf4fb30641bc611866aedeffbd7647371050cae07ec21ebb",
+          "targetSymbolId": "21bbe366d0b3624ade3c16506c6cbf2290de573961bfec27f73fc653938a84f8",
+          "argumentDefinitionIds": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+[
+  {
+    "path": "src/App.jsx",
+    "language": "javascript",
+    "fileKind": "source"
+  },
+  {
+    "path": "src/Button.jsx",
+    "language": "javascript",
+    "fileKind": "source"
+  },
+  {
+    "path": "src/Card.tsx",
+    "language": "typescript",
+    "fileKind": "source"
+  }
+]

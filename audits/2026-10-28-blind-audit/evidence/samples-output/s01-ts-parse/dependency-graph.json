@@ -1,0 +1,62 @@
+{
+  "projectId": "3e507ced-934f-48fd-9be2-568448d16e1f",
+  "analysisRunId": "ada53b84-474b-4181-8030-1ebe7dfe521e",
+  "nodes": [
+    {
+      "id": "symbol:18e6711a17566ff742aad811309151940cdf49994a13cdbf8f864a66a052c352",
+      "filePath": "src/ok.tsx",
+      "symbolId": "18e6711a17566ff742aad811309151940cdf49994a13cdbf8f864a66a052c352"
+    },
+    {
+      "id": "symbol:1d56f3e349b1a1d9237e52ada5e3176d154eafba0c1175f1f63b490362caf415",
+      "filePath": "src/ok.ts",
+      "symbolId": "1d56f3e349b1a1d9237e52ada5e3176d154eafba0c1175f1f63b490362caf415"
+    },
+    {
+      "id": "symbol:1f1b4cacf85b57e834c217ea7db85261102cd149b738f940ec42f9623dc6fc87",
+      "filePath": "src/ok.ts",
+      "symbolId": "1f1b4cacf85b57e834c217ea7db85261102cd149b738f940ec42f9623dc6fc87"
+    },
+    {
+      "id": "symbol:39d6c7f7f27f09d1d1b481a06c61f304955a7e876273410ca955c67309c378ce",
+      "filePath": "dist/bundle.min.js",
+      "symbolId": "39d6c7f7f27f09d1d1b481a06c61f304955a7e876273410ca955c67309c378ce"
+    },
+    {
+      "id": "symbol:3eab7ee724bcaf75a8edb4d1e1d80037cd011b510d98a67780535bce85816c02",
+      "filePath": "dist/bundle.min.js",
+      "symbolId": "3eab7ee724bcaf75a8edb4d1e1d80037cd011b510d98a67780535bce85816c02"
+    },
+    {
+      "id": "symbol:5bf546cba91c2772cb41dfd7d83eb9ef667860d7e52d005d1b10dec3494c2c30",
+      "filePath": "dist/bundle.min.js",
+      "symbolId": "5bf546cba91c2772cb41dfd7d83eb9ef667860d7e52d005d1b10dec3494c2c30"
+    },
+    {
+      "id": "symbol:b5b0459b0f6a807f2fec4ca6f8edc73717279e3e2cac05daabfc87bd550ccc8d",
+      "filePath": "src/ok.ts",
+      "symbolId": "b5b0459b0f6a807f2fec4ca6f8edc73717279e3e2cac05daabfc87bd550ccc8d"
+    },
+    {
+      "id": "symbol:d605eef2ac45b96651af2394b13d4edfab261854a454c949a26ca4ed73aab09e",
+      "filePath": "src/ok.ts",
+      "symbolId": "d605eef2ac45b96651af2394b13d4edfab261854a454c949a26ca4ed73aab09e"
+    },
+    {
+      "id": "symbol:ddd371f3beb1784158a249bd411d51121ea05eb5fcb25d5fd6c929e6562a1f87",
+      "filePath": "src/ok.tsx",
+      "symbolId": "ddd371f3beb1784158a249bd411d51121ea05eb5fcb25d5fd6c929e6562a1f87"
+    },
+    {
+      "id": "symbol:f0c9a0aebb86907165e6d29e64573f73f4eec55fa063ee6668054ad7bd62c2b7",
+      "filePath": "src/ok.tsx",
+      "symbolId": "f0c9a0aebb86907165e6d29e64573f73f4eec55fa063ee6668054ad7bd62c2b7"
+    }
+  ],
+  "edges": [],
+  "cycles": [],
+  "moduleGraph": {
+    "contract": "f07-import-relations-v1",
+    "edges": []
+  }
+}

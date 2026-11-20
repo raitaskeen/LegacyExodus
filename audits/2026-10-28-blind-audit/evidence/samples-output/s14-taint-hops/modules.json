@@ -1,0 +1,17 @@
+[
+  {
+    "path": "app.js",
+    "language": "javascript",
+    "fileKind": "source"
+  },
+  {
+    "path": "helpers.js",
+    "language": "javascript",
+    "fileKind": "source"
+  },
+  {
+    "path": "package.json",
+    "language": "json",
+    "fileKind": "manifest"
+  }
+]

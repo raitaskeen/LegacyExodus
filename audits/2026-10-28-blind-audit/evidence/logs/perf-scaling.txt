@@ -1,0 +1,4 @@
+﻿{"n":500,"lines":1010,"engineMs":[1367,1424,1416],"medianMs":1416,"discoveryMB":13.2}
+{"n":1000,"lines":2010,"engineMs":[4203,3974,5045],"medianMs":4203,"discoveryMB":26.3}
+{"n":2000,"lines":4010,"engineMs":[37651,16424,32925],"medianMs":32925,"discoveryMB":52.7}
+{"n":4000,"lines":8010,"engineMs":[74837,113786,152842],"medianMs":113786,"discoveryMB":105.3}

@@ -1,0 +1,17 @@
+﻿{
+ "calls": 5889,
+ "resolvedCalls": 1347,
+ "resolvedPct": 22.9,
+ "imports": 722,
+ "aliasOrRelativeImports": 581,
+ "importsWithExportEdge": 303,
+ "moduleEdges": 315,
+ "deadCodeFindings": 353,
+ "deadByKind": {
+  "variable": 334,
+  "method": 19
+ },
+ "unusedImports": 3,
+ "unusedExports": 238,
+ "symbols": 7097
+}

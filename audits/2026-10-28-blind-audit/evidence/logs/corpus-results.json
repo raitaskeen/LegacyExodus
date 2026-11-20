@@ -1,0 +1,117 @@
+[
+  {
+    "name": "engine-src",
+    "files": 142,
+    "analyzed": 126,
+    "parserFailures": 0,
+    "failureCodes": {},
+    "msRuns": [
+      9711,
+      8654
+    ],
+    "engineMs": 8266,
+    "deterministic": true,
+    "differing": [],
+    "discoveryBytes": 42290156,
+    "failingFiles": []
+  },
+  {
+    "name": "engine-tests",
+    "files": 159,
+    "analyzed": 156,
+    "parserFailures": 0,
+    "failureCodes": {},
+    "msRuns": [
+      36326,
+      29562
+    ],
+    "engineMs": 30971,
+    "deterministic": true,
+    "differing": [],
+    "discoveryBytes": 72635856,
+    "failingFiles": []
+  },
+  {
+    "name": "zod",
+    "files": 828,
+    "analyzed": 812,
+    "parserFailures": 4,
+    "failureCodes": {
+      "SingleTypeParameterWithoutTrailingComma": 4
+    },
+    "msRuns": [
+      187436,
+      156529
+    ],
+    "engineMs": 168617,
+    "deterministic": true,
+    "differing": [],
+    "discoveryBytes": 275294167,
+    "failingFiles": [
+      "src/v3/helpers/parseUtil.ts:SingleTypeParameterWithoutTrailingComma",
+      "src/v3/helpers/util.ts:SingleTypeParameterWithoutTrailingComma",
+      "src/v4/classic/tests/generics.test.ts:SingleTypeParameterWithoutTrailingComma",
+      "src/v4/core/tests/compile-differential.test.ts:SingleTypeParameterWithoutTrailingComma"
+    ]
+  },
+  {
+    "name": "pino",
+    "files": 179,
+    "analyzed": 151,
+    "parserFailures": 1,
+    "failureCodes": {
+      "UnexpectedToken": 1
+    },
+    "msRuns": [
+      23704,
+      10718
+    ],
+    "engineMs": 19651,
+    "deterministic": true,
+    "differing": [],
+    "discoveryBytes": 30700627,
+    "failingFiles": [
+      "test/fixtures/syntax-error-esm.mjs:UnexpectedToken"
+    ]
+  },
+  {
+    "name": "commander",
+    "files": 12,
+    "analyzed": 7,
+    "parserFailures": 1,
+    "failureCodes": {
+      "DeclarationMissingInitializer": 1
+    },
+    "msRuns": [
+      1890,
+      1361
+    ],
+    "engineMs": 1093,
+    "deterministic": true,
+    "differing": [],
+    "discoveryBytes": 5139568,
+    "failingFiles": [
+      "typings/index.d.ts:DeclarationMissingInitializer"
+    ]
+  },
+  {
+    "name": "babel-parser",
+    "files": 9,
+    "analyzed": 3,
+    "parserFailures": 1,
+    "failureCodes": {
+      "MissingPlugin": 1
+    },
+    "msRuns": [
+      12269,
+      9579
+    ],
+    "engineMs": 8338,
+    "deterministic": true,
+    "differing": [],
+    "discoveryBytes": 32512188,
+    "failingFiles": [
+      "lib/index.d.ts:MissingPlugin"
+    ]
+  }
+]

@@ -1,0 +1,125 @@
+[
+  {
+    "id": "ddd6bfc2888f1c54086ae718187c4598648749a7860a3b1c738648624a921a8f",
+    "kind": "class",
+    "name": "Outer",
+    "filePath": "x.js",
+    "language": "javascript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 0
+      },
+      "end": {
+        "line": 1,
+        "column": 33
+      }
+    }
+  },
+  {
+    "id": "ecde191bb89194291ec66bb8322e1aba12dcbc6ac19626f27f7382badbd2dcec",
+    "kind": "method",
+    "name": "m",
+    "filePath": "x.js",
+    "language": "javascript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "containerName": "Outer",
+    "containerId": "ddd6bfc2888f1c54086ae718187c4598648749a7860a3b1c738648624a921a8f",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 14
+      },
+      "end": {
+        "line": 1,
+        "column": 31
+      }
+    }
+  },
+  {
+    "id": "b16960ec0b2da2f231db66759f80c230242cf8a82a9745ec7b7b4421fd533a18",
+    "kind": "export",
+    "name": "Inner",
+    "filePath": "x.js",
+    "language": "javascript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 2,
+        "column": 0
+      },
+      "end": {
+        "line": 2,
+        "column": 49
+      }
+    }
+  },
+  {
+    "id": "d6e80fdaeb8c8c63123e9f62a208db65cd3ae5e4c51176aa09cb72e61e5ea0be",
+    "kind": "variable",
+    "name": "Inner",
+    "filePath": "x.js",
+    "language": "javascript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "declarationKind": "const",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 2,
+        "column": 13
+      },
+      "end": {
+        "line": 2,
+        "column": 48
+      }
+    }
+  },
+  {
+    "id": "3628ff01c6900b9b40a89b2e4bc116cf9cec49df19e648859a388f92f3f0aad0",
+    "kind": "method",
+    "name": "n",
+    "filePath": "x.js",
+    "language": "javascript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 2,
+        "column": 29
+      },
+      "end": {
+        "line": 2,
+        "column": 46
+      }
+    }
+  }
+]

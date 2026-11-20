@@ -1,0 +1,104 @@
+{
+  "projectId": "f96bfad7-43fd-4df6-bfb5-7adc757206a8",
+  "analysisRunId": "fbef25e8-3120-41b8-ae46-e3ea5dddee77",
+  "nodes": [
+    {
+      "id": "file:lib.js",
+      "kind": "file",
+      "name": "lib.js",
+      "filePath": "lib.js"
+    },
+    {
+      "id": "file:main.js",
+      "kind": "file",
+      "name": "main.js",
+      "filePath": "main.js"
+    },
+    {
+      "id": "symbol:01fbc294d59d3c1820dc6aa40139cfeaad64e3f5191f908a24e4c8522862199b",
+      "kind": "symbol",
+      "name": "hello",
+      "filePath": "lib.js"
+    },
+    {
+      "id": "symbol:16467f517265fccd06758d4b9a2d367fa4cf0bbaee989bc37de6ece1f1ec1046",
+      "kind": "symbol",
+      "name": "hello",
+      "filePath": "lib.js"
+    },
+    {
+      "id": "symbol:4de00da3c5fd27da67f60b39e00e6e6045e29344069c4f99425f375a421b71e1",
+      "kind": "symbol",
+      "name": "lib_1",
+      "filePath": "main.js"
+    },
+    {
+      "id": "symbol:96438121dec3205ec94b8247d60bba5b83ad54a27be677247d0bb531c2fe1100",
+      "kind": "symbol",
+      "name": "hello",
+      "filePath": "lib.js"
+    },
+    {
+      "id": "symbol:beba15762ea01b4ff90ad0f5b34b8d0a2571ff2a1a4478c8c42595ed25f8602e",
+      "kind": "symbol",
+      "name": "lib_1",
+      "filePath": "main.js"
+    },
+    {
+      "id": "symbol:efaca52b5d2344095881737adc3374f1bebbc4c3ed8262192ecacb0780bb0dd7",
+      "kind": "symbol",
+      "name": "hello",
+      "filePath": "lib.js"
+    },
+    {
+      "id": "symbol:f4cf66dcb9c84eff317885d5095685bcde077bdd68bde864be18903a502ffeea",
+      "kind": "symbol",
+      "name": "hello",
+      "filePath": "lib.js"
+    }
+  ],
+  "edges": [
+    {
+      "id": "13a5b29c97f6ffc7af89ad00342fce065b1b321f8cfaef822742ae368adfbb2c",
+      "from": "file:lib.js",
+      "to": "symbol:16467f517265fccd06758d4b9a2d367fa4cf0bbaee989bc37de6ece1f1ec1046",
+      "relationship": "contains"
+    },
+    {
+      "id": "242171a41eabc7456fc22770548f59fdd9eede9f35346fe1ce802e11dc151425",
+      "from": "file:lib.js",
+      "to": "symbol:efaca52b5d2344095881737adc3374f1bebbc4c3ed8262192ecacb0780bb0dd7",
+      "relationship": "contains"
+    },
+    {
+      "id": "6c7a837384f740f2d2b807aba8da42bbcce6d6eba3888ff65b3a2a4b514fec39",
+      "from": "file:main.js",
+      "to": "symbol:4de00da3c5fd27da67f60b39e00e6e6045e29344069c4f99425f375a421b71e1",
+      "relationship": "contains"
+    },
+    {
+      "id": "972ca34e9c5f433db1a1b818fbf6d6d17590c12142ada73c41c543d3ca6dcb92",
+      "from": "file:lib.js",
+      "to": "symbol:96438121dec3205ec94b8247d60bba5b83ad54a27be677247d0bb531c2fe1100",
+      "relationship": "contains"
+    },
+    {
+      "id": "98b98cb562b8270ecd24bb381593af89e780b0feaa7f2ff8b69a2aa441969888",
+      "from": "file:lib.js",
+      "to": "symbol:01fbc294d59d3c1820dc6aa40139cfeaad64e3f5191f908a24e4c8522862199b",
+      "relationship": "contains"
+    },
+    {
+      "id": "9b3e82af9533c49c4051400bb8db1c1e33803bccf73b1edafdfd4e1a05b36efe",
+      "from": "file:main.js",
+      "to": "symbol:beba15762ea01b4ff90ad0f5b34b8d0a2571ff2a1a4478c8c42595ed25f8602e",
+      "relationship": "contains"
+    },
+    {
+      "id": "e4b05b327d3d45e1a0e21c63eefa5f315a60535f1bc58329e386db18e4a48fde",
+      "from": "file:lib.js",
+      "to": "symbol:f4cf66dcb9c84eff317885d5095685bcde077bdd68bde864be18903a502ffeea",
+      "relationship": "contains"
+    }
+  ]
+}

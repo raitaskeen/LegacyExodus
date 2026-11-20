@@ -1,0 +1,182 @@
+{
+  "projectId": "0937000a-e919-4939-b0d8-7df1b20e330b",
+  "analysisRunId": "7cd54abb-7cc6-4076-aadf-1080eab57822",
+  "nodes": [
+    {
+      "id": "file:src/App.jsx",
+      "kind": "file",
+      "name": "src/App.jsx",
+      "filePath": "src/App.jsx"
+    },
+    {
+      "id": "file:src/Button.jsx",
+      "kind": "file",
+      "name": "src/Button.jsx",
+      "filePath": "src/Button.jsx"
+    },
+    {
+      "id": "file:src/Card.tsx",
+      "kind": "file",
+      "name": "src/Card.tsx",
+      "filePath": "src/Card.tsx"
+    },
+    {
+      "id": "symbol:0032f981105e5829e593c8c9b56d07a293247a3bbdba1d539a309c9006231ab4",
+      "kind": "symbol",
+      "name": "Button",
+      "filePath": "src/Button.jsx"
+    },
+    {
+      "id": "symbol:038873e163d638910996face57368d7e0af85eebc05773cd993c85f31d0c6e4b",
+      "kind": "symbol",
+      "name": "Unused",
+      "filePath": "src/Button.jsx"
+    },
+    {
+      "id": "symbol:07b9e552cca37d1aace594869fc3ebbf6c4a7772a73d9f5b91282d17412e6583",
+      "kind": "symbol",
+      "name": "default",
+      "filePath": "src/App.jsx"
+    },
+    {
+      "id": "symbol:091ce9a480d8cb868ea45920bc87c298d7a57d57ffe751cbd191245c9a4ad5b7",
+      "kind": "symbol",
+      "name": "Button",
+      "filePath": "src/Card.tsx"
+    },
+    {
+      "id": "symbol:61e4c23020c7924f424aac4f2c39f7389eab92f5f05c46022f6251df66595c5e",
+      "kind": "symbol",
+      "name": "Card",
+      "filePath": "src/Card.tsx"
+    },
+    {
+      "id": "symbol:8afdb9e725dafc194e752cbd0a206b799a290a5a3fbf7fa03309a9caf82aea90",
+      "kind": "symbol",
+      "name": "Button",
+      "filePath": "src/App.jsx"
+    },
+    {
+      "id": "symbol:9b73f253076e10d904b5611a96aa89bf08ed93e2ef6d8c6735bb5cd4b67cff5d",
+      "kind": "symbol",
+      "name": "React",
+      "filePath": "src/Card.tsx"
+    },
+    {
+      "id": "symbol:a664f00d7acfd8ed51eb8f3a6979efd24bd0788e3ca49baa01b63ef1e5ebd8bd",
+      "kind": "symbol",
+      "name": "Button",
+      "filePath": "src/Button.jsx"
+    },
+    {
+      "id": "symbol:b16e1cc249f3e1a639aa76c889b7a0bc67fe04ec4dd55aba668aa6c25e5e2ac2",
+      "kind": "symbol",
+      "name": "Card",
+      "filePath": "src/Card.tsx"
+    },
+    {
+      "id": "symbol:b19fdc2491803c85f2e4aa9632709ef9972baa8a8600517e420d9a759fd022f6",
+      "kind": "symbol",
+      "name": "App",
+      "filePath": "src/App.jsx"
+    },
+    {
+      "id": "symbol:b5c4682a580670c005a2e6107f28fe9542cb858db29768fca631ce9b39d18127",
+      "kind": "symbol",
+      "name": "Card",
+      "filePath": "src/Card.tsx"
+    },
+    {
+      "id": "symbol:e0e6f9ee7c553dfa9579b02a5f2be36c64be27483b787a8d8d52e68c122e82e7",
+      "kind": "symbol",
+      "name": "Unused",
+      "filePath": "src/Button.jsx"
+    }
+  ],
+  "edges": [
+    {
+      "id": "058e8b2e66f59fb5eb2af3a5fe132a8a85c31f623133c3eded0dab50c0a271bc",
+      "from": "file:src/Card.tsx",
+      "to": "symbol:b16e1cc249f3e1a639aa76c889b7a0bc67fe04ec4dd55aba668aa6c25e5e2ac2",
+      "relationship": "contains"
+    },
+    {
+      "id": "266124343a64dbd09517e6fec29fc2907a748701fdd5b5404438a102d589b727",
+      "from": "file:src/Button.jsx",
+      "to": "symbol:a664f00d7acfd8ed51eb8f3a6979efd24bd0788e3ca49baa01b63ef1e5ebd8bd",
+      "relationship": "contains"
+    },
+    {
+      "id": "296424cb6a683448129085b8bfeed67dc5250cc86e67dda5c7fab27995e84960",
+      "from": "symbol:091ce9a480d8cb868ea45920bc87c298d7a57d57ffe751cbd191245c9a4ad5b7",
+      "to": "symbol:a664f00d7acfd8ed51eb8f3a6979efd24bd0788e3ca49baa01b63ef1e5ebd8bd",
+      "relationship": "imports"
+    },
+    {
+      "id": "2bbf0f5d08f11e33ee929c4c2b159b969e614d1a6e8d8d9cce7fcea627f2a7d7",
+      "from": "file:src/Card.tsx",
+      "to": "symbol:091ce9a480d8cb868ea45920bc87c298d7a57d57ffe751cbd191245c9a4ad5b7",
+      "relationship": "contains"
+    },
+    {
+      "id": "56dbabe0b599bead1c133b1ccddd75b1a59f193761176303b2c082abac23a9d5",
+      "from": "file:src/Card.tsx",
+      "to": "symbol:b5c4682a580670c005a2e6107f28fe9542cb858db29768fca631ce9b39d18127",
+      "relationship": "contains"
+    },
+    {
+      "id": "5d778b3c653ed6e2ccd19e1b5db8abfee1a1c27851e92f50da8ec5e433e26742",
+      "from": "file:src/Card.tsx",
+      "to": "symbol:9b73f253076e10d904b5611a96aa89bf08ed93e2ef6d8c6735bb5cd4b67cff5d",
+      "relationship": "contains"
+    },
+    {
+      "id": "63b7c4b4255eeff5c672c589e5ffef8c10473bc0a2dfe4e0db28dad5cac38801",
+      "from": "file:src/App.jsx",
+      "to": "symbol:07b9e552cca37d1aace594869fc3ebbf6c4a7772a73d9f5b91282d17412e6583",
+      "relationship": "contains"
+    },
+    {
+      "id": "6f2b3fb52f65deb86009efb0da13fceaacd506a35156d24ba5105aed4ba20b83",
+      "from": "file:src/Button.jsx",
+      "to": "symbol:e0e6f9ee7c553dfa9579b02a5f2be36c64be27483b787a8d8d52e68c122e82e7",
+      "relationship": "contains"
+    },
+    {
+      "id": "8284b8ae6ad2bb7c960cfb3ac6fccba21bd751b055c4771c259b390dde2e221d",
+      "from": "file:src/App.jsx",
+      "to": "symbol:b19fdc2491803c85f2e4aa9632709ef9972baa8a8600517e420d9a759fd022f6",
+      "relationship": "contains"
+    },
+    {
+      "id": "8aba685df7361ecf05daca799da99552a400a41cec12dd1b02064b101b2962e0",
+      "from": "file:src/App.jsx",
+      "to": "symbol:8afdb9e725dafc194e752cbd0a206b799a290a5a3fbf7fa03309a9caf82aea90",
+      "relationship": "contains"
+    },
+    {
+      "id": "95f2fadf2f804a3f0096ab543f05d0470f6ab0720f4e5b8345c07ebb6b8119e9",
+      "from": "file:src/Button.jsx",
+      "to": "symbol:038873e163d638910996face57368d7e0af85eebc05773cd993c85f31d0c6e4b",
+      "relationship": "contains"
+    },
+    {
+      "id": "a0d557c8c74e31344313f270a4156c2ad1b2720fce1649ad1e447247ea0c1b28",
+      "from": "symbol:8afdb9e725dafc194e752cbd0a206b799a290a5a3fbf7fa03309a9caf82aea90",
+      "to": "symbol:a664f00d7acfd8ed51eb8f3a6979efd24bd0788e3ca49baa01b63ef1e5ebd8bd",
+      "relationship": "imports"
+    },
+    {
+      "id": "e9c3cfed444ebd7cb2519f27ec2c361250c7425cd8aa4e2bd7ed7a6864ed405c",
+      "from": "file:src/Card.tsx",
+      "to": "symbol:61e4c23020c7924f424aac4f2c39f7389eab92f5f05c46022f6251df66595c5e",
+      "relationship": "contains"
+    },
+    {
+      "id": "eb0d8f4dec2e04cf62646aa3be0809e40e72dc64aaed1f683b04553957d1a12a",
+      "from": "file:src/Button.jsx",
+      "to": "symbol:0032f981105e5829e593c8c9b56d07a293247a3bbdba1d539a309c9006231ab4",
+      "relationship": "contains"
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "repository": {
+    "name": "s07-namespace-import",
+    "path": "C:\\Projects\\.audit\\samples\\s07-namespace-import",
+    "sourceDigest": "af50d69f1dea7d0caff6783754f680f760796d5ed75b8fe9a62d67df74768264"
+  },
+  "engine": {
+    "packageVersion": "0.1.0",
+    "commitSha": "c694d6451ebd8457d7c0eb808286cf19d2c665d3",
+    "bunVersion": "bun-1.4.4"
+  },
+  "analysis": {
+    "projectId": "35f7cafe-ef64-4fbe-891e-64221543af89",
+    "analysisRunId": "1a8b805f-627d-485d-aafa-0da4153e7f03",
+    "generatedAt": "2026-10-28T04:44:16.550Z"
+  },
+  "requiredArtifacts": [
+    "control-flow.json",
+    "data-flow.json",
+    "dependencies.json",
+    "dependency-graph.json",
+    "files.json",
+    "frameworks.json",
+    "knowledge.json",
+    "modules.json",
+    "project.json",
+    "semantic.json",
+    "summary.json",
+    "symbols.json"
+  ],
+  "artifacts": {
+    "project.json": {
+      "sha256": "66d29006b6de344aa2a744f349fb7748250926a1860c58d87ddcf7c47fa3a458",
+      "bytes": 141
+    },
+    "files.json": {
+      "sha256": "66b6ea8ae130fed37913dbbc5909be515044d32a80da89a65e7373c6aa5dc6b0",
+      "bytes": 364
+    },
+    "dependencies.json": {
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "bytes": 3
+    },
+    "frameworks.json": {
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "bytes": 3
+    },
+    "summary.json": {
+      "sha256": "be3fd12cba5a39243882212a3a83eae6d646f48d0b4c0dd785a762ffc5ccb930",
+      "bytes": 673
+    },
+    "dependency-graph.json": {
+      "sha256": "252262609e0f985ce2d9aafba6d591760b07951ead1a1e110e1abadb226e8da9",
+      "bytes": 2088
+    },
+    "modules.json": {
+      "sha256": "6928df2f95dd8939970fd037104cc8fb1ea5ac26d7f1fce7fab8f7417aa3324d",
+      "bytes": 176
+    },
+    "symbols.json": {
+      "sha256": "cd985294bbde1263644624738d982da8ae7a204a20d96a0ffe76ccc3c1531d27",
+      "bytes": 2620
+    },
+    "knowledge.json": {
+      "sha256": "f620cdeb43eb56ce1f5aeb60a8199c59451c0930b9e0eda10f21b754962f85bd",
+      "bytes": 2745
+    },
+    "semantic.json": {
+      "sha256": "a7eebc8c42cf0edbab6b7cd88a37c4fa07c1f53850399ce35639a03d4a984e09",
+      "bytes": 2065
+    },
+    "control-flow.json": {
+      "sha256": "5fd79d08a872422b542cf4295673e0f2f6caec87e5733ff33a5e9dba43a12033",
+      "bytes": 8704
+    },
+    "data-flow.json": {
+      "sha256": "4f029a768149267a511ccdf6cd4984bedb094c01665804b5e9f00771f415a068",
+      "bytes": 4017
+    }
+  },
+  "analyzer": {
+    "fingerprint": "lx-analyzer-v1:12eea42d44bcfaf05dc542a50c42b30da2a0defd4958d5b6db4e92b34f6108ff"
+  },
+  "integrity": {
+    "algorithm": "hmac-sha256",
+    "keyId": "c028506bcf9e8ef6",
+    "mac": "bba68104271750277bbd67240797cc320ca1f51c53d4032200c50e9319648d60"
+  }
+}

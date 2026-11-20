@@ -1,0 +1,379 @@
+[
+  {
+    "id": "4d5c054a746e175c734495b85f42a74ac8c3d16744be9bfc3a728446f17cf619",
+    "kind": "export",
+    "name": "f",
+    "filePath": "src/defs.ts",
+    "language": "typescript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 3,
+        "column": 22
+      },
+      "end": {
+        "line": 3,
+        "column": 63
+      }
+    }
+  },
+  {
+    "id": "ab2a51b5e5ab4b95c0c62e01b7d6dd11fc551b4be21a7778ce5afabe17a8d024",
+    "kind": "function",
+    "name": "f",
+    "filePath": "src/defs.ts",
+    "language": "typescript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 3,
+        "column": 29
+      },
+      "end": {
+        "line": 3,
+        "column": 63
+      }
+    }
+  },
+  {
+    "id": "40e6cbf551b3b86841790b53ef922d75c4327fc857c978659dc0291937b01c2e",
+    "kind": "export",
+    "name": "Base",
+    "filePath": "src/defs.ts",
+    "language": "typescript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 7,
+        "column": 0
+      },
+      "end": {
+        "line": 7,
+        "column": 51
+      }
+    }
+  },
+  {
+    "id": "d2af0a0e7814049aeb385dfa1708acad3e8d943fd0ea18d0ee93731ccb6c55c1",
+    "kind": "class",
+    "name": "Base",
+    "filePath": "src/defs.ts",
+    "language": "typescript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 7,
+        "column": 7
+      },
+      "end": {
+        "line": 7,
+        "column": 51
+      }
+    }
+  },
+  {
+    "id": "5d59595ecfea1ceaabf3535c328483796bdb9eba8d10235e219e1b553a57b653",
+    "kind": "import",
+    "name": "Color",
+    "filePath": "src/use.ts",
+    "language": "typescript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "moduleSpecifier": "./defs",
+    "sourceSymbolName": "Color",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 9
+      },
+      "end": {
+        "line": 1,
+        "column": 14
+      }
+    }
+  },
+  {
+    "id": "e313d1fb5bcf97782b09ce0317159bfb7b00b36fc834de99e851fc09060ee5c9",
+    "kind": "import",
+    "name": "Dir",
+    "filePath": "src/use.ts",
+    "language": "typescript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "moduleSpecifier": "./defs",
+    "sourceSymbolName": "Dir",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 16
+      },
+      "end": {
+        "line": 1,
+        "column": 19
+      }
+    }
+  },
+  {
+    "id": "2a3a4e2481aa91a707c68ed6b13d24697cd2f35bbdf1e72d32db2bdbe3ba3e47",
+    "kind": "import",
+    "name": "NS",
+    "filePath": "src/use.ts",
+    "language": "typescript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "moduleSpecifier": "./defs",
+    "sourceSymbolName": "NS",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 21
+      },
+      "end": {
+        "line": 1,
+        "column": 23
+      }
+    }
+  },
+  {
+    "id": "ceeee4260050edb5623c24ed4c607438eb507cd24c9f30a068796dfa95157d48",
+    "kind": "import",
+    "name": "Base",
+    "filePath": "src/use.ts",
+    "language": "typescript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "moduleSpecifier": "./defs",
+    "sourceSymbolName": "Base",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 1,
+        "column": 25
+      },
+      "end": {
+        "line": 1,
+        "column": 29
+      }
+    }
+  },
+  {
+    "id": "77751d35fd93bc4b3d0d6e73f3d7f316af5ef11df56c64c65209fda47c582898",
+    "kind": "import",
+    "name": "Shape",
+    "filePath": "src/use.ts",
+    "language": "typescript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "moduleSpecifier": "./defs",
+    "sourceSymbolName": "Shape",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 2,
+        "column": 14
+      },
+      "end": {
+        "line": 2,
+        "column": 19
+      }
+    }
+  },
+  {
+    "id": "3f6c37f19796ca3ed095e192365f8b53f4425d0b3098075bd1561f005531a4ca",
+    "kind": "import",
+    "name": "Id",
+    "filePath": "src/use.ts",
+    "language": "typescript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "moduleSpecifier": "./defs",
+    "sourceSymbolName": "Id",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 2,
+        "column": 21
+      },
+      "end": {
+        "line": 2,
+        "column": 23
+      }
+    }
+  },
+  {
+    "id": "ae485ad35961eb420e9a79251cb62bab2f6e1716282d63c14f6bba0c87cc6871",
+    "kind": "variable",
+    "name": "s",
+    "filePath": "src/use.ts",
+    "language": "typescript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "declarationKind": "const",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 3,
+        "column": 6
+      },
+      "end": {
+        "line": 3,
+        "column": 38
+      }
+    }
+  },
+  {
+    "id": "240bec2b96c771e8cd4d30a87c518bd3f1d3eb181088917c1ba843a9891992bd",
+    "kind": "variable",
+    "name": "i",
+    "filePath": "src/use.ts",
+    "language": "typescript",
+    "exported": false,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "declarationKind": "const",
+    "value": "x",
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 3,
+        "column": 46
+      },
+      "end": {
+        "line": 3,
+        "column": 57
+      }
+    }
+  },
+  {
+    "id": "c03f261690f6440a82b5f366cdbb07c691ac74c1e28bd1d12bea13d31c2289d3",
+    "kind": "export",
+    "name": "Impl",
+    "filePath": "src/use.ts",
+    "language": "typescript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 5,
+        "column": 0
+      },
+      "end": {
+        "line": 5,
+        "column": 49
+      }
+    }
+  },
+  {
+    "id": "f8cc5d8f696b8a49773866580de334a592d7e72497140f98b4be37fd09210567",
+    "kind": "class",
+    "name": "Impl",
+    "filePath": "src/use.ts",
+    "language": "typescript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "location": {
+      "start": {
+        "line": 5,
+        "column": 7
+      },
+      "end": {
+        "line": 5,
+        "column": 49
+      }
+    }
+  },
+  {
+    "id": "f3765d7acbd376d20df22b3f56d76f2ff983f4db1d662d840cb48a21d50db75c",
+    "kind": "method",
+    "name": "run",
+    "filePath": "src/use.ts",
+    "language": "typescript",
+    "exported": true,
+    "defaultExport": false,
+    "async": false,
+    "anonymous": false,
+    "visibility": "public",
+    "parameters": [],
+    "scopeId": "scope:module",
+    "containerName": "Impl",
+    "containerId": "f8cc5d8f696b8a49773866580de334a592d7e72497140f98b4be37fd09210567",
+    "location": {
+      "start": {
+        "line": 5,
+        "column": 33
+      },
+      "end": {
+        "line": 5,
+        "column": 47
+      }
+    }
+  }
+]

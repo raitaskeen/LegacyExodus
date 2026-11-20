@@ -1,0 +1,28 @@
+{
+  "analysisDisposition": {
+    "contract": "r01-analysis-disposition-v1",
+    "files": [
+      {
+        "fileId": "4d4d0cea7e443590b59dddca4fc34faa6f37fbfd94a251d8d0047b8aa8ca19ee",
+        "path": "lib.js",
+        "kind": "analyzed",
+        "symbolCount": 4
+      },
+      {
+        "fileId": "58417e0f781b6656949d37258c8b9052ed266e2eb7a5163cad7b0863e6b2916a",
+        "path": "main.js",
+        "kind": "analyzed",
+        "symbolCount": 1
+      }
+    ]
+  },
+  "projectName": "s07-namespace-import",
+  "fileCount": 2,
+  "dependencyCount": 0,
+  "frameworkCount": 0,
+  "languages": [
+    "javascript"
+  ],
+  "enumerationFailureCount": 0,
+  "discoveryComplete": true
+}

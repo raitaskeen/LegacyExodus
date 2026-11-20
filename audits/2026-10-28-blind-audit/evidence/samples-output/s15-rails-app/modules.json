@@ -1,0 +1,22 @@
+[
+  {
+    "path": "app/controllers/users_controller.rb",
+    "language": "ruby",
+    "fileKind": "source"
+  },
+  {
+    "path": "app/views/components/card.html.erb",
+    "language": "unknown",
+    "fileKind": "unknown"
+  },
+  {
+    "path": "config/routes.rb",
+    "language": "ruby",
+    "fileKind": "source"
+  },
+  {
+    "path": "Gemfile",
+    "language": "unknown",
+    "fileKind": "unknown"
+  }
+]

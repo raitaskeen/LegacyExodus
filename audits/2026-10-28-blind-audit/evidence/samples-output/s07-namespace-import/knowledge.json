@@ -1,0 +1,86 @@
+{
+  "projectId": "35f7cafe-ef64-4fbe-891e-64221543af89",
+  "analysisRunId": "1a8b805f-627d-485d-aafa-0da4153e7f03",
+  "nodes": [
+    {
+      "id": "file:lib.js",
+      "kind": "file",
+      "name": "lib.js",
+      "filePath": "lib.js"
+    },
+    {
+      "id": "file:main.js",
+      "kind": "file",
+      "name": "main.js",
+      "filePath": "main.js"
+    },
+    {
+      "id": "symbol:034a4f474ac6c0f5c154500b8ab0aa15f3040e9c8a1b25acdb0c95aa5c22a3f1",
+      "kind": "symbol",
+      "name": "b",
+      "filePath": "lib.js"
+    },
+    {
+      "id": "symbol:09309203d18623768f84c4a0e91d108ca7ed7a156d7e27a63b9c777de369c077",
+      "kind": "symbol",
+      "name": "lib",
+      "filePath": "main.js"
+    },
+    {
+      "id": "symbol:17001d2a827b4d727ed6f635e89e072e337d1e4fadab21bf4ebb5f1882de6850",
+      "kind": "symbol",
+      "name": "a",
+      "filePath": "lib.js"
+    },
+    {
+      "id": "symbol:18e12a2fda52e1d5dee45d3e582717e3743725e8e17964acd2b7b69f5d9fca41",
+      "kind": "symbol",
+      "name": "a",
+      "filePath": "lib.js"
+    },
+    {
+      "id": "symbol:21bbe366d0b3624ade3c16506c6cbf2290de573961bfec27f73fc653938a84f8",
+      "kind": "symbol",
+      "name": "b",
+      "filePath": "lib.js"
+    }
+  ],
+  "edges": [
+    {
+      "id": "007721b4ae3f1d192bbb68592219fb518d38ba29a88ca04cad213f0fb6a66bdd",
+      "from": "file:lib.js",
+      "to": "symbol:17001d2a827b4d727ed6f635e89e072e337d1e4fadab21bf4ebb5f1882de6850",
+      "relationship": "contains"
+    },
+    {
+      "id": "397af46a7000100941c0ade484ed60fd12d8a78cd66880f3f8d8c909b2e6df67",
+      "from": "symbol:09309203d18623768f84c4a0e91d108ca7ed7a156d7e27a63b9c777de369c077",
+      "to": "symbol:18e12a2fda52e1d5dee45d3e582717e3743725e8e17964acd2b7b69f5d9fca41",
+      "relationship": "imports"
+    },
+    {
+      "id": "4507008a139ee6d36460a4fd39e5fd57a939bb94a53750b7d3c267e377f348bb",
+      "from": "file:lib.js",
+      "to": "symbol:18e12a2fda52e1d5dee45d3e582717e3743725e8e17964acd2b7b69f5d9fca41",
+      "relationship": "contains"
+    },
+    {
+      "id": "4d9656fc659604e323f471336df0fa293d7af48d2f8dc2783322ae3391d67b16",
+      "from": "file:lib.js",
+      "to": "symbol:21bbe366d0b3624ade3c16506c6cbf2290de573961bfec27f73fc653938a84f8",
+      "relationship": "contains"
+    },
+    {
+      "id": "55c8237ebede28cd0c2f66e042e50bdabec11a457b3ca8d4c6b3a1dc66ccde78",
+      "from": "file:main.js",
+      "to": "symbol:09309203d18623768f84c4a0e91d108ca7ed7a156d7e27a63b9c777de369c077",
+      "relationship": "contains"
+    },
+    {
+      "id": "f56e0a944fa4acb761de74aabe32b0608575b0a1eaac7da9f539547e6d576883",
+      "from": "file:lib.js",
+      "to": "symbol:034a4f474ac6c0f5c154500b8ab0aa15f3040e9c8a1b25acdb0c95aa5c22a3f1",
+      "relationship": "contains"
+    }
+  ]
+}

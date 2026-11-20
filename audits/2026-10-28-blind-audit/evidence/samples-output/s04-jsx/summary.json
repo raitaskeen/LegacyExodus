@@ -1,0 +1,35 @@
+{
+  "analysisDisposition": {
+    "contract": "r01-analysis-disposition-v1",
+    "files": [
+      {
+        "fileId": "d274a54187c91ba0f532df2a9e194e27ab50e988f5e4c33f5a7893918320c661",
+        "path": "src/App.jsx",
+        "kind": "analyzed",
+        "symbolCount": 3
+      },
+      {
+        "fileId": "3e1ee262d77c38ec4c96b3709a2e16f384c333b8a0a96503cfef0d2d1acc3e20",
+        "path": "src/Button.jsx",
+        "kind": "analyzed",
+        "symbolCount": 4
+      },
+      {
+        "fileId": "99a8de2c1678ec8bf4ebc3978fc1a66c1de3517de2c64988b6ed322e8a945966",
+        "path": "src/Card.tsx",
+        "kind": "analyzed",
+        "symbolCount": 5
+      }
+    ]
+  },
+  "projectName": "s04-jsx",
+  "fileCount": 3,
+  "dependencyCount": 0,
+  "frameworkCount": 0,
+  "languages": [
+    "javascript",
+    "typescript"
+  ],
+  "enumerationFailureCount": 0,
+  "discoveryComplete": true
+}

@@ -1,0 +1,330 @@
+{
+  "projectId": "6c528306-ecfe-4061-8df9-56dffc05f876",
+  "analysisRunId": "41dfe04c-813d-4a36-a291-4640c86332ea",
+  "graphs": [
+    {
+      "id": "1517b48a98eb2f2925c2d673beac1edc2922e30391b05e5a2b23cc59021cad07",
+      "filePath": "src/defs.ts",
+      "state": "INFERRED",
+      "definitions": [
+        {
+          "id": "70ceccaa42ed16cad7eb226b6d293d81e78d92ede71d58490c6a5c0247a7e495",
+          "filePath": "src/defs.ts",
+          "name": "f:return",
+          "kind": "return"
+        },
+        {
+          "id": "dd3faf773a3d900534304d4ffac3cff51f493fda7d112ccd6f5b87d600b2fce5",
+          "filePath": "src/defs.ts",
+          "name": "f",
+          "kind": "declaration"
+        }
+      ],
+      "uses": [
+        {
+          "id": "26f55f6e5f6a62692a4296a99b902efb31ec2625c852113811dcbe9932a9d626",
+          "filePath": "src/defs.ts",
+          "name": "Base"
+        },
+        {
+          "id": "290d863ea20b497c3fd745a74c1bcd0ec1a102f5584b081e904908659fae4dbd",
+          "filePath": "src/defs.ts",
+          "name": "Shape"
+        },
+        {
+          "id": "587da03cb3329db37c219b77674a48f825c49b4eeb3df27ed186304ce18f744c",
+          "filePath": "src/defs.ts",
+          "name": "Red"
+        },
+        {
+          "id": "6d8083ddcb771d09b401d93dcae9cf76a1340f92967c26903a4ec58a1d5e0c60",
+          "filePath": "src/defs.ts",
+          "name": "Dir"
+        },
+        {
+          "id": "6fb7e646ee741d658f8486f65efc0e97ca2a1674360f503a8952d8ea8c2e8a1c",
+          "filePath": "src/defs.ts",
+          "name": "Green"
+        },
+        {
+          "id": "8a2812c8189c8172bf3c21e8ca66b26a016aae4360d3ffad214cd0aebf90c2e3",
+          "filePath": "src/defs.ts",
+          "name": "area"
+        },
+        {
+          "id": "9b193b90681a9b0577e21d3b46763293eef9a81b9968dae44986e5cb106bd1f7",
+          "filePath": "src/defs.ts",
+          "name": "run"
+        },
+        {
+          "id": "a0a4e47fcd78b79aaca5467e9953b93d6ae218f1eab4e07ab47df591c0cf8997",
+          "filePath": "src/defs.ts",
+          "name": "Color"
+        },
+        {
+          "id": "ab9f3651797a78753986b25ab5e8b46a24ab3828e78741d842e3b3b648c38b1d",
+          "filePath": "src/defs.ts",
+          "name": "NS"
+        },
+        {
+          "id": "be70dbdbbf67b9ca487cddc7d7d15b6814dbe5354284aa18983edf8c32a21366",
+          "filePath": "src/defs.ts",
+          "name": "external"
+        },
+        {
+          "id": "e1c537de1424025e6c66d85eee3c890e9673c64ad75328239cb1f8d67f6434c1",
+          "filePath": "src/defs.ts",
+          "name": "Id"
+        },
+        {
+          "id": "fe7411cf4e5e10b68da7ddf9b6725480d8373ce7c5f05cc0dabd6a8bc111dcf4",
+          "filePath": "src/defs.ts",
+          "name": "Up"
+        }
+      ],
+      "defUseChains": [
+        {
+          "definitionId": "70ceccaa42ed16cad7eb226b6d293d81e78d92ede71d58490c6a5c0247a7e495",
+          "useIds": []
+        },
+        {
+          "definitionId": "dd3faf773a3d900534304d4ffac3cff51f493fda7d112ccd6f5b87d600b2fce5",
+          "useIds": []
+        }
+      ],
+      "lifetimes": [
+        {
+          "name": "f:return",
+          "filePath": "src/defs.ts",
+          "declarationId": "70ceccaa42ed16cad7eb226b6d293d81e78d92ede71d58490c6a5c0247a7e495",
+          "useIds": []
+        },
+        {
+          "name": "f",
+          "filePath": "src/defs.ts",
+          "declarationId": "dd3faf773a3d900534304d4ffac3cff51f493fda7d112ccd6f5b87d600b2fce5",
+          "useIds": []
+        }
+      ],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [
+        {
+          "symbolId": "ab2a51b5e5ab4b95c0c62e01b7d6dd11fc551b4be21a7778ce5afabe17a8d024",
+          "filePath": "src/defs.ts",
+          "parameterDefinitionIds": [],
+          "returnDefinitionIds": [
+            "70ceccaa42ed16cad7eb226b6d293d81e78d92ede71d58490c6a5c0247a7e495"
+          ]
+        }
+      ],
+      "callBindings": []
+    },
+    {
+      "id": "5350f618659fd0846c687da0e062afd29da5f72872bd62285f9bd0f45dfe9906",
+      "filePath": "src/legacy.ts",
+      "state": "INFERRED",
+      "definitions": [],
+      "uses": [
+        {
+          "id": "1d9d2778f5172b9950eb3c0cf9471f24a0f1e1841ccd7abeae665dcda569fcb2",
+          "filePath": "src/legacy.ts",
+          "name": "defs"
+        },
+        {
+          "id": "2fb58392e6cb333e19eaaf67361e7539373f8aae625424d8d7dd6cce61435838",
+          "filePath": "src/legacy.ts",
+          "name": "defs"
+        },
+        {
+          "id": "6e0a5ef0f1e5218667222b2e15a621685df9503538f08161d3acc73b475809fc",
+          "filePath": "src/legacy.ts",
+          "name": "fs"
+        },
+        {
+          "id": "e2b357e87b3415ea52de8e2a609d56100787a08bc01547ccedb4acc7dbc3a31d",
+          "filePath": "src/legacy.ts",
+          "name": "fs"
+        }
+      ],
+      "defUseChains": [],
+      "lifetimes": [],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [],
+      "callBindings": []
+    },
+    {
+      "id": "f94b0b3b6b56c0da5b43b9086827a7e6c248d931580e7f2a99ab97aba22c02ff",
+      "filePath": "src/use.ts",
+      "state": "INFERRED",
+      "definitions": [
+        {
+          "id": "501d8fc64ad045a627ccd740fa92c7f5bec0add179d3ff9f1adc315e2f9eb306",
+          "filePath": "src/use.ts",
+          "name": "s",
+          "kind": "declaration"
+        },
+        {
+          "id": "67db115ebd52aeb431e957c8c891dfb04e32b1a34dbccb3e9e389a24e6d0348e",
+          "filePath": "src/use.ts",
+          "name": "i",
+          "kind": "declaration",
+          "constantValue": "x"
+        }
+      ],
+      "uses": [
+        {
+          "id": "019a04251f3c47d59c14e908b8f478bf9a2cefd70b3d59f6917fbd0bf1960ef2",
+          "filePath": "src/use.ts",
+          "name": "i",
+          "definitionId": "67db115ebd52aeb431e957c8c891dfb04e32b1a34dbccb3e9e389a24e6d0348e"
+        },
+        {
+          "id": "15584138237219f8fef5af957367d48489b9b9f31dda01ceabb6ef1c7c32d021",
+          "filePath": "src/use.ts",
+          "name": "Base"
+        },
+        {
+          "id": "15584138237219f8fef5af957367d48489b9b9f31dda01ceabb6ef1c7c32d021",
+          "filePath": "src/use.ts",
+          "name": "Base"
+        },
+        {
+          "id": "21cd270c6ea0f48ec488bddad939aa6c2cd1dac24ce96067ecd358e870e5d1cf",
+          "filePath": "src/use.ts",
+          "name": "Color"
+        },
+        {
+          "id": "21cd270c6ea0f48ec488bddad939aa6c2cd1dac24ce96067ecd358e870e5d1cf",
+          "filePath": "src/use.ts",
+          "name": "Color"
+        },
+        {
+          "id": "30c0e2e6d0fb4f588d5678dd24356cf12163fa5a4d090e97cce851d044057ea1",
+          "filePath": "src/use.ts",
+          "name": "Dir"
+        },
+        {
+          "id": "585c9d28d2e708077831f7d326fc96a0855d8fc1ff0eb826ca8948ce52a7e94e",
+          "filePath": "src/use.ts",
+          "name": "Color"
+        },
+        {
+          "id": "6baef92bab0161d6467533679acac52da4fcf64b067cb8e99f4ba6cd26710f85",
+          "filePath": "src/use.ts",
+          "name": "NS"
+        },
+        {
+          "id": "6baef92bab0161d6467533679acac52da4fcf64b067cb8e99f4ba6cd26710f85",
+          "filePath": "src/use.ts",
+          "name": "NS"
+        },
+        {
+          "id": "6d446d96107944b39d21069b86a3bb93add502bc1a2f7dda36e1250d3f0e8a92",
+          "filePath": "src/use.ts",
+          "name": "Base"
+        },
+        {
+          "id": "7c45bce52738297996b68fa061d88784374dc4be1f6f2e57f06088355591a73f",
+          "filePath": "src/use.ts",
+          "name": "Impl"
+        },
+        {
+          "id": "a20111e95388294e93dd6520826f06fa083524080b3f6d0f6703e73e64604258",
+          "filePath": "src/use.ts",
+          "name": "s",
+          "definitionId": "501d8fc64ad045a627ccd740fa92c7f5bec0add179d3ff9f1adc315e2f9eb306"
+        },
+        {
+          "id": "a4df12f15d95ccc16cb363426fcf97035e2f1f472f81af5d01381693f543e777",
+          "filePath": "src/use.ts",
+          "name": "Color.Red"
+        },
+        {
+          "id": "a78909cdcdb924fc6d17e5b219486f164c9e8a544ed654c43c2db8981618f7f2",
+          "filePath": "src/use.ts",
+          "name": "undefined"
+        },
+        {
+          "id": "a8ce902c275ffe43b8f5766426eb15cd7a9c8158742dd5d61e749e8d5c914a6e",
+          "filePath": "src/use.ts",
+          "name": "Id"
+        },
+        {
+          "id": "a8ce902c275ffe43b8f5766426eb15cd7a9c8158742dd5d61e749e8d5c914a6e",
+          "filePath": "src/use.ts",
+          "name": "Id"
+        },
+        {
+          "id": "ca72170aba177421ae91bbda3bd0700c5d25ec1d31468842280f6d28ba1997ff",
+          "filePath": "src/use.ts",
+          "name": "Dir.Up"
+        },
+        {
+          "id": "eb38b4fa09eea1f96bd88da15c18b8615dfcd1079d8e7d033b48ded7dae29c54",
+          "filePath": "src/use.ts",
+          "name": "Dir"
+        },
+        {
+          "id": "eb38b4fa09eea1f96bd88da15c18b8615dfcd1079d8e7d033b48ded7dae29c54",
+          "filePath": "src/use.ts",
+          "name": "Dir"
+        },
+        {
+          "id": "f6c6341a5af39a1e6eea150dff23950fe68122d52cfb8d3639f726dae4503ec2",
+          "filePath": "src/use.ts",
+          "name": "Shape"
+        },
+        {
+          "id": "f6c6341a5af39a1e6eea150dff23950fe68122d52cfb8d3639f726dae4503ec2",
+          "filePath": "src/use.ts",
+          "name": "Shape"
+        }
+      ],
+      "defUseChains": [
+        {
+          "definitionId": "501d8fc64ad045a627ccd740fa92c7f5bec0add179d3ff9f1adc315e2f9eb306",
+          "useIds": [
+            "a20111e95388294e93dd6520826f06fa083524080b3f6d0f6703e73e64604258"
+          ]
+        },
+        {
+          "definitionId": "67db115ebd52aeb431e957c8c891dfb04e32b1a34dbccb3e9e389a24e6d0348e",
+          "useIds": [
+            "019a04251f3c47d59c14e908b8f478bf9a2cefd70b3d59f6917fbd0bf1960ef2"
+          ]
+        }
+      ],
+      "lifetimes": [
+        {
+          "name": "s",
+          "filePath": "src/use.ts",
+          "declarationId": "501d8fc64ad045a627ccd740fa92c7f5bec0add179d3ff9f1adc315e2f9eb306",
+          "useIds": [
+            "a20111e95388294e93dd6520826f06fa083524080b3f6d0f6703e73e64604258"
+          ]
+        },
+        {
+          "name": "i",
+          "filePath": "src/use.ts",
+          "declarationId": "67db115ebd52aeb431e957c8c891dfb04e32b1a34dbccb3e9e389a24e6d0348e",
+          "useIds": [
+            "019a04251f3c47d59c14e908b8f478bf9a2cefd70b3d59f6917fbd0bf1960ef2"
+          ]
+        }
+      ],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [
+        {
+          "symbolId": "f3765d7acbd376d20df22b3f56d76f2ff983f4db1d662d840cb48a21d50db75c",
+          "filePath": "src/use.ts",
+          "parameterDefinitionIds": [],
+          "returnDefinitionIds": []
+        }
+      ],
+      "callBindings": []
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "repository": {
+    "name": "s05",
+    "path": "C:\\Projects\\.audit\\samples\\s05-express-routes",
+    "sourceDigest": "6c7159029ddb984c2efc6dcdf08931efd0f7ad846b6acde2d2829005bd5c3a7a"
+  },
+  "engine": {
+    "packageVersion": "0.1.0",
+    "commitSha": "c694d6451ebd8457d7c0eb808286cf19d2c665d3",
+    "bunVersion": "bun-1.4.4"
+  },
+  "analysis": {
+    "projectId": "9988916d-f59e-464e-a753-1d63b6276106",
+    "analysisRunId": "842db048-7827-45eb-aac9-0312949b7742",
+    "generatedAt": "2026-10-28T04:44:14.506Z"
+  },
+  "requiredArtifacts": [
+    "control-flow.json",
+    "data-flow.json",
+    "dependencies.json",
+    "dependency-graph.json",
+    "files.json",
+    "frameworks.json",
+    "knowledge.json",
+    "modules.json",
+    "project.json",
+    "semantic.json",
+    "summary.json",
+    "symbols.json"
+  ],
+  "artifacts": {
+    "project.json": {
+      "sha256": "58ebb198eb38b3f5c19a1afe029821bb6f3410ca61ceb6e516b63258cb49500b",
+      "bytes": 134
+    },
+    "files.json": {
+      "sha256": "4da2bb8a27e74c8f04db6257860be4ec5dfd8478a031a754b42c6a4e6231093e",
+      "bytes": 366
+    },
+    "dependencies.json": {
+      "sha256": "5106f4f6fc833d713b54d77710727cc929109cd0b8e5ea3589f69a4cfaa01090",
+      "bytes": 85
+    },
+    "frameworks.json": {
+      "sha256": "3d679a5fb3d2ae276d38a94beb909f8510f01306433fa78016f8520f813cff20",
+      "bytes": 77
+    },
+    "summary.json": {
+      "sha256": "71df0e5152304e6ae821ef1b5bfea5345494465e7da7016f2ec2a2d32d0ed9cb",
+      "bytes": 486
+    },
+    "dependency-graph.json": {
+      "sha256": "665f9a8253edd3aca8dd1ad9bfab7750c5aaac6cad3db82f6855791208bd250b",
+      "bytes": 2591
+    },
+    "modules.json": {
+      "sha256": "00c51c771bcfc8c8d83fac38d8a53558984fca4d8197562cd0be923dd7a5a004",
+      "bytes": 177
+    },
+    "symbols.json": {
+      "sha256": "2830e29c2ae622c489bb52a36b5b04e113f6e8e272b7db2445367f6b381ee748",
+      "bytes": 6710
+    },
+    "knowledge.json": {
+      "sha256": "3d253770f07939e4efca608fc21ca461c310ff282d81e4c626b1064e7eab0fd8",
+      "bytes": 4834
+    },
+    "semantic.json": {
+      "sha256": "d609ed3099002c0a12f78f998481189376a10a4265c88b6f740dc15f3d1f52b7",
+      "bytes": 16612
+    },
+    "control-flow.json": {
+      "sha256": "624b96a86a5be7aa3ccc9d7719548efda88ce7126eb09ea48f218a4d305e542d",
+      "bytes": 8728
+    },
+    "data-flow.json": {
+      "sha256": "f8328f21100bc9f8d686e581ed83152f0e48c79ea18fbca3632774fd6590bd44",
+      "bytes": 9387
+    }
+  },
+  "analyzer": {
+    "fingerprint": "lx-analyzer-v1:12eea42d44bcfaf05dc542a50c42b30da2a0defd4958d5b6db4e92b34f6108ff"
+  },
+  "integrity": {
+    "algorithm": "hmac-sha256",
+    "keyId": "c028506bcf9e8ef6",
+    "mac": "1008ac354159505f6717f2f6ae5df83775d741a197281d931c3412ed5e7f3146"
+  }
+}

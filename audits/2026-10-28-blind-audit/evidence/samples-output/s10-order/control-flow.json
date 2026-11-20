@@ -1,0 +1,281 @@
+{
+  "projectId": "eea416b8-723b-4c5e-b13e-3c0b7760d414",
+  "analysisRunId": "de1753ae-460a-4b76-be5d-a7929bc3b60f",
+  "graphs": [
+    {
+      "id": "5dd33df1f99e412c444c8070c8cec7bbf59d7a78ff5c30e00a9f1e67724509a5",
+      "filePath": "_x.js",
+      "scopeName": "module",
+      "state": "RESOLVED",
+      "entryBlockId": "9a460c87052e6c838fa11d89aa954ab3294241678dcd1f19796164193b66a2e5",
+      "exitBlockId": "73e6fce8fd57d8840047d628abf7ea634e7e1a29339a80a82f0f54a73143a166",
+      "blocks": [
+        {
+          "id": "73e6fce8fd57d8840047d628abf7ea634e7e1a29339a80a82f0f54a73143a166",
+          "statements": [],
+          "predecessorIds": [
+            "9a460c87052e6c838fa11d89aa954ab3294241678dcd1f19796164193b66a2e5"
+          ],
+          "successorIds": []
+        },
+        {
+          "id": "9a460c87052e6c838fa11d89aa954ab3294241678dcd1f19796164193b66a2e5",
+          "statements": [
+            {
+              "id": "ebc9e267ee161bd9dcb6d0f240dbd36539dd8fdc778e773c2591ebc3ba50f31d",
+              "type": "ExportNamedDeclaration",
+              "location": {
+                "line": 1,
+                "column": 0
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "73e6fce8fd57d8840047d628abf7ea634e7e1a29339a80a82f0f54a73143a166"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "db8753b43dfc15a5ec131b58c5725e841356b517843501097b7518625e36d8ae",
+          "fromBlockId": "9a460c87052e6c838fa11d89aa954ab3294241678dcd1f19796164193b66a2e5",
+          "toBlockId": "73e6fce8fd57d8840047d628abf7ea634e7e1a29339a80a82f0f54a73143a166",
+          "kind": "next"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "73e6fce8fd57d8840047d628abf7ea634e7e1a29339a80a82f0f54a73143a166",
+          "immediateDominatorId": "9a460c87052e6c838fa11d89aa954ab3294241678dcd1f19796164193b66a2e5"
+        },
+        {
+          "blockId": "9a460c87052e6c838fa11d89aa954ab3294241678dcd1f19796164193b66a2e5"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    },
+    {
+      "id": "560c1e2b283976782be2a0c667ea03df4cc02105cc1ea9cf2afb03a647d06870",
+      "filePath": "a.js",
+      "scopeName": "module",
+      "state": "RESOLVED",
+      "entryBlockId": "f26b8b1a5d61daef23b2fbeaadfd2b376b5250290c1d3cb8576817343e28ada8",
+      "exitBlockId": "312633cc23c87a8d7c2e204483a1cbc19d4fe241e5339f35ff887b7a89a48d24",
+      "blocks": [
+        {
+          "id": "312633cc23c87a8d7c2e204483a1cbc19d4fe241e5339f35ff887b7a89a48d24",
+          "statements": [],
+          "predecessorIds": [
+            "f26b8b1a5d61daef23b2fbeaadfd2b376b5250290c1d3cb8576817343e28ada8"
+          ],
+          "successorIds": []
+        },
+        {
+          "id": "f26b8b1a5d61daef23b2fbeaadfd2b376b5250290c1d3cb8576817343e28ada8",
+          "statements": [
+            {
+              "id": "c1f4ca73eba22d8f3156cfe13693f92289b28afb6105cbed68ec0ed32dabd6d9",
+              "type": "ExportNamedDeclaration",
+              "location": {
+                "line": 1,
+                "column": 0
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "312633cc23c87a8d7c2e204483a1cbc19d4fe241e5339f35ff887b7a89a48d24"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "28bc270faf24978265d1bf56bb613828f482f59b88ea9a03ee1af86f01238957",
+          "fromBlockId": "f26b8b1a5d61daef23b2fbeaadfd2b376b5250290c1d3cb8576817343e28ada8",
+          "toBlockId": "312633cc23c87a8d7c2e204483a1cbc19d4fe241e5339f35ff887b7a89a48d24",
+          "kind": "next"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "312633cc23c87a8d7c2e204483a1cbc19d4fe241e5339f35ff887b7a89a48d24",
+          "immediateDominatorId": "f26b8b1a5d61daef23b2fbeaadfd2b376b5250290c1d3cb8576817343e28ada8"
+        },
+        {
+          "blockId": "f26b8b1a5d61daef23b2fbeaadfd2b376b5250290c1d3cb8576817343e28ada8"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    },
+    {
+      "id": "e091e84a5e1e4330f4e3a7f26099763279f418f7f04232ec9b0ae5bb4675fb58",
+      "filePath": "ä.js",
+      "scopeName": "module",
+      "state": "RESOLVED",
+      "entryBlockId": "620dc2ca8bfe9ad9f98f3dcfde46178fbf409cd9dc02106e90925f3cdd5bfa54",
+      "exitBlockId": "d6271d3b38b72c9e4ed503c5db18faaf045f749e6eafd39f0fae5bbcbe35084f",
+      "blocks": [
+        {
+          "id": "620dc2ca8bfe9ad9f98f3dcfde46178fbf409cd9dc02106e90925f3cdd5bfa54",
+          "statements": [
+            {
+              "id": "fbd67564a638df7e5f0340e41cc1620816acca02806b59a2d140a57264b558dd",
+              "type": "ExportNamedDeclaration",
+              "location": {
+                "line": 1,
+                "column": 0
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "d6271d3b38b72c9e4ed503c5db18faaf045f749e6eafd39f0fae5bbcbe35084f"
+          ]
+        },
+        {
+          "id": "d6271d3b38b72c9e4ed503c5db18faaf045f749e6eafd39f0fae5bbcbe35084f",
+          "statements": [],
+          "predecessorIds": [
+            "620dc2ca8bfe9ad9f98f3dcfde46178fbf409cd9dc02106e90925f3cdd5bfa54"
+          ],
+          "successorIds": []
+        }
+      ],
+      "edges": [
+        {
+          "id": "415197b8102ba1ad5a189649d1a0c34a50ad54c1fa1896fd9edb1356cbb0353a",
+          "fromBlockId": "620dc2ca8bfe9ad9f98f3dcfde46178fbf409cd9dc02106e90925f3cdd5bfa54",
+          "toBlockId": "d6271d3b38b72c9e4ed503c5db18faaf045f749e6eafd39f0fae5bbcbe35084f",
+          "kind": "next"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "620dc2ca8bfe9ad9f98f3dcfde46178fbf409cd9dc02106e90925f3cdd5bfa54"
+        },
+        {
+          "blockId": "d6271d3b38b72c9e4ed503c5db18faaf045f749e6eafd39f0fae5bbcbe35084f",
+          "immediateDominatorId": "620dc2ca8bfe9ad9f98f3dcfde46178fbf409cd9dc02106e90925f3cdd5bfa54"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    },
+    {
+      "id": "d23b3ef07829b82e00dea8c843a3e24ed717409420d8d339bf7dfb214a7ab92a",
+      "filePath": "B.js",
+      "scopeName": "module",
+      "state": "RESOLVED",
+      "entryBlockId": "72aba330c5a5c87715679d6adf6a4706d42da7497704d3e66f7c43038f57f71b",
+      "exitBlockId": "8a1a1fc8fb7c9af3ae3e62955adc16d9b7f0617a17c572f09988444d5c03d78a",
+      "blocks": [
+        {
+          "id": "72aba330c5a5c87715679d6adf6a4706d42da7497704d3e66f7c43038f57f71b",
+          "statements": [
+            {
+              "id": "0005de9107e3243b60a2073d4f6d6752d93323d9b403083f3d6e724b74ca2078",
+              "type": "ExportNamedDeclaration",
+              "location": {
+                "line": 1,
+                "column": 0
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "8a1a1fc8fb7c9af3ae3e62955adc16d9b7f0617a17c572f09988444d5c03d78a"
+          ]
+        },
+        {
+          "id": "8a1a1fc8fb7c9af3ae3e62955adc16d9b7f0617a17c572f09988444d5c03d78a",
+          "statements": [],
+          "predecessorIds": [
+            "72aba330c5a5c87715679d6adf6a4706d42da7497704d3e66f7c43038f57f71b"
+          ],
+          "successorIds": []
+        }
+      ],
+      "edges": [
+        {
+          "id": "3cb7a8210c8167d390a9e63bb1f14f2de29823f2de60efde7b9d771aec500ceb",
+          "fromBlockId": "72aba330c5a5c87715679d6adf6a4706d42da7497704d3e66f7c43038f57f71b",
+          "toBlockId": "8a1a1fc8fb7c9af3ae3e62955adc16d9b7f0617a17c572f09988444d5c03d78a",
+          "kind": "next"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "72aba330c5a5c87715679d6adf6a4706d42da7497704d3e66f7c43038f57f71b"
+        },
+        {
+          "blockId": "8a1a1fc8fb7c9af3ae3e62955adc16d9b7f0617a17c572f09988444d5c03d78a",
+          "immediateDominatorId": "72aba330c5a5c87715679d6adf6a4706d42da7497704d3e66f7c43038f57f71b"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    },
+    {
+      "id": "64a474c554134d4ecedddc49ca0d8f76a6eaf62360d041c4f6d6ba38731dacda",
+      "filePath": "Z.js",
+      "scopeName": "module",
+      "state": "RESOLVED",
+      "entryBlockId": "fcaf86216fbc255c7180efc375c3f92a7aa8d3c2aef575138b8d83a14678e35c",
+      "exitBlockId": "dddd5bf0edee8da1833d473f69284f22c33c5348948f70b8e069ad120fa416de",
+      "blocks": [
+        {
+          "id": "dddd5bf0edee8da1833d473f69284f22c33c5348948f70b8e069ad120fa416de",
+          "statements": [],
+          "predecessorIds": [
+            "fcaf86216fbc255c7180efc375c3f92a7aa8d3c2aef575138b8d83a14678e35c"
+          ],
+          "successorIds": []
+        },
+        {
+          "id": "fcaf86216fbc255c7180efc375c3f92a7aa8d3c2aef575138b8d83a14678e35c",
+          "statements": [
+            {
+              "id": "1967b1e9813523cfe754267a74a638b5259794de7e24636d22b4ca1a9d2bb908",
+              "type": "ExportNamedDeclaration",
+              "location": {
+                "line": 1,
+                "column": 0
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "dddd5bf0edee8da1833d473f69284f22c33c5348948f70b8e069ad120fa416de"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "1aa305ec4092015cd7345601a192a6461003b75fa888f2f1b0de2389a3e6509f",
+          "fromBlockId": "fcaf86216fbc255c7180efc375c3f92a7aa8d3c2aef575138b8d83a14678e35c",
+          "toBlockId": "dddd5bf0edee8da1833d473f69284f22c33c5348948f70b8e069ad120fa416de",
+          "kind": "next"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "dddd5bf0edee8da1833d473f69284f22c33c5348948f70b8e069ad120fa416de",
+          "immediateDominatorId": "fcaf86216fbc255c7180efc375c3f92a7aa8d3c2aef575138b8d83a14678e35c"
+        },
+        {
+          "blockId": "fcaf86216fbc255c7180efc375c3f92a7aa8d3c2aef575138b8d83a14678e35c"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    }
+  ]
+}

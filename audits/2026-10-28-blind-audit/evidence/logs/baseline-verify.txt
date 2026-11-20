@@ -1,0 +1,13 @@
+﻿bun : $ bun run src/cli/index.ts verify
+At line:1 char:602
++ ... = Get-Date; bun run verify *> C:\Projects\.audit\logs\baseline-verify ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ($ bun run src/cli/index.ts verify:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Repository Verification Dashboard
+  [PASS] Static Typecheck: Zero compiler errors (6068ms)
+  [PASS] Test Suite: All 1812 tests passing across 152 files (317409ms)
+  [PASS] Benchmark Governance: 8/8 audit checks verified (1879ms)
+  [PASS] Git Working Tree Hygiene: No whitespace/diff issues (208ms)
+Total Time: 325582ms

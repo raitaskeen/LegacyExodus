@@ -1,0 +1,527 @@
+{
+  "projectId": "14869e1c-8c6a-4949-a201-f83134ac1efb",
+  "analysisRunId": "b04ab568-6791-4115-9e93-409f33c9f7c2",
+  "graphs": [
+    {
+      "id": "5c6981b154293f85e703eae2e95cecb8ef17c3b07f44f9f6c6f445d66f4933ec",
+      "filePath": "app.js",
+      "scopeName": "anonymous@6:15",
+      "state": "RESOLVED",
+      "entryBlockId": "ba94e99eedcdbbb37fd2776a13ed926406566f7fbc465cce23e51872693f9c80",
+      "exitBlockId": "4cd83461c58feb49aa310716ed7cc4281a06af4f8764652ecf1fa7c55b353d8c",
+      "blocks": [
+        {
+          "id": "4cd83461c58feb49aa310716ed7cc4281a06af4f8764652ecf1fa7c55b353d8c",
+          "statements": [],
+          "predecessorIds": [
+            "ba94e99eedcdbbb37fd2776a13ed926406566f7fbc465cce23e51872693f9c80"
+          ],
+          "successorIds": []
+        },
+        {
+          "id": "ba94e99eedcdbbb37fd2776a13ed926406566f7fbc465cce23e51872693f9c80",
+          "statements": [
+            {
+              "id": "9bffde3b0b285969b96828eb7dc2451db6945053a086f512d9da8acb3b88be21",
+              "type": "VariableDeclaration",
+              "location": {
+                "line": 6,
+                "column": 31
+              }
+            },
+            {
+              "id": "17a4076ca00b36225ec1131a8950212e1b1efebc097a0854f9a1ecc75b52706e",
+              "type": "ExpressionStatement",
+              "location": {
+                "line": 6,
+                "column": 57
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "4cd83461c58feb49aa310716ed7cc4281a06af4f8764652ecf1fa7c55b353d8c"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "55c5de7baab8e01355e4175c8170dc70c3c0142b837027a093029230cd7cedb1",
+          "fromBlockId": "ba94e99eedcdbbb37fd2776a13ed926406566f7fbc465cce23e51872693f9c80",
+          "toBlockId": "4cd83461c58feb49aa310716ed7cc4281a06af4f8764652ecf1fa7c55b353d8c",
+          "kind": "next"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "4cd83461c58feb49aa310716ed7cc4281a06af4f8764652ecf1fa7c55b353d8c",
+          "immediateDominatorId": "ba94e99eedcdbbb37fd2776a13ed926406566f7fbc465cce23e51872693f9c80"
+        },
+        {
+          "blockId": "ba94e99eedcdbbb37fd2776a13ed926406566f7fbc465cce23e51872693f9c80"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    },
+    {
+      "id": "6ce96e08242342e529b8c4cbbe823f1eaeb2eafa3d3edc0597fa8863e04c9ff7",
+      "filePath": "app.js",
+      "scopeName": "module",
+      "state": "RESOLVED",
+      "entryBlockId": "a96f187ef7915a2d09735dfdd5f4692b0c331b16e5107fd98ad3477ac030a0aa",
+      "exitBlockId": "6375cf1e4bdc1e6490c6bc08f31bf0302151775bf6b8473750614f2890dfc46d",
+      "blocks": [
+        {
+          "id": "6375cf1e4bdc1e6490c6bc08f31bf0302151775bf6b8473750614f2890dfc46d",
+          "statements": [],
+          "predecessorIds": [
+            "a96f187ef7915a2d09735dfdd5f4692b0c331b16e5107fd98ad3477ac030a0aa"
+          ],
+          "successorIds": []
+        },
+        {
+          "id": "a96f187ef7915a2d09735dfdd5f4692b0c331b16e5107fd98ad3477ac030a0aa",
+          "statements": [
+            {
+              "id": "3016baaebc30fbe4213145d22905f3b5b9cf3f3c8df16451038d0e6432a2b8c8",
+              "type": "ImportDeclaration",
+              "location": {
+                "line": 1,
+                "column": 0
+              }
+            },
+            {
+              "id": "0172953a744a5d2889658cd2a203c2854f11d391e7e780e99f65cde802bf4004",
+              "type": "ImportDeclaration",
+              "location": {
+                "line": 2,
+                "column": 0
+              }
+            },
+            {
+              "id": "c65602707315670daa3b1fd40e7e712362ce34cbb6fe8deeaeefd1741ba6f6cf",
+              "type": "VariableDeclaration",
+              "location": {
+                "line": 3,
+                "column": 0
+              }
+            },
+            {
+              "id": "04fd27cd4da4807c04ea1331e88df41e48a00909c6d7423eaf55aca47a193c31",
+              "type": "ExpressionStatement",
+              "location": {
+                "line": 4,
+                "column": 0
+              }
+            },
+            {
+              "id": "f71a2d085b2712e45d05f2ebdfa002e5cd220d89a252a712ee1cc12ec7914d04",
+              "type": "ExpressionStatement",
+              "location": {
+                "line": 5,
+                "column": 0
+              }
+            },
+            {
+              "id": "cd3bda5264ada5327d8448839566c7ae841f8fa67063335d09341a7f7d072cd0",
+              "type": "ExpressionStatement",
+              "location": {
+                "line": 6,
+                "column": 0
+              }
+            },
+            {
+              "id": "b2d0858bd6ebfcd863bfbf91d08098f021a01c863dd50f083f82efe8eadcb45f",
+              "type": "ExpressionStatement",
+              "location": {
+                "line": 7,
+                "column": 0
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "6375cf1e4bdc1e6490c6bc08f31bf0302151775bf6b8473750614f2890dfc46d"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "7355f6101bdefac3f06756f593758d9a72ac85043aa0cf2d06406bee5e6fc489",
+          "fromBlockId": "a96f187ef7915a2d09735dfdd5f4692b0c331b16e5107fd98ad3477ac030a0aa",
+          "toBlockId": "6375cf1e4bdc1e6490c6bc08f31bf0302151775bf6b8473750614f2890dfc46d",
+          "kind": "next"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "6375cf1e4bdc1e6490c6bc08f31bf0302151775bf6b8473750614f2890dfc46d",
+          "immediateDominatorId": "a96f187ef7915a2d09735dfdd5f4692b0c331b16e5107fd98ad3477ac030a0aa"
+        },
+        {
+          "blockId": "a96f187ef7915a2d09735dfdd5f4692b0c331b16e5107fd98ad3477ac030a0aa"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    },
+    {
+      "id": "85aabc285e9e2e2642efb51391917aac75ae3cd265a78b7ae01b020b7aeb9bc9",
+      "filePath": "app.js",
+      "scopeName": "anonymous@7:15",
+      "state": "RESOLVED",
+      "entryBlockId": "b3e01b67a86c73de5f8fbb9654735a39927fb7bbea81781ede5070132e8f31bc",
+      "exitBlockId": "ac1afc92f7d325e8f8741fa59f37c65ea23691bfa424a1aee6cf753730fe5064",
+      "blocks": [
+        {
+          "id": "ac1afc92f7d325e8f8741fa59f37c65ea23691bfa424a1aee6cf753730fe5064",
+          "statements": [],
+          "predecessorIds": [
+            "b3e01b67a86c73de5f8fbb9654735a39927fb7bbea81781ede5070132e8f31bc"
+          ],
+          "successorIds": []
+        },
+        {
+          "id": "b3e01b67a86c73de5f8fbb9654735a39927fb7bbea81781ede5070132e8f31bc",
+          "statements": [
+            {
+              "id": "2c6bec7d2ccf9be8aa01a9d7f028c216913052868c19e9e296d2cce0e724b317",
+              "type": "ExpressionStatement",
+              "location": {
+                "line": 7,
+                "column": 31
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "ac1afc92f7d325e8f8741fa59f37c65ea23691bfa424a1aee6cf753730fe5064"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "cd0deb15090741182c6be83211f75762ead0b82de43f6cd364b1c40ab349edb7",
+          "fromBlockId": "b3e01b67a86c73de5f8fbb9654735a39927fb7bbea81781ede5070132e8f31bc",
+          "toBlockId": "ac1afc92f7d325e8f8741fa59f37c65ea23691bfa424a1aee6cf753730fe5064",
+          "kind": "next"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "ac1afc92f7d325e8f8741fa59f37c65ea23691bfa424a1aee6cf753730fe5064",
+          "immediateDominatorId": "b3e01b67a86c73de5f8fbb9654735a39927fb7bbea81781ede5070132e8f31bc"
+        },
+        {
+          "blockId": "b3e01b67a86c73de5f8fbb9654735a39927fb7bbea81781ede5070132e8f31bc"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    },
+    {
+      "id": "ec1a56f93c1f1e8a9a9b522c21ef22072a8c3be85e08ff7ff0a8bd84ce4c3caf",
+      "filePath": "app.js",
+      "scopeName": "anonymous@5:15",
+      "state": "RESOLVED",
+      "entryBlockId": "f72f69f46d1080077ae01b5deae4f48d74a6eee67a4ebc98fad8cbb4af4ebd27",
+      "exitBlockId": "a23dff91e7c9cbfcd717b26fb611b4b268f22b9ebbc753fbcb1fb27d569ffa65",
+      "blocks": [
+        {
+          "id": "a23dff91e7c9cbfcd717b26fb611b4b268f22b9ebbc753fbcb1fb27d569ffa65",
+          "statements": [],
+          "predecessorIds": [
+            "f72f69f46d1080077ae01b5deae4f48d74a6eee67a4ebc98fad8cbb4af4ebd27"
+          ],
+          "successorIds": []
+        },
+        {
+          "id": "f72f69f46d1080077ae01b5deae4f48d74a6eee67a4ebc98fad8cbb4af4ebd27",
+          "statements": [
+            {
+              "id": "d9f5e966daa03ec7aeeeca5fe3c5652e3cc44e660682cad6fec4710eb0640c9e",
+              "type": "VariableDeclaration",
+              "location": {
+                "line": 5,
+                "column": 31
+              }
+            },
+            {
+              "id": "ea35f572cb767c5221bc0fc0713716ceddc4ab8397fe2301a5d14f5ad78032e8",
+              "type": "ExpressionStatement",
+              "location": {
+                "line": 5,
+                "column": 51
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "a23dff91e7c9cbfcd717b26fb611b4b268f22b9ebbc753fbcb1fb27d569ffa65"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "5d279159d46fa95cbf39c49b43d6f95ed8970d76d6b88bc897b52d2056706f05",
+          "fromBlockId": "f72f69f46d1080077ae01b5deae4f48d74a6eee67a4ebc98fad8cbb4af4ebd27",
+          "toBlockId": "a23dff91e7c9cbfcd717b26fb611b4b268f22b9ebbc753fbcb1fb27d569ffa65",
+          "kind": "next"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "a23dff91e7c9cbfcd717b26fb611b4b268f22b9ebbc753fbcb1fb27d569ffa65",
+          "immediateDominatorId": "f72f69f46d1080077ae01b5deae4f48d74a6eee67a4ebc98fad8cbb4af4ebd27"
+        },
+        {
+          "blockId": "f72f69f46d1080077ae01b5deae4f48d74a6eee67a4ebc98fad8cbb4af4ebd27"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    },
+    {
+      "id": "ffcc5535950ab7ebe926bced8604983c7b833fd7d523c0cec721baaca1d83b2c",
+      "filePath": "app.js",
+      "scopeName": "anonymous@4:15",
+      "state": "RESOLVED",
+      "entryBlockId": "7e8507977d7b4ffacd95a1191ee4eef690ca67fc2ce737c687f4c9c9d63e23f5",
+      "exitBlockId": "e3fdfdb0e674fd8a2effa0c8c1d57ead0e7e114f9625e3a4a168b56eab06d344",
+      "blocks": [
+        {
+          "id": "7e8507977d7b4ffacd95a1191ee4eef690ca67fc2ce737c687f4c9c9d63e23f5",
+          "statements": [
+            {
+              "id": "bf8a6fcf6f2ec2fa1174d4744744e9bd835675bf22041756312c0e129c7e64a4",
+              "type": "VariableDeclaration",
+              "location": {
+                "line": 4,
+                "column": 31
+              }
+            },
+            {
+              "id": "008b8602b6abbb9fcae7fb37bca4f4636b8535c081ab14c463c6ef8a5e0b94ec",
+              "type": "ExpressionStatement",
+              "location": {
+                "line": 4,
+                "column": 51
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "e3fdfdb0e674fd8a2effa0c8c1d57ead0e7e114f9625e3a4a168b56eab06d344"
+          ]
+        },
+        {
+          "id": "e3fdfdb0e674fd8a2effa0c8c1d57ead0e7e114f9625e3a4a168b56eab06d344",
+          "statements": [],
+          "predecessorIds": [
+            "7e8507977d7b4ffacd95a1191ee4eef690ca67fc2ce737c687f4c9c9d63e23f5"
+          ],
+          "successorIds": []
+        }
+      ],
+      "edges": [
+        {
+          "id": "e90c69b01b48303d4c3ee134a5b335bf881b5cc9d84e197b5da89f4458339212",
+          "fromBlockId": "7e8507977d7b4ffacd95a1191ee4eef690ca67fc2ce737c687f4c9c9d63e23f5",
+          "toBlockId": "e3fdfdb0e674fd8a2effa0c8c1d57ead0e7e114f9625e3a4a168b56eab06d344",
+          "kind": "next"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "7e8507977d7b4ffacd95a1191ee4eef690ca67fc2ce737c687f4c9c9d63e23f5"
+        },
+        {
+          "blockId": "e3fdfdb0e674fd8a2effa0c8c1d57ead0e7e114f9625e3a4a168b56eab06d344",
+          "immediateDominatorId": "7e8507977d7b4ffacd95a1191ee4eef690ca67fc2ce737c687f4c9c9d63e23f5"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    },
+    {
+      "id": "d6269a42dfe15646da8a982fdcca730b0fb1a94e459caf52655084fdadaa12c3",
+      "filePath": "helpers.js",
+      "scopeName": "reply@1:7",
+      "state": "RESOLVED",
+      "entryBlockId": "963f9745f36c3849e4a9b253a3a8667739a6a0e698b4f5c9008e3f92f9a16263",
+      "exitBlockId": "5d68f290c51837e9beca817b2a6ab2bd65e1cd89a944a533bacd3cc0ac0480c8",
+      "blocks": [
+        {
+          "id": "5d68f290c51837e9beca817b2a6ab2bd65e1cd89a944a533bacd3cc0ac0480c8",
+          "statements": [],
+          "predecessorIds": [
+            "963f9745f36c3849e4a9b253a3a8667739a6a0e698b4f5c9008e3f92f9a16263"
+          ],
+          "successorIds": []
+        },
+        {
+          "id": "963f9745f36c3849e4a9b253a3a8667739a6a0e698b4f5c9008e3f92f9a16263",
+          "statements": [
+            {
+              "id": "17f3b3038a186c5c5efd89a6e4462ef0616bf8ab0b57b36fbd55b19c6f791e45",
+              "type": "ExpressionStatement",
+              "location": {
+                "line": 1,
+                "column": 36
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "5d68f290c51837e9beca817b2a6ab2bd65e1cd89a944a533bacd3cc0ac0480c8"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "5d1daba5712cad89a5308e05d257c84985bb4cec7a7ad97838fd3432751d6067",
+          "fromBlockId": "963f9745f36c3849e4a9b253a3a8667739a6a0e698b4f5c9008e3f92f9a16263",
+          "toBlockId": "5d68f290c51837e9beca817b2a6ab2bd65e1cd89a944a533bacd3cc0ac0480c8",
+          "kind": "next"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "5d68f290c51837e9beca817b2a6ab2bd65e1cd89a944a533bacd3cc0ac0480c8",
+          "immediateDominatorId": "963f9745f36c3849e4a9b253a3a8667739a6a0e698b4f5c9008e3f92f9a16263"
+        },
+        {
+          "blockId": "963f9745f36c3849e4a9b253a3a8667739a6a0e698b4f5c9008e3f92f9a16263"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    },
+    {
+      "id": "da8f4df6b034a4e1b54a98f668373f3bdf5f36d2abe9397934c65b149cea11fa",
+      "filePath": "helpers.js",
+      "scopeName": "module",
+      "state": "RESOLVED",
+      "entryBlockId": "4e2604a1d3eab5b9905253c667a09297fc11d59dc09bccd5ae8893e68ab4865d",
+      "exitBlockId": "f97d1e50c7705e3467c44f5f56b51f025110fbafbe3c7729922a532f29e4777f",
+      "blocks": [
+        {
+          "id": "4e2604a1d3eab5b9905253c667a09297fc11d59dc09bccd5ae8893e68ab4865d",
+          "statements": [
+            {
+              "id": "37b0973cf668b44d32e4a30bc8905bd04435fd9b96924ee8080744a2bb6858b3",
+              "type": "ExportNamedDeclaration",
+              "location": {
+                "line": 1,
+                "column": 0
+              }
+            },
+            {
+              "id": "8d647d451ad511860d50157d2b5dfa704144462a7f2913f39dfdcad25e2fe334",
+              "type": "ExportNamedDeclaration",
+              "location": {
+                "line": 2,
+                "column": 0
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "f97d1e50c7705e3467c44f5f56b51f025110fbafbe3c7729922a532f29e4777f"
+          ]
+        },
+        {
+          "id": "f97d1e50c7705e3467c44f5f56b51f025110fbafbe3c7729922a532f29e4777f",
+          "statements": [],
+          "predecessorIds": [
+            "4e2604a1d3eab5b9905253c667a09297fc11d59dc09bccd5ae8893e68ab4865d"
+          ],
+          "successorIds": []
+        }
+      ],
+      "edges": [
+        {
+          "id": "bb882728b8b1fd7f543516272374fb170d3518ae4318c64a347d82e60f83985b",
+          "fromBlockId": "4e2604a1d3eab5b9905253c667a09297fc11d59dc09bccd5ae8893e68ab4865d",
+          "toBlockId": "f97d1e50c7705e3467c44f5f56b51f025110fbafbe3c7729922a532f29e4777f",
+          "kind": "next"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "4e2604a1d3eab5b9905253c667a09297fc11d59dc09bccd5ae8893e68ab4865d"
+        },
+        {
+          "blockId": "f97d1e50c7705e3467c44f5f56b51f025110fbafbe3c7729922a532f29e4777f",
+          "immediateDominatorId": "4e2604a1d3eab5b9905253c667a09297fc11d59dc09bccd5ae8893e68ab4865d"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    },
+    {
+      "id": "de92a587609020a020118b2bf235ec64e59c32772196fbf0e829e3a508e1339c",
+      "filePath": "helpers.js",
+      "scopeName": "pass@2:7",
+      "state": "RESOLVED",
+      "entryBlockId": "db63a7446a904b70afeac00f882a5ed427d0633a36b9fb19df44963a8fbfffbd",
+      "exitBlockId": "4d6fc0cd488bd9c8c646559277cd14b417161a7e06b91dd4bbcd37dc8fc157fe",
+      "blocks": [
+        {
+          "id": "4d6fc0cd488bd9c8c646559277cd14b417161a7e06b91dd4bbcd37dc8fc157fe",
+          "statements": [],
+          "predecessorIds": [
+            "db63a7446a904b70afeac00f882a5ed427d0633a36b9fb19df44963a8fbfffbd"
+          ],
+          "successorIds": []
+        },
+        {
+          "id": "db63a7446a904b70afeac00f882a5ed427d0633a36b9fb19df44963a8fbfffbd",
+          "statements": [
+            {
+              "id": "24fe284b1120b9cb2dd1ddb7491224ccc139f1d22e70a4cab865126753c6f1af",
+              "type": "ReturnStatement",
+              "location": {
+                "line": 2,
+                "column": 30
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "4d6fc0cd488bd9c8c646559277cd14b417161a7e06b91dd4bbcd37dc8fc157fe"
+          ],
+          "terminator": "ReturnStatement"
+        }
+      ],
+      "edges": [
+        {
+          "id": "0a37244007d54e98623857b0a904c596515c4a0ecdac6cae3592bc2cacf105a6",
+          "fromBlockId": "db63a7446a904b70afeac00f882a5ed427d0633a36b9fb19df44963a8fbfffbd",
+          "toBlockId": "4d6fc0cd488bd9c8c646559277cd14b417161a7e06b91dd4bbcd37dc8fc157fe",
+          "kind": "return"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "4d6fc0cd488bd9c8c646559277cd14b417161a7e06b91dd4bbcd37dc8fc157fe",
+          "immediateDominatorId": "db63a7446a904b70afeac00f882a5ed427d0633a36b9fb19df44963a8fbfffbd"
+        },
+        {
+          "blockId": "db63a7446a904b70afeac00f882a5ed427d0633a36b9fb19df44963a8fbfffbd"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    }
+  ]
+}

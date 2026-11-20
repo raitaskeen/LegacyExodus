@@ -1,0 +1,140 @@
+{
+  "projectId": "fbe55fa0-8f7a-4627-9995-3ad125acac60",
+  "analysisRunId": "21c9d7be-24d2-465a-9b77-554eaffb2a1c",
+  "graphs": [
+    {
+      "id": "a4af35fefec92a8a44939ad74e90e3dc19f131b48a5885a161f15fbb0e01a38e",
+      "filePath": "types.d.ts",
+      "scopeName": "module",
+      "state": "RESOLVED",
+      "entryBlockId": "2e0033c02d37773996bdec17b2b5fa9a7b96e1fdf45c5046ac6658d5b44c31dd",
+      "exitBlockId": "2715791adf4ccb89c1c523a0b0aa6f2a90101bbc956a06bc0473af9b3f405edc",
+      "blocks": [
+        {
+          "id": "2715791adf4ccb89c1c523a0b0aa6f2a90101bbc956a06bc0473af9b3f405edc",
+          "statements": [],
+          "predecessorIds": [
+            "2e0033c02d37773996bdec17b2b5fa9a7b96e1fdf45c5046ac6658d5b44c31dd"
+          ],
+          "successorIds": []
+        },
+        {
+          "id": "2e0033c02d37773996bdec17b2b5fa9a7b96e1fdf45c5046ac6658d5b44c31dd",
+          "statements": [
+            {
+              "id": "7eeeb039e25e6ca7e5fc677792e5e88a774a421f34f0704ac8a42946f7dee757",
+              "type": "TSModuleDeclaration",
+              "location": {
+                "line": 1,
+                "column": 0
+              }
+            },
+            {
+              "id": "3e3e5070cc89bf0b25a54adeefdb1a7abcab77bdaa0592f2c84a52371424d442",
+              "type": "TSModuleDeclaration",
+              "location": {
+                "line": 2,
+                "column": 0
+              }
+            },
+            {
+              "id": "14bf421a2208fbad45d66822a1ef6f4abfeaf30d9acae0cd85caf60b8cd98319",
+              "type": "ExportNamedDeclaration",
+              "location": {
+                "line": 3,
+                "column": 0
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "2715791adf4ccb89c1c523a0b0aa6f2a90101bbc956a06bc0473af9b3f405edc"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "467b7fc7372c27a197009fbacab9238b619133878d7e074c8b334458fb140637",
+          "fromBlockId": "2e0033c02d37773996bdec17b2b5fa9a7b96e1fdf45c5046ac6658d5b44c31dd",
+          "toBlockId": "2715791adf4ccb89c1c523a0b0aa6f2a90101bbc956a06bc0473af9b3f405edc",
+          "kind": "next"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "2715791adf4ccb89c1c523a0b0aa6f2a90101bbc956a06bc0473af9b3f405edc",
+          "immediateDominatorId": "2e0033c02d37773996bdec17b2b5fa9a7b96e1fdf45c5046ac6658d5b44c31dd"
+        },
+        {
+          "blockId": "2e0033c02d37773996bdec17b2b5fa9a7b96e1fdf45c5046ac6658d5b44c31dd"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    },
+    {
+      "id": "64639bed8b90767c47b7d6608a5f47cec5c68009e8e152274ce0f014fe133ef1",
+      "filePath": "use.ts",
+      "scopeName": "module",
+      "state": "RESOLVED",
+      "entryBlockId": "2bd1274660acdd5bb05647387f99a0e403d2d4241e508b39c8ef09c5da3fdf6f",
+      "exitBlockId": "932d0389c41b10a35b95efd67d7b1b7b1bc125e6d5a1115ef954d080eb577b3b",
+      "blocks": [
+        {
+          "id": "2bd1274660acdd5bb05647387f99a0e403d2d4241e508b39c8ef09c5da3fdf6f",
+          "statements": [
+            {
+              "id": "01b794516d2f7554145488cf38e36d5a8e0ae91c914e9266ca6291eef0770716",
+              "type": "ImportDeclaration",
+              "location": {
+                "line": 1,
+                "column": 0
+              }
+            },
+            {
+              "id": "d49228f0535cb73cede41066ecb0892781f4a9350d5318c4053cdf03e331f379",
+              "type": "ExpressionStatement",
+              "location": {
+                "line": 2,
+                "column": 0
+              }
+            }
+          ],
+          "predecessorIds": [],
+          "successorIds": [
+            "932d0389c41b10a35b95efd67d7b1b7b1bc125e6d5a1115ef954d080eb577b3b"
+          ]
+        },
+        {
+          "id": "932d0389c41b10a35b95efd67d7b1b7b1bc125e6d5a1115ef954d080eb577b3b",
+          "statements": [],
+          "predecessorIds": [
+            "2bd1274660acdd5bb05647387f99a0e403d2d4241e508b39c8ef09c5da3fdf6f"
+          ],
+          "successorIds": []
+        }
+      ],
+      "edges": [
+        {
+          "id": "bd9d29f3a7e54dcb8faf518a88b17ad5aa1bd972f1a2ea03f69d0c686d30a420",
+          "fromBlockId": "2bd1274660acdd5bb05647387f99a0e403d2d4241e508b39c8ef09c5da3fdf6f",
+          "toBlockId": "932d0389c41b10a35b95efd67d7b1b7b1bc125e6d5a1115ef954d080eb577b3b",
+          "kind": "next"
+        }
+      ],
+      "dominators": [
+        {
+          "blockId": "2bd1274660acdd5bb05647387f99a0e403d2d4241e508b39c8ef09c5da3fdf6f"
+        },
+        {
+          "blockId": "932d0389c41b10a35b95efd67d7b1b7b1bc125e6d5a1115ef954d080eb577b3b",
+          "immediateDominatorId": "2bd1274660acdd5bb05647387f99a0e403d2d4241e508b39c8ef09c5da3fdf6f"
+        }
+      ],
+      "loops": [],
+      "unreachableBlockIds": [],
+      "deadCodeNodeIds": []
+    }
+  ]
+}

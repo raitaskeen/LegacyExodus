@@ -1,0 +1,212 @@
+{
+  "projectId": "6c528306-ecfe-4061-8df9-56dffc05f876",
+  "analysisRunId": "41dfe04c-813d-4a36-a291-4640c86332ea",
+  "nodes": [
+    {
+      "id": "file:src/defs.ts",
+      "kind": "file",
+      "name": "src/defs.ts",
+      "filePath": "src/defs.ts"
+    },
+    {
+      "id": "file:src/legacy.ts",
+      "kind": "file",
+      "name": "src/legacy.ts",
+      "filePath": "src/legacy.ts"
+    },
+    {
+      "id": "file:src/use.ts",
+      "kind": "file",
+      "name": "src/use.ts",
+      "filePath": "src/use.ts"
+    },
+    {
+      "id": "symbol:240bec2b96c771e8cd4d30a87c518bd3f1d3eb181088917c1ba843a9891992bd",
+      "kind": "symbol",
+      "name": "i",
+      "filePath": "src/use.ts"
+    },
+    {
+      "id": "symbol:2a3a4e2481aa91a707c68ed6b13d24697cd2f35bbdf1e72d32db2bdbe3ba3e47",
+      "kind": "symbol",
+      "name": "NS",
+      "filePath": "src/use.ts"
+    },
+    {
+      "id": "symbol:3f6c37f19796ca3ed095e192365f8b53f4425d0b3098075bd1561f005531a4ca",
+      "kind": "symbol",
+      "name": "Id",
+      "filePath": "src/use.ts"
+    },
+    {
+      "id": "symbol:40e6cbf551b3b86841790b53ef922d75c4327fc857c978659dc0291937b01c2e",
+      "kind": "symbol",
+      "name": "Base",
+      "filePath": "src/defs.ts"
+    },
+    {
+      "id": "symbol:4d5c054a746e175c734495b85f42a74ac8c3d16744be9bfc3a728446f17cf619",
+      "kind": "symbol",
+      "name": "f",
+      "filePath": "src/defs.ts"
+    },
+    {
+      "id": "symbol:5d59595ecfea1ceaabf3535c328483796bdb9eba8d10235e219e1b553a57b653",
+      "kind": "symbol",
+      "name": "Color",
+      "filePath": "src/use.ts"
+    },
+    {
+      "id": "symbol:77751d35fd93bc4b3d0d6e73f3d7f316af5ef11df56c64c65209fda47c582898",
+      "kind": "symbol",
+      "name": "Shape",
+      "filePath": "src/use.ts"
+    },
+    {
+      "id": "symbol:ab2a51b5e5ab4b95c0c62e01b7d6dd11fc551b4be21a7778ce5afabe17a8d024",
+      "kind": "symbol",
+      "name": "f",
+      "filePath": "src/defs.ts"
+    },
+    {
+      "id": "symbol:ae485ad35961eb420e9a79251cb62bab2f6e1716282d63c14f6bba0c87cc6871",
+      "kind": "symbol",
+      "name": "s",
+      "filePath": "src/use.ts"
+    },
+    {
+      "id": "symbol:c03f261690f6440a82b5f366cdbb07c691ac74c1e28bd1d12bea13d31c2289d3",
+      "kind": "symbol",
+      "name": "Impl",
+      "filePath": "src/use.ts"
+    },
+    {
+      "id": "symbol:ceeee4260050edb5623c24ed4c607438eb507cd24c9f30a068796dfa95157d48",
+      "kind": "symbol",
+      "name": "Base",
+      "filePath": "src/use.ts"
+    },
+    {
+      "id": "symbol:d2af0a0e7814049aeb385dfa1708acad3e8d943fd0ea18d0ee93731ccb6c55c1",
+      "kind": "symbol",
+      "name": "Base",
+      "filePath": "src/defs.ts"
+    },
+    {
+      "id": "symbol:e313d1fb5bcf97782b09ce0317159bfb7b00b36fc834de99e851fc09060ee5c9",
+      "kind": "symbol",
+      "name": "Dir",
+      "filePath": "src/use.ts"
+    },
+    {
+      "id": "symbol:f3765d7acbd376d20df22b3f56d76f2ff983f4db1d662d840cb48a21d50db75c",
+      "kind": "symbol",
+      "name": "run",
+      "filePath": "src/use.ts"
+    },
+    {
+      "id": "symbol:f8cc5d8f696b8a49773866580de334a592d7e72497140f98b4be37fd09210567",
+      "kind": "symbol",
+      "name": "Impl",
+      "filePath": "src/use.ts"
+    }
+  ],
+  "edges": [
+    {
+      "id": "06f2a8975ab33426df498813a941a8d03ca6257a3f7393a5729823b8d84b57aa",
+      "from": "symbol:ceeee4260050edb5623c24ed4c607438eb507cd24c9f30a068796dfa95157d48",
+      "to": "symbol:40e6cbf551b3b86841790b53ef922d75c4327fc857c978659dc0291937b01c2e",
+      "relationship": "imports"
+    },
+    {
+      "id": "0b109253aa1e24abd5d35eb3ae9dcab69c04b665ea8282c680f30b5abd9555d0",
+      "from": "file:src/defs.ts",
+      "to": "symbol:40e6cbf551b3b86841790b53ef922d75c4327fc857c978659dc0291937b01c2e",
+      "relationship": "contains"
+    },
+    {
+      "id": "0f7df8d94cefb98b79ff0fb30398b08d1648655badaea14a7199374eb9f61cdd",
+      "from": "file:src/use.ts",
+      "to": "symbol:ae485ad35961eb420e9a79251cb62bab2f6e1716282d63c14f6bba0c87cc6871",
+      "relationship": "contains"
+    },
+    {
+      "id": "21aeae269e2f24148046c8b03895cc6f5ea6cc94e15ad7cab5a1a92f321b00fd",
+      "from": "file:src/use.ts",
+      "to": "symbol:f3765d7acbd376d20df22b3f56d76f2ff983f4db1d662d840cb48a21d50db75c",
+      "relationship": "contains"
+    },
+    {
+      "id": "259eca27c68809f4caaf1a11ae70db0fd913178eee5d04066168922dfe057857",
+      "from": "file:src/use.ts",
+      "to": "symbol:ceeee4260050edb5623c24ed4c607438eb507cd24c9f30a068796dfa95157d48",
+      "relationship": "contains"
+    },
+    {
+      "id": "27adc64f3c77fc4d42a9c0ebe576e374044e0961cb399b9f918dfbcaea478114",
+      "from": "file:src/use.ts",
+      "to": "symbol:5d59595ecfea1ceaabf3535c328483796bdb9eba8d10235e219e1b553a57b653",
+      "relationship": "contains"
+    },
+    {
+      "id": "2b716d84bbd694a4375f8f4f1948df215bec1dff5e00b897898e517852e13672",
+      "from": "file:src/use.ts",
+      "to": "symbol:77751d35fd93bc4b3d0d6e73f3d7f316af5ef11df56c64c65209fda47c582898",
+      "relationship": "contains"
+    },
+    {
+      "id": "4cf8031d96d9f664833a7d8ab8746ccd00509fbb13d477a2d837c8a742b58dc0",
+      "from": "file:src/use.ts",
+      "to": "symbol:2a3a4e2481aa91a707c68ed6b13d24697cd2f35bbdf1e72d32db2bdbe3ba3e47",
+      "relationship": "contains"
+    },
+    {
+      "id": "4e7093803a95fd0042a9f7286299a494a235763fe0fdf9f2ca9853f14a0e0c92",
+      "from": "file:src/defs.ts",
+      "to": "symbol:ab2a51b5e5ab4b95c0c62e01b7d6dd11fc551b4be21a7778ce5afabe17a8d024",
+      "relationship": "contains"
+    },
+    {
+      "id": "63cc2a511fcc8a00c058f9882e0f52fc0145f445248b1653d2f5340cfe97726d",
+      "from": "file:src/use.ts",
+      "to": "symbol:3f6c37f19796ca3ed095e192365f8b53f4425d0b3098075bd1561f005531a4ca",
+      "relationship": "contains"
+    },
+    {
+      "id": "7e84296b889b7ce2919a6470387b2a7fd418a2fba7aca51f57f52115186340b3",
+      "from": "file:src/defs.ts",
+      "to": "symbol:d2af0a0e7814049aeb385dfa1708acad3e8d943fd0ea18d0ee93731ccb6c55c1",
+      "relationship": "contains"
+    },
+    {
+      "id": "929a883181e4d30a727d28d77ddafcfcc9982ab8933be8f1f6bef36c9ec557ed",
+      "from": "file:src/defs.ts",
+      "to": "symbol:4d5c054a746e175c734495b85f42a74ac8c3d16744be9bfc3a728446f17cf619",
+      "relationship": "contains"
+    },
+    {
+      "id": "f105256597f4ef3b21789f9a420a6a14c70d0be671c943880b6e38f4317bb203",
+      "from": "file:src/use.ts",
+      "to": "symbol:e313d1fb5bcf97782b09ce0317159bfb7b00b36fc834de99e851fc09060ee5c9",
+      "relationship": "contains"
+    },
+    {
+      "id": "f2e5dedcc919a3ccf568ba4219baefa9b2aaa3920d1d2548795ca84de516b846",
+      "from": "file:src/use.ts",
+      "to": "symbol:c03f261690f6440a82b5f366cdbb07c691ac74c1e28bd1d12bea13d31c2289d3",
+      "relationship": "contains"
+    },
+    {
+      "id": "f80ece4aeba978cc363d0456d772a2880e17c943c3c1130429c713e1fa857ffb",
+      "from": "file:src/use.ts",
+      "to": "symbol:240bec2b96c771e8cd4d30a87c518bd3f1d3eb181088917c1ba843a9891992bd",
+      "relationship": "contains"
+    },
+    {
+      "id": "fedf9467a03ee187053703ed094944fac44a39c41af3459fc54ae604ff00dbc8",
+      "from": "file:src/use.ts",
+      "to": "symbol:f8cc5d8f696b8a49773866580de334a592d7e72497140f98b4be37fd09210567",
+      "relationship": "contains"
+    }
+  ]
+}

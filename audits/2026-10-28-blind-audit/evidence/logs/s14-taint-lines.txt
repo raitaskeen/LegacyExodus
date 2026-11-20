@@ -1,0 +1,6 @@
+﻿s14 app.js:
+CONFIRMED line 4 res.send
+CONFIRMED 524698b8
+s14 helpers.js:
+CONFIRMED f76a376e
+CONFIRMED line 1 res.send

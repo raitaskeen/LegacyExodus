@@ -1,0 +1,41 @@
+{
+  "analysisDisposition": {
+    "contract": "r01-analysis-disposition-v1",
+    "files": [
+      {
+        "fileId": "072fc23b941d05af2383888f292b78e406e0e82a4a3f8ee698113dd9bcc79e5f",
+        "path": "src/a.ts",
+        "kind": "analyzed",
+        "symbolCount": 2
+      },
+      {
+        "fileId": "363f5941f4d8df68d4bd5a6a9fa72f57f452e7ea9880d3a622cdaae065f1b5fb",
+        "path": "src/b.ts",
+        "kind": "analyzed",
+        "symbolCount": 3
+      },
+      {
+        "fileId": "15e6fde2f92fb1046b74289914adae4ea200fa03e2d195ab04d237c0899c2b1c",
+        "path": "src/c.ts",
+        "kind": "analyzed",
+        "symbolCount": 3
+      },
+      {
+        "fileId": "b1b2e48a852b545a78b4beace2c58c494e614184d203f31c5aff30edb9dfbdb1",
+        "path": "src/d.ts",
+        "kind": "analyzed",
+        "symbolCount": 3
+      }
+    ]
+  },
+  "projectName": "s03-ts-resolution",
+  "fileCount": 5,
+  "dependencyCount": 0,
+  "frameworkCount": 0,
+  "languages": [
+    "json",
+    "typescript"
+  ],
+  "enumerationFailureCount": 0,
+  "discoveryComplete": true
+}

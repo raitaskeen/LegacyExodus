@@ -1,0 +1,171 @@
+{
+  "projectId": "eea416b8-723b-4c5e-b13e-3c0b7760d414",
+  "analysisRunId": "de1753ae-460a-4b76-be5d-a7929bc3b60f",
+  "graphs": [
+    {
+      "id": "e248f270dfe82b046e5e92ac3e03bb235d76204e0311453fa4831254a37186c3",
+      "filePath": "_x.js",
+      "state": "INFERRED",
+      "definitions": [
+        {
+          "id": "81b8637aaaaf1408b5b3b55ae0939e412926557a20fe25fbf1027a5d4acaae7d",
+          "filePath": "_x.js",
+          "name": "x",
+          "kind": "declaration",
+          "constantValue": 1
+        }
+      ],
+      "uses": [],
+      "defUseChains": [
+        {
+          "definitionId": "81b8637aaaaf1408b5b3b55ae0939e412926557a20fe25fbf1027a5d4acaae7d",
+          "useIds": []
+        }
+      ],
+      "lifetimes": [
+        {
+          "name": "x",
+          "filePath": "_x.js",
+          "declarationId": "81b8637aaaaf1408b5b3b55ae0939e412926557a20fe25fbf1027a5d4acaae7d",
+          "useIds": []
+        }
+      ],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [],
+      "callBindings": []
+    },
+    {
+      "id": "4b8bcc3f60b0d73d3a565b50e54385c594c8d9eb720e3319ec0fb4a5df381fff",
+      "filePath": "a.js",
+      "state": "INFERRED",
+      "definitions": [
+        {
+          "id": "89512495663eca1e1702c8847a0d1538f9e8b5e6be90aaf9eb0dfcc23c364af4",
+          "filePath": "a.js",
+          "name": "a",
+          "kind": "declaration",
+          "constantValue": 1
+        }
+      ],
+      "uses": [],
+      "defUseChains": [
+        {
+          "definitionId": "89512495663eca1e1702c8847a0d1538f9e8b5e6be90aaf9eb0dfcc23c364af4",
+          "useIds": []
+        }
+      ],
+      "lifetimes": [
+        {
+          "name": "a",
+          "filePath": "a.js",
+          "declarationId": "89512495663eca1e1702c8847a0d1538f9e8b5e6be90aaf9eb0dfcc23c364af4",
+          "useIds": []
+        }
+      ],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [],
+      "callBindings": []
+    },
+    {
+      "id": "30926c03ca0c019495602ee9e56dd6584cc7d235da61c6762372740903b7bb06",
+      "filePath": "ä.js",
+      "state": "INFERRED",
+      "definitions": [
+        {
+          "id": "a694db115b3c19c1bbcfb69e7b84d83b351e299171e93032db7f5f3dda8b8955",
+          "filePath": "ä.js",
+          "name": "ae",
+          "kind": "declaration",
+          "constantValue": 1
+        }
+      ],
+      "uses": [],
+      "defUseChains": [
+        {
+          "definitionId": "a694db115b3c19c1bbcfb69e7b84d83b351e299171e93032db7f5f3dda8b8955",
+          "useIds": []
+        }
+      ],
+      "lifetimes": [
+        {
+          "name": "ae",
+          "filePath": "ä.js",
+          "declarationId": "a694db115b3c19c1bbcfb69e7b84d83b351e299171e93032db7f5f3dda8b8955",
+          "useIds": []
+        }
+      ],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [],
+      "callBindings": []
+    },
+    {
+      "id": "234409643809044549af8d74027f62ae3043ad3f6b5bc24aed07cd3acc1203ce",
+      "filePath": "B.js",
+      "state": "INFERRED",
+      "definitions": [
+        {
+          "id": "a07a4cba7c2c04917f24cb8ed9a50f43af3506137e530eeb0c9b3a294c3fa1c7",
+          "filePath": "B.js",
+          "name": "b",
+          "kind": "declaration",
+          "constantValue": 1
+        }
+      ],
+      "uses": [],
+      "defUseChains": [
+        {
+          "definitionId": "a07a4cba7c2c04917f24cb8ed9a50f43af3506137e530eeb0c9b3a294c3fa1c7",
+          "useIds": []
+        }
+      ],
+      "lifetimes": [
+        {
+          "name": "b",
+          "filePath": "B.js",
+          "declarationId": "a07a4cba7c2c04917f24cb8ed9a50f43af3506137e530eeb0c9b3a294c3fa1c7",
+          "useIds": []
+        }
+      ],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [],
+      "callBindings": []
+    },
+    {
+      "id": "70e1f02290ef491543d092459331019d8c22cae0661c627f93497b20b3fed996",
+      "filePath": "Z.js",
+      "state": "INFERRED",
+      "definitions": [
+        {
+          "id": "b18d86f6fef701ae14832067a5da092c1c07c13134d3d00034731291e34ac190",
+          "filePath": "Z.js",
+          "name": "z",
+          "kind": "declaration",
+          "constantValue": 1
+        }
+      ],
+      "uses": [],
+      "defUseChains": [
+        {
+          "definitionId": "b18d86f6fef701ae14832067a5da092c1c07c13134d3d00034731291e34ac190",
+          "useIds": []
+        }
+      ],
+      "lifetimes": [
+        {
+          "name": "z",
+          "filePath": "Z.js",
+          "declarationId": "b18d86f6fef701ae14832067a5da092c1c07c13134d3d00034731291e34ac190",
+          "useIds": []
+        }
+      ],
+      "taintFlows": [],
+      "interproceduralFlows": [],
+      "functionSummaries": [],
+      "callBindings": []
+    }
+  ]
+}

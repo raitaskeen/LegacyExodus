@@ -1,0 +1,8 @@
+{
+  "name": "s14",
+  "path": "C:\\Projects\\.audit\\samples\\s14-taint-hops",
+  "languages": [
+    "javascript",
+    "json"
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "calls": [
+    {
+      "id": "91fe2c19cf816872d0765573b46feccbb6a527b5ba7017d0aadb5c7a5a5a0e45",
+      "sourceFilePath": "x.js",
+      "callerName": "module",
+      "calleeName": "Outer",
+      "resolutionState": "RESOLVED",
+      "targetSymbolId": "ddd6bfc2888f1c54086ae718187c4598648749a7860a3b1c738648624a921a8f",
+      "location": {
+        "line": 3,
+        "column": 0
+      }
+    }
+  ],
+  "references": [
+    {
+      "id": "4e3772f869c8ff8c41de35bb540810d80abea23d0c6812893eaeaf74f1539af8",
+      "filePath": "x.js",
+      "name": "Outer",
+      "kind": "identifier",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "ddd6bfc2888f1c54086ae718187c4598648749a7860a3b1c738648624a921a8f"
+    },
+    {
+      "id": "c6025dd4bb663ea97bf9723f053b5b206fc1f7e1101d28cbd8f1b61a536c1462",
+      "filePath": "x.js",
+      "name": "Outer",
+      "kind": "call",
+      "resolutionState": "RESOLVED",
+      "resolvedSymbolId": "ddd6bfc2888f1c54086ae718187c4598648749a7860a3b1c738648624a921a8f"
+    }
+  ],
+  "scopes": [
+    {
+      "id": "f66b67229a864257539b83b202ee9f093e0f029dee9d0b2ccdb3476401b1c6da",
+      "filePath": "x.js",
+      "name": "module",
+      "declaredSymbols": [
+        "Inner",
+        "Outer",
+        "m",
+        "n"
+      ],
+      "referencedNames": [
+        "Outer"
+      ]
+    }
+  ],
+  "deadCode": [
+    {
+      "symbolId": "ecde191bb89194291ec66bb8322e1aba12dcbc6ac19626f27f7382badbd2dcec",
+      "filePath": "x.js",
+      "name": "m",
+      "reason": "unreferenced-local-symbol",
+      "state": "INFERRED"
+    }
+  ],
+  "unusedImports": [],
+  "unusedExports": [
+    {
+      "symbolId": "b16960ec0b2da2f231db66759f80c230242cf8a82a9745ec7b7b4421fd533a18",
+      "filePath": "x.js",
+      "name": "Inner",
+      "reason": "unused-export",
+      "state": "INFERRED"
+    }
+  ],
+  "entryPoints": [],
+  "routes": [],
+  "middlewareChains": [],
+  "projectId": "81f62af1-7820-4e3d-85c3-40ec268559f1",
+  "analysisRunId": "35ce8d21-e8a0-49ea-acc2-72426e588c7b"
+}
