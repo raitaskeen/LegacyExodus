@@ -22,6 +22,8 @@ export interface CategoryDiff {
   readonly gained: readonly string[];
   /** Base facts of an UNRESOLVED call or reference that the head proves at the same site (owner decision, Phase B). */
   readonly upgraded: readonly string[];
+  /** Base facts of an UNRESOLVED call whose head fact at the same site is UNRESOLVED for another reason. */
+  readonly reasonChanged: readonly string[];
 }
 
 export interface FactDiff {
@@ -29,6 +31,7 @@ export interface FactDiff {
   readonly lost: number;
   readonly gained: number;
   readonly upgraded: number;
+  readonly reasonChanged: number;
 }
 
 /** Categories whose facts end in `|<state>|<target>`, where an UNRESOLVED fact can become a proven one. */
@@ -44,25 +47,33 @@ function stateOf(fact: string): { readonly site: string; readonly state: string 
 
 /**
  * Pairs each lost UNRESOLVED fact with a gained RESOLVED or EXTERNAL fact at the same site, one for one. Such a
- * pair is knowledge gained, not a fact lost; a RESOLVED fact that changes or disappears stays a loss.
+ * pair is knowledge gained, not a fact lost; a RESOLVED or EXTERNAL fact that changes or disappears stays a loss.
+ * A lost UNRESOLVED fact left over that pairs with a gained UNRESOLVED fact at the same site only changed its reason:
+ * no proven fact is lost, so it is listed apart, like an upgrade.
  */
-function upgrades(lost: readonly string[], gained: readonly string[]): { readonly lost: string[]; readonly gained: string[]; readonly upgraded: string[] } {
+function upgrades(lost: readonly string[], gained: readonly string[]): { readonly lost: string[]; readonly gained: string[]; readonly upgraded: string[]; readonly reasonChanged: string[] } {
   const proven = new Map<string, string[]>();
+  const unresolved = new Map<string, string[]>();
   for (const fact of gained) {
     const parsed = stateOf(fact);
-    if (parsed !== undefined && PROVEN_STATES.has(parsed.state)) proven.set(parsed.site, [...(proven.get(parsed.site) ?? []), fact]);
+    if (parsed === undefined) continue;
+    const into = PROVEN_STATES.has(parsed.state) ? proven : parsed.state === "UNRESOLVED" ? unresolved : undefined;
+    into?.set(parsed.site, [...(into.get(parsed.site) ?? []), fact]);
   }
   const used = new Set<string>();
   const upgraded: string[] = [];
+  const reasonChanged: string[] = [];
   const stillLost: string[] = [];
   for (const fact of lost) {
     const parsed = stateOf(fact);
-    const match = parsed?.state === "UNRESOLVED" ? (proven.get(parsed.site) ?? []).find((candidate) => !used.has(candidate)) : undefined;
-    if (match === undefined) { stillLost.push(fact); continue; }
-    used.add(match);
-    upgraded.push(fact);
+    if (parsed?.state !== "UNRESOLVED") { stillLost.push(fact); continue; }
+    const match = (proven.get(parsed.site) ?? []).find((candidate) => !used.has(candidate));
+    if (match !== undefined) { used.add(match); upgraded.push(fact); continue; }
+    const other = (unresolved.get(parsed.site) ?? []).find((candidate) => !used.has(candidate));
+    if (other !== undefined) { used.add(other); reasonChanged.push(fact); continue; }
+    stillLost.push(fact);
   }
-  return { lost: stillLost, gained: gained.filter((fact) => !used.has(fact)), upgraded };
+  return { lost: stillLost, gained: gained.filter((fact) => !used.has(fact)), upgraded, reasonChanged };
 }
 
 export interface CorpusDiff extends FactDiff {
@@ -211,8 +222,16 @@ export function extractFacts(discoveryDirectory: string): FactSet {
   for (const cycle of graph?.cycles ?? []) add("cycles", cycle.join(" > "));
 
   const semantic = readArtifact(discoveryDirectory, "semantic.json");
+  // A call's target: the proven symbol, the package or global member an EXTERNAL call reaches, or the reason a call
+  // stays UNRESOLVED, so a changed EXTERNAL target or reason is a changed fact (AUD-07c). `|` is escaped: the state and
+  // the target are the last two fields.
+  const callTarget = (call: any): string => {
+    if (call.resolutionState === "EXTERNAL") return `ext:${call.external?.module ?? "-"}:${call.external?.member ?? "-"}`.replaceAll("|", "%7C");
+    if (call.resolutionState === "RESOLVED") return describe(call.targetSymbolId);
+    return `reason:${call.reason ?? "-"}`.replaceAll("|", "%7C");
+  };
   addCounted("calls", (semantic?.calls ?? []).map((call: any) =>
-    `${call.sourceFilePath}${at(call.location)}|${call.callerName}|${call.calleeName}|${call.resolutionState}|${describe(call.targetSymbolId)}`));
+    `${call.sourceFilePath}${at(call.location)}|${call.callerName}|${call.calleeName}|${call.resolutionState}|${callTarget(call)}`));
   for (const call of semantic?.calls ?? []) if (typeof call.key === "string") add("call-keys", call.key);
   for (const route of semantic?.routes ?? []) if (typeof route.key === "string") add("route-keys", route.key);
   for (const chain of semantic?.middlewareChains ?? []) if (typeof chain.key === "string") add("middleware-keys", chain.key);
@@ -296,14 +315,15 @@ export function diffFacts(base: FactSet, head: FactSet): FactDiff {
     const after = head.get(category) ?? new Set<string>();
     const lost = [...before].filter((fact) => !after.has(fact)).sort(compare);
     const gained = [...after].filter((fact) => !before.has(fact)).sort(compare);
-    const paired = UPGRADABLE.has(category) ? upgrades(lost, gained) : { lost, gained, upgraded: [] };
-    return { category, base: before.size, head: after.size, lost: paired.lost, gained: paired.gained, upgraded: paired.upgraded };
+    const paired = UPGRADABLE.has(category) ? upgrades(lost, gained) : { lost, gained, upgraded: [], reasonChanged: [] };
+    return { category, base: before.size, head: after.size, lost: paired.lost, gained: paired.gained, upgraded: paired.upgraded, reasonChanged: paired.reasonChanged };
   });
   return {
     categories,
     lost: categories.reduce((sum, category) => sum + category.lost.length, 0),
     gained: categories.reduce((sum, category) => sum + category.gained.length, 0),
     upgraded: categories.reduce((sum, category) => sum + category.upgraded.length, 0),
+    reasonChanged: categories.reduce((sum, category) => sum + category.reasonChanged.length, 0),
   };
 }
 
@@ -346,15 +366,16 @@ export function formatFactDiff(results: readonly CorpusDiff[], limit = 50): stri
   for (const result of results) {
     const delta = result.baseMs === 0 ? "n/a" : `${(((result.headMs - result.baseMs) / result.baseMs) * 100).toFixed(1)}%`;
     const upgradedNote = result.upgraded > 0 ? `, upgraded ${result.upgraded} (UNRESOLVED -> RESOLVED or EXTERNAL at the same site)` : "";
-    lines.push(`## ${result.corpus}`, "", `Lost ${result.lost}, gained ${result.gained}${upgradedNote}. Engine time ${Math.round(result.baseMs)} ms -> ${Math.round(result.headMs)} ms (${delta}, single run).`, "");
+    const reasonNote = result.reasonChanged > 0 ? `, reason changed ${result.reasonChanged} (UNRESOLVED for another reason at the same site)` : "";
+    lines.push(`## ${result.corpus}`, "", `Lost ${result.lost}, gained ${result.gained}${upgradedNote}${reasonNote}. Engine time ${Math.round(result.baseMs)} ms -> ${Math.round(result.headMs)} ms (${delta}, single run).`, "");
     if (result.headCoverage !== undefined) lines.push(...formatCoverage(result.headCoverage, result.baseCoverage));
-    const changed = result.categories.filter((category) => category.lost.length > 0 || category.gained.length > 0 || category.upgraded.length > 0);
+    const changed = result.categories.filter((category) => category.lost.length > 0 || category.gained.length > 0 || category.upgraded.length > 0 || category.reasonChanged.length > 0);
     if (changed.length === 0) { lines.push("No fact changed.", ""); continue; }
-    lines.push("| Category | Base | Head | Lost | Gained | Upgraded |", "|---|---|---|---|---|---|");
-    for (const category of changed) lines.push(`| ${category.category} | ${category.base} | ${category.head} | ${category.lost.length} | ${category.gained.length} | ${category.upgraded.length} |`);
+    lines.push("| Category | Base | Head | Lost | Gained | Upgraded | Reason changed |", "|---|---|---|---|---|---|---|");
+    for (const category of changed) lines.push(`| ${category.category} | ${category.base} | ${category.head} | ${category.lost.length} | ${category.gained.length} | ${category.upgraded.length} | ${category.reasonChanged.length} |`);
     lines.push("");
     for (const category of changed) {
-      for (const [label, facts] of [["Lost", category.lost], ["Gained", category.gained], ["Upgraded", category.upgraded]] as const) {
+      for (const [label, facts] of [["Lost", category.lost], ["Gained", category.gained], ["Upgraded", category.upgraded], ["Reason changed", category.reasonChanged]] as const) {
         if (facts.length === 0) continue;
         lines.push(`### ${label} ${category.category}`, "", ...facts.slice(0, limit).map((fact) => `- \`${fact}\``));
         if (facts.length > limit) lines.push(`- … ${facts.length - limit} more`);

@@ -47,7 +47,7 @@ describe("fact diff", () => {
     const calls = diff.categories.find((category) => category.category === "calls");
 
     expect(calls?.lost).toEqual(["main.js@3:0|module|b|RESOLVED|function:b@2:0@lib.js"]);
-    expect(calls?.gained).toEqual(["main.js@3:0|module|b|UNRESOLVED|-"]);
+    expect(calls?.gained).toEqual(["main.js@3:0|module|b|UNRESOLVED|reason:-"]);
     expect(formatFactDiff([{ corpus: "sample", baseMs: 10, headMs: 12, ...diff }])).toContain("| calls | 1 | 1 | 1 | 1 |");
   });
 
@@ -60,7 +60,7 @@ describe("fact diff", () => {
 
     expect(diff.lost).toBe(0);
     expect(calls?.gained).toEqual([]);
-    expect(calls?.upgraded).toEqual(["main.js@3:0|module|b|UNRESOLVED|-", "main.js@4:0|module|fs.readFile|UNRESOLVED|-"]);
+    expect(calls?.upgraded).toEqual(["main.js@3:0|module|b|UNRESOLVED|reason:-", "main.js@4:0|module|fs.readFile|UNRESOLVED|reason:-"]);
     expect(formatFactDiff([{ corpus: "sample", baseMs: 10, headMs: 12, ...diff }])).toContain("upgraded 2 (UNRESOLVED -> RESOLVED or EXTERNAL at the same site)");
   });
 
@@ -71,8 +71,42 @@ describe("fact diff", () => {
     const diff = diffFacts(extractFacts(base), extractFacts(head));
     const calls = diff.categories.find((category) => category.category === "calls");
 
-    expect(calls?.lost).toEqual(["main.js@3:0|module|b|RESOLVED|function:b@2:0@lib.js", "main.js@9:0|module|b|UNRESOLVED|-"]);
+    expect(calls?.lost).toEqual(["main.js@3:0|module|b|RESOLVED|function:b@2:0@lib.js", "main.js@9:0|module|b|UNRESOLVED|reason:-"]);
     expect(calls?.upgraded).toEqual([]);
+  });
+
+  it("counts an EXTERNAL call whose module or member changes as lost (AUD-07c)", () => {
+    const external = (module: string, member: string) => ({ ...call("EXTERNAL"), calleeName: "fsp.readFile", external: { module, member } });
+    const base = discovery({ "symbols.json": [], "semantic.json": { calls: [external("fs/promises", "readFile")] } });
+    const head = discovery({ "symbols.json": [], "semantic.json": { calls: [external("fs", "readFile")] } });
+
+    const diff = diffFacts(extractFacts(base), extractFacts(head));
+    const calls = diff.categories.find((category) => category.category === "calls");
+
+    expect(calls?.lost).toEqual(["main.js@3:0|module|fsp.readFile|EXTERNAL|ext:fs/promises:readFile"]);
+    expect(calls?.gained).toEqual(["main.js@3:0|module|fsp.readFile|EXTERNAL|ext:fs:readFile"]);
+    expect(diff.lost).toBe(1);
+  });
+
+  it("lists an UNRESOLVED call whose reason changes apart, as no proven fact lost (AUD-07c)", () => {
+    const unresolved = (reason: string) => ({ ...call("UNRESOLVED"), reason });
+    const base = discovery({ "symbols.json": [], "semantic.json": { calls: [unresolved("parameter-callee"), { ...unresolved("eval-or-with"), location: { line: 5, column: 0 } }] } });
+    const head = discovery({ "symbols.json": [], "semantic.json": { calls: [unresolved("receiver-not-proven")] } });
+
+    const diff = diffFacts(extractFacts(base), extractFacts(head));
+    const calls = diff.categories.find((category) => category.category === "calls");
+
+    expect(calls?.reasonChanged).toEqual(["main.js@3:0|module|b|UNRESOLVED|reason:parameter-callee"]);
+    // A call that disappears is still lost, whatever its state.
+    expect(calls?.lost).toEqual(["main.js@5:0|module|b|UNRESOLVED|reason:eval-or-with"]);
+    expect(calls?.gained).toEqual([]);
+    expect(formatFactDiff([{ corpus: "sample", baseMs: 10, headMs: 12, ...diff }])).toContain("reason changed 1 (UNRESOLVED for another reason at the same site)");
+  });
+
+  it("escapes a `|` in an EXTERNAL target so the state stays the second-to-last field", () => {
+    const odd = { ...call("EXTERNAL"), external: { module: "a|b", member: "c" } };
+    const facts = [...(extractFacts(discovery({ "symbols.json": [], "semantic.json": { calls: [odd] } })).get("calls") ?? [])];
+    expect(facts).toEqual(["main.js@3:0|module|b|EXTERNAL|ext:a%7Cb:c"]);
   });
 
   it("counts repeated identical references instead of collapsing them", () => {
