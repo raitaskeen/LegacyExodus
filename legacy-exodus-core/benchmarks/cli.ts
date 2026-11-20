@@ -28,8 +28,8 @@ import { compareBenchmarkRuns, formatComparisonMarkdown } from "./compare";
 import { isAuditPassing, runBenchmarkSelfAudit } from "./audit";
 import { executeBenchmarkRun } from "./harness";
 import { analyzeWith, diffFacts, extractFacts, formatCoverage, formatFactDiff, runFactDiff, type CorpusDiff } from "./fact-diff";
-import { formatOracle, runCallOracle } from "./call-oracle";
-import { formatFlowOracle, runFlowOracle } from "./flow-oracle";
+import { callRunProblems, formatOracle, runCallOracle } from "./call-oracle";
+import { flowRunProblems, formatFlowOracle, runFlowOracle } from "./flow-oracle";
 import { generateMarkdownReport } from "./scripts/report";
 import { runFidelityValidation } from "./fidelity/runner";
 import { ensureCacheEntryVerified } from "./scripts/acquire";
@@ -209,7 +209,8 @@ async function main(): Promise<void> {
       const output = getArgValue(args, "--output");
       if (output !== undefined) await writeFile(resolve(output), markdown, "utf8");
       console.log(markdown);
-      if (args.includes("--fail-on-contradiction") && results.some((result) => result.contradictions.length > 0)) process.exitCode = 1;
+      // A run whose suite failed or that saw too little is no evidence: it fails like a contradiction (AUD-16).
+      if (args.includes("--fail-on-contradiction") && results.some((result) => result.contradictions.length > 0 || flowRunProblems(result).length > 0)) process.exitCode = 1;
       break;
     }
     case "call-oracle": {
@@ -225,7 +226,8 @@ async function main(): Promise<void> {
       const output = getArgValue(args, "--output");
       if (output !== undefined) await writeFile(resolve(output), markdown, "utf8");
       console.log(markdown);
-      if (args.includes("--fail-on-contradiction") && results.some((result) => result.contradictions.length > 0)) process.exitCode = 1;
+      // A run whose suite failed or that saw too little is no evidence: it fails like a contradiction (AUD-16).
+      if (args.includes("--fail-on-contradiction") && results.some((result) => result.contradictions.length > 0 || callRunProblems(result).length > 0)) process.exitCode = 1;
       break;
     }
     case "fact-diff": {
