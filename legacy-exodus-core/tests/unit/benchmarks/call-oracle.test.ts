@@ -4,7 +4,31 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { innermostSite, instrument, judgeRun, originalColumn, preloadSource, targetFunctions } from "../../../benchmarks/call-oracle";
+import { CORPUS_TESTS, innermostSite, instrument, judgeRun, originalColumn, preloadSource, runNotes, runProblems, targetFunctions, testCommand } from "../../../benchmarks/call-oracle";
+
+describe("oracle test runs (AUD-16)", () => {
+  test("leaves out only the tests that fail for that oracle and platform", () => {
+    const base = ["npx", "borp", "--reporter=@jsumners/line-reporter"];
+    expect(testCommand("fastify", "flow", "linux")).toEqual([...base, "--ignore", "test/build/version.test.js"]);
+    expect(testCommand("fastify", "call", "linux")).toEqual([...base, "--ignore", "test/build/version.test.js", "--ignore", "test/plugin.1.test.js", "--ignore", "test/plugin.4.test.js", "--ignore", "test/issue-4959.test.js"]);
+    expect(testCommand("fastify", "flow", "win32")).toEqual([...base, "--ignore", "test/build/version.test.js", "--ignore", "test/http2/closing.test.js"]);
+    expect(testCommand("express", "call", "linux")).toEqual(["npm", "run", "test"]);
+    expect(() => testCommand("unknown", "call")).toThrow("No test command");
+  });
+
+  test("gives every left-out test a reason", () => {
+    for (const tests of Object.values(CORPUS_TESTS)) for (const skipped of tests.skip) expect(skipped.reason.length).toBeGreaterThan(20);
+  });
+
+  test("a failing suite or a run below its floor is not evidence", () => {
+    expect(runProblems("fastify", 0, { observedSites: 9000 })).toEqual([]);
+    expect(runProblems("fastify", 1, { observedSites: 9000 })).toEqual(["the test run exited with 1"]);
+    expect(runProblems("fastify", null, {})).toEqual(["the test run exited with null"]);
+    expect(runProblems("express", 0, { observedSites: 10 })).toEqual(["10 call sites observed, below the floor of 3200"]);
+    expect(runProblems("express", 0, { executedStatements: 10 })).toEqual(["10 statements executed, below the floor of 9000"]);
+    expect(runNotes("express", "call", ["the test run exited with 1"])).toEqual(["**Not evidence: the test run exited with 1.**", ""]);
+  });
+});
 
 /** A symbol location starting at `needle` on 1-based `line` of `lines`. */
 const at = (lines: readonly string[], line: number, needle: string) => {
@@ -147,6 +171,9 @@ describe("call oracle instrumentation (Phase A3)", () => {
       writeFileSync(join(work, "preload.cjs"), preloadSource(root, files, traces));
       const run = spawnSync("node", ["--require", join(work, "preload.cjs"), join(root, "a.js")], { encoding: "utf8" });
       expect(run.status).toBe(0);
+      // The pid alone is not unique: Windows reuses pids within one test run, and a reused pid overwrote a trace.
+      expect(readdirSync(traces)).toHaveLength(1);
+      expect(readdirSync(traces)[0]).toMatch(new RegExp(`^trace-${run.pid}-[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}\\.json$`));
       const trace = JSON.parse(readFileSync(join(traces, readdirSync(traces)[0]!), "utf8"));
       // a.js line 3 `main()` enters main (a.js 2:0); line 2 `b.hello()` enters hello (b.js 1:16).
       expect(trace["0:3:1"]).toEqual(["0:2:0"]);

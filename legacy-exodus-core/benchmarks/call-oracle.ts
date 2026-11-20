@@ -15,8 +15,83 @@ import { tmpdir } from "node:os";
 import { basename, join, posix, relative, resolve, sep } from "node:path";
 import { parse } from "@babel/parser";
 
-/** The test command per pinned corpus: an npm script name. */
-const TEST_SCRIPTS: Readonly<Record<string, string>> = { express: "test", fastify: "unit" };
+/** A test file left out of an oracle's run, and why. */
+interface SkippedTest {
+  readonly file: string;
+  /** Only for this oracle; both when absent. */
+  readonly oracle?: "call" | "flow";
+  /** Only on this platform; all when absent. */
+  readonly platform?: NodeJS.Platform;
+  readonly reason: string;
+}
+
+/**
+ * How the oracles run a pinned corpus's own tests (AUD-16). A suite that fails is not evidence, so a failing run fails
+ * the oracle. `skip` leaves out the test files that fail whatever the engine does, each with its reason, only for the
+ * oracle and platform where they fail. The floors catch a run that passes while seeing little (a preload or coverage
+ * collection that stopped working); they sit about 10% below the lowest run measured.
+ */
+interface CorpusTests {
+  readonly command: readonly string[];
+  /** The runner's option that leaves out one test file. */
+  readonly ignoreOption?: string;
+  readonly skip: readonly SkippedTest[];
+  /** Call oracle: fewer call sites observed than this, and the run is not evidence. */
+  readonly minObservedSites: number;
+  /** Flow oracle: fewer CFG statements executed than this, and the run is not evidence. */
+  readonly minExecutedStatements: number;
+}
+
+export const CORPUS_TESTS: Readonly<Record<string, CorpusTests>> = {
+  express: { command: ["npm", "run", "test"], skip: [], minObservedSites: 3200, minExecutedStatements: 9000 },
+  // `borp` without `--coverage`: the flow oracle collects V8 coverage itself, and both oracles run the same tests.
+  fastify: {
+    command: ["npx", "borp", "--reporter=@jsumners/line-reporter"],
+    ignoreOption: "--ignore",
+    skip: [
+      { file: "test/build/version.test.js", reason: "at the pinned commit package.json says 5.3.3 and fastify.js says 5.3.2; fails without any oracle" },
+      { file: "test/plugin.1.test.js", oracle: "call", reason: "names a plugin by its source text, which the call oracle's probes change" },
+      { file: "test/plugin.4.test.js", oracle: "call", reason: "names a plugin by its source text, which the call oracle's probes change" },
+      { file: "test/issue-4959.test.js", oracle: "call", reason: "races a 5 ms socket timer against the request; the probes' slowdown makes it lose the race in some runs" },
+      { file: "test/http2/closing.test.js", platform: "win32", reason: "times out on Windows without any oracle" },
+    ],
+    minObservedSites: 8100,
+    minExecutedStatements: 25000,
+  },
+};
+
+/** The test files one oracle's run of a corpus leaves out on `platform`. */
+export function skippedTests(corpus: string, oracle: "call" | "flow", platform: NodeJS.Platform = process.platform): readonly SkippedTest[] {
+  return (CORPUS_TESTS[corpus]?.skip ?? []).filter((test) => (test.oracle ?? oracle) === oracle && (test.platform ?? platform) === platform);
+}
+
+/** The command that runs a corpus's tests for one oracle on `platform`, with that run's skipped files left out. */
+export function testCommand(corpus: string, oracle: "call" | "flow", platform: NodeJS.Platform = process.platform): readonly string[] {
+  const tests = CORPUS_TESTS[corpus];
+  if (tests === undefined) throw new Error(`No test command is configured for corpus ${corpus}.`);
+  const skipped = skippedTests(corpus, oracle, platform);
+  if (skipped.length > 0 && tests.ignoreOption === undefined) throw new Error(`Corpus ${corpus} skips tests but its runner has no ignore option.`);
+  return [...tests.command, ...skipped.flatMap((test) => [tests.ignoreOption!, test.file])];
+}
+
+/** Markdown lines naming a run's left-out tests and, if any, why the run is not evidence. */
+export function runNotes(corpus: string, oracle: "call" | "flow", problems: readonly string[]): string[] {
+  const lines: string[] = [];
+  const skipped = skippedTests(corpus, oracle);
+  if (skipped.length > 0) lines.push(`Tests left out: ${skipped.map((test) => `\`${test.file}\` (${test.reason})`).join("; ")}.`, "");
+  if (problems.length > 0) lines.push(`**Not evidence: ${problems.join("; ")}.**`, "");
+  return lines;
+}
+
+/** Why a run is not evidence: its suite failed, or it saw fewer sites or statements than the corpus's floor. */
+export function runProblems(corpus: string, testExit: number | null, seen: { readonly observedSites?: number; readonly executedStatements?: number }): string[] {
+  const tests = CORPUS_TESTS[corpus];
+  const problems: string[] = [];
+  if (testExit !== 0) problems.push(`the test run exited with ${testExit}`);
+  if (tests !== undefined && seen.observedSites !== undefined && seen.observedSites < tests.minObservedSites) problems.push(`${seen.observedSites} call sites observed, below the floor of ${tests.minObservedSites}`);
+  if (tests !== undefined && seen.executedStatements !== undefined && seen.executedStatements < tests.minExecutedStatements) problems.push(`${seen.executedStatements} statements executed, below the floor of ${tests.minExecutedStatements}`);
+  return problems;
+}
 
 interface Insertion { readonly line: number; readonly column: number; readonly length: number }
 /** `callee`: how the engine's callee name must end for this site (several calls can start at one position: `f().g()`). */
@@ -127,9 +202,11 @@ globalThis.__lxEnter = function __lxEnter(file, line, column) {
   let callees = seen.get(key); if (callees === undefined) { callees = new Set(); seen.set(key, callees); }
   callees.add(file + ":" + line + ":" + column);
 };
+// One file per process, named so that a later process given the same pid cannot overwrite it: Windows reuses pids
+// within one test run, which lost whole test files' observations (AUD-16).
 process.on("exit", () => {
   const out = {}; for (const [key, callees] of seen) out[key] = [...callees].sort();
-  fs.writeFileSync(path.join(${JSON.stringify(traceDirectory)}, "trace-" + process.pid + ".json"), JSON.stringify(out));
+  fs.writeFileSync(path.join(${JSON.stringify(traceDirectory)}, "trace-" + process.pid + "-" + require("crypto").randomUUID() + ".json"), JSON.stringify(out), { flag: "wx" });
 });
 `;
 }
@@ -177,21 +254,23 @@ function callSites(file: string, source: string): CallSite[] {
  * A clean copy of a pinned corpus (no `.git`, `.discovery` or dependencies) analysed by the engine at `engineRoot`,
  * inside `work`. Shared by the call and flow oracles.
  */
-export function analyzeCleanCopy(engineRoot: string, corpus: string, work: string): { readonly name: string; readonly script: string; readonly clean: string } {
+export function analyzeCleanCopy(engineRoot: string, corpus: string, work: string): { readonly name: string; readonly clean: string } {
   const name = basename(resolve(corpus));
-  const script = TEST_SCRIPTS[name];
-  if (script === undefined) throw new Error(`No test script is configured for corpus ${name}.`);
+  if (CORPUS_TESTS[name] === undefined) throw new Error(`No test command is configured for corpus ${name}.`);
   const clean = join(work, "clean", name);
   cpSync(resolve(corpus), clean, { recursive: true, filter: (path) => !/[\\/](\.discovery|\.git|node_modules)([\\/]|$)/.test(path) });
   const analyzed = spawnSync(process.execPath, ["run", join(engineRoot, "src/cli/index.ts"), "analyze", clean, "--refresh", "--json"], {
     cwd: engineRoot, encoding: "utf8", maxBuffer: 1 << 26, env: { ...process.env, LEGACY_EXODUS_HOME: join(work, "home"), NO_COLOR: "1" },
   });
   if (analyzed.status !== 0) throw new Error(`analyze failed: ${String(analyzed.stderr).slice(0, 2000)}`);
-  return { name, script, clean };
+  return { name, clean };
 }
 
-/** Installs a corpus copy's dev dependencies and runs its test script with `env` added; returns the exit code. */
-export function installAndTest(run: string, script: string, env: Readonly<Record<string, string>>, command: readonly string[] = ["npm", "run", script]): number | null {
+/**
+ * Installs a corpus copy's dev dependencies and runs `command` with `env` added; returns the exit code. A failing run
+ * prints the end of its output, so the CI log shows which tests failed.
+ */
+export function installAndTest(run: string, command: readonly string[], env: Readonly<Record<string, string>>): number | null {
   // A pinned lockfile (benchmarks/oracle-locks/<corpus>) makes the install exact and repeatable; without one npm
   // resolves the dev dependencies afresh, which can fail when the registry is mid-publish.
   const lock = join(import.meta.dir, "oracle-locks", basename(run), "package-lock.json");
@@ -199,6 +278,10 @@ export function installAndTest(run: string, script: string, env: Readonly<Record
   const install = spawnSync("npm", [existsSync(lock) ? "ci" : "install", "--no-audit", "--no-fund", "--ignore-scripts", "--loglevel=error"], { cwd: run, encoding: "utf8", shell: true, maxBuffer: 1 << 26 });
   if (install.status !== 0) throw new Error(`npm install failed: ${String(install.stderr).slice(0, 2000)}`);
   const tests = spawnSync(command[0]!, command.slice(1), { cwd: run, encoding: "utf8", shell: true, maxBuffer: 1 << 28, env: { ...process.env, NO_COLOR: "1", CI: "1", ...env } });
+  if (tests.status !== 0) {
+    const tail = `${tests.stdout ?? ""}\n${tests.stderr ?? ""}`.split("\n").filter((line) => line.trim() !== "").slice(-60).join("\n");
+    console.error(`Tests of ${basename(run)} (${command.join(" ")}) exited with ${tests.status}. Last lines:\n${tail}`);
+  }
   return tests.status;
 }
 
@@ -226,7 +309,7 @@ export function runCallOracle(engineRoot: string, corpus: string): OracleResult 
 /** Analyses a clean copy of the corpus inside `work`, runs its tests instrumented and collects what they entered. */
 export function observeRun(engineRoot: string, corpus: string, work: string): ObservedRun {
   // 1. The engine's facts, from a clean copy (no dependencies installed, as in the fact diff).
-  const { name, script, clean } = analyzeCleanCopy(engineRoot, corpus, work);
+  const { name, clean } = analyzeCleanCopy(engineRoot, corpus, work);
 
   // 2. An instrumented copy with its dev dependencies, then its own tests.
   const run = join(work, "run", name);
@@ -248,7 +331,7 @@ export function observeRun(engineRoot: string, corpus: string, work: string): Ob
   mkdirSync(traces);
   const preload = join(work, "lx-preload.cjs");
   writeFileSync(preload, preloadSource(run, files, traces));
-  const testExit = installAndTest(run, script, { NODE_OPTIONS: `--require=${preload}` });
+  const testExit = installAndTest(run, testCommand(name, "call"), { NODE_OPTIONS: `--require=${preload}` });
 
   // 3. Observed call site -> functions entered, in original coordinates.
   const observed = new Map<string, Set<string>>();
@@ -577,6 +660,11 @@ export function offsetOf(path: string, line: number, column: number): number {
   return (starts[line - 1] ?? 0) + column;
 }
 
+/** Why a call oracle run is not evidence (empty when it is). */
+export function callRunProblems(result: OracleResult): string[] {
+  return runProblems(result.corpus, result.testExit, { observedSites: result.observedSites });
+}
+
 /** Markdown summary of one oracle run. */
 export function formatOracle(result: OracleResult): string {
   const precisionBase = result.resolvedAgree + result.contradictions.length;
@@ -585,6 +673,7 @@ export function formatOracle(result: OracleResult): string {
     "",
     `Test run exit code ${result.testExit}. Instrumented ${result.instrumentedFiles} files${result.skippedFiles.length > 0 ? ` (${result.skippedFiles.length} not parsed: ${result.skippedFiles.slice(0, 5).join(", ")})` : ""}.`,
     "",
+    ...runNotes(result.corpus, "call", callRunProblems(result)),
     "| Measure | Value |",
     "|---|---|",
     `| Call sites the tests exercised into repository functions | ${result.observedSites} |`,

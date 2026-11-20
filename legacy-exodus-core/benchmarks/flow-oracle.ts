@@ -12,10 +12,7 @@ import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } fro
 import { tmpdir } from "node:os";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { analyzeCleanCopy, installAndTest, offsetOf } from "./call-oracle";
-
-/** The test command per corpus when its npm script collects coverage itself. */
-const COVERAGE_COMMANDS: Readonly<Record<string, readonly string[]>> = { fastify: ["npx", "borp", "--reporter=@jsumners/line-reporter"] };
+import { analyzeCleanCopy, installAndTest, offsetOf, runNotes, runProblems, testCommand } from "./call-oracle";
 
 interface Range { readonly start: number; readonly end: number; readonly count: number }
 
@@ -63,7 +60,7 @@ export function readCoverage(directory: string, root: string): Map<string, Range
 export function runFlowOracle(engineRoot: string, corpus: string): FlowOracleResult {
   const work = mkdtempSync(join(tmpdir(), "lx-flow-oracle-"));
   try {
-    const { name, script, clean } = analyzeCleanCopy(engineRoot, corpus, work);
+    const { name, clean } = analyzeCleanCopy(engineRoot, corpus, work);
     const read = (artifact: string) => JSON.parse(readFileSync(join(clean, ".discovery", artifact), "utf8"));
     const controlFlow = read("control-flow.json");
     const semantic = read("semantic.json");
@@ -73,8 +70,8 @@ export function runFlowOracle(engineRoot: string, corpus: string): FlowOracleRes
     cpSync(clean, run, { recursive: true, filter: (path) => !/[\\/]\.discovery([\\/]|$)/.test(path) });
     const coverageDirectory = join(work, "coverage");
     mkdirSync(coverageDirectory);
-    // A runner that collects coverage itself (Fastify's `borp --coverage`) redirects NODE_V8_COVERAGE: run it without.
-    const testExit = installAndTest(run, script, { NODE_V8_COVERAGE: coverageDirectory }, COVERAGE_COMMANDS[name]);
+    // The corpus's command never collects coverage itself (Fastify's `borp --coverage` would redirect NODE_V8_COVERAGE).
+    const testExit = installAndTest(run, testCommand(name, "flow"), { NODE_V8_COVERAGE: coverageDirectory });
     const coverage = readCoverage(coverageDirectory, run);
 
     // Offsets come from the clean copy: the run copy has the same sources.
@@ -126,6 +123,11 @@ export function runFlowOracle(engineRoot: string, corpus: string): FlowOracleRes
   }
 }
 
+/** Why a flow oracle run is not evidence (empty when it is). */
+export function flowRunProblems(result: FlowOracleResult): string[] {
+  return runProblems(result.corpus, result.testExit, { executedStatements: result.executedStatements });
+}
+
 /** Markdown summary of one flow oracle run. */
 export function formatFlowOracle(result: FlowOracleResult): string {
   const lines = [
@@ -133,6 +135,7 @@ export function formatFlowOracle(result: FlowOracleResult): string {
     "",
     `Test run exit code ${result.testExit}.`,
     "",
+    ...runNotes(result.corpus, "flow", flowRunProblems(result)),
     "| Measure | Value |",
     "|---|---|",
     `| CFG statements | ${result.statements} |`,
