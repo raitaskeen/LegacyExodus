@@ -4,7 +4,107 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { innermostSite, instrument, originalColumn, preloadSource } from "../../../benchmarks/call-oracle";
+import { innermostSite, instrument, judgeRun, originalColumn, preloadSource, targetFunctions } from "../../../benchmarks/call-oracle";
+
+/** A symbol location starting at `needle` on 1-based `line` of `lines`. */
+const at = (lines: readonly string[], line: number, needle: string) => {
+  const column = lines[line - 1]!.indexOf(needle);
+  if (column < 0) throw new Error(`${needle} not on line ${line}`);
+  return { start: { line, column }, end: { line, column: column + needle.length } };
+};
+const position = (file: string, lines: readonly string[], line: number, needle: string) => `${file}:${line}:${at(lines, line, needle).start.column}`;
+
+describe("call oracle comparison (AUD-04)", () => {
+  const lines = [
+    "function plain() { return 1; }",
+    "class WithCtor { constructor() { this.a = 1; } run() { return 2; } }",
+    "class NoCtor { run() {} }",
+    "const arrow = () => 3;",
+    "const api = { go: plain, m() { return 4; }, data: { x: 1 } };",
+    "exports.hook = function () { return 5; };",
+    "const made = make();",
+    "module.exports.plain = plain;", // 8: the shape `module.exports.createServer = createServer`
+    "function runnerFactory(step) { return function runner() { return step; }; }", // 9
+    "const runA = runnerFactory(1);", // 10: every call returns the same function
+    "module.exports.built = (function () { const main = function inner() {}; return main; })();", // 11: an IIFE
+    "var dup = function a() {}; var dup = function b() {}; function useParam(fn) { return fn; }", // 12
+    "exports.again = dup; exports.param = useParam(plain);", // 13
+    "function app() { const app = { x: 1 }; return app; } module.exports.app = app;", // 14: Fastify's `fastify` shape
+  ];
+  const find = targetFunctions((file) => (file === "a.js" ? lines.join("\n") : undefined));
+  const target = (kind: string, line: number, needle: string) => find({ kind, name: "t", filePath: "a.js", location: at(lines, line, needle) });
+  const where = (line: number, needle: string) => position("a.js", lines, line, needle);
+
+  test("names the function a target denotes, from the source at the target's position", () => {
+    expect(target("function", 1, "function plain")).toBe(where(1, "function plain"));
+    expect(target("class", 2, "class WithCtor")).toBe(where(2, "constructor"));
+    expect(target("method", 2, "run")).toBe(where(2, "run"));
+    expect(target("variable", 4, "arrow")).toBe(where(4, "() =>"));
+    expect(target("variable", 5, "go")).toBe(where(1, "function plain")); // `go: plain`, followed by name
+    expect(target("variable", 5, "m()")).toBe(where(5, "m()"));
+    expect(target("export", 6, "exports.hook")).toBe(where(6, "function ()"));
+    expect(target("export", 8, "module.exports.plain")).toBe(where(1, "function plain"));
+    expect(target("variable", 10, "runA")).toBe(where(9, "function runner("));
+    expect(target("export", 11, "module.exports.built")).toBe(where(11, "function inner"));
+    // The top-level `app` is the function; the `const app` inside it is another scope's binding.
+    expect(target("export", 14, "module.exports.app")).toBe(where(14, "function app"));
+  });
+
+  test("does not follow a name bound twice in its scope, or a parameter", () => {
+    expect(target("export", 13, "exports.again")).toBeUndefined();
+    expect(target("export", 13, "exports.param")).toBeUndefined();
+  });
+
+  test("names nothing where the source shows no function", () => {
+    expect(target("class", 3, "class NoCtor")).toBeUndefined();
+    expect(target("variable", 5, "api")).toBeUndefined(); // an object
+    expect(target("variable", 5, "data")).toBeUndefined();
+    expect(target("variable", 7, "made")).toBeUndefined(); // a call result
+    expect(find({ kind: "function", name: "x", filePath: "missing.js", location: at(lines, 1, "function plain") })).toBeUndefined();
+  });
+
+  test("counts a call that enters any other function as a contradiction, whatever the target's kind", () => {
+    // The engine claims x.run -> the literal method run (a variable symbol, as C1 factory literals give) and
+    // plain() -> plain. The run entered the neighbour `other` for x.run and, for plain(), a function nested in plain:
+    // both were invisible before (a variable target was "not checkable"; a nested function was inside the span).
+    const work = mkdtempSync(join(tmpdir(), "lx-oracle-judge-"));
+    try {
+      const main = [
+        "function make() { return { run() { return 1; }, other() {} }; }",
+        "function plain() { return function inner() {}; }",
+        "const x = make();",
+        "x.run();",
+        "plain();",
+        "x.other();",
+      ];
+      writeFileSync(join(work, "main.js"), main.join("\n"));
+      mkdirSync(join(work, ".discovery"));
+      const symbols = [
+        { id: "s-run", kind: "variable", name: "run", filePath: "main.js", location: at(main, 1, "run") },
+        { id: "s-other", kind: "variable", name: "other", filePath: "main.js", location: at(main, 1, "other") },
+        { id: "s-plain", kind: "function", name: "plain", filePath: "main.js", location: { start: { line: 2, column: 0 }, end: { line: 2, column: main[1]!.length } } },
+      ];
+      const call = (line: number, calleeName: string, targetSymbolId: string) =>
+        ({ sourceFilePath: "main.js", location: { line, column: 0 }, calleeName, callerName: "module", resolutionState: "RESOLVED", targetSymbolId });
+      writeFileSync(join(work, ".discovery", "symbols.json"), JSON.stringify(symbols));
+      writeFileSync(join(work, ".discovery", "semantic.json"), JSON.stringify({ calls: [call(4, "x.run", "s-run"), call(5, "plain", "s-plain"), call(6, "x.other", "s-other")] }));
+      const observed = new Map([
+        ["main.js:4:2", new Set([position("main.js", main, 1, "other")])],
+        ["main.js:5:0", new Set([position("main.js", main, 2, "function inner")])],
+        ["main.js:6:2", new Set([position("main.js", main, 1, "other")])],
+      ]);
+      const result = judgeRun({ corpus: "demo", clean: work, testExit: 0, observed, instrumentedFiles: 1, skippedFiles: [] });
+      expect(result.matchedSites).toBe(3);
+      expect(result.resolvedAgree).toBe(1);
+      expect(result.unverifiable).toBe(0);
+      expect(result.contradictions).toHaveLength(2);
+      expect(result.contradictions[0]).toContain("x.run -> engine variable:run");
+      expect(result.contradictions[1]).toContain("plain -> engine function:plain");
+    } finally {
+      rmSync(work, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("call oracle instrumentation (Phase A3)", () => {
   test("adds a probe after a function's directives and wraps an arrow's expression body", () => {
