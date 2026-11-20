@@ -22,7 +22,7 @@ Documentation follows implementation truth: it describes `main`, and it never cl
       <b>Understand the design</b><br/>
       <sub>
         <a href="architecture/system-overview.md">System Overview</a><br/>
-        <a href="adr/README.md">Decision Records</a>: ADR-001 to ADR-011<br/>
+        <a href="adr/README.md">Decision Records</a>: ADR-001 to ADR-012<br/>
         <a href="GLOSSARY.md">Glossary</a>
       </sub>
     </td>

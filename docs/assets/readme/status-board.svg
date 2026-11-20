@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 400" width="960" height="400" role="img" aria-labelledby="t d">
   <title id="t">What works today, and what does not yet</title>
-  <desc id="d">Four columns. Works today: CLI and runtime, discovery and parsing, storage and snapshot reuse, deterministic .discovery output, plugin contracts. Partial, with documented limits: symbols and module graphs, calls and control flow, data flow and taint, knowledge graph, Express semantics. Planned next: semantic IR, JavaScript to TypeScript migration, the Migration Readiness Assessment, the Behaviour Safety Net test generator. Target architecture: migration planning and transformation, bounded AI gateway, equivalence gates, PHP, Java and Rails.</desc>
+  <desc id="d">Four columns. Works today: CLI and runtime, discovery and parsing, storage and snapshot reuse, deterministic .discovery output, plugin contracts. Partial, with documented limits: symbols and module graphs, calls and control flow, data flow and taint, knowledge graph, Express semantics. Planned next: types, then the semantic IR, JavaScript to TypeScript migration, the Migration Readiness Assessment, the Behaviour Safety Net test generator. Target architecture: migration planning and transformation, bounded AI gateway, equivalence gates, PHP, Java and Rails.</desc>
   <style>
     .ink { fill: none; stroke: #16130f; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     .head { font: 800 17px Inter, "Segoe UI", Helvetica, Arial, sans-serif; fill: #16130f; }
@@ -66,7 +66,7 @@
     <text class="head" x="16" y="70">Designed, not built</text>
     <text class="sub" x="16" y="88">in the roadmap order</text>
     <g class="item">
-      <text x="34" y="130">Semantic IR (Wave 6)</text>
+      <text x="34" y="130">Types, then IR (Wave 6)</text>
       <text x="34" y="170">JS to TypeScript (Wave 7)</text>
       <text x="34" y="210">Readiness Assessment</text>
       <text x="34" y="250">Behaviour Safety Net</text>

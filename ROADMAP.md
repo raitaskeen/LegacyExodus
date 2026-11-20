@@ -20,14 +20,19 @@ Every capability and milestone is strictly classified into one of the following 
 
 ---
 
-## Where we are (2026-11-09)
+## Where we are (2026-11-20)
 
 ```mermaid
 flowchart LR
     A["Waves 0–5<br/>blind-audit fixes<br/>BA-01…BA-28"]:::done --> B["ADR-008 / ADR-009<br/>stable ids,<br/>streaming execution"]:::done
     B --> C["Fresh-audit fixes<br/>NA-01…NA-16"]:::done
-    C --> D["Wave 6<br/>Semantic IR"]:::next
-    D --> E["Wave 7<br/>JS → TypeScript<br/>migration"]:::next
+    C --> P["Engine plan A–C<br/>measure, outside calls,<br/>follow objects"]:::done
+    P --> X["Cross-file audits<br/>and red team<br/>XA, XB, RT"]:::done
+    X --> D["Phase D<br/>types"]:::now
+    D --> I["Wave 6<br/>Semantic IR"]:::next
+    D --> H["Phases E–H<br/>frameworks, IR facts,<br/>speed, trust"]:::next
+    I --> E["Wave 7<br/>JS → TypeScript<br/>migration"]:::next
+    H --> E
     E --> F["Wave 8<br/>PHP → Java → Ruby"]:::later
     classDef done fill:#138a6a,color:#fff,stroke:#138a6a
     classDef now fill:#b24418,color:#fff,stroke:#b24418
@@ -41,8 +46,12 @@ flowchart LR
 | **ADR-008, ADR-009** | Edit-stable fact identity; whole-run fact lists on disk | **`COMPLETED`** | #238–#257. Ghost peak memory fell from 9.9 GB to about 2 GB, with fact-diff 0/0 at every step |
 | **Fresh-audit fixes** | NA-01…NA-16 from the [2026-11-08 audit](https://github.com/raitaskeen/LegacyExodus/pull/203) | **`COMPLETED`** | All sixteen merged (#259–#286), each with no fact lost: NA-01, NA-02, NA-03a to NA-03e, NA-04, NA-05, NA-06 (ADR-010: byte-identical fact artifacts, stable project id), NA-07 to NA-13, NA-15 (docs refresh), NA-16 (ADR-011: bounded snapshot reuse). Dependency updates merge one at a time behind a fact-diff (NA-14) |
 | **Accuracy harness** | Recall and precision per fact category on the conformance corpus; runtime-proven taint ground truth | **`COMPLETED`** | `bun run benchmarks/cli.ts accuracy`; CI publishes it with every PR (#273) |
-| **Wave 6, Semantic IR** | A language-neutral IR built from proven facts only, each unit carrying its evidence state | **`PLANNED`** | Next. Entry criteria are in the remediation queue |
-| **Wave 7, first migration** | JS → TypeScript (owner decision, 2026-11-03), verified by the project's own tests plus characterization tests | **`PLANNED`** | Builds on Wave 6 |
+| **Engine plan, phases A–C** | A: a reason on every `UNRESOLVED` call; call and flow oracles that run Express's and Fastify's own tests. B: `EXTERNAL` calls into packages, Node built-ins and standard globals (ADR-012). C: calls that follow objects across files (factory results, prototypes and ES5 inheritance, CommonJS export objects), and `call-graph-builder.ts` split into layered modules | **`COMPLETED`** | A and B: #301–#318. C: #312 (C1), #315 (C2, C2b), #316 (C3), #324 (C1b), #328 (C1c), #350 (C6). Call oracle on CI: 5,282 `RESOLVED` calls checked against the test runs (Express 1,813, recall 51.8%; Fastify 3,469, recall 40.2%), 0 contradictions. C4 (callback parameters) moved to Phase E as framework semantics; C5 (constructor fields) was measured and skipped on 2026-11-20, because the open-world rule leaves almost nothing for it |
+| **Cross-file audits and red team** | XA-01…XA-08 (2026-11-09), XB-01…XB-09 (2026-11-11), and 25 red-team findings (RT, 2026-11-15) | **`COMPLETED`** | XA: #294–#300. XB: #319–#323 and #349. RT: #328–#348. XA and XB findings were reproduced with Node as ground truth; each red-team fix adds conformance cases that fail without it. XA-08 and XB-09 were closed by owner decision |
+| **Phase D, types** | Types from the TypeScript checker per `tsconfig`, under a memory budget; the `RESOLVED BY TYPE` state (ADR-012); JSDoc for JavaScript; signatures as facts for the IR | **`PLANNED`** | Next |
+| **Phases E–H** | E: frameworks (Fastify, Koa, NestJS). F: facts the IR and migration need (effects per function, export surface, module format, leaf-first order). G: incremental runs and speed. H: determinism across Linux and Windows, docs checked against measured numbers, then a fresh blind audit | **`PLANNED`** | The engine plan, `ENGINE-PLAN-TO-88.md`, on the `audit/2026-10-28-blind-audit` branch |
+| **Wave 6, Semantic IR** | A language-neutral IR built from proven facts only, each unit carrying its evidence state | **`PLANNED`** | After Phase D, when the IR has types to build on (milestone M3 of the engine plan). Entry criteria are in the remediation queue |
+| **Wave 7, first migration** | JS → TypeScript (owner decision, 2026-11-03), verified by the project's own tests plus characterization tests | **`PLANNED`** | Builds on Wave 6 and phases E–H (milestone M4) |
 | **Products** | Migration Readiness Assessment (first product, a report from the engine evidence); Behaviour Safety Net (a characterization test generator, which must run customer code and so needs its own design review) | **`PLANNED`** | Owner decisions, 2026-11-03 and 2026-11-08 |
 | **Wave 8, languages** | PHP, then Java, then Ruby on Rails, each through the existing adapter seams with its own conformance corpus and pinned benchmark | **`PLANNED`** | Owner order, 2026-11-03 |
 
@@ -50,10 +59,11 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    PR["Pull request"] --> T["Typecheck<br/>+ 2,300+ tests"]
+    PR["Pull request"] --> T["Typecheck<br/>+ 2,490+ tests"]
     T --> C["Conformance corpus<br/>+ known-gaps ledger"]
     C --> F["Fact Diff<br/>fixture · src · Express · Fastify"]
-    F --> S["Scale Gate<br/>10,000-file corpus"]
+    F --> O["Call and flow oracles<br/>Express · Fastify test runs"]
+    O --> S["Scale Gate<br/>10,000-file corpus"]
     S --> R["Review<br/>+ owner sign-off<br/>for lost facts"]
     R --> M["main"]
 ```
