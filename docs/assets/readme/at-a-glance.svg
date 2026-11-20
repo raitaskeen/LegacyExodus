@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 250" width="960" height="250" role="img" aria-labelledby="t d">
   <title id="t">LegacyExodus at a glance</title>
-  <desc id="d">Four measured figures at engine commit b3615d1. Ghost v6.73.0: 7,172 files and 415,492 calls in one run. Reusing Ghost's analysis: 1.0 GB, down from 11.3 GB. Tests: 2,355 passing, 0 failing. The November 8 audit: 16 of 16 findings fixed.</desc>
+  <desc id="d">Four measured figures on main a6eb968. Ghost v6.73.0: 7,172 files and 415,492 calls in one run, 192 s and 1.9 GiB peak memory. Precision: 0 wrong of 5,282 RESOLVED calls that the Express and Fastify test suites ran (CI call oracle). Tests: 2,493 passing, 0 failing, 22,877 assertions in 204 test files. Audits: 84 of 86 findings closed, 82 fixed and 2 closed by owner decision; 2 are not scheduled.</desc>
   <style>
     .ink { fill: none; stroke: #16130f; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     .big { font: 800 40px Inter, "Segoe UI", Helvetica, Arial, sans-serif; fill: #16130f; letter-spacing: -1px; }
@@ -20,31 +20,28 @@
     <text class="big" x="16" y="78">7,172</text>
     <text class="lab" x="18" y="104">files of Ghost in one run</text>
     <text class="note" x="18" y="128">415,492 calls mapped,</text>
-    <text class="note" x="18" y="145">every file accounted for</text>
+    <text class="note" x="18" y="145">192 s, 1.9 GiB peak memory</text>
     <path class="ink" d="M18 160 Q100 156 190 161" stroke="#b24418" stroke-width="3"/>
   </g>
 
   <!-- card 2: reuse -->
   <g transform="translate(256 22)">
     <path class="ink" d="M3 3 Q105 0 207 4 Q211 90 208 181 Q105 184 2 180 Q-2 90 3 3 Z" style="fill:#fff7f0"/>
-    <text class="kick" x="18" y="30">BOUNDED MEMORY</text>
-    <text class="big" x="16" y="78">1.0</text><text class="unit" x="82" y="78">GB</text>
-    <text class="lab" x="18" y="104">to reuse Ghost's analysis</text>
-    <text class="note" x="18" y="128">was 11.3 GB and 79 s;</text>
-    <text class="note" x="18" y="145">now about 25 s</text>
-    <!-- before/after bars -->
-    <path d="M18 158 L190 158" stroke="#a3a39f" stroke-width="6" stroke-linecap="round"/>
-    <path d="M18 168 L34 168" stroke="#b24418" stroke-width="6" stroke-linecap="round"/>
+    <text class="kick" x="18" y="30">PRECISION</text>
+    <text class="big" x="16" y="78">0</text>
+    <text class="lab" x="18" y="104">wrong of 5,282 checked</text>
+    <text class="note" x="18" y="128">RESOLVED calls run by the</text>
+    <text class="note" x="18" y="145">Express and Fastify tests</text>
   </g>
 
   <!-- card 3: tests -->
   <g transform="translate(488 22)">
     <path class="ink" d="M2 4 Q105 1 208 3 Q212 90 208 180 Q105 184 3 181 Q-1 90 2 4 Z" style="fill:#fff7f0"/>
     <text class="kick" x="18" y="30">TESTED</text>
-    <text class="big" x="16" y="78">2,355</text>
+    <text class="big" x="16" y="78">2,493</text>
     <text class="lab" x="18" y="104">tests passing, 0 failing</text>
-    <text class="note" x="18" y="128">22,411 assertions</text>
-    <text class="note" x="18" y="145">in 198 test files</text>
+    <text class="note" x="18" y="128">22,877 assertions</text>
+    <text class="note" x="18" y="145">in 204 test files</text>
     <g transform="translate(160 140)">
       <path d="M0 12 Q1 0 13 0 Q26 1 26 13 Q25 25 13 26 Q1 25 0 12 Z" style="fill:#138a6a" stroke="#16130f" stroke-width="1.5"/>
       <path d="M7 13 L11 17 L19 8" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
@@ -55,17 +52,11 @@
   <g transform="translate(720 22)">
     <path class="ink" d="M3 3 Q105 0 206 4 Q210 90 207 181 Q105 184 2 180 Q-2 90 3 3 Z" style="fill:#fff7f0"/>
     <text class="kick" x="18" y="30">AUDITED</text>
-    <text class="big" x="16" y="78">16</text><text class="unit" x="66" y="78">/ 16</text>
-    <text class="lab" x="18" y="104">Nov 8 audit findings fixed</text>
-    <text class="note" x="18" y="128">each merged after a fact</text>
-    <text class="note" x="18" y="145">diff showed no fact lost</text>
-    <g fill="#2d5ba8">
-      <circle cx="22" cy="164" r="3.5"/><circle cx="33" cy="164" r="3.5"/><circle cx="44" cy="164" r="3.5"/><circle cx="55" cy="164" r="3.5"/>
-      <circle cx="66" cy="164" r="3.5"/><circle cx="77" cy="164" r="3.5"/><circle cx="88" cy="164" r="3.5"/><circle cx="99" cy="164" r="3.5"/>
-      <circle cx="110" cy="164" r="3.5"/><circle cx="121" cy="164" r="3.5"/><circle cx="132" cy="164" r="3.5"/><circle cx="143" cy="164" r="3.5"/>
-      <circle cx="154" cy="164" r="3.5"/><circle cx="165" cy="164" r="3.5"/><circle cx="176" cy="164" r="3.5"/><circle cx="187" cy="164" r="3.5"/>
-    </g>
+    <text class="big" x="16" y="78">84</text><text class="unit" x="66" y="78">/ 86</text>
+    <text class="lab" x="18" y="104">audit findings closed</text>
+    <text class="note" x="18" y="128">82 fixed, 2 closed by owner</text>
+    <text class="note" x="18" y="145">decision, 2 not scheduled</text>
   </g>
 
-  <text class="foot" x="26" y="232">Engine b3615d1, one 16 GB Windows machine, 2026-11-08 and 09. Commands and sources: see "Measured, not claimed" below.</text>
+  <text class="foot" x="26" y="232">Main a6eb968, one 16 GB Windows machine, 2026-11-18 to 20. Commands and sources: see "Measured, not claimed" below.</text>
 </svg>

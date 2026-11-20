@@ -17,6 +17,7 @@ Each record states one decision: the problem, what was chosen, what was rejected
 | [009](ADR-009-streaming-sharded-execution.md) | Whole-run fact lists live on disk (`FactArray`), so memory does not hold every fact at once | `ACCEPTED` · implemented | `src/shared/fact-array.ts` |
 | [010](ADR-010-reproducible-projections.md) | Fact artifacts carry no run identity, so they are byte-reproducible; one stable project id per repository | `ACCEPTED` · implemented | `src/storage/projections`, `src/discovery/project-identity.ts` |
 | [011](ADR-011-bounded-snapshot-reuse.md) | Snapshot reuse verifies while copying and restores lists on disk, so reuse costs less memory than analysing | `ACCEPTED` · implemented | `src/discovery/discovery-validator.ts`, `src/shared/json-document-reader.ts` |
+| [012](ADR-012-external-and-typed-evidence-states.md) | A call into a package, a Node module or a standard global is `EXTERNAL`, a proven state of its own; `RESOLVED BY TYPE` is reserved for types | `ACCEPTED` · EXTERNAL implemented, `RESOLVED BY TYPE` planned (Phase D) | `src/semantic/semantic-contracts.ts`, `src/semantic/external-targets.ts` |
 
 ## How the recent records build on each other
 
